@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 
@@ -19,7 +18,6 @@ type singleFileHandler struct {
 	root       string
 	mode       markdown.Mode
 	unsafeHTML bool
-	events     *eventHub
 }
 
 func newSingleFileHandler(source string, mode markdown.Mode, unsafeHTML bool, events *eventHub) http.Handler {
@@ -31,11 +29,10 @@ func newSingleFileHandler(source string, mode markdown.Mode, unsafeHTML bool, ev
 		root:       filepath.Dir(source),
 		mode:       mode,
 		unsafeHTML: unsafeHTML,
-		events:     events,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/api/events", events)
-	mux.HandleFunc("/assets/", handler.serveAsset)
+	mux.Handle("/assets/", newAssetHandler(handler.root))
 	mux.HandleFunc("/", handler.serveDocument)
 	return mux
 }
@@ -73,7 +70,18 @@ func (handler *singleFileHandler) serveDocument(response http.ResponseWriter, re
 	}
 }
 
-func (handler *singleFileHandler) serveAsset(response http.ResponseWriter, request *http.Request) {
+type assetHandler struct {
+	root string
+}
+
+func newAssetHandler(root string) http.Handler {
+	if canonical, err := files.CanonicalPath(root); err == nil {
+		root = canonical
+	}
+	return &assetHandler{root: root}
+}
+
+func (handler *assetHandler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
 		response.Header().Set("Allow", "GET, HEAD")
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
@@ -85,8 +93,8 @@ func (handler *singleFileHandler) serveAsset(response http.ResponseWriter, reque
 		http.NotFound(response, request)
 		return
 	}
-	target, err := files.CanonicalPath(filepath.Join(handler.root, filepath.FromSlash(relative)))
-	if err != nil || !files.IsWithin(handler.root, target) {
+	target, err := resolveRequestFile(handler.root, relative)
+	if err != nil {
 		http.NotFound(response, request)
 		return
 	}
@@ -110,32 +118,5 @@ func assetPath(requestURL *url.URL) (string, error) {
 	if !strings.HasPrefix(escaped, "/assets/") {
 		return "", fmt.Errorf("invalid asset route")
 	}
-	value := strings.TrimPrefix(escaped, "/assets/")
-	for iteration := 0; iteration < 8; iteration++ {
-		decoded, err := url.PathUnescape(value)
-		if err != nil {
-			return "", fmt.Errorf("decode asset path: %w", err)
-		}
-		if decoded == value {
-			break
-		}
-		value = decoded
-		if iteration == 7 {
-			return "", fmt.Errorf("asset path exceeds decoding limit")
-		}
-	}
-	value = strings.ReplaceAll(value, "\\", "/")
-	if value == "" || strings.ContainsRune(value, '\x00') || path.IsAbs(value) {
-		return "", fmt.Errorf("invalid asset path")
-	}
-	for _, segment := range strings.Split(value, "/") {
-		if segment == ".." {
-			return "", fmt.Errorf("asset path escapes root")
-		}
-	}
-	cleaned := path.Clean(value)
-	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return "", fmt.Errorf("invalid asset path")
-	}
-	return cleaned, nil
+	return safeRelativePath(strings.TrimPrefix(escaped, "/assets/"))
 }

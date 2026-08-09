@@ -4,7 +4,7 @@
 
 `m2h` 是一个使用 Go 实现的命令行工具，用于把 Markdown 转换为 HTML，或在浏览器、终端中预览 Markdown。
 
-> 当前状态：版本命令、共享 Markdown 渲染核心、`convert` 和单文件 `preview` 已经可用；目录 `preview` 与 `view` 仍处于后续阶段，调用时会返回明确的未实现错误。具体进度见 [PROGRESS.md](PROGRESS.md)。
+> 当前状态：版本命令、共享 Markdown 渲染核心、`convert`、单文件 `preview` 和目录预览 API 已经可用；目录 React 界面与 `view` 仍处于后续阶段。具体进度见 [PROGRESS.md](PROGRESS.md)。
 
 ## 命令概览
 
@@ -105,9 +105,16 @@ $ m2h preview docs
 $ m2h preview docs --glob '**/*.md' --depth 4 --mode dark
 ```
 
-> 目录预览将在阶段 5 和阶段 6 接入；当前版本会返回 `Error: directory preview is not implemented in this release`。
+目录服务现已提供以下 API；阶段 6 会在同一服务上接入完整 React 文件树界面：
 
-目录模式提供文件树、当前文档标题和手动刷新按钮。文档路由形如 `/doc/design/architecture.md`，直接刷新仍停留在当前文档。首次打开依次选择 `README.md`、`index.md`、按相对路径排序的第一个 Markdown；没有 Markdown 时显示空状态。
+- `GET /api/files`：返回按相对路径排序的文件列表和 `defaultPath`。每个文件包含 `path`、`name`、由 Go AST 提取的 `title`。
+- `GET /api/document?path=<relative-path>`：从磁盘读取最新内容，返回 `path`、`title` 和 Markdown 正文 `html`。
+- `GET /assets/<relative-path>`：提供输入根目录内的非 Markdown 附件。
+- `GET /doc/<relative-markdown-path>`：返回嵌入的 SPA 入口，支持深链接直接刷新。
+
+默认文档严格依次选择根目录的 `README.md`、根目录的 `index.md`、排序后的第一个 Markdown；空目录返回空文件列表与空 `defaultPath`。
+
+阶段 6 的目录界面将提供文件树、当前文档标题和手动刷新按钮。文档路由形如 `/doc/design/architecture.md`，直接刷新仍保留该深链接。
 
 目录模式不自动监听文件；点击刷新后，下一次打开文档会从磁盘读取最新内容。
 

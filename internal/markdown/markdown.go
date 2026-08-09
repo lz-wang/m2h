@@ -122,6 +122,17 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 	return Result{HTML: page.String(), Body: body.String(), Title: title}, nil
 }
 
+// Title extracts the first H1 as plain text and falls back to the filename.
+func Title(source []byte, sourcePath string) (string, error) {
+	normalized, err := normalizeSourcePath(sourcePath)
+	if err != nil {
+		return "", err
+	}
+	engine := newEngine(false)
+	document := engine.Parser().Parse(text.NewReader(source))
+	return extractTitle(document, source, normalized), nil
+}
+
 func newEngine(unsafeHTML bool) goldmark.Markdown {
 	rendererOptions := []renderer.Option{}
 	if unsafeHTML {
@@ -152,12 +163,21 @@ func normalizeOptions(options RenderOptions) (RenderOptions, error) {
 		return RenderOptions{}, &OptionError{Name: "target", Value: string(options.Target)}
 	}
 
-	options.SourcePath = strings.ReplaceAll(options.SourcePath, "\\", "/")
-	options.SourcePath = pathpkg.Clean(options.SourcePath)
-	if options.SourcePath == "." || pathpkg.IsAbs(options.SourcePath) || escapesRoot(options.SourcePath) {
-		return RenderOptions{}, &OptionError{Name: "source path", Value: options.SourcePath}
+	normalizedSource, err := normalizeSourcePath(options.SourcePath)
+	if err != nil {
+		return RenderOptions{}, err
 	}
+	options.SourcePath = normalizedSource
 	return options, nil
+}
+
+func normalizeSourcePath(sourcePath string) (string, error) {
+	sourcePath = strings.ReplaceAll(sourcePath, "\\", "/")
+	sourcePath = pathpkg.Clean(sourcePath)
+	if sourcePath == "." || pathpkg.IsAbs(sourcePath) || escapesRoot(sourcePath) {
+		return "", &OptionError{Name: "source path", Value: sourcePath}
+	}
+	return sourcePath, nil
 }
 
 func rewriteDocument(document ast.Node, options RenderOptions) error {

@@ -171,7 +171,7 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 
 		discovered := Entry{AbsolutePath: current, RelativePath: relative, Mode: info.Mode()}
 		if IsMarkdown(relative) {
-			if options.Pattern == "" || doublestar.MatchUnvalidated(options.Pattern, relative) {
+			if Matches(relative, options) {
 				result.Markdown = append(result.Markdown, discovered)
 			}
 		} else {
@@ -186,6 +186,16 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 	sortEntries(result.Markdown)
 	sortEntries(result.Assets)
 	return result, nil
+}
+
+// Matches reports whether a normalized file path passes depth and glob rules.
+// Call ValidateDiscoverOptions before using this helper with external input.
+func Matches(relative string, options DiscoverOptions) bool {
+	relative = NormalizeRelativePath(relative)
+	if relative == "." || fileDepth(relative) > options.Depth {
+		return false
+	}
+	return options.Pattern == "" || doublestar.MatchUnvalidated(options.Pattern, relative)
 }
 
 // ValidateDiscoverOptions validates enumeration flags before filesystem access.

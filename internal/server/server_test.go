@@ -7,6 +7,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -225,7 +226,6 @@ func TestRunValidatesInputKindsAndDirectoryFlags(t *testing.T) {
 		options Options
 		want    string
 	}{
-		{options: Options{Input: root, Mode: markdown.ModeAuto}, want: "directory preview is not implemented"},
 		{options: Options{Input: textFile, Mode: markdown.ModeAuto}, want: "expected a Markdown file"},
 		{options: Options{Input: markdownFile, Mode: markdown.ModeAuto, PatternSet: true}, want: "--glob can only be used"},
 		{options: Options{Input: markdownFile, Mode: markdown.ModeAuto, DepthSet: true}, want: "--depth can only be used"},
@@ -235,6 +235,36 @@ func TestRunValidatesInputKindsAndDirectoryFlags(t *testing.T) {
 		if err == nil || !strings.Contains(err.Error(), test.want) {
 			t.Errorf("run(%+v) error = %v, want %q", test.options, err, test.want)
 		}
+	}
+}
+
+func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "README.md"), "# Directory")
+	ctx, cancel := context.WithCancel(context.Background())
+	watchCalled := false
+	deps := testDependencies()
+	deps.listen = func(string, string) (net.Listener, error) {
+		return net.Listen("tcp", "127.0.0.1:0")
+	}
+	deps.watch = func(context.Context, string, time.Duration, func(), io.Writer) error {
+		watchCalled = true
+		return errors.New("directory watcher must not run")
+	}
+	err := run(ctx, Options{
+		Input: root + string(os.PathSeparator),
+		Mode:  markdown.ModeAuto,
+		OnListening: func(string) {
+			cancel()
+		},
+	}, deps)
+	if err != nil {
+		t.Fatalf("directory run error = %v", err)
+	}
+	if watchCalled {
+		t.Fatal("directory preview created a watcher")
 	}
 }
 

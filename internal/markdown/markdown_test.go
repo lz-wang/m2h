@@ -221,3 +221,27 @@ func TestRenderRejectsInvalidOptions(t *testing.T) {
 		}
 	}
 }
+
+func TestTitleUsesSharedASTExtraction(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		source     string
+		sourcePath string
+		want       string
+	}{
+		{source: "## Before\n\n# Hello *world* `code`", sourcePath: "guide.md", want: "Hello world code"},
+		{source: "No H1", sourcePath: "notes/计划.md", want: "计划.md"},
+	} {
+		title, err := Title([]byte(test.source), test.sourcePath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if title != test.want {
+			t.Errorf("Title() = %q, want %q", title, test.want)
+		}
+	}
+	if _, err := Title([]byte("text"), "../outside.md"); err == nil {
+		t.Fatal("Title() accepted an escaping source path")
+	}
+}

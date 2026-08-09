@@ -75,16 +75,13 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	if input.Kind == files.KindDirectory {
-		return fmt.Errorf("directory preview is not implemented in this release")
-	}
-	if normalized.PatternSet {
+	if input.Kind == files.KindFile && normalized.PatternSet {
 		return fmt.Errorf("--glob can only be used when previewing a directory")
 	}
-	if normalized.DepthSet {
+	if input.Kind == files.KindFile && normalized.DepthSet {
 		return fmt.Errorf("--depth can only be used when previewing a directory")
 	}
-	if !files.IsMarkdown(input.Path) {
+	if input.Kind == files.KindFile && !files.IsMarkdown(input.Path) {
 		return fmt.Errorf("preview %q: expected a Markdown file", input.Path)
 	}
 
@@ -93,8 +90,18 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		logger = io.Discard
 	}
 	hub := newEventHub(deps.keepAlive)
+	var handler http.Handler
+	if input.Kind == files.KindDirectory {
+		handler = newDirectoryHandler(input.Path, normalized.Mode, normalized.UnsafeHTML, files.DiscoverOptions{
+			Depth:   normalized.Depth,
+			Pattern: normalized.Pattern,
+			Log:     logger,
+		}, hub, logger)
+	} else {
+		handler = newSingleFileHandler(input.Path, normalized.Mode, normalized.UnsafeHTML, hub)
+	}
 	httpServer := &http.Server{
-		Handler:  newSingleFileHandler(input.Path, normalized.Mode, normalized.UnsafeHTML, hub),
+		Handler:  handler,
 		ErrorLog: log.New(logger, "m2h: http: ", 0),
 	}
 	requestedAddress := net.JoinHostPort(normalized.Host, strconv.Itoa(normalized.Port))
@@ -106,15 +113,19 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	runContext, cancel := context.WithCancel(ctx)
 	defer cancel()
 	serveDone := make(chan error, 1)
-	watchDone := make(chan error, 1)
+	var watchDone <-chan error
 	go func() {
 		serveDone <- httpServer.Serve(listener)
 	}()
-	go func() {
-		watchDone <- deps.watch(runContext, input.Path, deps.debounce, func() {
-			hub.publish(documentChanged)
-		}, logger)
-	}()
+	if input.Kind == files.KindFile {
+		watchResults := make(chan error, 1)
+		watchDone = watchResults
+		go func() {
+			watchResults <- deps.watch(runContext, input.Path, deps.debounce, func() {
+				hub.publish(documentChanged)
+			}, logger)
+		}()
+	}
 
 	address := previewURL(normalized.Host, listener.Addr())
 	_, _ = fmt.Fprintf(logger, "m2h: previewing %s at %s\n", input.Path, address)

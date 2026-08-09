@@ -4,15 +4,16 @@
 
 ## 当前状态
 
-- 当前里程碑：阶段 4 已完成，下一步是阶段 5“目录 `preview` API 与安全边界”。
-- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、版本命令、共享 GFM 渲染核心、完整 `convert`，以及具备父目录监听、SSE 实时刷新、安全附件路由和优雅关闭的单文件 `preview`；目录 `preview` 与 `view` 尚未接入。
+- 当前里程碑：阶段 5 已完成，下一步是阶段 6“React 目录 WebUI”。
+- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、版本命令、共享 GFM 渲染核心、完整 `convert`、单文件实时 `preview`，以及具备文件列表、最新文档、安全附件、深链接 fallback、默认选择和请求日志的目录预览 API；React 目录界面与 `view` 尚未接入。
 - 已完成提交：
   - `ab493ce docs(init): 初始化项目基础文档`
   - `f7e9552 chore(init): 初始化项目工程骨架`
   - `b18482e feat(cli): 完成阶段 1 工具链与版本骨架`
   - `7f56e5d feat(markdown): 完成阶段 2 共享渲染核心`
   - `171796a feat(convert): 完成阶段 3 文件发现与转换`
-- CI 状态：阶段 3 的 main 与 `v0.3.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知；v0.3.0 的 12 个 Release 资产、正文和 Darwin arm64 实际转换已核验。
+  - `2363f5b feat(preview): 完成阶段 4 单文件实时预览`
+- CI 状态：阶段 4 的 main 与 `v0.4.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知；v0.4.0 的 12 个 Release 资产、正文和 Darwin arm64 实时预览已核验。
 
 本文件是实现顺序、范围和验收状态的唯一进度来源。用户命令契约见 `README.md`，发布摘要见 `CHANGELOG.md`。
 
@@ -114,7 +115,7 @@
 | 2 | 共享 Markdown 渲染核心 | 阶段 1 | 已完成（v0.2.0） |
 | 3 | 文件发现与 `convert` | 阶段 2 | 已完成（v0.3.0） |
 | 4 | 单文件 `preview`、watcher、SSE | 阶段 2 | 已完成（v0.4.0） |
-| 5 | 目录 `preview` API 与安全边界 | 阶段 3、4 | 未开始 |
+| 5 | 目录 `preview` API 与安全边界 | 阶段 3、4 | 已完成（v0.5.0） |
 | 6 | React 目录 WebUI | 阶段 5 | 未开始 |
 | 7 | `view` 终端预览 | 阶段 2 | 未开始 |
 | 8 | 跨平台发布与文档收口 | 阶段 3–7 | 未开始 |
@@ -201,21 +202,21 @@
 
 ### 交付物
 
-- [ ] `GET /api/files` 返回按相对路径排序的 `{path,name,title}`，title 来自 Go AST。
-- [ ] `GET /api/document?path=...` 每次读取磁盘并返回 `{path,title,html}`。
-- [ ] `GET /assets/*` 返回根目录内非 Markdown 附件，设置正确 content type 和缓存策略。
-- [ ] `/doc/*` 对浏览器导航 fallback 到嵌入的 SPA `index.html`，API 404 保持 JSON 错误，不被 SPA 接管。
-- [ ] 默认选择严格遵循 `README.md`、`index.md`、首个排序文件、空状态的优先级。
-- [ ] 请求日志包含 method、route、相对文档路径、status、耗时；不记录文件正文。
-- [ ] 目录模式不创建 watcher，刷新文件树只重新扫描一次。
+- [x] `GET /api/files` 返回按相对路径排序的 `{path,name,title}`，title 来自 Go AST。
+- [x] `GET /api/document?path=...` 每次读取磁盘并返回 `{path,title,html}`。
+- [x] `GET /assets/*` 返回根目录内非 Markdown 附件，设置正确 content type 和缓存策略。
+- [x] `/doc/*` 对浏览器导航 fallback 到嵌入的 SPA `index.html`，API 404 保持 JSON 错误，不被 SPA 接管。
+- [x] 默认选择严格遵循 `README.md`、`index.md`、首个排序文件、空状态的优先级。
+- [x] 请求日志包含 method、route、相对文档路径、status、耗时；不记录文件正文。
+- [x] 目录模式不创建 watcher，刷新文件树只重新扫描一次。
 
 ### 测试与验收
 
-- [ ] API contract 测试覆盖正常、空目录、文件删除、标题变化、非法 query 和不存在文件。
-- [ ] depth、glob、尾部 `/` 和 symlink 规则与 convert 共享 fixture，并得到一致文件集合。
-- [ ] 路径穿越、URL 编码、NUL、绝对路径、大小写边界和 symlink escape 被拒绝。
-- [ ] 直接请求嵌套路由 `/doc/design/architecture.md` 返回 SPA；刷新不回到默认文档。
-- [ ] 手动刷新后文件树更新，随后打开文档读取最新磁盘内容。
+- [x] API contract 测试覆盖正常、空目录、文件删除、标题变化、非法 query 和不存在文件。
+- [x] depth、glob、尾部 `/` 和 symlink 规则与 convert 共享 fixture，并得到一致文件集合。
+- [x] 路径穿越、URL 编码、NUL、绝对路径、大小写边界和 symlink escape 被拒绝。
+- [x] 直接请求嵌套路由 `/doc/design/architecture.md` 返回 SPA；刷新不回到默认文档。
+- [x] 刷新文件树后得到最新集合，随后打开文档读取最新磁盘内容。
 
 ## 阶段 6：React 目录 WebUI
 
