@@ -1,0 +1,45 @@
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+html.m2h-mode-light {
+  color-scheme: light;
+  --m2h-page-background: #ffffff;
+}
+
+html.m2h-mode-dark {
+  color-scheme: dark;
+  --m2h-page-background: #0d1117;
+}
+
+html.m2h-mode-auto {
+  color-scheme: light dark;
+  --m2h-page-background: #ffffff;
+}
+
+body.m2h-page {
+  min-height: 100vh;
+  background: var(--m2h-page-background);
+}
+
+.markdown-body {
+  box-sizing: border-box;
+  min-width: 200px;
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 45px;
+}
+
+@media (prefers-color-scheme: dark) {
+  html.m2h-mode-auto {
+    --m2h-page-background: #0d1117;
+  }
+}
+
+@media (max-width: 767px) {
+  .markdown-body {
+    padding: 15px;
+  }
+}

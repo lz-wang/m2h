@@ -1,0 +1,103 @@
+.chroma {
+  color: var(--fgColor-default);
+  background-color: var(--bgColor-muted);
+}
+
+.chroma .err,
+.chroma .gr,
+.chroma .gt {
+  color: var(--color-prettylights-syntax-invalid-illegal-text);
+}
+
+.chroma .k,
+.chroma .kc,
+.chroma .kd,
+.chroma .kn,
+.chroma .kp,
+.chroma .kr,
+.chroma .kt,
+.chroma .nt {
+  color: var(--color-prettylights-syntax-keyword);
+}
+
+.chroma .na,
+.chroma .nb,
+.chroma .bp,
+.chroma .nc,
+.chroma .no,
+.chroma .nd,
+.chroma .ni,
+.chroma .ne,
+.chroma .nf,
+.chroma .nl {
+  color: var(--color-prettylights-syntax-entity);
+}
+
+.chroma .l,
+.chroma .ld,
+.chroma .m,
+.chroma .mb,
+.chroma .mf,
+.chroma .mh,
+.chroma .mi,
+.chroma .il,
+.chroma .mo,
+.chroma .s,
+.chroma .sa,
+.chroma .sb,
+.chroma .sc,
+.chroma .dl,
+.chroma .sd,
+.chroma .s2,
+.chroma .se,
+.chroma .sh,
+.chroma .si,
+.chroma .sx,
+.chroma .sr,
+.chroma .s1,
+.chroma .ss {
+  color: var(--color-prettylights-syntax-string);
+}
+
+.chroma .c,
+.chroma .ch,
+.chroma .cm,
+.chroma .c1,
+.chroma .cs,
+.chroma .cp,
+.chroma .cpf {
+  color: var(--color-prettylights-syntax-comment);
+}
+
+.chroma .gd {
+  color: var(--color-prettylights-syntax-markup-deleted-text);
+  background-color: var(--color-prettylights-syntax-markup-deleted-bg);
+}
+
+.chroma .gi {
+  color: var(--color-prettylights-syntax-markup-inserted-text);
+  background-color: var(--color-prettylights-syntax-markup-inserted-bg);
+}
+
+.chroma .gh,
+.chroma .gu {
+  color: var(--color-prettylights-syntax-markup-heading);
+  font-weight: 600;
+}
+
+.chroma .o,
+.chroma .ow,
+.chroma .p {
+  color: var(--fgColor-muted);
+}
+
+.chroma .n,
+.chroma .nx,
+.chroma .py,
+.chroma .nv,
+.chroma .vc,
+.chroma .vg,
+.chroma .vi,
+.chroma .vm {
+  color: var(--color-prettylights-syntax-variable);
+}

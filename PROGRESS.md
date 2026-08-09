@@ -1,15 +1,16 @@
 # m2h 开发进度
 
-最后更新：2026-08-09
+最后更新：2026-08-10
 
 ## 当前状态
 
-- 当前里程碑：阶段 1 已完成，下一步是阶段 2“共享 Markdown 渲染核心”。
-- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、`version` 与 `--version`；`convert`、`preview`、`view` 会返回明确的开发期错误。
+- 当前里程碑：阶段 2 已完成，下一步是阶段 3“文件发现与 `convert`”。
+- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、`version` 与 `--version`、供后续命令复用的共享 GFM 渲染核心；`convert`、`preview`、`view` 尚未接入并会返回明确的开发期错误。
 - 已完成提交：
   - `ab493ce docs(init): 初始化项目基础文档`
   - `f7e9552 chore(init): 初始化项目工程骨架`
-- CI 状态：`go.mod` 与 `web/package-lock.json` 已就位，workflow 会运行测试、Codecov 和六平台构建；阶段 1 发布前核验 main 与 tag workflow。
+  - `b18482e feat(cli): 完成阶段 1 工具链与版本骨架`
+- CI 状态：阶段 1 的 main 与 `v0.1.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知。
 
 本文件是实现顺序、范围和验收状态的唯一进度来源。用户命令契约见 `README.md`，发布摘要见 `CHANGELOG.md`。
 
@@ -108,7 +109,7 @@
 | --- | --- | --- | --- |
 | 0 | 文档、目录、Makefile、CI、实施计划 | 无 | 已完成 |
 | 1 | Go/Web 工具链、CLI 骨架、版本 | 阶段 0 | 已完成（v0.1.0） |
-| 2 | 共享 Markdown 渲染核心 | 阶段 1 | 未开始 |
+| 2 | 共享 Markdown 渲染核心 | 阶段 1 | 已完成（v0.2.0） |
 | 3 | 文件发现与 `convert` | 阶段 2 | 未开始 |
 | 4 | 单文件 `preview`、watcher、SSE | 阶段 2 | 未开始 |
 | 5 | 目录 `preview` API 与安全边界 | 阶段 3、4 | 未开始 |
@@ -139,20 +140,20 @@
 
 ### 交付物
 
-- [ ] 在 `internal/markdown` 定义 `RenderOptions`、主题、输出目标（convert/preview）和渲染结果（HTML、Title）。
-- [ ] 配置固定的 Goldmark GFM、代码高亮和 raw HTML 安全开关。
-- [ ] 实现 AST 级本地 Markdown link rewriter，不用渲染后字符串替换。
-- [ ] 实现 AST 级首个 H1 标题提取；标题纯文本化时正确处理行内代码、链接和强调。
-- [ ] 在 `internal/assets` 固定 `github-markdown-css`、代码主题 CSS、m2h layout CSS 和上游许可证。
-- [ ] 生成完整 HTML 文档模板，主题 `light/dark/auto` 覆盖页面背景、正文、代码块和移动端布局。
+- [x] 在 `internal/markdown` 定义 `RenderOptions`、主题、输出目标（convert/preview）和渲染结果（HTML、Title）。
+- [x] 配置固定的 Goldmark GFM、代码高亮和 raw HTML 安全开关。
+- [x] 实现 AST 级本地 Markdown link rewriter，不用渲染后字符串替换。
+- [x] 实现 AST 级首个 H1 标题提取；标题纯文本化时正确处理行内代码、链接和强调。
+- [x] 在 `internal/assets` 固定 `github-markdown-css`、代码主题 CSS、m2h layout CSS 和上游许可证。
+- [x] 生成完整 HTML 文档模板，主题 `light/dark/auto` 覆盖页面背景、正文、代码块和移动端布局。
 
 ### 测试与验收
 
-- [ ] fixture 覆盖 GFM 表格、任务列表、删除线、自动链接、围栏代码和语言高亮。
-- [ ] raw HTML 默认被抑制，`unsafe-html=true` 才原样渲染；危险 URL 默认仍安全处理。
-- [ ] 链接矩阵覆盖相对路径、父目录、query、fragment、绝对 URL、mailto、anchor 和非 Markdown 后缀。
-- [ ] convert 与 preview 对同一输入产生相同正文 AST 输出，仅链接目标和外层页面不同。
-- [ ] CSS 快照包含 980px、45px/15px 和 light/dark/auto 规则。
+- [x] fixture 覆盖 GFM 表格、任务列表、删除线、自动链接、围栏代码和语言高亮。
+- [x] raw HTML 默认被抑制，`unsafe-html=true` 才原样渲染；危险 URL 默认仍安全处理。
+- [x] 链接矩阵覆盖相对路径、父目录、query、fragment、绝对 URL、mailto、anchor 和非 Markdown 后缀。
+- [x] convert 与 preview 对同一输入产生相同正文 AST 输出，仅链接目标和外层页面不同。
+- [x] CSS 快照包含 980px、45px/15px 和 light/dark/auto 规则。
 
 ## 阶段 3：文件发现与 `convert`
 

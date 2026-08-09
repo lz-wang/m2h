@@ -4,7 +4,7 @@
 
 `m2h` 是一个使用 Go 实现的命令行工具，用于把 Markdown 转换为 HTML，或在浏览器、终端中预览 Markdown。
 
-> 当前状态：CLI 骨架和版本命令已经可用；`convert`、`preview`、`view` 仍处于后续阶段，调用时会返回明确的未实现错误。具体进度见 [PROGRESS.md](PROGRESS.md)。
+> 当前状态：CLI 骨架、版本命令和共享 Markdown 渲染核心已经可用；`convert`、`preview`、`view` 仍处于后续阶段，调用时会返回明确的未实现错误。具体进度见 [PROGRESS.md](PROGRESS.md)。
 
 ## 命令概览
 
@@ -116,7 +116,8 @@ $ m2h view README.md --mode dark
 ## Markdown 与页面样式
 
 - Markdown 语法固定为标准 GFM，不提供额外扩展选项；代码块支持语法高亮。
-- HTML 使用 `github-markdown-css`，正文最大宽度为 `980px`。
+- `convert` 与 `preview` 共用同一个 AST 解析、标题提取、链接改写和完整页面渲染核心，不维护两套规则。
+- HTML 使用内置的 `github-markdown-css` 5.9.0，正文最大宽度为 `980px`。
 - 桌面端正文 padding 为 `45px`；宽度不超过 `767px` 时为 `15px`。
 - raw HTML 与危险 URL 默认不渲染，只有显式传入 `--unsafe-html` 才允许 raw HTML。
 
