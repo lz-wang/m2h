@@ -7,6 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/lz-wang/m2h/internal/markdown"
+	"github.com/lz-wang/m2h/internal/server"
 )
 
 func runCommand(t *testing.T, args ...string) (string, string, error) {
@@ -121,7 +124,7 @@ func TestUnknownFlagsReturnStableError(t *testing.T) {
 func TestFeatureHandlersReportDevelopmentError(t *testing.T) {
 	t.Parallel()
 
-	for _, command := range []string{"preview", "view"} {
+	for _, command := range []string{"view"} {
 		_, _, err := runCommand(t, command, "README.md")
 		if err == nil {
 			t.Fatalf("m2h %s succeeded, want error", command)
@@ -129,6 +132,52 @@ func TestFeatureHandlersReportDevelopmentError(t *testing.T) {
 		want := "Error: " + command + " is not implemented in this release"
 		if got := err.Error(); got != want {
 			t.Fatalf("m2h %s error = %q, want %q", command, got, want)
+		}
+	}
+}
+
+func TestPreviewCommandForwardsOptions(t *testing.T) {
+	previous := runPreview
+	t.Cleanup(func() { runPreview = previous })
+
+	var captured server.Options
+	runPreview = func(_ context.Context, options server.Options) error {
+		captured = options
+		return nil
+	}
+	stdout, stderr, err := runCommand(
+		t,
+		"preview", "guide.md",
+		"--host", "0.0.0.0",
+		"--port", "9142",
+		"--browser",
+		"--mode", "dark",
+		"--unsafe-html",
+	)
+	if err != nil || stdout != "" || stderr != "" {
+		t.Fatalf("preview result stdout=%q stderr=%q err=%v", stdout, stderr, err)
+	}
+	if captured.Input != "guide.md" || captured.Host != "0.0.0.0" || captured.Port != 9142 ||
+		captured.Mode != markdown.ModeDark || !captured.Browser || !captured.UnsafeHTML || captured.Log == nil {
+		t.Fatalf("preview options = %+v", captured)
+	}
+}
+
+func TestPreviewCommandValidatesArgumentsAndPort(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"preview"}, want: "Error: preview requires exactly one file or directory"},
+		{args: []string{"preview", "one.md", "two.md"}, want: "Error: preview requires exactly one file or directory"},
+		{args: []string{"preview", "missing.md", "--port", "0"}, want: "Error: --port must be between 1 and 65535"},
+		{args: []string{"preview", "missing.md", "--port", "65536"}, want: "Error: --port must be between 1 and 65535"},
+	} {
+		_, _, err := runCommand(t, test.args...)
+		if err == nil || err.Error() != test.want {
+			t.Errorf("m2h %v error = %v, want %q", test.args, err, test.want)
 		}
 	}
 }

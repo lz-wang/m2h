@@ -12,14 +12,15 @@ import (
 
 	"github.com/lz-wang/m2h/internal/convert"
 	"github.com/lz-wang/m2h/internal/markdown"
+	"github.com/lz-wang/m2h/internal/server"
 	"github.com/lz-wang/m2h/internal/version"
 )
 
 const (
 	defaultDepth = 2
-	defaultHost  = "127.0.0.1"
+	defaultHost  = server.DefaultHost
 	defaultMode  = "auto"
-	defaultPort  = 8793
+	defaultPort  = server.DefaultPort
 )
 
 // New constructs the root command after validating the injected build version.
@@ -125,16 +126,52 @@ func previewCommand() *urfavecli.Command {
 		ArgsUsage: "<file|directory>",
 		Flags: []urfavecli.Flag{
 			&urfavecli.StringFlag{Name: "host", Value: defaultHost, Usage: "listen host"},
-			&urfavecli.IntFlag{Name: "port", Aliases: []string{"p"}, Value: defaultPort, Usage: "listen port"},
+			&urfavecli.IntFlag{
+				Name:    "port",
+				Aliases: []string{"p"},
+				Value:   defaultPort,
+				Usage:   "listen port",
+				Validator: func(value int) error {
+					if value < 1 || value > 65535 {
+						return fmt.Errorf("Error: --port must be between 1 and 65535")
+					}
+					return nil
+				},
+			},
 			&urfavecli.BoolFlag{Name: "browser", Usage: "open the default browser after listening"},
 			modeFlag(),
 			&urfavecli.BoolFlag{Name: "unsafe-html", Usage: "allow raw HTML in Markdown"},
 			&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob"},
 			&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth"},
 		},
-		Action:       notImplemented("preview"),
+		Action:       previewAction,
 		OnUsageError: normalizeUsageError,
 	}
+}
+
+var runPreview = server.Run
+
+func previewAction(ctx context.Context, command *urfavecli.Command) error {
+	if command.Args().Len() != 1 {
+		return fmt.Errorf("Error: preview requires exactly one file or directory")
+	}
+	err := runPreview(ctx, server.Options{
+		Input:      command.Args().First(),
+		Host:       command.String("host"),
+		Port:       command.Int("port"),
+		Mode:       markdown.Mode(command.String("mode")),
+		Browser:    command.Bool("browser"),
+		UnsafeHTML: command.Bool("unsafe-html"),
+		Pattern:    command.String("glob"),
+		Depth:      command.Int("depth"),
+		PatternSet: command.IsSet("glob"),
+		DepthSet:   command.IsSet("depth"),
+		Log:        command.Root().ErrWriter,
+	})
+	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
+		return err
+	}
+	return fmt.Errorf("Error: %w", err)
 }
 
 func viewCommand() *urfavecli.Command {

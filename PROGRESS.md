@@ -4,14 +4,15 @@
 
 ## 当前状态
 
-- 当前里程碑：阶段 3 已完成，下一步是阶段 4“单文件 `preview`、watcher 与 SSE”。
-- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、版本命令、共享 GFM 渲染核心，以及支持单文件/目录、depth、glob、资源复制与安全符号链接边界的 `convert`；`preview`、`view` 尚未接入。
+- 当前里程碑：阶段 4 已完成，下一步是阶段 5“目录 `preview` API 与安全边界”。
+- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、版本命令、共享 GFM 渲染核心、完整 `convert`，以及具备父目录监听、SSE 实时刷新、安全附件路由和优雅关闭的单文件 `preview`；目录 `preview` 与 `view` 尚未接入。
 - 已完成提交：
   - `ab493ce docs(init): 初始化项目基础文档`
   - `f7e9552 chore(init): 初始化项目工程骨架`
   - `b18482e feat(cli): 完成阶段 1 工具链与版本骨架`
   - `7f56e5d feat(markdown): 完成阶段 2 共享渲染核心`
-- CI 状态：阶段 2 的 main 与 `v0.2.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知。
+  - `171796a feat(convert): 完成阶段 3 文件发现与转换`
+- CI 状态：阶段 3 的 main 与 `v0.3.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知；v0.3.0 的 12 个 Release 资产、正文和 Darwin arm64 实际转换已核验。
 
 本文件是实现顺序、范围和验收状态的唯一进度来源。用户命令契约见 `README.md`，发布摘要见 `CHANGELOG.md`。
 
@@ -112,7 +113,7 @@
 | 1 | Go/Web 工具链、CLI 骨架、版本 | 阶段 0 | 已完成（v0.1.0） |
 | 2 | 共享 Markdown 渲染核心 | 阶段 1 | 已完成（v0.2.0） |
 | 3 | 文件发现与 `convert` | 阶段 2 | 已完成（v0.3.0） |
-| 4 | 单文件 `preview`、watcher、SSE | 阶段 2 | 未开始 |
+| 4 | 单文件 `preview`、watcher、SSE | 阶段 2 | 已完成（v0.4.0） |
 | 5 | 目录 `preview` API 与安全边界 | 阶段 3、4 | 未开始 |
 | 6 | React 目录 WebUI | 阶段 5 | 未开始 |
 | 7 | `view` 终端预览 | 阶段 2 | 未开始 |
@@ -181,20 +182,20 @@
 
 ### 交付物
 
-- [ ] 在 `internal/server` 实现 `--host`、`--port/-p`、优雅关闭、错误日志和单文档 HTML handler；默认监听 `127.0.0.1:8793`。
-- [ ] 在 `internal/watcher` 监听输入文件的父目录，按目标 basename 过滤 create/write/rename 事件并做 debounce。
-- [ ] 实现 `/api/events` SSE：连接保活、客户端断开清理、`document-changed` 广播。
-- [ ] 单文件页面不渲染标题栏、文件树或操作按钮，只渲染 `.markdown-body`。
-- [ ] `--browser` 在监听成功后打开平台默认浏览器；失败只记录错误，不终止已启动服务。
-- [ ] 为本地附件提供安全 `/assets/*` 路由，资源读取以 Markdown 父目录为 root。
+- [x] 在 `internal/server` 实现 `--host`、`--port/-p`、优雅关闭、错误日志和单文档 HTML handler；默认监听 `127.0.0.1:8793`。
+- [x] 在 `internal/watcher` 监听输入文件的父目录，按目标 basename 过滤 create/write/rename 事件并做 debounce。
+- [x] 实现 `/api/events` SSE：连接保活、客户端断开清理、`document-changed` 广播。
+- [x] 单文件页面不渲染标题栏、文件树或操作按钮，只渲染 `.markdown-body`。
+- [x] `--browser` 在监听成功后打开平台默认浏览器；失败只记录错误，不终止已启动服务。
+- [x] 为本地附件提供安全 `/assets/*` 路由，资源读取以 Markdown 父目录为 root。
 
 ### 测试与验收
 
-- [ ] 测试普通写入与 temp-file + rename 两种保存方式都触发一次有效刷新。
-- [ ] 测试无关文件变化不触发、事件 burst 被合并、客户端断开不泄漏 goroutine。
-- [ ] 测试默认 `127.0.0.1:8793`、自定义 host/port、端口占用与信号关闭。
-- [ ] 测试路径穿越、编码穿越和 symlink 越界附件请求均被拒绝。
-- [ ] 浏览器手动验收 light/dark/auto、代码块、移动端 padding 和实时刷新。
+- [x] 测试普通写入与 temp-file + rename 两种保存方式都触发一次有效刷新。
+- [x] 测试无关文件变化不触发、事件 burst 被合并、客户端断开不泄漏 goroutine。
+- [x] 测试默认 `127.0.0.1:8793`、自定义 host/port、端口占用与信号关闭。
+- [x] 测试路径穿越、编码穿越和 symlink 越界附件请求均被拒绝。
+- [ ] 浏览器手动验收 light/dark/auto、代码块、移动端 padding 和实时刷新（自动化 HTTP、SSE 与 CSS 契约已通过，保留给用户做浏览器验收）。
 
 ## 阶段 5：目录 `preview` API 与安全边界
 

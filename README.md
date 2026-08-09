@@ -4,7 +4,7 @@
 
 `m2h` 是一个使用 Go 实现的命令行工具，用于把 Markdown 转换为 HTML，或在浏览器、终端中预览 Markdown。
 
-> 当前状态：版本命令、共享 Markdown 渲染核心和 `convert` 已经可用；`preview`、`view` 仍处于后续阶段，调用时会返回明确的未实现错误。具体进度见 [PROGRESS.md](PROGRESS.md)。
+> 当前状态：版本命令、共享 Markdown 渲染核心、`convert` 和单文件 `preview` 已经可用；目录 `preview` 与 `view` 仍处于后续阶段，调用时会返回明确的未实现错误。具体进度见 [PROGRESS.md](PROGRESS.md)。
 
 ## 命令概览
 
@@ -94,6 +94,9 @@ $ m2h preview README.md --host 127.0.0.1 --port 8793 --browser
 ```
 
 单文件模式只显示 GitHub 风格正文，并监听文件所在目录以兼容编辑器的 atomic save；内容变化后通过 SSE 刷新页面。
+服务默认监听 `127.0.0.1:8793`，启动后输出实际预览地址；按 Ctrl+C 或向进程发送终止信号会优雅关闭。`--browser` 默认关闭，仅在监听成功后尝试打开系统默认浏览器，打开失败不会停止服务。
+
+Markdown 父目录内的本地图片与附件通过 `/assets/*` 提供；绝对路径、路径穿越、重复编码穿越和越界符号链接都会被拒绝。
 
 浏览一个 Markdown 目录：
 
@@ -102,9 +105,11 @@ $ m2h preview docs
 $ m2h preview docs --glob '**/*.md' --depth 4 --mode dark
 ```
 
+> 目录预览将在阶段 5 和阶段 6 接入；当前版本会返回 `Error: directory preview is not implemented in this release`。
+
 目录模式提供文件树、当前文档标题和手动刷新按钮。文档路由形如 `/doc/design/architecture.md`，直接刷新仍停留在当前文档。首次打开依次选择 `README.md`、`index.md`、按相对路径排序的第一个 Markdown；没有 Markdown 时显示空状态。
 
-服务默认监听 `127.0.0.1:8793`，`--browser` 默认关闭，`--mode` 默认 `auto`。目录模式不自动监听文件；点击刷新后，下一次打开文档会从磁盘读取最新内容。
+目录模式不自动监听文件；点击刷新后，下一次打开文档会从磁盘读取最新内容。
 
 ## 在终端中预览
 
@@ -130,6 +135,7 @@ $ m2h view README.md --mode dark
 ```text
 Error: unknown option
 Error: --glob can only be used when converting a directory
+Error: --glob can only be used when previewing a directory
 ```
 
 ## 从源码构建

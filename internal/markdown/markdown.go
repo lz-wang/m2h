@@ -66,6 +66,11 @@ var pageTemplate = template.Must(template.New("document").Parse(`<!doctype html>
 <body class="m2h-page">
   <article class="markdown-body">
 {{.Body}}  </article>
+{{if .LiveReload}}  <script>
+    const events = new EventSource("/api/events");
+    events.addEventListener("document-changed", () => window.location.reload());
+  </script>
+{{end}}
 </body>
 </html>
 `))
@@ -96,17 +101,19 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 
 	var page bytes.Buffer
 	data := struct {
-		Mode   Mode
-		Target Target
-		Title  string
-		Styles template.CSS
-		Body   template.HTML
+		Mode       Mode
+		Target     Target
+		Title      string
+		Styles     template.CSS
+		Body       template.HTML
+		LiveReload bool
 	}{
-		Mode:   normalized.Mode,
-		Target: normalized.Target,
-		Title:  title,
-		Styles: template.CSS(stylesheet),
-		Body:   template.HTML(body.String()),
+		Mode:       normalized.Mode,
+		Target:     normalized.Target,
+		Title:      title,
+		Styles:     template.CSS(stylesheet),
+		Body:       template.HTML(body.String()),
+		LiveReload: normalized.Target == TargetPreview,
 	}
 	if err := pageTemplate.Execute(&page, data); err != nil {
 		return Result{}, err
@@ -192,6 +199,13 @@ func rewriteDestination(destination []byte, options RenderOptions, image bool) [
 
 	extension := pathpkg.Ext(pathPart)
 	if !strings.EqualFold(extension, ".md") && !strings.EqualFold(extension, ".markdown") {
+		if options.Target == TargetPreview {
+			resolved, ok := resolveWithinRoot(options.SourcePath, pathPart)
+			if !ok {
+				return destination
+			}
+			return []byte("/assets/" + resolved + suffix)
+		}
 		return destination
 	}
 	if options.Target == TargetConvert {

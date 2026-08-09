@@ -89,6 +89,7 @@ func TestRenderRewritesLocalLinksAtASTLevel(t *testing.T) {
 		{name: "mailto", target: TargetConvert, sourcePath: "current.md", destination: "mailto:user@example.com", want: "mailto:user@example.com"},
 		{name: "anchor", target: TargetConvert, sourcePath: "current.md", destination: "#install", want: "#install"},
 		{name: "non markdown", target: TargetConvert, sourcePath: "current.md", destination: "guide.txt", want: "guide.txt"},
+		{name: "preview attachment", target: TargetPreview, sourcePath: "design/current.md", destination: "files/guide.pdf?download=1", want: "/assets/design/files/guide.pdf?download=1"},
 	}
 
 	for _, test := range tests {
@@ -196,6 +197,14 @@ func TestConvertAndPreviewShareRenderedBody(t *testing.T) {
 	}
 	if convert.HTML == preview.HTML {
 		t.Fatal("target-specific outer documents are identical")
+	}
+	if strings.Contains(convert.HTML, "EventSource") {
+		t.Fatal("convert HTML contains preview live-reload client")
+	}
+	for _, want := range []string{"new EventSource(\"/api/events\")", `addEventListener("document-changed"`} {
+		if !strings.Contains(preview.HTML, want) {
+			t.Errorf("preview HTML does not contain %q: %s", want, preview.HTML)
+		}
 	}
 }
 
