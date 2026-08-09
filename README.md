@@ -2,9 +2,9 @@
 
 [![codecov](https://codecov.io/gh/lz-wang/m2h/graph/badge.svg?token=iNo6LuOlzm)](https://codecov.io/gh/lz-wang/m2h)
 
-`m2h` 是一个计划使用 Go 实现的命令行工具，用于把 Markdown 转换为 HTML，或在浏览器、终端中预览 Markdown。
+`m2h` 是一个使用 Go 实现的命令行工具，用于把 Markdown 转换为 HTML，或在浏览器、终端中预览 Markdown。
 
-> 当前状态：项目正在初始化，下面记录的是待实现的 CLI 使用契约，当前还没有可执行程序。具体进度见 [PROGRESS.md](PROGRESS.md)。
+> 当前状态：CLI 骨架和版本命令已经可用；`convert`、`preview`、`view` 仍处于后续阶段，调用时会返回明确的未实现错误。具体进度见 [PROGRESS.md](PROGRESS.md)。
 
 ## 命令概览
 
@@ -131,12 +131,13 @@ Error: --glob can only be used when serving a directory
 
 ## 从源码构建
 
-项目结构完成但实现尚未开始。后续开发环境入口将统一由 Makefile 提供：
+开发环境入口统一由 Makefile 提供：
 
 ```console
 $ make setup
 $ make build
 $ make test
+$ make check
 $ make help
 ```
 

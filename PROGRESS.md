@@ -4,12 +4,12 @@
 
 ## 当前状态
 
-- 当前里程碑：阶段 0 已完成，下一步是阶段 1“工具链、CLI 骨架与版本”。
-- 当前可用能力：`make help`、`make version`；m2h 可执行程序尚未实现。
+- 当前里程碑：阶段 1 已完成，下一步是阶段 2“共享 Markdown 渲染核心”。
+- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、`version` 与 `--version`；`convert`、`preview`、`view` 会返回明确的开发期错误。
 - 已完成提交：
   - `ab493ce docs(init): 初始化项目基础文档`
   - `f7e9552 chore(init): 初始化项目工程骨架`
-- CI 状态：workflow 已就位；在 `go.mod` 与 `web/package-lock.json` 创建前，只运行 readiness，不执行测试和构建。
+- CI 状态：`go.mod` 与 `web/package-lock.json` 已就位，workflow 会运行测试、Codecov 和六平台构建；阶段 1 发布前核验 main 与 tag workflow。
 
 本文件是实现顺序、范围和验收状态的唯一进度来源。用户命令契约见 `README.md`，发布摘要见 `CHANGELOG.md`。
 
@@ -107,7 +107,7 @@
 | 阶段 | 交付内容 | 依赖 | 状态 |
 | --- | --- | --- | --- |
 | 0 | 文档、目录、Makefile、CI、实施计划 | 无 | 已完成 |
-| 1 | Go/Web 工具链、CLI 骨架、版本 | 阶段 0 | 未开始 |
+| 1 | Go/Web 工具链、CLI 骨架、版本 | 阶段 0 | 已完成（v0.1.0） |
 | 2 | 共享 Markdown 渲染核心 | 阶段 1 | 未开始 |
 | 3 | 文件发现与 `convert` | 阶段 2 | 未开始 |
 | 4 | 单文件 `preview`、watcher、SSE | 阶段 2 | 未开始 |
@@ -120,20 +120,20 @@
 
 ### 交付物
 
-- [ ] 创建 `go.mod/go.sum`，module path 使用仓库的最终 GitHub 路径，声明 Go 1.26。
-- [ ] 创建 `main.go`，只负责构建 `cli.Command`、注入版本并返回进程退出码。
-- [ ] 在 `internal/cli` 注册 `version`、`convert`、`preview`、`view` 命令和完整 flags；未实现 handler 返回明确的开发期错误。
-- [ ] 在 `internal/version` 实现版本值、格式校验和 CLI 输出。
-- [ ] 初始化 React 19 + TypeScript 7 + Vite + Vitest + Biome 的最小可构建 Web 项目和 lockfile，不实现目录 UI。
-- [ ] 让 `make setup`、`make build`、`make test`、`make check` 可执行，并让 CI readiness 自动进入测试/构建分支。
+- [x] 创建 `go.mod/go.sum`，module path 使用仓库的最终 GitHub 路径，声明 Go 1.26。
+- [x] 创建 `main.go`，只负责构建 `cli.Command`、注入版本并返回进程退出码。
+- [x] 在 `internal/cli` 注册 `version`、`convert`、`preview`、`view` 命令和完整 flags；未实现 handler 返回明确的开发期错误。
+- [x] 在 `internal/version` 实现版本值、格式校验和 CLI 输出。
+- [x] 初始化 React 19 + TypeScript 7 + Vite + Vitest + Biome 的最小可构建 Web 项目和 lockfile，不实现目录 UI。
+- [x] 让 `make setup`、`make build`、`make test`、`make check` 可执行，并让 CI readiness 自动进入测试/构建分支。
 
 ### 测试与验收
 
-- [ ] `m2h version`、`m2h --version`、`make version` 输出一致。
-- [ ] 无 tag 构建为 `dev-<commit-date>-<commit7>`；精确 `v1.2.3` tag 构建为 `1.2.3`。
-- [ ] 所有未知 flag 返回 `Error: unknown option` 和非零退出码。
-- [ ] 命令帮助包含 README 中约定的参数、默认值和短选项。
-- [ ] `make check` 与 `make build` 通过；CI 至少完成一次 Linux test job。
+- [x] `m2h version`、`m2h --version`、`make version` 输出一致。
+- [x] 无 tag 构建为 `dev-<commit-date>-<commit7>`；精确 `v1.2.3` tag 构建为 `1.2.3`。
+- [x] 所有未知 flag 返回 `Error: unknown option` 和非零退出码。
+- [x] 命令帮助包含 README 中约定的参数、默认值和短选项。
+- [x] `make check` 与 `make build` 通过；CI 至少完成一次 Linux test job。
 
 ## 阶段 2：共享 Markdown 渲染核心
 
