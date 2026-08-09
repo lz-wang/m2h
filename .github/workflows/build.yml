@@ -124,6 +124,25 @@ jobs:
       - name: Build binary
         run: make build-os OS=${{ matrix.goos }} ARCH=${{ matrix.goarch }} VERSION=${{ needs.readiness.outputs.version }}
 
+      - name: Prepare WebDAV payload
+        shell: bash
+        run: |
+          source="dist/m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}"
+          cp "${source}" bin
+          sha256sum bin > bin.sha256
+
+      - name: Upload to WebDAV
+        continue-on-error: true
+        uses: bxb100/action-upload-webdav@v1
+        with:
+          webdav_address: ${{ secrets.WEBDAV_SERVER }}
+          webdav_username: ${{ secrets.WEBDAV_USERNAME }}
+          webdav_password: ${{ secrets.WEBDAV_PASSWORD }}
+          webdav_upload_path: "/Shares/github/${{ github.repository }}/${{ matrix.goos }}/${{ matrix.goarch }}/${{ needs.readiness.outputs.version }}"
+          files: |
+            bin
+            bin.sha256
+
       - name: Upload binary
         uses: actions/upload-artifact@v6
         with:

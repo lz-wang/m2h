@@ -22,7 +22,7 @@
 - [x] 创建 100 行以内、渐进式披露的 `AGENTS.md`。
 - [x] 创建面向 CLI 用户的 `README.md`，并明确功能尚未实现。
 - [x] 创建只记录新特性与修复的 Keep a Changelog 格式 `CHANGELOG.md`。
-- [x] 创建 Makefile、`.gitignore`、六平台 CI/Codecov/Pushover workflow。
+- [x] 创建 Makefile、`.gitignore`、六平台 build/release、Codecov、WebDAV、Pushover workflows。
 - [x] 用 `.gitkeep` 初始化 `internal/*` 与 `web/src` 目录。
 - [x] 将后续实现拆成有依赖、有测试、有完成标准的阶段。
 - [x] 本轮没有创建 `main.go`、模块清单、前端清单或业务实现。
@@ -257,8 +257,10 @@
 - [ ] 完成 Go `//go:embed` WebUI 和 CSS 资产，验证发布二进制不依赖工作目录文件。
 - [ ] `make build-all` 生成 linux/darwin/windows × amd64/arm64 六个二进制。
 - [ ] `make dist` 生成六个压缩包和 `checksums.txt`，包内含二进制、README、LICENSE。
-- [ ] GitHub Actions 使用 checkout@v6、setup-node@v6、setup-go@v6、codecov@v7，并上传六平台 artifacts。
-- [ ] 配置 `CODECOV_TOKEN`、`PUSHOVER_TOKEN`、`PUSHOVER_USER`；缺少 Pushover secret 时安全跳过通知。
+- [ ] build workflow 使用 checkout@v6、setup-node@v6、setup-go@v6、codecov@v7，并上传六平台 artifacts。
+- [ ] release workflow 只接受 `vX.Y.Z` tag，复用完整检查与六平台构建，并从 CHANGELOG 对应版本生成或更新 GitHub Release。
+- [ ] build/release 均将二进制与 SHA-256 上传到 `/Shares/github/<owner>/<repo>/<os>/<arch>/<version>/bin{,.sha256}`。
+- [ ] 配置 `CODECOV_TOKEN`、`PUSHOVER_TOKEN`、`PUSHOVER_USER`、`WEBDAV_SERVER`、`WEBDAV_USERNAME`、`WEBDAV_PASSWORD`；缺少 Pushover secret 时安全跳过通知。
 - [ ] README 移除“尚未实现”提示并以实测输出更新所有示例。
 - [ ] 发布时把实际新特性/修复从 `[未发布]` 移到 `x.y.z`，内容与 GitHub Release 完全一致。
 
@@ -268,7 +270,7 @@
 - [ ] 校验六个 archive、文件名、Windows `.exe`、SHA-256 和解压后的 `m2h version`。
 - [ ] 在 macOS、Linux、Windows 至少各运行 version、单文件 convert、单文件 preview、view smoke test。
 - [ ] 正式 tag `vX.Y.Z` 的二进制只输出 `X.Y.Z`；非 tag 构建输出开发版本格式。
-- [ ] GitHub Actions test、Codecov、六个 matrix build、artifact 上传和 Pushover 状态全部验证。
+- [ ] build/release 的 test、Codecov、六个 matrix build、artifact、WebDAV、GitHub Release 和 Pushover 状态全部验证。
 
 ## 横向测试矩阵
 
