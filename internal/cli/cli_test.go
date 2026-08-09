@@ -10,6 +10,7 @@ import (
 
 	"github.com/lz-wang/m2h/internal/markdown"
 	"github.com/lz-wang/m2h/internal/server"
+	"github.com/lz-wang/m2h/internal/view"
 )
 
 func runCommand(t *testing.T, args ...string) (string, string, error) {
@@ -121,17 +122,47 @@ func TestUnknownFlagsReturnStableError(t *testing.T) {
 	}
 }
 
-func TestFeatureHandlersReportDevelopmentError(t *testing.T) {
+func TestViewCommandForwardsOptions(t *testing.T) {
+	previous := runView
+	t.Cleanup(func() { runView = previous })
+
+	var captured view.Options
+	runView = func(_ context.Context, options view.Options) error {
+		captured = options
+		return nil
+	}
+	stdout, stderr, err := runCommand(t, "view", "guide.md", "--mode", "light")
+	if err != nil || stdout != "" || stderr != "" {
+		t.Fatalf("view result stdout=%q stderr=%q err=%v", stdout, stderr, err)
+	}
+	if captured.Input != "guide.md" || captured.Mode != markdown.ModeLight || captured.Stdin != os.Stdin || captured.Output == nil {
+		t.Fatalf("view options = %+v", captured)
+	}
+}
+
+func TestViewCommandRendersMarkdown(t *testing.T) {
+	t.Setenv("NO_COLOR", "1")
+	source := filepath.Join(t.TempDir(), "guide.md")
+	if err := os.WriteFile(source, []byte("# Guide\n\n- terminal"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCommand(t, "view", source, "--mode", "dark")
+	if err != nil || stderr != "" {
+		t.Fatalf("view result stdout=%q stderr=%q err=%v", stdout, stderr, err)
+	}
+	if !strings.Contains(stdout, "Guide") || !strings.Contains(stdout, "terminal") || strings.Contains(stdout, "\x1b[") {
+		t.Fatalf("view output = %q", stdout)
+	}
+}
+
+func TestViewCommandValidatesArguments(t *testing.T) {
 	t.Parallel()
 
-	for _, command := range []string{"view"} {
-		_, _, err := runCommand(t, command, "README.md")
-		if err == nil {
-			t.Fatalf("m2h %s succeeded, want error", command)
-		}
-		want := "Error: " + command + " is not implemented in this release"
-		if got := err.Error(); got != want {
-			t.Fatalf("m2h %s error = %q, want %q", command, got, want)
+	for _, args := range [][]string{{"view"}, {"view", "one.md", "two.md"}} {
+		_, _, err := runCommand(t, args...)
+		if err == nil || err.Error() != "Error: view requires exactly one Markdown file" {
+			t.Errorf("m2h %v error = %v", args, err)
 		}
 	}
 }

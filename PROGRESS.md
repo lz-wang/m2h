@@ -4,8 +4,8 @@
 
 ## 当前状态
 
-- 当前里程碑：阶段 6 已完成，下一步是阶段 7“`view` 终端预览”。
-- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、版本命令、共享 GFM 渲染核心、完整 `convert`、单文件实时 `preview`，以及具备文件树、历史路由、三种主题、手动刷新、可访问状态反馈和安全 API 的 React 目录预览；`view` 尚未接入。
+- 当前里程碑：阶段 7 已完成，下一步是阶段 8“跨平台发布与文档收口”。
+- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、版本命令、共享 GFM 渲染核心、完整 `convert`、单文件实时 `preview`、具备文件树、历史路由、三种主题、手动刷新、可访问状态反馈和安全 API 的 React 目录预览，以及支持背景探测、`NO_COLOR` 和取消的单文件终端 `view`。
 - 已完成提交：
   - `ab493ce docs(init): 初始化项目基础文档`
   - `f7e9552 chore(init): 初始化项目工程骨架`
@@ -14,7 +14,9 @@
   - `171796a feat(convert): 完成阶段 3 文件发现与转换`
   - `2363f5b feat(preview): 完成阶段 4 单文件实时预览`
   - `f7377c0 feat(preview): 完成阶段 5 目录预览 API`
-- CI 状态：阶段 5 的 main 与 `v0.5.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知；v0.5.0 的 12 个 Release 资产、正文和 Darwin arm64 目录 API 已核验。
+  - `1ccd26c feat(web): 完成阶段 6 目录预览界面`
+  - `feat(view): 完成阶段 7 终端预览`（本阶段提交）
+- CI 状态：阶段 6 的 main 与 `v0.6.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知；v0.6.0 的 12 个 Release 资产、正文和 Darwin arm64 内嵌 WebUI 已核验。阶段 7 本地 `make check`、Go race、六平台交叉构建和 Darwin arm64 独立工作目录 smoke 已通过，并在 main/release workflow 新增 Linux、macOS、Windows 原生 version + view smoke 矩阵。
 
 本文件是实现顺序、范围和验收状态的唯一进度来源。用户命令契约见 `README.md`，发布摘要见 `CHANGELOG.md`。
 
@@ -93,7 +95,7 @@
 - 文件监听：`github.com/fsnotify/fsnotify`。
 - Markdown：`github.com/yuin/goldmark` v1 最新稳定版。
 - 代码高亮：`github.com/yuin/goldmark-highlighting/v2`。
-- 终端渲染：`github.com/charmbracelet/glamour` 最新稳定版，行为参考 Glow。
+- 终端渲染：`charm.land/glamour/v2` v2.0.1；背景探测与输出降级使用 `charm.land/lipgloss/v2` v2.0.5，行为参考 Glow。
 
 ### Web
 
@@ -118,7 +120,7 @@
 | 4 | 单文件 `preview`、watcher、SSE | 阶段 2 | 已完成（v0.4.0） |
 | 5 | 目录 `preview` API 与安全边界 | 阶段 3、4 | 已完成（v0.5.0） |
 | 6 | React 目录 WebUI | 阶段 5 | 已完成（v0.6.0） |
-| 7 | `view` 终端预览 | 阶段 2 | 未开始 |
+| 7 | `view` 终端预览 | 阶段 2 | 已完成（v0.7.0） |
 | 8 | 跨平台发布与文档收口 | 阶段 3–7 | 未开始 |
 
 ## 阶段 1：工具链、CLI 骨架与版本
@@ -242,17 +244,17 @@
 
 ### 交付物
 
-- [ ] 使用 Glamour 渲染单个本地 Markdown 文件，不启动 Web 服务。
-- [ ] `--mode light|dark|auto` 映射到终端样式；auto 使用终端背景检测能力，无法检测时使用稳定默认值。
-- [ ] 非文件、目录输入、读取失败和未知 mode 返回明确错误与非零退出码。
-- [ ] 复用共享输入安全和标准 GFM 语法配置；不复制浏览器 HTML/CSS 渲染路径。
+- [x] 使用 Glamour 渲染单个本地 Markdown 文件，不启动 Web 服务。
+- [x] `--mode light|dark|auto` 映射到终端样式；auto 使用终端背景检测能力，无法检测时使用稳定默认值。
+- [x] 非文件、目录输入、读取失败和未知 mode 返回明确错误与非零退出码。
+- [x] 复用共享输入安全和标准 GFM 语法配置；不复制浏览器 HTML/CSS 渲染路径。
 
 ### 测试与验收
 
-- [ ] golden tests 覆盖标题、列表、表格、代码块、链接和 Unicode。
-- [ ] 颜色输出在非 TTY/`NO_COLOR` 场景遵守终端约定。
-- [ ] 大文件渲染可取消，错误不输出半截成功提示。
-- [ ] `make test` 与三大平台基础 smoke test 通过。
+- [x] golden tests 覆盖标题、列表、表格、代码块、链接和 Unicode。
+- [x] 颜色输出在非 TTY/`NO_COLOR` 场景遵守终端约定。
+- [x] 大文件渲染可取消，错误不输出半截成功提示。
+- [x] `make test` 与三大平台基础 smoke test 通过：本地 `make check`、race、六目标交叉构建已通过，CI 在 Linux、macOS、Windows 原生运行 version + view。
 
 ## 阶段 8：跨平台发布与文档收口
 

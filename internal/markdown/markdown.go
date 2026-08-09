@@ -133,22 +133,49 @@ func Title(source []byte, sourcePath string) (string, error) {
 	return extractTitle(document, source, normalized), nil
 }
 
+// NewGFM creates a Markdown engine with m2h's standard GFM extensions plus any
+// renderer-specific extensions supplied by the caller.
+func NewGFM(extraExtensions ...goldmark.Extender) goldmark.Markdown {
+	extensions := append([]goldmark.Extender{extension.GFM}, extraExtensions...)
+	return goldmark.New(goldmark.WithExtensions(extensions...))
+}
+
+// SanitizeDangerousURLs removes link and image destinations that Goldmark's
+// HTML renderer would reject, allowing alternate renderers to share the same
+// default-safe URL contract.
+func SanitizeDangerousURLs(document ast.Node) error {
+	return ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch typed := node.(type) {
+		case *ast.Link:
+			if goldmarkhtml.IsDangerousURL(bytes.TrimSpace(typed.Destination)) {
+				typed.Destination = nil
+			}
+		case *ast.Image:
+			if goldmarkhtml.IsDangerousURL(bytes.TrimSpace(typed.Destination)) {
+				typed.Destination = nil
+			}
+		}
+		return ast.WalkContinue, nil
+	})
+}
+
 func newEngine(unsafeHTML bool) goldmark.Markdown {
 	rendererOptions := []renderer.Option{}
 	if unsafeHTML {
 		rendererOptions = append(rendererOptions, goldmarkhtml.WithUnsafe())
 	}
 
-	return goldmark.New(
-		goldmark.WithExtensions(
-			extension.GFM,
-			highlighting.NewHighlighting(
-				highlighting.WithStyle("github"),
-				highlighting.WithFormatOptions(html.WithClasses(true)),
-			),
+	engine := NewGFM(
+		highlighting.NewHighlighting(
+			highlighting.WithStyle("github"),
+			highlighting.WithFormatOptions(html.WithClasses(true)),
 		),
-		goldmark.WithRendererOptions(rendererOptions...),
 	)
+	engine.Renderer().AddOptions(rendererOptions...)
+	return engine
 }
 
 func normalizeOptions(options RenderOptions) (RenderOptions, error) {
@@ -181,6 +208,9 @@ func normalizeSourcePath(sourcePath string) (string, error) {
 }
 
 func rewriteDocument(document ast.Node, options RenderOptions) error {
+	if err := SanitizeDangerousURLs(document); err != nil {
+		return err
+	}
 	return ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -196,10 +226,6 @@ func rewriteDocument(document ast.Node, options RenderOptions) error {
 }
 
 func rewriteDestination(destination []byte, options RenderOptions, image bool) []byte {
-	if goldmarkhtml.IsDangerousURL(bytes.TrimSpace(destination)) {
-		return nil
-	}
-
 	original := string(destination)
 	pathPart, suffix := splitDestination(original)
 	if !isRelativeLocalPath(pathPart) {

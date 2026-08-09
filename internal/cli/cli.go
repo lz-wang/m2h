@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	urfavecli "github.com/urfave/cli/v3"
@@ -14,6 +15,7 @@ import (
 	"github.com/lz-wang/m2h/internal/markdown"
 	"github.com/lz-wang/m2h/internal/server"
 	"github.com/lz-wang/m2h/internal/version"
+	"github.com/lz-wang/m2h/internal/view"
 )
 
 const (
@@ -32,7 +34,7 @@ func New(buildVersion string, stdout, stderr io.Writer) (*urfavecli.Command, err
 
 	command := &urfavecli.Command{
 		Name:        "m2h",
-		Usage:       "convert and preview GitHub-flavored Markdown",
+		Usage:       "convert and preview GitHub-flavored Markdown in browsers or terminals",
 		UsageText:   "m2h [global options] command [command options]",
 		HideVersion: true,
 		Writer:      stdout,
@@ -180,9 +182,27 @@ func viewCommand() *urfavecli.Command {
 		Usage:        "render one Markdown file in the terminal",
 		ArgsUsage:    "<file>",
 		Flags:        []urfavecli.Flag{modeFlag()},
-		Action:       notImplemented("view"),
+		Action:       viewAction,
 		OnUsageError: normalizeUsageError,
 	}
+}
+
+var runView = view.Run
+
+func viewAction(ctx context.Context, command *urfavecli.Command) error {
+	if command.Args().Len() != 1 {
+		return fmt.Errorf("Error: view requires exactly one Markdown file")
+	}
+	err := runView(ctx, view.Options{
+		Input:  command.Args().First(),
+		Mode:   markdown.Mode(command.String("mode")),
+		Stdin:  os.Stdin,
+		Output: command.Root().Writer,
+	})
+	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
+		return err
+	}
+	return fmt.Errorf("Error: %w", err)
 }
 
 func modeFlag() *urfavecli.StringFlag {
@@ -199,12 +219,6 @@ func modeFlag() *urfavecli.StringFlag {
 				return fmt.Errorf("Error: --mode must be one of light, dark, or auto")
 			}
 		},
-	}
-}
-
-func notImplemented(name string) urfavecli.ActionFunc {
-	return func(context.Context, *urfavecli.Command) error {
-		return fmt.Errorf("Error: %s is not implemented in this release", name)
 	}
 }
 

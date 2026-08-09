@@ -187,9 +187,55 @@ jobs:
             release/*.zip.sha256
           if-no-files-found: error
 
+  smoke:
+    name: Smoke ${{ matrix.os }}
+    needs: [prepare, test]
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.prepare.outputs.tag }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          check-latest: true
+
+      - name: Build native binary
+        shell: bash
+        run: |
+          npm ci --prefix web
+          npm run build --prefix web
+          binary="m2h"
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then binary="m2h.exe"; fi
+          go build -tags webui -trimpath -buildvcs=false \
+            -ldflags "-X main.M2HVersion=${{ needs.prepare.outputs.version }}" \
+            -o "${binary}" .
+
+      - name: Run native version and view smoke tests
+        shell: bash
+        run: |
+          binary="./m2h"
+          if [[ "${RUNNER_OS}" == "Windows" ]]; then binary="./m2h.exe"; fi
+          printf '# Smoke\n\n- %s\n' "${RUNNER_OS}" > smoke.md
+          "${binary}" version | grep -Fx '${{ needs.prepare.outputs.version }}'
+          NO_COLOR=1 "${binary}" view smoke.md --mode dark | grep -F 'Smoke'
+
   publish:
     name: Publish GitHub Release
-    needs: [prepare, test, build]
+    needs: [prepare, test, build, smoke]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -237,7 +283,7 @@ jobs:
 
   notify:
     name: Pushover notification
-    needs: [prepare, test, build, publish]
+    needs: [prepare, test, build, smoke, publish]
     if: always()
     runs-on: ubuntu-latest
     steps:
@@ -255,8 +301,9 @@ jobs:
 
           TEST_RESULT="${{ needs.test.result }}"
           BUILD_RESULT="${{ needs.build.result }}"
+          SMOKE_RESULT="${{ needs.smoke.result }}"
           PUBLISH_RESULT="${{ needs.publish.result }}"
-          if [[ "${TEST_RESULT}" == "success" && "${BUILD_RESULT}" == "success" && "${PUBLISH_RESULT}" == "success" ]]; then
+          if [[ "${TEST_RESULT}" == "success" && "${BUILD_RESULT}" == "success" && "${SMOKE_RESULT}" == "success" && "${PUBLISH_RESULT}" == "success" ]]; then
             PRIORITY="0"
             TITLE="m2h 发布成功"
           else
@@ -268,6 +315,7 @@ jobs:
           <b>m2h 发布通知</b>
           <u>测试结果</u>: ${TEST_RESULT}
           <u>构建结果</u>: ${BUILD_RESULT}
+          <u>三平台 Smoke</u>: ${SMOKE_RESULT}
           <u>发布结果</u>: ${PUBLISH_RESULT}
           <u>版本</u>: <font color="#0000ff">${RELEASE_TAG}</font>
           <u>触发人</u>: <i>${{ github.actor }}</i>

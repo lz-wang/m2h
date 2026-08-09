@@ -4,7 +4,7 @@
 
 `m2h` 是一个使用 Go 实现的命令行工具，用于把 Markdown 转换为 HTML，或在浏览器、终端中预览 Markdown。
 
-> 当前状态：版本命令、共享 Markdown 渲染核心、`convert`、单文件 `preview` 和 React 目录预览已经可用；`view` 仍处于后续阶段。具体进度见 [PROGRESS.md](PROGRESS.md)。
+> 当前状态：版本命令、共享 Markdown 渲染核心、`convert`、单文件与 React 目录 `preview`，以及终端 `view` 均已可用。具体进度见 [PROGRESS.md](PROGRESS.md)。
 
 ## 命令概览
 
@@ -120,19 +120,22 @@ $ m2h preview docs --glob '**/*.md' --depth 4 --mode dark
 
 页面顶部和浏览器标签标题直接使用 API 返回的 `title`；React 不会重新解析服务端 HTML 来猜测标题。WebUI、组件样式和共享 Markdown CSS 都嵌入单个 Go 二进制，不依赖启动时的工作目录文件。
 
-## 在终端中预览（阶段 7 规划）
+## 在终端中预览
 
 ```console
 $ m2h view README.md
 $ m2h view README.md --mode dark
+$ NO_COLOR=1 m2h view README.md --mode light
 ```
 
-阶段 7 将让 `view` 使用终端样式渲染单个 Markdown 文件且不启动 Web 服务。当前版本调用该命令会返回明确的未实现错误。
+`view` 使用 Glamour 在当前终端渲染一个本地 Markdown 文件，不启动 Web 服务，也不接受目录或非 Markdown 输入。`--mode` 支持 `light`、`dark` 和默认的 `auto`；`auto` 会在真实终端中探测背景，无法探测或输出被重定向时稳定使用 dark 样式。
+
+设置非空的 `NO_COLOR` 会禁用 ANSI 颜色；管道或文件等非 TTY 输出也会自动移除颜色控制序列。输入读取或渲染失败时不会先写出半截成功内容，取消命令会返回非零退出码。
 
 ## Markdown 与页面样式
 
 - Markdown 语法固定为标准 GFM，不提供额外扩展选项；代码块支持语法高亮。
-- `convert` 与 `preview` 共用同一个 AST 解析、标题提取、链接改写和完整页面渲染核心，不维护两套规则。
+- `convert` 与 `preview` 共用同一个 AST 解析、标题提取、链接改写和完整页面渲染核心；`view` 复用相同的标准 GFM 配置，但使用独立的终端 ANSI renderer，不复制浏览器 HTML/CSS 路径。
 - HTML 使用内置的 `github-markdown-css` 5.9.0，正文最大宽度为 `980px`。
 - 桌面端正文 padding 为 `45px`；宽度不超过 `767px` 时为 `15px`。
 - raw HTML 与危险 URL 默认不渲染，只有显式传入 `--unsafe-html` 才允许 raw HTML。
