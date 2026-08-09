@@ -4,13 +4,14 @@
 
 ## 当前状态
 
-- 当前里程碑：阶段 2 已完成，下一步是阶段 3“文件发现与 `convert`”。
-- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、`version` 与 `--version`、供后续命令复用的共享 GFM 渲染核心；`convert`、`preview`、`view` 尚未接入并会返回明确的开发期错误。
+- 当前里程碑：阶段 3 已完成，下一步是阶段 4“单文件 `preview`、watcher 与 SSE”。
+- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、版本命令、共享 GFM 渲染核心，以及支持单文件/目录、depth、glob、资源复制与安全符号链接边界的 `convert`；`preview`、`view` 尚未接入。
 - 已完成提交：
   - `ab493ce docs(init): 初始化项目基础文档`
   - `f7e9552 chore(init): 初始化项目工程骨架`
   - `b18482e feat(cli): 完成阶段 1 工具链与版本骨架`
-- CI 状态：阶段 1 的 main 与 `v0.1.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知。
+  - `7f56e5d feat(markdown): 完成阶段 2 共享渲染核心`
+- CI 状态：阶段 2 的 main 与 `v0.2.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知。
 
 本文件是实现顺序、范围和验收状态的唯一进度来源。用户命令契约见 `README.md`，发布摘要见 `CHANGELOG.md`。
 
@@ -110,7 +111,7 @@
 | 0 | 文档、目录、Makefile、CI、实施计划 | 无 | 已完成 |
 | 1 | Go/Web 工具链、CLI 骨架、版本 | 阶段 0 | 已完成（v0.1.0） |
 | 2 | 共享 Markdown 渲染核心 | 阶段 1 | 已完成（v0.2.0） |
-| 3 | 文件发现与 `convert` | 阶段 2 | 未开始 |
+| 3 | 文件发现与 `convert` | 阶段 2 | 已完成（v0.3.0） |
 | 4 | 单文件 `preview`、watcher、SSE | 阶段 2 | 未开始 |
 | 5 | 目录 `preview` API 与安全边界 | 阶段 3、4 | 未开始 |
 | 6 | React 目录 WebUI | 阶段 5 | 未开始 |
@@ -159,22 +160,22 @@
 
 ### 交付物
 
-- [ ] 在 `internal/convert` 区分文件/目录输入，统一规范化尾部 `/`、绝对路径和根目录符号链接。
-- [ ] 使用 doublestar 实现 depth + glob 过滤；结果按规范化相对路径稳定排序。
-- [ ] 单文件默认写入同目录同名 `.html`，`--output/-o` 可指定文件。
-- [ ] 目录输出保留相对结构；未指定 output 时 HTML 写在源文件旁边。
-- [ ] `--copy-assets=true` 默认复制非 Markdown 文件，false 时只生成 HTML。
-- [ ] output 位于 source 内时排除 output subtree，防止重复遍历；写入使用临时文件 + rename。
-- [ ] 所有目标冲突、权限错误和部分失败返回上下文错误，不能把失败批次报告为成功。
+- [x] 在 `internal/convert` 区分文件/目录输入，统一规范化尾部 `/`、绝对路径和根目录符号链接。
+- [x] 使用 doublestar 实现 depth + glob 过滤；结果按规范化相对路径稳定排序。
+- [x] 单文件默认写入同目录同名 `.html`，`--output/-o` 可指定文件。
+- [x] 目录输出保留相对结构；未指定 output 时 HTML 写在源文件旁边。
+- [x] `--copy-assets=true` 默认复制非 Markdown 文件，false 时只生成 HTML。
+- [x] output 位于 source 内时排除 output subtree，防止重复遍历；写入使用临时文件 + rename。
+- [x] 所有目标冲突、权限错误和部分失败返回上下文错误，不能把失败批次报告为成功。
 
 ### 测试与验收
 
-- [ ] 测试深度 0/1/2/3、`*`/`**`、Windows 分隔符归一化、空匹配和非法 glob。
-- [ ] 测试目录有无尾部 `/` 输出完全一致。
-- [ ] 测试资源复制、目录结构、同名冲突、output-in-source 和 copy-assets=false。
-- [ ] 测试根输入 symlink、内部 symlink directory 跳过、symlink 越界保护。
-- [ ] `--glob`、`--depth` 用于单文件时返回针对性错误。
-- [ ] `make test` 和针对 convert fixture 的集成测试通过。
+- [x] 测试深度 0/1/2/3、`*`/`**`、Windows 分隔符归一化、空匹配和非法 glob。
+- [x] 测试目录有无尾部 `/` 输出完全一致。
+- [x] 测试资源复制、目录结构、同名冲突、output-in-source 和 copy-assets=false。
+- [x] 测试根输入 symlink、内部 symlink directory 跳过、symlink 越界保护。
+- [x] `--glob`、`--depth` 用于单文件时返回针对性错误。
+- [x] `make test` 和针对 convert fixture 的集成测试通过。
 
 ## 阶段 4：单文件 `preview`、watcher 与 SSE
 

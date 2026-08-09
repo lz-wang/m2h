@@ -3,6 +3,8 @@ package cli
 import (
 	"bytes"
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -119,7 +121,7 @@ func TestUnknownFlagsReturnStableError(t *testing.T) {
 func TestFeatureHandlersReportDevelopmentError(t *testing.T) {
 	t.Parallel()
 
-	for _, command := range []string{"convert", "preview", "view"} {
+	for _, command := range []string{"preview", "view"} {
 		_, _, err := runCommand(t, command, "README.md")
 		if err == nil {
 			t.Fatalf("m2h %s succeeded, want error", command)
@@ -128,6 +130,65 @@ func TestFeatureHandlersReportDevelopmentError(t *testing.T) {
 		if got := err.Error(); got != want {
 			t.Fatalf("m2h %s error = %q, want %q", command, got, want)
 		}
+	}
+}
+
+func TestConvertCommandWritesHTML(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "guide.md")
+	if err := os.WriteFile(source, []byte("# Guide\n\n[Next](next.md)"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	output := filepath.Join(root, "public", "index.html")
+
+	stdout, stderr, err := runCommand(t, "convert", source, "--output", output, "--mode", "dark")
+	if err != nil {
+		t.Fatalf("convert returned error: %v", err)
+	}
+	if stdout != "" || stderr != "" {
+		t.Fatalf("convert output stdout=%q stderr=%q", stdout, stderr)
+	}
+	html, err := os.ReadFile(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`<title>Guide</title>`, `href="next.html"`, `class="m2h-mode-dark"`} {
+		if !bytes.Contains(html, []byte(want)) {
+			t.Errorf("HTML does not contain %q", want)
+		}
+	}
+}
+
+func TestConvertCommandValidatesArgumentsAndDirectoryOnlyFlags(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "guide.md")
+	if err := os.WriteFile(source, []byte("# Guide"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"convert"}, want: "Error: convert requires exactly one file or directory"},
+		{args: []string{"convert", source, source}, want: "Error: convert requires exactly one file or directory"},
+		{args: []string{"convert", source, "--glob", "*.md"}, want: "Error: --glob can only be used when converting a directory"},
+		{args: []string{"convert", source, "--depth", "2"}, want: "Error: --depth can only be used when converting a directory"},
+		{args: []string{"convert", source, "--copy-assets=false"}, want: "Error: --copy-assets can only be used when converting a directory"},
+	}
+	for _, test := range tests {
+		_, _, err := runCommand(t, test.args...)
+		if err == nil || err.Error() != test.want {
+			t.Errorf("m2h %v error = %v, want %q", test.args, err, test.want)
+		}
+	}
+}
+
+func TestConvertCommandValidatesGlobBeforeInput(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "missing")
+	_, _, err := runCommand(t, "convert", missing, "--glob", "[")
+	if err == nil || !strings.Contains(err.Error(), "invalid glob") || strings.Contains(err.Error(), "missing") {
+		t.Fatalf("convert error = %v, want invalid glob before input error", err)
 	}
 }
 

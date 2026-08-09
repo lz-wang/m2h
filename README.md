@@ -4,7 +4,7 @@
 
 `m2h` 是一个使用 Go 实现的命令行工具，用于把 Markdown 转换为 HTML，或在浏览器、终端中预览 Markdown。
 
-> 当前状态：CLI 骨架、版本命令和共享 Markdown 渲染核心已经可用；`convert`、`preview`、`view` 仍处于后续阶段，调用时会返回明确的未实现错误。具体进度见 [PROGRESS.md](PROGRESS.md)。
+> 当前状态：版本命令、共享 Markdown 渲染核心和 `convert` 已经可用；`preview`、`view` 仍处于后续阶段，调用时会返回明确的未实现错误。具体进度见 [PROGRESS.md](PROGRESS.md)。
 
 ## 命令概览
 
@@ -63,6 +63,8 @@ $ m2h convert docs/ --output public/docs --depth 3 --glob '**/plan_*.md'
 ```
 
 目录末尾是否带 `/` 不影响语义。批量模式保留 Markdown 的相对目录结构；未指定 `--output` 时，HTML 写在源 Markdown 旁边。`--copy-assets` 默认为 `true`，非 Markdown 文件按原相对路径复制。
+
+目录扫描不会递归跟随内部符号链接目录；符号链接文件只有在目标仍位于输入根目录内时才会读取。输出目录位于输入目录内时会从扫描中排除，文件使用临时文件加 rename 写入，批次冲突会在写入前失败。
 
 主要选项：
 
@@ -127,7 +129,7 @@ $ m2h view README.md --mode dark
 
 ```text
 Error: unknown option
-Error: --glob can only be used when serving a directory
+Error: --glob can only be used when converting a directory
 ```
 
 ## 从源码构建

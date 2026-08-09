@@ -10,6 +10,8 @@ import (
 
 	urfavecli "github.com/urfave/cli/v3"
 
+	"github.com/lz-wang/m2h/internal/convert"
+	"github.com/lz-wang/m2h/internal/markdown"
 	"github.com/lz-wang/m2h/internal/version"
 )
 
@@ -88,9 +90,32 @@ func convertCommand() *urfavecli.Command {
 			},
 			&urfavecli.BoolFlag{Name: "unsafe-html", Usage: "allow raw HTML in Markdown"},
 		},
-		Action:       notImplemented("convert"),
+		Action:       convertAction,
 		OnUsageError: normalizeUsageError,
 	}
+}
+
+func convertAction(ctx context.Context, command *urfavecli.Command) error {
+	if command.Args().Len() != 1 {
+		return fmt.Errorf("Error: convert requires exactly one file or directory")
+	}
+	err := convert.Run(ctx, convert.Options{
+		Input:         command.Args().First(),
+		Output:        command.String("output"),
+		Pattern:       command.String("glob"),
+		Depth:         command.Int("depth"),
+		Mode:          markdown.Mode(command.String("mode")),
+		CopyAssets:    command.Bool("copy-assets"),
+		UnsafeHTML:    command.Bool("unsafe-html"),
+		PatternSet:    command.IsSet("glob"),
+		DepthSet:      command.IsSet("depth"),
+		CopyAssetsSet: command.IsSet("copy-assets"),
+		Log:           command.Root().ErrWriter,
+	})
+	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
+		return err
+	}
+	return fmt.Errorf("Error: %w", err)
 }
 
 func previewCommand() *urfavecli.Command {
