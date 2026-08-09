@@ -17,7 +17,6 @@ m2h convert <file|directory>
     --depth/-d
     --mode
     --copy-assets
-    --extensions
     --unsafe-html
 
 m2h preview <file|directory>
@@ -25,7 +24,6 @@ m2h preview <file|directory>
     --port/-p
     --browser
     --mode
-    --extensions
     --unsafe-html
     --glob
     --depth/-d
@@ -72,7 +70,6 @@ $ m2h convert docs/ --output public/docs --depth 3 --glob '**/plan_*.md'
 - `--depth, -d`：目录递归深度，默认 `2`（输入目录和向下两层）。
 - `--glob`：按相对输入根目录、使用 `/` 分隔的路径匹配 Markdown。
 - `--mode`：`light`、`dark` 或 `auto`，默认 `auto`。
-- `--extensions`：在默认 GFM 语法之外启用额外 Goldmark 扩展。
 - `--unsafe-html`：显式允许 Markdown 中的原始 HTML，默认关闭。
 
 本地资源路径保持不变，本地 Markdown 链接会改写为 HTML 链接：
@@ -118,7 +115,7 @@ $ m2h view README.md --mode dark
 
 ## Markdown 与页面样式
 
-- 默认支持标准 GFM，代码块支持语法高亮。
+- Markdown 语法固定为标准 GFM，不提供额外扩展选项；代码块支持语法高亮。
 - HTML 使用 `github-markdown-css`，正文最大宽度为 `980px`。
 - 桌面端正文 padding 为 `45px`；宽度不超过 `767px` 时为 `15px`。
 - raw HTML 与危险 URL 默认不渲染，只有显式传入 `--unsafe-html` 才允许 raw HTML。

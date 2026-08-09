@@ -35,7 +35,6 @@
 - `docs` 与 `docs/` 必须解析为相同的目录输入。
 - 未知参数报 `Error: unknown option`；存在但不适用于输入类型的参数返回针对性错误，并使用非零退出码。
 - 所有枚举参数先校验再访问文件系统；`--mode` 只接受 `light`、`dark`、`auto`。
-- `--extensions` 使用可重复的字符串切片参数；每一项允许逗号分隔，去重后再启用。未知扩展必须报错，不能静默忽略。
 
 ### 路径、glob 与符号链接
 
@@ -48,7 +47,7 @@
 
 ### Markdown 与链接
 
-- 默认启用 Goldmark 标准 GFM；`--extensions` 只增加额外扩展，不关闭 GFM。
+- Markdown 语法固定为 Goldmark 标准 GFM，不提供额外扩展选项。
 - raw HTML 和危险 URL 默认禁用，只有 `--unsafe-html` 显式启用 `html.WithUnsafe()`。
 - 本地 Markdown 链接由一个 AST renderer 统一改写，并保留 query 与 fragment：
 
@@ -140,8 +139,8 @@
 
 ### 交付物
 
-- [ ] 在 `internal/markdown` 定义 `RenderOptions`、主题、扩展集合、输出目标（convert/preview）和渲染结果（HTML、Title）。
-- [ ] 配置 Goldmark GFM、可选扩展、代码高亮、raw HTML 安全开关。
+- [ ] 在 `internal/markdown` 定义 `RenderOptions`、主题、输出目标（convert/preview）和渲染结果（HTML、Title）。
+- [ ] 配置固定的 Goldmark GFM、代码高亮和 raw HTML 安全开关。
 - [ ] 实现 AST 级本地 Markdown link rewriter，不用渲染后字符串替换。
 - [ ] 实现 AST 级首个 H1 标题提取；标题纯文本化时正确处理行内代码、链接和强调。
 - [ ] 在 `internal/assets` 固定 `github-markdown-css`、代码主题 CSS、m2h layout CSS 和上游许可证。
@@ -241,7 +240,7 @@
 - [ ] 使用 Glamour 渲染单个本地 Markdown 文件，不启动 Web 服务。
 - [ ] `--mode light|dark|auto` 映射到终端样式；auto 使用终端背景检测能力，无法检测时使用稳定默认值。
 - [ ] 非文件、目录输入、读取失败和未知 mode 返回明确错误与非零退出码。
-- [ ] 复用共享输入安全和扩展默认值；不复制浏览器 HTML/CSS 渲染路径。
+- [ ] 复用共享输入安全和标准 GFM 语法配置；不复制浏览器 HTML/CSS 渲染路径。
 
 ### 测试与验收
 
@@ -278,7 +277,7 @@
 | --- | --- |
 | 输入 | 单文件、目录、尾部 `/`、根 symlink、空目录、不存在路径 |
 | 路径 | ASCII、空格、Unicode、深层目录、`..`、URL 编码、Windows 分隔符 |
-| Markdown | GFM、额外扩展、raw HTML、危险 URL、代码高亮、本地链接、附件 |
+| Markdown | 标准 GFM、raw HTML、危险 URL、代码高亮、本地链接、附件 |
 | mode | light、dark、auto、非法值 |
 | 文件变化 | write、atomic rename、删除、重建、无关文件 burst |
 | 平台 | linux/darwin/windows × amd64/arm64 构建 |
