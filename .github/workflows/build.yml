@@ -186,14 +186,12 @@ jobs:
             -ldflags "-X main.M2HVersion=${{ needs.readiness.outputs.version }}" \
             -o "${binary}" .
 
-      - name: Run native version and view smoke tests
+      - name: Run native command smoke tests
         shell: bash
         run: |
           binary="./m2h"
           if [[ "${RUNNER_OS}" == "Windows" ]]; then binary="./m2h.exe"; fi
-          printf '# Smoke\n\n- %s\n' "${RUNNER_OS}" > smoke.md
-          "${binary}" version | grep -Fx '${{ needs.readiness.outputs.version }}'
-          NO_COLOR=1 "${binary}" view smoke.md --mode dark | grep -F 'Smoke'
+          bash scripts/smoke.sh "${binary}" '${{ needs.readiness.outputs.version }}'
 
   notify:
     name: Pushover notification

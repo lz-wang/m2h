@@ -15,6 +15,13 @@
 
 <!-- 发布时只保留实际存在的“新增”和“修复”小节。 -->
 
+## [0.8.0] - 2026-08-10
+
+### 新增
+
+- 提供 linux、darwin、windows 的 amd64/arm64 六种正式发布包、配套 SHA-256 校验文件，以及不依赖工作目录资源的内嵌 WebUI 二进制。
+- 在每次 main 构建与正式发布中，于 Linux、macOS、Windows 原生验证 version、convert、preview 和 view 完整命令路径。
+
 ## [0.7.0] - 2026-08-10
 
 ### 新增

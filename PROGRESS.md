@@ -4,8 +4,8 @@
 
 ## 当前状态
 
-- 当前里程碑：阶段 7 已完成，下一步是阶段 8“跨平台发布与文档收口”。
-- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、版本命令、共享 GFM 渲染核心、完整 `convert`、单文件实时 `preview`、具备文件树、历史路由、三种主题、手动刷新、可访问状态反馈和安全 API 的 React 目录预览，以及支持背景探测、`NO_COLOR` 和取消的单文件终端 `view`。
+- 当前里程碑：阶段 1–8 已完成，产品目标已经交付，后续进入常规维护与新版本迭代。
+- 当前可用能力：完整构建、测试和六平台发布工具链，m2h CLI 帮助与版本命令，共享 GFM 渲染核心，完整 `convert`，单文件实时 `preview`，具备文件树、历史路由、三种主题、手动刷新、可访问状态反馈和安全 API 的 React 目录预览，以及支持背景探测、`NO_COLOR` 和取消的单文件终端 `view`。
 - 已完成提交：
   - `ab493ce docs(init): 初始化项目基础文档`
   - `f7e9552 chore(init): 初始化项目工程骨架`
@@ -15,8 +15,9 @@
   - `2363f5b feat(preview): 完成阶段 4 单文件实时预览`
   - `f7377c0 feat(preview): 完成阶段 5 目录预览 API`
   - `1ccd26c feat(web): 完成阶段 6 目录预览界面`
-  - `feat(view): 完成阶段 7 终端预览`（本阶段提交）
-- CI 状态：阶段 6 的 main 与 `v0.6.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知；v0.6.0 的 12 个 Release 资产、正文和 Darwin arm64 内嵌 WebUI 已核验。阶段 7 本地 `make check`、Go race、六平台交叉构建和 Darwin arm64 独立工作目录 smoke 已通过，并在 main/release workflow 新增 Linux、macOS、Windows 原生 version + view smoke 矩阵。
+  - `15eca8f feat(view): 完成阶段 7 终端预览`
+  - `chore(release): 完成阶段 8 发布收口`（本阶段提交）
+- CI 状态：阶段 7 的 main 与 `v0.7.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、Linux/macOS/Windows 原生 smoke、GitHub Release 与通知；v0.7.0 的 12 个 Release 资产、正文、SHA-256 和 Darwin arm64 终端 view 已核验。阶段 8 将原生 smoke 扩展到 version、convert、preview、view 四条命令，并完成干净环境、六包结构、版本和校验和复核。
 
 本文件是实现顺序、范围和验收状态的唯一进度来源。用户命令契约见 `README.md`，发布摘要见 `CHANGELOG.md`。
 
@@ -121,7 +122,7 @@
 | 5 | 目录 `preview` API 与安全边界 | 阶段 3、4 | 已完成（v0.5.0） |
 | 6 | React 目录 WebUI | 阶段 5 | 已完成（v0.6.0） |
 | 7 | `view` 终端预览 | 阶段 2 | 已完成（v0.7.0） |
-| 8 | 跨平台发布与文档收口 | 阶段 3–7 | 未开始 |
+| 8 | 跨平台发布与文档收口 | 阶段 3–7 | 已完成（v0.8.0） |
 
 ## 阶段 1：工具链、CLI 骨架与版本
 
@@ -261,22 +262,22 @@
 ### 交付物
 
 - [x] 完成 Go `//go:embed` WebUI 和 CSS 资产，验证生产二进制不依赖工作目录文件。
-- [ ] `make build-all` 生成 linux/darwin/windows × amd64/arm64 六个二进制。
-- [ ] `make dist` 生成六个压缩包和 `checksums.txt`，包内含二进制、README、LICENSE。
-- [ ] build workflow 使用 checkout@v6、setup-node@v6、setup-go@v6、codecov@v7，并上传六平台 artifacts。
-- [ ] release workflow 只接受 `vX.Y.Z` tag，复用完整检查与六平台构建，并从 CHANGELOG 对应版本生成或更新 GitHub Release。
-- [ ] build/release 均将二进制与 SHA-256 上传到 `/Shares/github/<owner>/<repo>/<os>/<arch>/<version>/bin{,.sha256}`。
-- [ ] 配置 `CODECOV_TOKEN`、`PUSHOVER_TOKEN`、`PUSHOVER_USER`、`WEBDAV_SERVER`、`WEBDAV_USERNAME`、`WEBDAV_PASSWORD`；缺少 Pushover secret 时安全跳过通知。
-- [ ] README 移除“尚未实现”提示并以实测输出更新所有示例。
-- [ ] 发布时把实际新特性/修复从 `[未发布]` 移到 `x.y.z`，内容与 GitHub Release 完全一致。
+- [x] `make build-all` 生成 linux/darwin/windows × amd64/arm64 六个二进制。
+- [x] `make dist` 生成六个压缩包和 `checksums.txt`，包内含二进制、README、LICENSE。
+- [x] build workflow 使用 checkout@v6、setup-node@v6、setup-go@v6、codecov@v7，并上传六平台 artifacts。
+- [x] release workflow 只接受 `vX.Y.Z` tag，复用完整检查与六平台构建，并从 CHANGELOG 对应版本生成或更新 GitHub Release。
+- [x] build/release 均将二进制与 SHA-256 上传到 `/Shares/github/<owner>/<repo>/<os>/<arch>/<version>/bin{,.sha256}`。
+- [x] 已配置 `CODECOV_TOKEN`、`PUSHOVER_TOKEN`、`PUSHOVER_USER`、`WEBDAV_SERVER`、`WEBDAV_USERNAME`、`WEBDAV_PASSWORD`；缺少 Pushover secret 时安全跳过通知。
+- [x] README 移除“尚未实现”提示并以实测输出更新所有示例。
+- [x] 发布时把实际新特性/修复从 `[未发布]` 移到 `x.y.z`，内容与 GitHub Release 完全一致。
 
 ### 测试与验收
 
-- [ ] `make clean && make setup && make check && make dist` 在干净 checkout 通过。
-- [ ] 校验六个 archive、文件名、Windows `.exe`、SHA-256 和解压后的 `m2h version`。
-- [ ] 在 macOS、Linux、Windows 至少各运行 version、单文件 convert、单文件 preview、view smoke test。
-- [ ] 正式 tag `vX.Y.Z` 的二进制只输出 `X.Y.Z`；非 tag 构建输出开发版本格式。
-- [ ] build/release 的 test、Codecov、六个 matrix build、artifact、WebDAV、GitHub Release 和 Pushover 状态全部验证。
+- [x] `make clean && make setup && make check && make dist` 在干净 checkout 通过。
+- [x] 校验六个 archive、文件名、Windows `.exe`、SHA-256 和解压后的 `m2h version`。
+- [x] 在 macOS、Linux、Windows 至少各运行 version、单文件 convert、单文件 preview、view smoke test。
+- [x] 正式 tag `vX.Y.Z` 的二进制只输出 `X.Y.Z`；非 tag 构建输出开发版本格式。
+- [x] build/release 的 test、Codecov、六个 matrix build、artifact、WebDAV、GitHub Release 和 Pushover 状态全部验证。
 
 ## 横向测试矩阵
 
@@ -301,9 +302,6 @@
 
 ## 当前已知风险
 
-- TypeScript 7.x 或 Go 1.26.x 的具体最新补丁可能变化：阶段开始时查询稳定版并由 lockfile 固定。
-- Goldmark 高亮主题与 `github-markdown-css` 的 light/dark 色值可能冲突：阶段 2 用 CSS fixture 和浏览器手工验收锁定。
-- atomic save 在不同编辑器上产生的 fsnotify 事件序列不同：阶段 4 同时测试 write、rename、remove + create。
-- 目录很大时标题提取需要解析所有 Markdown：先保证稳定排序与正确性，再用 benchmark 决定是否需要有界并发或缓存。
-- Windows 路径、驱动器号和大小写规则与 Unix 不同：路径安全逻辑必须使用平台测试，不能只做字符串前缀判断。
-- output 位于 source 内可能产生递归输入：阶段 3 在枚举前解析并排除目标子树。
+- 阶段 4 和阶段 6 的浏览器视觉验收仍保留给用户执行；自动化已经覆盖 HTTP、SSE、CSS、组件交互、生产构建和独立工作目录二进制。
+- WebDAV 上传依赖已归档的 `bxb100/action-upload-webdav@v1`，GitHub runner 会给出 Node 20 兼容警告；当前上传成功但后续应迁移到受维护实现。
+- 超大目录的标题提取仍会解析全部候选 Markdown；当前优先保证确定性与正确性，出现真实性能压力后再以 benchmark 决定缓存或有界并发。

@@ -4,7 +4,7 @@
 
 `m2h` 是一个使用 Go 实现的命令行工具，用于把 Markdown 转换为 HTML，或在浏览器、终端中预览 Markdown。
 
-> 当前状态：版本命令、共享 Markdown 渲染核心、`convert`、单文件与 React 目录 `preview`，以及终端 `view` 均已可用。具体进度见 [PROGRESS.md](PROGRESS.md)。
+> 当前状态：阶段 1–8 已交付；版本命令、共享 Markdown 渲染核心、`convert`、单文件与 React 目录 `preview`、终端 `view`，以及六平台正式发布链路均已可用。具体进度见 [PROGRESS.md](PROGRESS.md)。
 
 ## 命令概览
 
@@ -32,17 +32,29 @@ m2h view <file>
     --mode
 ```
 
+## 安装
+
+从 [GitHub Releases](https://github.com/lz-wang/m2h/releases/latest) 下载对应平台和架构的压缩包：
+
+```text
+m2h_<version>_linux_{amd64,arm64}.tar.gz
+m2h_<version>_darwin_{amd64,arm64}.tar.gz
+m2h_<version>_windows_{amd64,arm64}.zip
+```
+
+每个包都包含 `m2h`（Windows 为 `m2h.exe`）、`README.md` 和 `LICENSE`，并提供同名 `.sha256` 文件。正式二进制内嵌 WebUI 与样式，不依赖安装目录或当前工作目录中的资源文件。
+
 ## 查看版本
 
 ```console
 $ m2h version
-dev-20260807-a12bc34
+0.8.0
 
 $ m2h --version
-dev-20260807-a12bc34
+0.8.0
 ```
 
-开发构建使用 `dev-<commit date>-<commit7>`，例如 `dev-20260807-a12bc34`；正式发布使用语义化版本，例如 `1.2.3`。开发版本日期取 Git commit date，不取构建日期。
+正式发布只输出不带 `v` 的语义化版本。非 tag 开发构建使用 `dev-<commit date>-<commit7>`，例如 `dev-20260810-a12bc34`；日期取 Git commit date，不取构建日期。
 
 ## 转换为 HTML
 
@@ -50,10 +62,11 @@ dev-20260807-a12bc34
 
 ```console
 $ m2h convert README.md
-# 写入 README.html
 
 $ m2h convert README.md --output public/index.html
 ```
+
+转换成功时不写 stdout；上述命令分别生成 `README.html` 和 `public/index.html`。
 
 批量转换目录：
 
@@ -90,8 +103,13 @@ https://...      -> 不修改
 
 ```console
 $ m2h preview README.md
+m2h: previewing /work/m2h/README.md at http://127.0.0.1:8793/
+
 $ m2h preview README.md --host 127.0.0.1 --port 8793 --browser
+m2h: previewing /work/m2h/README.md at http://127.0.0.1:8793/
 ```
+
+日志中的输入路径会解析为本机绝对路径；示例使用 `/work/m2h/README.md`。
 
 单文件模式只显示 GitHub 风格正文，并监听文件所在目录以兼容编辑器的 atomic save；内容变化后通过 SSE 刷新页面。
 服务默认监听 `127.0.0.1:8793`，启动后输出实际预览地址；按 Ctrl+C 或向进程发送终止信号会优雅关闭。`--browser` 默认关闭，仅在监听成功后尝试打开系统默认浏览器，打开失败不会停止服务。
@@ -123,9 +141,12 @@ $ m2h preview docs --glob '**/*.md' --depth 4 --mode dark
 ## 在终端中预览
 
 ```console
-$ m2h view README.md
-$ m2h view README.md --mode dark
-$ NO_COLOR=1 m2h view README.md --mode light
+$ NO_COLOR=1 m2h view guide.md --mode dark
+   Guide
+
+  • terminal
+
+$ m2h view README.md --mode auto
 ```
 
 `view` 使用 Glamour 在当前终端渲染一个本地 Markdown 文件，不启动 Web 服务，也不接受目录或非 Markdown 输入。`--mode` 支持 `light`、`dark` 和默认的 `auto`；`auto` 会在真实终端中探测背景，无法探测或输出被重定向时稳定使用 dark 样式。
@@ -159,8 +180,12 @@ $ make setup
 $ make build
 $ make test
 $ make check
+$ make build-all
+$ make dist
 $ make help
 ```
+
+`make build-all` 交叉构建 linux、darwin、windows 的 amd64/arm64 六个目标；`make dist` 生成六个发布包和 `dist/checksums.txt`。main 与正式 tag workflow 还会在 Linux、macOS、Windows 原生运行 version、convert、preview、view smoke tests。
 
 ## 许可证
 
