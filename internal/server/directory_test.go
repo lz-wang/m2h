@@ -13,8 +13,10 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
+	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
 )
@@ -323,6 +325,85 @@ func TestDirectoryAssetsSPAFallbackAndAPINotFound(t *testing.T) {
 	assertJSONError(t, apiMissing, http.StatusNotFound)
 	if !strings.HasPrefix(apiMissing.Header().Get("Content-Type"), "application/json") || strings.Contains(apiMissing.Body.String(), "<!doctype") {
 		t.Fatalf("API 404 content type=%q body=%q", apiMissing.Header().Get("Content-Type"), apiMissing.Body.String())
+	}
+}
+
+func TestDirectoryWebUIAssetsAndSharedMarkdownStyles(t *testing.T) {
+	t.Parallel()
+
+	root := canonicalDirectory(t, t.TempDir())
+	ui := fstest.MapFS{
+		"index.html":       &fstest.MapFile{Data: []byte(`<!doctype html><div id="root">production UI</div>`)},
+		"assets/index.js":  &fstest.MapFile{Data: []byte(`console.log("m2h")`)},
+		"assets/index.css": &fstest.MapFile{Data: []byte(`.app { color: blue; }`)},
+	}
+	handlerState := &directoryHandler{
+		root:      root,
+		mode:      markdown.ModeAuto,
+		discovery: files.DiscoverOptions{Depth: 2},
+		discover:  files.Discover,
+		ui:        ui,
+	}
+	handler := handlerState.routes(newEventHub(time.Second), nil)
+
+	for _, mode := range []markdown.Mode{markdown.ModeLight, markdown.ModeDark, markdown.ModeAuto} {
+		response := performRequest(handler, http.MethodGet, "/ui/markdown.css?mode="+string(mode))
+		if response.Code != http.StatusOK {
+			t.Fatalf("GET Markdown CSS mode %s status = %d", mode, response.Code)
+		}
+		want, err := assets.Stylesheet(string(mode))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response.Body.String() != want {
+			t.Errorf("Markdown CSS mode %s did not use shared stylesheet", mode)
+		}
+		if !strings.HasPrefix(response.Header().Get("Content-Type"), "text/css") || response.Header().Get("Cache-Control") != "no-cache" {
+			t.Errorf("Markdown CSS mode %s headers content-type=%q cache=%q", mode, response.Header().Get("Content-Type"), response.Header().Get("Cache-Control"))
+		}
+	}
+
+	defaultStyles := performRequest(handler, http.MethodGet, "/ui/markdown.css")
+	wantDefault, err := assets.Stylesheet(string(markdown.ModeAuto))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if defaultStyles.Body.String() != wantDefault {
+		t.Fatal("Markdown CSS without query did not use the preview mode")
+	}
+	headStyles := performRequest(handler, http.MethodHead, "/ui/markdown.css?mode=light")
+	if headStyles.Code != http.StatusOK || headStyles.Body.Len() != 0 {
+		t.Fatalf("Markdown CSS HEAD response = %d %q", headStyles.Code, headStyles.Body.String())
+	}
+	for _, target := range []string{"/ui/markdown.css?mode=invalid", "/ui/markdown.css?mode=light&extra=1", "/ui/markdown.css?mode=light&mode=dark"} {
+		if response := performRequest(handler, http.MethodGet, target); response.Code != http.StatusBadRequest {
+			t.Errorf("GET %s status = %d, want 400", target, response.Code)
+		}
+	}
+	if response := performRequest(handler, http.MethodPost, "/ui/markdown.css"); response.Code != http.StatusMethodNotAllowed || response.Header().Get("Allow") != "GET, HEAD" {
+		t.Fatalf("Markdown CSS POST status=%d allow=%q", response.Code, response.Header().Get("Allow"))
+	}
+
+	for target, want := range map[string]string{
+		"/ui/assets/index.js":  `console.log("m2h")`,
+		"/ui/assets/index.css": `.app { color: blue; }`,
+	} {
+		response := performRequest(handler, http.MethodGet, target)
+		if response.Code != http.StatusOK || response.Body.String() != want {
+			t.Errorf("GET %s response = %d %q", target, response.Code, response.Body.String())
+		}
+		if response.Header().Get("Cache-Control") != "public, max-age=31536000, immutable" {
+			t.Errorf("GET %s cache = %q", target, response.Header().Get("Cache-Control"))
+		}
+	}
+	if response := performRequest(handler, http.MethodGet, "/ui/assets/missing.js"); response.Code != http.StatusNotFound {
+		t.Fatalf("missing WebUI asset status = %d", response.Code)
+	}
+
+	rootPage := performRequest(handler, http.MethodGet, "/")
+	deepPage := performRequest(handler, http.MethodGet, "/doc/guides/setup.md?mode=dark")
+	if rootPage.Code != http.StatusOK || rootPage.Body.String() != deepPage.Body.String() || !strings.Contains(rootPage.Body.String(), "production UI") {
+		t.Fatalf("embedded UI root=%d deep=%d body=%q", rootPage.Code, deepPage.Code, rootPage.Body.String())
 	}
 }
 

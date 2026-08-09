@@ -4,8 +4,8 @@
 
 ## 当前状态
 
-- 当前里程碑：阶段 5 已完成，下一步是阶段 6“React 目录 WebUI”。
-- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、版本命令、共享 GFM 渲染核心、完整 `convert`、单文件实时 `preview`，以及具备文件列表、最新文档、安全附件、深链接 fallback、默认选择和请求日志的目录预览 API；React 目录界面与 `view` 尚未接入。
+- 当前里程碑：阶段 6 已完成，下一步是阶段 7“`view` 终端预览”。
+- 当前可用能力：完整构建与测试工具链、m2h CLI 帮助、版本命令、共享 GFM 渲染核心、完整 `convert`、单文件实时 `preview`，以及具备文件树、历史路由、三种主题、手动刷新、可访问状态反馈和安全 API 的 React 目录预览；`view` 尚未接入。
 - 已完成提交：
   - `ab493ce docs(init): 初始化项目基础文档`
   - `f7e9552 chore(init): 初始化项目工程骨架`
@@ -13,7 +13,8 @@
   - `7f56e5d feat(markdown): 完成阶段 2 共享渲染核心`
   - `171796a feat(convert): 完成阶段 3 文件发现与转换`
   - `2363f5b feat(preview): 完成阶段 4 单文件实时预览`
-- CI 状态：阶段 4 的 main 与 `v0.4.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知；v0.4.0 的 12 个 Release 资产、正文和 Darwin arm64 实时预览已核验。
+  - `f7377c0 feat(preview): 完成阶段 5 目录预览 API`
+- CI 状态：阶段 5 的 main 与 `v0.5.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、GitHub Release 与通知；v0.5.0 的 12 个 Release 资产、正文和 Darwin arm64 目录 API 已核验。
 
 本文件是实现顺序、范围和验收状态的唯一进度来源。用户命令契约见 `README.md`，发布摘要见 `CHANGELOG.md`。
 
@@ -116,7 +117,7 @@
 | 3 | 文件发现与 `convert` | 阶段 2 | 已完成（v0.3.0） |
 | 4 | 单文件 `preview`、watcher、SSE | 阶段 2 | 已完成（v0.4.0） |
 | 5 | 目录 `preview` API 与安全边界 | 阶段 3、4 | 已完成（v0.5.0） |
-| 6 | React 目录 WebUI | 阶段 5 | 未开始 |
+| 6 | React 目录 WebUI | 阶段 5 | 已完成（v0.6.0） |
 | 7 | `view` 终端预览 | 阶段 2 | 未开始 |
 | 8 | 跨平台发布与文档收口 | 阶段 3–7 | 未开始 |
 
@@ -222,20 +223,20 @@
 
 ### 交付物
 
-- [ ] 初始化 shadcn Base UI 组件：Sidebar、ScrollArea、Button、Tooltip、Separator，并使用 lucide 图标。
-- [ ] 构建桌面侧栏 + 文档区布局；侧栏文件树默认折叠，当前文件自动展开并滚动定位。
-- [ ] 用浏览器 History API 同步 `/doc/*`，启动时从 URL 恢复文档，不维护第二套路由状态。
-- [ ] 顶部标题和 `document.title` 直接使用 API title；不解析 `.markdown-body h1`。
-- [ ] mode 始终写入 `?mode=light|dark|auto`，默认 URL 为 `?mode=auto`。
-- [ ] 刷新按钮重新加载文件树并保留仍存在的当前选择；当前文件已删除时回退到默认优先级。
-- [ ] 空目录、加载中、API 错误、文档删除和附件失败都有可访问的状态反馈。
+- [x] 初始化 shadcn Base UI 组件：Sidebar、ScrollArea、Button、Tooltip、Separator，并使用 lucide 图标。
+- [x] 构建桌面侧栏 + 文档区布局；侧栏文件树默认折叠，当前文件自动展开并滚动定位。
+- [x] 用浏览器 History API 同步 `/doc/*`，启动时从 URL 恢复文档，不维护第二套路由状态。
+- [x] 顶部标题和 `document.title` 直接使用 API title；不解析 `.markdown-body h1`。
+- [x] mode 始终写入 `?mode=light|dark|auto`，默认 URL 为 `?mode=auto`。
+- [x] 刷新按钮重新加载文件树并保留仍存在的当前选择；当前文件已删除时回退到默认优先级。
+- [x] 空目录、加载中、API 错误、文档删除和附件失败都有可访问的状态反馈。
 
 ### 测试与验收
 
-- [ ] Vitest 覆盖默认选择、深链接恢复、前进/后退、树展开定位、刷新与删除回退。
-- [ ] 组件可通过键盘操作，有可访问名称、焦点可见，不用仅颜色表达状态。
-- [ ] `npm run lint`、`npm run test`、`npm run build` 和 `make check` 通过。
-- [ ] 手动浏览器验收桌面/移动布局、长标题、深层树、大文件滚动、三种主题和页面标题。
+- [x] Vitest 覆盖默认选择、深链接恢复、前进/后退、树展开定位、刷新与删除回退。
+- [x] 组件可通过键盘操作，有可访问名称、焦点可见，不用仅颜色表达状态。
+- [x] `npm run lint`、`npm run test`、`npm run build` 和 `make check` 通过；前端 statements/branches/functions/lines 覆盖率为 90.74%/83.9%/94.52%/91.05%。
+- [ ] 手动浏览器验收桌面/移动布局、长标题、深层树、大文件滚动、三种主题和页面标题（自动化组件、HTTP、生产构建和独立工作目录二进制 smoke test 已通过，保留给用户做浏览器验收）。
 
 ## 阶段 7：`view` 终端预览
 
@@ -257,7 +258,7 @@
 
 ### 交付物
 
-- [ ] 完成 Go `//go:embed` WebUI 和 CSS 资产，验证发布二进制不依赖工作目录文件。
+- [x] 完成 Go `//go:embed` WebUI 和 CSS 资产，验证生产二进制不依赖工作目录文件。
 - [ ] `make build-all` 生成 linux/darwin/windows × amd64/arm64 六个二进制。
 - [ ] `make dist` 生成六个压缩包和 `checksums.txt`，包内含二进制、README、LICENSE。
 - [ ] build workflow 使用 checkout@v6、setup-node@v6、setup-go@v6、codecov@v7，并上传六平台 artifacts。

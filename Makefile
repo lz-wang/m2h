@@ -51,7 +51,7 @@ M2H_VERSION := $(VERSION)
 endif
 
 VERSION_VAR := main.M2HVersion
-GO_BUILD_FLAGS := -trimpath -buildvcs=false
+GO_BUILD_FLAGS := -tags webui -trimpath -buildvcs=false
 GO_LDFLAGS := -X $(VERSION_VAR)=$(M2H_VERSION)
 GO_RELEASE_LDFLAGS := -s -w $(GO_LDFLAGS)
 HOST_GOEXE := $(shell $(GO) env GOEXE 2>/dev/null)

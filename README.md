@@ -4,7 +4,7 @@
 
 `m2h` 是一个使用 Go 实现的命令行工具，用于把 Markdown 转换为 HTML，或在浏览器、终端中预览 Markdown。
 
-> 当前状态：版本命令、共享 Markdown 渲染核心、`convert`、单文件 `preview` 和目录预览 API 已经可用；目录 React 界面与 `view` 仍处于后续阶段。具体进度见 [PROGRESS.md](PROGRESS.md)。
+> 当前状态：版本命令、共享 Markdown 渲染核心、`convert`、单文件 `preview` 和 React 目录预览已经可用；`view` 仍处于后续阶段。具体进度见 [PROGRESS.md](PROGRESS.md)。
 
 ## 命令概览
 
@@ -105,27 +105,29 @@ $ m2h preview docs
 $ m2h preview docs --glob '**/*.md' --depth 4 --mode dark
 ```
 
-目录服务现已提供以下 API；阶段 6 会在同一服务上接入完整 React 文件树界面：
+目录模式打开内嵌的 React 界面，桌面端由文件树侧栏和文档区组成；移动端可通过“切换文件导航”按钮打开侧栏。当前文件所在目录会自动展开并滚动定位，其余目录默认折叠。侧栏支持 `⌘/Ctrl+B` 切换，所有图标按钮都有可访问名称。
+
+文档路由形如 `/doc/design/architecture.md?mode=auto`。选择文件会写入浏览器历史，直接刷新、前进和后退都会恢复对应文档。查询参数 `mode` 始终为 `light`、`dark` 或 `auto`；界面顶部可随时切换，`--mode` 决定服务启动时输出和打开的初始 URL。
+
+刷新按钮会重新扫描文件树：当前文档仍存在时保持选择，已删除时依次回退到根目录的 `README.md`、根目录的 `index.md` 或排序后的第一个 Markdown。目录模式不自动监听文件；每次打开文档仍从磁盘读取最新内容。空目录、加载失败、文档删除和附件失败会在界面内给出状态反馈。
+
+同一服务提供以下 API：
 
 - `GET /api/files`：返回按相对路径排序的文件列表和 `defaultPath`。每个文件包含 `path`、`name`、由 Go AST 提取的 `title`。
 - `GET /api/document?path=<relative-path>`：从磁盘读取最新内容，返回 `path`、`title` 和 Markdown 正文 `html`。
 - `GET /assets/<relative-path>`：提供输入根目录内的非 Markdown 附件。
 - `GET /doc/<relative-markdown-path>`：返回嵌入的 SPA 入口，支持深链接直接刷新。
 
-默认文档严格依次选择根目录的 `README.md`、根目录的 `index.md`、排序后的第一个 Markdown；空目录返回空文件列表与空 `defaultPath`。
+页面顶部和浏览器标签标题直接使用 API 返回的 `title`；React 不会重新解析服务端 HTML 来猜测标题。WebUI、组件样式和共享 Markdown CSS 都嵌入单个 Go 二进制，不依赖启动时的工作目录文件。
 
-阶段 6 的目录界面将提供文件树、当前文档标题和手动刷新按钮。文档路由形如 `/doc/design/architecture.md`，直接刷新仍保留该深链接。
-
-目录模式不自动监听文件；点击刷新后，下一次打开文档会从磁盘读取最新内容。
-
-## 在终端中预览
+## 在终端中预览（阶段 7 规划）
 
 ```console
 $ m2h view README.md
 $ m2h view README.md --mode dark
 ```
 
-`view` 使用终端样式渲染单个 Markdown 文件，不启动 Web 服务。
+阶段 7 将让 `view` 使用终端样式渲染单个 Markdown 文件且不启动 Web 服务。当前版本调用该命令会返回明确的未实现错误。
 
 ## Markdown 与页面样式
 

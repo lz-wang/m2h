@@ -245,6 +245,7 @@ func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "README.md"), "# Directory")
 	ctx, cancel := context.WithCancel(context.Background())
 	watchCalled := false
+	listeningAddress := ""
 	deps := testDependencies()
 	deps.listen = func(string, string) (net.Listener, error) {
 		return net.Listen("tcp", "127.0.0.1:0")
@@ -255,8 +256,9 @@ func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
 	}
 	err := run(ctx, Options{
 		Input: root + string(os.PathSeparator),
-		Mode:  markdown.ModeAuto,
-		OnListening: func(string) {
+		Mode:  markdown.ModeDark,
+		OnListening: func(address string) {
+			listeningAddress = address
 			cancel()
 		},
 	}, deps)
@@ -265,6 +267,9 @@ func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
 	}
 	if watchCalled {
 		t.Fatal("directory preview created a watcher")
+	}
+	if !strings.HasSuffix(listeningAddress, "/?mode=dark") {
+		t.Fatalf("directory preview address = %q, want explicit mode query", listeningAddress)
 	}
 }
 

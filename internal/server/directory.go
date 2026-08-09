@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,14 +15,11 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
-
-	_ "embed"
+	webui "github.com/lz-wang/m2h/web"
 )
-
-//go:embed directory.html
-var directoryIndex []byte
 
 type fileSummary struct {
 	Path  string `json:"path"`
@@ -46,6 +44,7 @@ type directoryHandler struct {
 	unsafeHTML bool
 	discovery  files.DiscoverOptions
 	discover   func(context.Context, string, files.DiscoverOptions) (files.Discovery, error)
+	ui         fs.FS
 }
 
 func newDirectoryHandler(
@@ -62,19 +61,25 @@ func newDirectoryHandler(
 		unsafeHTML: unsafeHTML,
 		discovery:  discovery,
 		discover:   files.Discover,
+		ui:         webui.Content(),
 	}
 	return handler.routes(events, logger)
 }
 
 func (handler *directoryHandler) routes(events *eventHub, logger io.Writer) http.Handler {
+	if handler.ui == nil {
+		handler.ui = webui.Content()
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
 	mux.Handle("/api/events", events)
 	mux.HandleFunc("/api/", jsonNotFound)
 	mux.Handle("/assets/", newAssetHandler(handler.root))
-	mux.HandleFunc("/doc/", serveDirectoryIndex)
-	mux.HandleFunc("/", serveDirectoryIndex)
+	mux.HandleFunc("/ui/markdown.css", handler.serveMarkdownStyles)
+	mux.Handle("/ui/", http.StripPrefix("/ui/", immutableUIAssets(http.FileServer(http.FS(handler.ui)))))
+	mux.HandleFunc("/doc/", handler.serveDirectoryIndex)
+	mux.HandleFunc("/", handler.serveDirectoryIndex)
 	return requestLogger(mux, logger)
 }
 
@@ -155,7 +160,7 @@ func (handler *directoryHandler) serveDocument(response http.ResponseWriter, req
 	})
 }
 
-func serveDirectoryIndex(response http.ResponseWriter, request *http.Request) {
+func (handler *directoryHandler) serveDirectoryIndex(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
 		response.Header().Set("Allow", "GET, HEAD")
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
@@ -168,8 +173,48 @@ func serveDirectoryIndex(response http.ResponseWriter, request *http.Request) {
 	response.Header().Set("Content-Type", "text/html; charset=utf-8")
 	response.Header().Set("Cache-Control", "no-cache")
 	if request.Method == http.MethodGet {
-		_, _ = response.Write(directoryIndex)
+		index, err := fs.ReadFile(handler.ui, "index.html")
+		if err != nil {
+			http.Error(response, "read embedded WebUI", http.StatusInternalServerError)
+			return
+		}
+		_, _ = response.Write(index)
 	}
+}
+
+func (handler *directoryHandler) serveMarkdownStyles(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+		response.Header().Set("Allow", "GET, HEAD")
+		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	mode := string(handler.mode)
+	if request.URL.RawQuery != "" {
+		values := request.URL.Query()
+		provided, exists := values["mode"]
+		if !exists || len(values) != 1 || len(provided) != 1 {
+			http.Error(response, "invalid mode query", http.StatusBadRequest)
+			return
+		}
+		mode = provided[0]
+	}
+	stylesheet, err := assets.Stylesheet(mode)
+	if err != nil {
+		http.Error(response, "invalid mode query", http.StatusBadRequest)
+		return
+	}
+	response.Header().Set("Content-Type", "text/css; charset=utf-8")
+	response.Header().Set("Cache-Control", "no-cache")
+	if request.Method == http.MethodGet {
+		_, _ = io.WriteString(response, stylesheet)
+	}
+}
+
+func immutableUIAssets(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		next.ServeHTTP(response, request)
+	})
 }
 
 func jsonNotFound(response http.ResponseWriter, _ *http.Request) {

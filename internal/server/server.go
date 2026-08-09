@@ -128,6 +128,9 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	}
 
 	address := previewURL(normalized.Host, listener.Addr())
+	if input.Kind == files.KindDirectory {
+		address += "?mode=" + string(normalized.Mode)
+	}
 	_, _ = fmt.Fprintf(logger, "m2h: previewing %s at %s\n", input.Path, address)
 	if normalized.OnListening != nil {
 		normalized.OnListening(address)
