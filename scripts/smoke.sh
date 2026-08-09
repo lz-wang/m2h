@@ -22,11 +22,11 @@ server_pid=""
 cleanup() {
 	if [[ -n "${server_pid}" ]]; then
 		if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
-			taskkill.exe //PID "${server_pid}" //T //F >/dev/null 2>&1 || true
+			taskkill.exe //IM "$(basename "${binary}")" //T //F >/dev/null 2>&1 || true
 		else
 			kill -TERM "${server_pid}" >/dev/null 2>&1 || true
+			wait "${server_pid}" >/dev/null 2>&1 || true
 		fi
-		wait "${server_pid}" >/dev/null 2>&1 || true
 	fi
 	if [[ -n "${smoke_root}" && -d "${smoke_root}" ]]; then
 		rm -rf -- "${smoke_root}"

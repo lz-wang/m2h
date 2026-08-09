@@ -187,6 +187,7 @@ jobs:
             -o "${binary}" .
 
       - name: Run native command smoke tests
+        timeout-minutes: 2
         shell: bash
         run: |
           binary="./m2h"
