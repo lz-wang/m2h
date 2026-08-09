@@ -1,5 +1,7 @@
 # m2h
 
+[![codecov](https://codecov.io/gh/lz-wang/m2h/graph/badge.svg?token=iNo6LuOlzm)](https://codecov.io/gh/lz-wang/m2h)
+
 `m2h` 是一个计划使用 Go 实现的命令行工具，用于把 Markdown 转换为 HTML，或在浏览器、终端中预览 Markdown。
 
 > 当前状态：项目正在初始化，下面记录的是待实现的 CLI 使用契约，当前还没有可执行程序。具体进度见 [PROGRESS.md](PROGRESS.md)。
