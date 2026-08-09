@@ -1,0 +1,33 @@
+# Local indexes and agent state
+.codegraph/
+.agents/
+.codex/
+
+# Environment and editor files
+.env
+.env.*
+!.env.example
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Go outputs
+/m2h
+/m2h.exe
+*.test
+coverage.out
+coverage.html
+
+# Web outputs
+web/node_modules/
+web/dist/
+web/coverage/
+*.tsbuildinfo
+
+# Build and distribution outputs
+build/
+dist/
+*.log
+logs/
+__debug_bin
