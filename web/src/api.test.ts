@@ -27,6 +27,11 @@ describe("browser API", () => {
             path: "space name.md",
             title: "Space",
             html: "<p>Body</p>",
+            frontmatter: {
+              entries: [{ key: "date", value: "2026-07-11" }],
+              date: "2026-07-11",
+              tags: ["Go"],
+            },
           }),
           {
             status: 200,
@@ -43,6 +48,11 @@ describe("browser API", () => {
       path: "space name.md",
       title: "Space",
       html: "<p>Body</p>",
+      frontmatter: {
+        entries: [{ key: "date", value: "2026-07-11" }],
+        date: "2026-07-11",
+        tags: ["Go"],
+      },
     });
     expect(fetchMock.mock.calls[1]?.[0]).toBe(
       "/api/document?path=space+name.md",
@@ -80,6 +90,54 @@ describe("browser API", () => {
       }),
     );
     await expect(browserAPI.getDocument("a.md")).rejects.toThrow(
+      "文档响应格式无效",
+    );
+  });
+
+  it("accepts null, missing, and malformed frontmatter", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          path: "null.md",
+          title: "Null",
+          html: "<p>Body</p>",
+          frontmatter: null,
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.getDocument("null.md")).resolves.toEqual({
+      path: "null.md",
+      title: "Null",
+      html: "<p>Body</p>",
+      frontmatter: null,
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({ path: "missing.md", title: "Missing", html: "" }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.getDocument("missing.md")).resolves.toEqual({
+      path: "missing.md",
+      title: "Missing",
+      html: "",
+      frontmatter: null,
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          path: "bad.md",
+          title: "Bad",
+          html: "",
+          frontmatter: { entries: "nope" },
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.getDocument("bad.md")).rejects.toThrow(
       "文档响应格式无效",
     );
   });

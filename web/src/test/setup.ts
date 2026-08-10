@@ -7,6 +7,42 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+// jsdom 30 under newer Node runtimes leaves window.localStorage undefined,
+// which breaks tests that clear or read persisted layout. Install an
+// in-memory Storage only when the host environment does not provide one.
+function ensureLocalStorage(): void {
+  const host = window as unknown as { localStorage?: Storage };
+  if (host.localStorage && typeof host.localStorage.setItem === "function") {
+    return;
+  }
+  const store = new Map<string, string>();
+  const storage: Storage = {
+    get length() {
+      return store.size;
+    },
+    clear() {
+      store.clear();
+    },
+    getItem(key) {
+      return store.has(key) ? (store.get(key) ?? null) : null;
+    },
+    key(index) {
+      return [...store.keys()][index] ?? null;
+    },
+    removeItem(key) {
+      store.delete(key);
+    },
+    setItem(key, value) {
+      store.set(key, String(value));
+    },
+  };
+  Object.defineProperty(window, "localStorage", {
+    configurable: true,
+    value: storage,
+  });
+}
+ensureLocalStorage();
+
 Object.defineProperty(window, "matchMedia", {
   configurable: true,
   value: vi.fn().mockImplementation((query: string) => ({

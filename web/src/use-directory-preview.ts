@@ -351,6 +351,9 @@ function documentError(reason: unknown): string {
   if (reason instanceof APIError && reason.status === 404) {
     return "文档已被删除或不再符合当前筛选条件，请刷新文件列表。";
   }
+  if (reason instanceof APIError && reason.status === 422) {
+    return "Frontmatter 格式无效，请检查 YAML。";
+  }
   return "无法读取该文档，请检查服务日志后重试。";
 }
 

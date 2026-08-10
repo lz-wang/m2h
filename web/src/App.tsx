@@ -25,8 +25,9 @@ import type {
 } from "react";
 import { useEffect, useMemo, useState } from "react";
 
-import type { PreviewAPI } from "./api";
+import type { FrontMatter, PreviewAPI } from "./api";
 import { DocumentTree } from "./components/document-tree";
+import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { ScrollArea } from "./components/ui/scroll-area";
@@ -233,7 +234,10 @@ export function App({ api }: AppProps) {
                 {sidebarOpen ? "收起文件导航" : "展开文件导航"}
               </TooltipContent>
             </Tooltip>
-            <DocumentTitle title={preview.document?.title ?? null} />
+            <DocumentTitle
+              title={preview.document?.title ?? null}
+              frontmatter={preview.document?.frontmatter ?? null}
+            />
             <div className="toolbar-actions">
               <DocumentWidthMenu
                 width={preview.width}
@@ -275,6 +279,7 @@ export function App({ api }: AppProps) {
                 phase={preview.phase}
                 error={preview.error}
                 html={preview.document?.html ?? null}
+                frontmatter={preview.document?.frontmatter ?? null}
                 onRetry={() => void preview.retry()}
                 onClick={handleMarkdownClick}
                 onKeyDown={handleMarkdownKeyDown}
@@ -313,11 +318,17 @@ function readStoredLayout(): StoredLayout {
   }
 }
 
-function DocumentTitle({ title }: { title: string | null }) {
-  const label = title ?? "未选择文档";
+function DocumentTitle({
+  title,
+  frontmatter,
+}: {
+  title: string | null;
+  frontmatter: FrontMatter | null;
+}) {
   return (
     <section className="document-title" aria-label="当前文档标题">
-      {label}
+      <div className="document-title-text">{title ?? "未选择文档"}</div>
+      <FrontMatterSummary frontmatter={frontmatter} />
     </section>
   );
 }
@@ -506,6 +517,7 @@ interface PreviewContentProps {
   phase: ReturnType<typeof useDirectoryPreview>["phase"];
   error: string | null;
   html: string | null;
+  frontmatter: FrontMatter | null;
   onRetry(): void;
   onClick(event: ReactMouseEvent<HTMLElement>): void;
   onKeyDown(event: ReactKeyboardEvent<HTMLElement>): void;
@@ -516,6 +528,7 @@ function PreviewContent({
   phase,
   error,
   html,
+  frontmatter,
   onRetry,
   onClick,
   onKeyDown,
@@ -559,12 +572,19 @@ function PreviewContent({
     );
   }
   return (
-    <article
-      className="markdown-body reader-document"
-      onClick={onClick}
-      onKeyDown={onKeyDown}
-      onErrorCapture={onErrorCapture}
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
+    <>
+      {frontmatter !== null && frontmatter.entries.length > 0 ? (
+        <div className="reader-frontmatter">
+          <FrontMatterPanel frontmatter={frontmatter} />
+        </div>
+      ) : null}
+      <article
+        className="markdown-body reader-document"
+        onClick={onClick}
+        onKeyDown={onKeyDown}
+        onErrorCapture={onErrorCapture}
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </>
   );
 }

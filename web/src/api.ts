@@ -9,10 +9,22 @@ export interface FileListResponse {
   defaultPath: string;
 }
 
+export interface FrontMatterEntry {
+  key: string;
+  value: string;
+}
+
+export interface FrontMatter {
+  entries: FrontMatterEntry[];
+  date?: string;
+  tags?: string[];
+}
+
 export interface DocumentResponse {
   path: string;
   title: string;
   html: string;
+  frontmatter: FrontMatter | null;
 }
 
 export interface PreviewAPI {
@@ -71,6 +83,42 @@ function parseFileList(payload: unknown): FileListResponse {
   return { files, defaultPath: payload.defaultPath };
 }
 
+function parseFrontMatter(payload: unknown): FrontMatter | null {
+  if (payload === undefined || payload === null) {
+    return null;
+  }
+  if (!isRecord(payload) || !Array.isArray(payload.entries)) {
+    throw new Error("文档响应格式无效");
+  }
+  const entries = payload.entries.map((entry) => {
+    if (
+      !isRecord(entry) ||
+      typeof entry.key !== "string" ||
+      typeof entry.value !== "string"
+    ) {
+      throw new Error("文档响应格式无效");
+    }
+    return { key: entry.key, value: entry.value };
+  });
+  const result: FrontMatter = { entries };
+  if (payload.date !== undefined && payload.date !== null) {
+    if (typeof payload.date !== "string") {
+      throw new Error("文档响应格式无效");
+    }
+    result.date = payload.date;
+  }
+  if (payload.tags !== undefined && payload.tags !== null) {
+    if (
+      !Array.isArray(payload.tags) ||
+      !payload.tags.every((tag) => typeof tag === "string")
+    ) {
+      throw new Error("文档响应格式无效");
+    }
+    result.tags = payload.tags;
+  }
+  return result;
+}
+
 function parseDocument(payload: unknown): DocumentResponse {
   if (
     !isRecord(payload) ||
@@ -80,7 +128,12 @@ function parseDocument(payload: unknown): DocumentResponse {
   ) {
     throw new Error("文档响应格式无效");
   }
-  return { path: payload.path, title: payload.title, html: payload.html };
+  return {
+    path: payload.path,
+    title: payload.title,
+    html: payload.html,
+    frontmatter: parseFrontMatter(payload.frontmatter),
+  };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

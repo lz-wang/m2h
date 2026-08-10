@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -415,6 +421,72 @@ describe("App directory preview", () => {
       ),
     );
   });
+
+  it("renders frontmatter summary and a collapsed panel", async () => {
+    const user = userEvent.setup();
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h1 id="top">Readme</h1>',
+        frontmatter: {
+          entries: [
+            { key: "date", value: "2026-07-11" },
+            { key: "tags", value: "- Go\n- Markdown" },
+            { key: "author", value: "lzwang" },
+          ],
+          date: "2026-07-11",
+          tags: ["Go", "Markdown"],
+        },
+      }),
+    });
+    render(<App api={api} />);
+
+    await screen.findByRole("heading", { name: "Readme", level: 1 });
+
+    // Toolbar summary surfaces the normalized date and tags.
+    const titleRegion = screen.getByRole("region", { name: "当前文档标题" });
+    expect(within(titleRegion).getByText("2026-07-11")).toBeTruthy();
+    expect(within(titleRegion).getByText("Go · Markdown")).toBeTruthy();
+
+    // The frontmatter panel is present but collapsed by default.
+    const panel = screen.getByText("Frontmatter").closest("details");
+    if (panel === null) {
+      throw new Error("frontmatter panel was not rendered");
+    }
+    expect(panel.hasAttribute("open")).toBe(false);
+    expect(within(panel).getByText("3")).toBeTruthy();
+
+    // Expanding opens the panel.
+    await user.click(screen.getByText("Frontmatter"));
+    expect(panel.hasAttribute("open")).toBe(true);
+  });
+
+  it("keeps the panel but hides the summary without date or tags", async () => {
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h1 id="top">Readme</h1>',
+        frontmatter: {
+          entries: [{ key: "author", value: "lzwang" }],
+        },
+      }),
+    });
+    render(<App api={api} />);
+
+    await screen.findByRole("heading", { name: "Readme", level: 1 });
+
+    expect(screen.queryByText("2026-07-11")).toBeNull();
+    expect(screen.queryByText("Frontmatter")).toBeTruthy();
+  });
+
+  it("renders no frontmatter UI when metadata is absent", async () => {
+    render(<App api={createAPI()} />);
+
+    await screen.findByText("Body for README.md");
+    expect(screen.queryByText("Frontmatter")).toBeNull();
+  });
 });
 
 function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
@@ -427,7 +499,12 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
       if (file === undefined) {
         throw new APIError(404, "not found");
       }
-      return { path, title: file.title, html: `<p>Body for ${path}</p>` };
+      return {
+        path,
+        title: file.title,
+        html: `<p>Body for ${path}</p>`,
+        frontmatter: null,
+      };
     }),
     ...overrides,
   };
