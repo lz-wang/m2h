@@ -199,7 +199,11 @@ export function App({ api }: AppProps) {
 function DocumentPath({ path }: { path: string | null }) {
   const label = path ?? "未选择文档";
   return (
-    <nav className="document-path" aria-label="当前文档路径" title={path ?? undefined}>
+    <nav
+      className="document-path"
+      aria-label="当前文档路径"
+      title={path ?? undefined}
+    >
       {label}
     </nav>
   );
