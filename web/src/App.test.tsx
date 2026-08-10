@@ -210,7 +210,7 @@ describe("App directory preview", () => {
         })}
       />,
     );
-    await screen.findByText("目录中没有 Markdown 文件");
+    expect(await screen.findAllByText("目录中没有 Markdown 文件")).toHaveLength(2);
     expect(window.location.pathname + window.location.search).toBe(
       "/?mode=auto",
     );
