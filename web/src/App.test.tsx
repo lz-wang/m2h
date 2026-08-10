@@ -42,7 +42,6 @@ describe("App directory preview", () => {
     expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
     const title = screen.getByRole("region", { name: "当前文档标题" });
     expect(title.textContent).toBe("Readme API Title");
-    expect(title.getAttribute("title")).toBe("README.md");
     expect(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
     ).toBeTruthy();
@@ -232,6 +231,33 @@ describe("App directory preview", () => {
         .getByRole("button", { name: "显示主题：浅色" })
         .querySelector(".lucide-sun"),
     ).toBeTruthy();
+  });
+
+  it("shows consistent tooltips for the title and every toolbar action", async () => {
+    const user = userEvent.setup();
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    const targets = [
+      [screen.getByRole("button", { name: "切换文件导航" }), "收起文件导航"],
+      [screen.getByRole("region", { name: "当前文档标题" }), "README.md"],
+      [screen.getByRole("button", { name: "文档宽度：标准" }), "调整文档宽度"],
+      [screen.getByRole("button", { name: "刷新文件列表" }), "重新扫描目录"],
+      [
+        screen.getByRole("button", { name: "显示主题：跟随系统" }),
+        "切换显示主题",
+      ],
+    ] as const;
+
+    for (const [target, content] of targets) {
+      await user.hover(target);
+      expect(
+        await screen.findByText(content, {
+          selector: '[data-slot="tooltip-content"]',
+        }),
+      ).toBeTruthy();
+      await user.unhover(target);
+    }
   });
 
   it("exposes full file names and resizes the desktop sidebar by dragging", async () => {

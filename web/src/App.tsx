@@ -315,13 +315,18 @@ function DocumentTitle({
 }) {
   const label = title ?? "未选择文档";
   return (
-    <section
-      className="document-title"
-      aria-label="当前文档标题"
-      title={path ?? undefined}
-    >
-      {label}
-    </section>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <section className="document-title" aria-label="当前文档标题" />
+        }
+      >
+        {label}
+      </TooltipTrigger>
+      <TooltipContent side="bottom">
+        {path ?? "当前没有选择文档"}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -372,17 +377,24 @@ function DocumentWidthMenu({
   const CurrentIcon = current.icon;
   return (
     <Menu.Root>
-      <Menu.Trigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`文档宽度：${current.label}`}
-          />
-        }
-      >
-        <CurrentIcon aria-hidden="true" />
-      </Menu.Trigger>
+      <Tooltip>
+        <Menu.Trigger
+          render={
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`文档宽度：${current.label}`}
+                />
+              }
+            />
+          }
+        >
+          <CurrentIcon aria-hidden="true" />
+        </Menu.Trigger>
+        <TooltipContent side="bottom">调整文档宽度</TooltipContent>
+      </Tooltip>
       <Menu.Portal>
         <Menu.Positioner
           className="theme-menu-positioner"
@@ -446,17 +458,24 @@ function ThemeMenu({
 
   return (
     <Menu.Root>
-      <Menu.Trigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`显示主题：${currentLabel}`}
-          />
-        }
-      >
-        <CurrentIcon aria-hidden="true" />
-      </Menu.Trigger>
+      <Tooltip>
+        <Menu.Trigger
+          render={
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`显示主题：${currentLabel}`}
+                />
+              }
+            />
+          }
+        >
+          <CurrentIcon aria-hidden="true" />
+        </Menu.Trigger>
+        <TooltipContent side="bottom">切换显示主题</TooltipContent>
+      </Tooltip>
       <Menu.Portal>
         <Menu.Positioner
           className="theme-menu-positioner"
