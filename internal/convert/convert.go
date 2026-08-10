@@ -24,6 +24,7 @@ type Options struct {
 	Pattern       string
 	Depth         int
 	Mode          markdown.Mode
+	Width         markdown.Width
 	CopyAssets    bool
 	UnsafeHTML    bool
 	PatternSet    bool
@@ -43,6 +44,9 @@ type plannedFile struct {
 
 // Run validates options before resolving the input and performs the conversion.
 func Run(ctx context.Context, options Options) error {
+	if options.Width == "" {
+		options.Width = markdown.WidthStandard
+	}
 	if err := validateOptions(options); err != nil {
 		return err
 	}
@@ -72,6 +76,15 @@ func validateOptions(options Options) error {
 	case markdown.ModeLight, markdown.ModeDark, markdown.ModeAuto:
 	default:
 		return fmt.Errorf("invalid mode %q: expected light, dark, or auto", options.Mode)
+	}
+	width := options.Width
+	if width == "" {
+		width = markdown.WidthStandard
+	}
+	switch width {
+	case markdown.WidthStandard, markdown.WidthWide, markdown.WidthFull:
+	default:
+		return fmt.Errorf("invalid width %q: expected standard, wide, or full", options.Width)
 	}
 	return files.ValidateDiscoverOptions(files.DiscoverOptions{Depth: options.Depth, Pattern: options.Pattern})
 }
@@ -118,6 +131,7 @@ func runFile(ctx context.Context, source string, options Options) error {
 	}
 	rendered, err := markdown.Render(contents, markdown.RenderOptions{
 		Mode:       options.Mode,
+		Width:      options.Width,
 		Target:     markdown.TargetConvert,
 		SourcePath: filepath.Base(source),
 		UnsafeHTML: options.UnsafeHTML,
@@ -188,6 +202,7 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) error
 		}
 		rendered, err := markdown.Render(contents, markdown.RenderOptions{
 			Mode:       options.Mode,
+			Width:      options.Width,
 			Target:     markdown.TargetConvert,
 			SourcePath: plans[index].sourcePath,
 			UnsafeHTML: options.UnsafeHTML,

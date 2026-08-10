@@ -16,6 +16,7 @@ m2h convert <file|directory>
     --glob
     --depth/-d
     --mode
+    --width
     --copy-assets
     --unsafe-html
 
@@ -24,6 +25,7 @@ m2h preview <file|directory>
     --port/-p
     --browser
     --mode
+    --width
     --unsafe-html
     --glob
     --depth/-d
@@ -85,6 +87,7 @@ $ m2h convert docs/ --output public/docs --depth 3 --glob '**/plan_*.md'
 - `--depth, -d`：目录递归深度，默认 `2`（输入目录和向下两层）。
 - `--glob`：按相对输入根目录、使用 `/` 分隔的路径匹配 Markdown。
 - `--mode`：`light`、`dark` 或 `auto`，默认 `auto`。
+- `--width`：`standard`（980px）、`wide`（1280px）或 `full`（不限制最大宽度），默认 `standard`。
 - `--unsafe-html`：显式允许 Markdown 中的原始 HTML，默认关闭。
 
 本地资源路径保持不变，本地 Markdown 链接会改写为 HTML 链接：
@@ -120,12 +123,12 @@ Markdown 父目录内的本地图片与附件通过 `/assets/*` 提供；绝对�
 
 ```console
 $ m2h preview docs
-$ m2h preview docs --glob '**/*.md' --depth 4 --mode dark
+$ m2h preview docs --glob '**/*.md' --depth 4 --mode dark --width wide
 ```
 
-目录模式打开内嵌的 React 界面，桌面端由文件树侧栏和文档区组成；移动端可通过“切换文件导航”按钮打开侧栏。侧栏顶部可以按文档标题或文件名进行本地搜索，搜索不会发起额外网络请求。当前文件所在目录会自动展开，当前文档使用更明显的背景高亮且切换文件时不会自动滚动；其余目录默认折叠。悬浮文档项可同时查看文件名与文档标题。侧栏支持 `⌘/Ctrl+B` 切换，标题栏中的文档标题和所有功能按钮严格对齐；功能按钮使用悬浮提示，文档标题不显示悬浮提示。拖动后的侧栏宽度、侧栏展开状态与正文宽度预设会保存在浏览器本地，刷新后继续沿用。
+目录模式打开内嵌的 React 界面，桌面端由文件树侧栏和文档区组成；移动端可通过“切换文件导航”按钮打开侧栏。侧栏顶部可以按文档标题或文件名进行本地搜索，搜索不会发起额外网络请求。当前文件所在目录会自动展开，当前文档使用更明显的背景高亮且切换文件时不会自动滚动；其余目录默认折叠。悬浮文档项可同时查看文件名与文档标题。侧栏支持 `⌘/Ctrl+B` 切换，标题栏中的文档标题和所有功能按钮严格对齐；功能按钮使用悬浮提示，文档标题不显示悬浮提示。拖动后的侧栏宽度与侧栏展开状态会保存在浏览器本地；正文宽度由 URL 保存，不再读取旧版 localStorage 中的宽度数据。
 
-文档路由形如 `/doc/design/architecture.md?mode=auto`。选择文件会写入浏览器历史，直接刷新、前进和后退都会恢复对应文档。查询参数 `mode` 始终为 `light`、`dark` 或 `auto`；界面顶部可随时切换，`--mode` 决定服务启动时输出和打开的初始 URL。
+文档路由形如 `/doc/design/architecture.md?mode=auto&width=standard`。选择文件会写入浏览器历史，直接刷新、前进和后退都会恢复对应文档。查询参数 `mode` 与 `width` 始终记录当前主题和正文宽度；界面顶部可随时切换，`--mode` 与 `--width` 决定服务启动时输出和打开的初始 URL。单文件 `preview` 和 `convert` 生成的独立页面同样应用 `--width`。
 
 刷新按钮会重新扫描文件树：当前文档仍存在时保持选择，已删除时依次回退到根目录的 `README.md`、根目录的 `index.md` 或排序后的第一个 Markdown。目录模式不自动监听文件；每次打开文档仍从磁盘读取最新内容。空目录、加载失败、文档删除和附件失败会在界面内给出状态反馈。
 

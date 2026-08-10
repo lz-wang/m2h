@@ -17,10 +17,15 @@ type singleFileHandler struct {
 	source     string
 	root       string
 	mode       markdown.Mode
+	width      markdown.Width
 	unsafeHTML bool
 }
 
 func newSingleFileHandler(source string, mode markdown.Mode, unsafeHTML bool, events *eventHub) http.Handler {
+	return newSingleFileHandlerWithWidth(source, mode, markdown.WidthStandard, unsafeHTML, events)
+}
+
+func newSingleFileHandlerWithWidth(source string, mode markdown.Mode, width markdown.Width, unsafeHTML bool, events *eventHub) http.Handler {
 	if canonical, err := files.CanonicalPath(source); err == nil {
 		source = canonical
 	}
@@ -28,6 +33,7 @@ func newSingleFileHandler(source string, mode markdown.Mode, unsafeHTML bool, ev
 		source:     source,
 		root:       filepath.Dir(source),
 		mode:       mode,
+		width:      width,
 		unsafeHTML: unsafeHTML,
 	}
 	mux := http.NewServeMux()
@@ -55,6 +61,7 @@ func (handler *singleFileHandler) serveDocument(response http.ResponseWriter, re
 	}
 	rendered, err := markdown.Render(contents, markdown.RenderOptions{
 		Mode:       handler.mode,
+		Width:      handler.width,
 		Target:     markdown.TargetPreview,
 		SourcePath: filepath.Base(handler.source),
 		UnsafeHTML: handler.unsafeHTML,

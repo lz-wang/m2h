@@ -30,6 +30,15 @@ const (
 	ModeAuto  Mode = "auto"
 )
 
+// Width controls the maximum width of rendered browser documents.
+type Width string
+
+const (
+	WidthStandard Width = "standard"
+	WidthWide     Width = "wide"
+	WidthFull     Width = "full"
+)
+
 // Target controls local link rewriting for generated files or live previews.
 type Target string
 
@@ -41,6 +50,7 @@ const (
 // RenderOptions configures a single Markdown render.
 type RenderOptions struct {
 	Mode       Mode
+	Width      Width
 	Target     Target
 	SourcePath string
 	UnsafeHTML bool
@@ -54,7 +64,7 @@ type Result struct {
 }
 
 var pageTemplate = template.Must(template.New("document").Parse(`<!doctype html>
-<html lang="zh-CN" class="m2h-mode-{{.Mode}}" data-target="{{.Target}}">
+<html lang="zh-CN" class="m2h-mode-{{.Mode}}" data-target="{{.Target}}" data-width="{{.Width}}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -102,6 +112,7 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 	var page bytes.Buffer
 	data := struct {
 		Mode       Mode
+		Width      Width
 		Target     Target
 		Title      string
 		Styles     template.CSS
@@ -109,6 +120,7 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 		LiveReload bool
 	}{
 		Mode:       normalized.Mode,
+		Width:      normalized.Width,
 		Target:     normalized.Target,
 		Title:      title,
 		Styles:     template.CSS(stylesheet),
@@ -183,6 +195,14 @@ func normalizeOptions(options RenderOptions) (RenderOptions, error) {
 	case ModeLight, ModeDark, ModeAuto:
 	default:
 		return RenderOptions{}, &OptionError{Name: "mode", Value: string(options.Mode)}
+	}
+	if options.Width == "" {
+		options.Width = WidthStandard
+	}
+	switch options.Width {
+	case WidthStandard, WidthWide, WidthFull:
+	default:
+		return RenderOptions{}, &OptionError{Name: "width", Value: string(options.Width)}
 	}
 	switch options.Target {
 	case TargetConvert, TargetPreview:

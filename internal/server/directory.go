@@ -42,6 +42,7 @@ type documentResponse struct {
 type directoryHandler struct {
 	root       string
 	mode       markdown.Mode
+	width      markdown.Width
 	unsafeHTML bool
 	discovery  files.DiscoverOptions
 	discover   func(context.Context, string, files.DiscoverOptions) (files.Discovery, error)
@@ -56,9 +57,22 @@ func newDirectoryHandler(
 	events *eventHub,
 	logger io.Writer,
 ) http.Handler {
+	return newDirectoryHandlerWithWidth(root, mode, markdown.WidthStandard, unsafeHTML, discovery, events, logger)
+}
+
+func newDirectoryHandlerWithWidth(
+	root string,
+	mode markdown.Mode,
+	width markdown.Width,
+	unsafeHTML bool,
+	discovery files.DiscoverOptions,
+	events *eventHub,
+	logger io.Writer,
+) http.Handler {
 	handler := &directoryHandler{
 		root:       root,
 		mode:       mode,
+		width:      width,
 		unsafeHTML: unsafeHTML,
 		discovery:  discovery,
 		discover:   files.Discover,
@@ -146,6 +160,7 @@ func (handler *directoryHandler) serveDocument(response http.ResponseWriter, req
 	}
 	rendered, err := markdown.Render(contents, markdown.RenderOptions{
 		Mode:       handler.mode,
+		Width:      handler.width,
 		Target:     markdown.TargetPreview,
 		SourcePath: relative,
 		UnsafeHTML: handler.unsafeHTML,

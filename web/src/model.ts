@@ -1,10 +1,12 @@
 import type { FileSummary } from "./api";
 
 export type Mode = "light" | "dark" | "auto";
+export type DocumentWidth = "standard" | "wide" | "full";
 
 export interface RouteState {
   path: string | null;
   mode: Mode;
+  width: DocumentWidth;
   hash: string;
 }
 
@@ -32,26 +34,36 @@ export function readRoute(
   const parameters = new URLSearchParams(search);
   const requestedMode = parameters.get("mode");
   const mode: Mode = isMode(requestedMode) ? requestedMode : "auto";
+  const requestedWidth = parameters.get("width");
+  const width: DocumentWidth = isDocumentWidth(requestedWidth)
+    ? requestedWidth
+    : "standard";
   if (!pathname.startsWith("/doc/")) {
-    return { path: null, mode, hash: normalizeHash(hash) };
+    return { path: null, mode, width, hash: normalizeHash(hash) };
   }
   const encoded = pathname.slice("/doc/".length);
   if (encoded === "") {
-    return { path: null, mode, hash: normalizeHash(hash) };
+    return { path: null, mode, width, hash: normalizeHash(hash) };
   }
   try {
     return {
       path: decodeURIComponent(encoded),
       mode,
+      width,
       hash: normalizeHash(hash),
     };
   } catch {
-    return { path: null, mode, hash: normalizeHash(hash) };
+    return { path: null, mode, width, hash: normalizeHash(hash) };
   }
 }
 
-export function routeURL(path: string | null, mode: Mode, hash = ""): string {
-  const parameters = new URLSearchParams({ mode });
+export function routeURL(
+  path: string | null,
+  mode: Mode,
+  width: DocumentWidth,
+  hash = "",
+): string {
+  const parameters = new URLSearchParams({ mode, width });
   const suffix = normalizeHash(hash);
   if (path === null) {
     return `/?${parameters.toString()}${suffix}`;
@@ -147,6 +159,10 @@ function sortTree(nodes: TreeNode[]): void {
 
 function isMode(value: string | null): value is Mode {
   return value === "light" || value === "dark" || value === "auto";
+}
+
+function isDocumentWidth(value: string | null): value is DocumentWidth {
+  return value === "standard" || value === "wide" || value === "full";
 }
 
 function normalizeHash(hash: string): string {

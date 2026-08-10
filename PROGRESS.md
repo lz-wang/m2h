@@ -8,7 +8,7 @@
 - 当前可用能力：完整构建、测试和六平台发布工具链，m2h CLI 帮助与版本命令，共享 GFM 渲染核心，完整 `convert`，单文件实时 `preview`，具备文件树、可调侧栏与正文宽度、历史路由、三种主题、手动刷新、可访问状态反馈和安全 API 的 React 目录预览，以及支持背景探测、`NO_COLOR` 和取消的单文件终端 `view`。
 - 当前维护：GitHub Actions 的 WebDAV 构建与发布上传保留 `m2h_<os>_<arch>[.exe]` 真实文件名，并生成同名 `.sha256` 校验文件。
 - 当前维护：浏览器 dark 与深色系统 auto 模式的代码块使用 GitHub dark 语法配色，并由共享样式覆盖 convert 与 preview。
-- 当前维护：目录预览会持久化侧栏宽度、展开状态与正文宽度，支持按标题或文件名本地搜索，保持无分割线工具栏的垂直对齐，并以更明显的背景凸显当前文档而不自动滚动。
+- 当前维护：`convert` 与 `preview` 通过 `--width` 统一设置标准、宽或全屏正文；目录预览在地址栏持久化宽度并移除旧 localStorage 宽度，侧栏布局仍在本地保存。
 - 当前维护：目录预览请求日志采用紧凑的访问日志格式，包含时间戳、客户端 IP、方法、请求位置、状态码和一位小数的毫秒耗时。
 - 已完成提交：
   - `ab493ce docs(init): 初始化项目基础文档`
@@ -47,6 +47,7 @@
 - `docs` 与 `docs/` 必须解析为相同的目录输入。
 - 未知参数报 `Error: unknown option`；存在但不适用于输入类型的参数返回针对性错误，并使用非零退出码。
 - 所有枚举参数先校验再访问文件系统；`--mode` 只接受 `light`、`dark`、`auto`。
+- `--width` 只接受 `standard`、`wide`、`full`，默认 `standard`，并同时用于 `convert` 和 `preview`。
 
 ### 路径、glob 与符号链接
 
@@ -235,6 +236,7 @@
 - [x] 用浏览器 History API 同步 `/doc/*`，启动时从 URL 恢复文档，不维护第二套路由状态。
 - [x] 顶部标题和 `document.title` 直接使用 API title；不解析 `.markdown-body h1`。
 - [x] mode 始终写入 `?mode=light|dark|auto`，默认 URL 为 `?mode=auto`。
+- [x] width 始终写入 `?width=standard|wide|full`，由 `--width` 提供初始值，不再从 localStorage 恢复正文宽度。
 - [x] 刷新按钮重新加载文件树并保留仍存在的当前选择；当前文件已删除时回退到默认优先级。
 - [x] 空目录、加载中、API 错误、文档删除和附件失败都有可访问的状态反馈。
 - [x] 顶栏显示服务端文档标题且不附加悬浮提示，主题按钮图标与当前主题一致。

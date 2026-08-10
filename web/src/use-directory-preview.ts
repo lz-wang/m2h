@@ -7,7 +7,13 @@ import {
   type FileSummary,
   type PreviewAPI,
 } from "./api";
-import { chooseDocument, type Mode, readRoute, routeURL } from "./model";
+import {
+  chooseDocument,
+  type DocumentWidth,
+  type Mode,
+  readRoute,
+  routeURL,
+} from "./model";
 
 export type PreviewPhase =
   | "loading-files"
@@ -21,12 +27,14 @@ export interface DirectoryPreviewState {
   selectedPath: string | null;
   document: DocumentResponse | null;
   mode: Mode;
+  width: DocumentWidth;
   phase: PreviewPhase;
   error: string | null;
   assetError: string | null;
   refresh(): Promise<void>;
   select(path: string, hash?: string): Promise<void>;
   setMode(mode: Mode): void;
+  setWidth(width: DocumentWidth): void;
   reportAssetError(source: string): void;
   retry(): Promise<void>;
 }
@@ -48,6 +56,9 @@ export function useDirectoryPreview(
   const [documentResponse, setDocumentResponse] =
     useState<DocumentResponse | null>(null);
   const [mode, setModeState] = useState<Mode>(initialRoute.current.mode);
+  const [width, setWidthState] = useState<DocumentWidth>(
+    initialRoute.current.width,
+  );
   const [phase, setPhase] = useState<PreviewPhase>("loading-files");
   const [error, setError] = useState<string | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
@@ -55,6 +66,7 @@ export function useDirectoryPreview(
   const defaultPathRef = useRef("");
   const selectedPathRef = useRef<string | null>(null);
   const modeRef = useRef<Mode>(initialRoute.current.mode);
+  const widthRef = useRef<DocumentWidth>(initialRoute.current.width);
   const listController = useRef<AbortController | null>(null);
   const documentController = useRef<AbortController | null>(null);
   const documentRequest = useRef(0);
@@ -64,7 +76,7 @@ export function useDirectoryPreview(
       if (action === "none") {
         return;
       }
-      const url = routeURL(path, nextMode, hash);
+      const url = routeURL(path, nextMode, widthRef.current, hash);
       if (action === "push") {
         window.history.pushState(null, "", url);
       } else {
@@ -179,7 +191,9 @@ export function useDirectoryPreview(
         window.location.hash,
       );
       modeRef.current = route.mode;
+      widthRef.current = route.width;
       setModeState(route.mode);
+      setWidthState(route.width);
       const target = chooseDocument(
         filesRef.current,
         route.path,
@@ -194,7 +208,7 @@ export function useDirectoryPreview(
         return;
       }
       const targetHash = target === route.path ? route.hash : "";
-      const canonical = routeURL(target, route.mode, targetHash);
+      const canonical = routeURL(target, route.mode, route.width, targetHash);
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       if (canonical !== current) {
         window.history.replaceState(null, "", canonical);
@@ -270,6 +284,20 @@ export function useDirectoryPreview(
     [writeRoute],
   );
 
+  const setWidth = useCallback(
+    (nextWidth: DocumentWidth) => {
+      widthRef.current = nextWidth;
+      setWidthState(nextWidth);
+      writeRoute(
+        selectedPathRef.current,
+        modeRef.current,
+        "replace",
+        window.location.hash,
+      );
+    },
+    [writeRoute],
+  );
+
   const reportAssetError = useCallback((source: string) => {
     setAssetError(
       source === "" ? "有附件加载失败。" : `附件加载失败：${source}`,
@@ -281,12 +309,14 @@ export function useDirectoryPreview(
     selectedPath,
     document: documentResponse,
     mode,
+    width,
     phase,
     error,
     assetError,
     refresh,
     select,
     setMode,
+    setWidth,
     reportAssetError,
     retry: refresh,
   };
