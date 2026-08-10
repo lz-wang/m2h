@@ -179,13 +179,13 @@ body,
   align-self: center;
 }
 
-.document-path {
+.document-title {
   min-width: 0;
   flex: 1;
   overflow: hidden;
-  color: var(--muted-foreground);
-  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
-  font-size: 0.75rem;
+  color: var(--foreground);
+  font-size: 0.875rem;
+  font-weight: 600;
   line-height: 1.25rem;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -265,6 +265,35 @@ body,
   padding-bottom: 4rem;
 }
 
+.reader-document,
+.asset-warning {
+  transition:
+    max-width 160ms ease,
+    margin 160ms ease;
+}
+
+.reader-canvas-standard .reader-document,
+.reader-canvas-standard .asset-warning {
+  max-width: 980px;
+}
+
+.reader-canvas-wide .reader-document,
+.reader-canvas-wide .asset-warning {
+  max-width: 1280px;
+}
+
+.reader-canvas-full .reader-document,
+.reader-canvas-full .asset-warning {
+  max-width: none;
+  margin-right: 1rem;
+  margin-left: 1rem;
+}
+
+.sidebar-resize-handle {
+  cursor: col-resize;
+  touch-action: none;
+}
+
 .state-panel {
   display: grid;
   place-items: center;
@@ -340,8 +369,14 @@ body,
     padding: 0 0.5rem;
   }
 
-  .document-path {
+  .document-title {
     font-size: 0.7rem;
+  }
+
+  .reader-canvas-full .reader-document,
+  .reader-canvas-full .asset-warning {
+    margin-right: 0;
+    margin-left: 0;
   }
 
   .reader-canvas {

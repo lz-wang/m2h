@@ -1,22 +1,28 @@
 import { Menu } from "@base-ui/react/menu";
 import {
   Check,
+  Columns3,
   FileQuestion,
   ImageOff,
   Inbox,
   LoaderCircle,
+  Maximize2,
   MonitorCog,
   Moon,
   RefreshCw,
+  Scaling,
   Sun,
   SunMoon,
   TriangleAlert,
 } from "lucide-react";
 import type {
+  CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  PointerEvent as ReactPointerEvent,
   SyntheticEvent,
 } from "react";
+import { useState } from "react";
 
 import type { PreviewAPI } from "./api";
 import { DocumentTree } from "./components/document-tree";
@@ -32,6 +38,7 @@ import {
   SidebarHeader,
   SidebarInset,
   SidebarProvider,
+  SidebarRail,
   SidebarTrigger,
 } from "./components/ui/sidebar";
 import {
@@ -53,8 +60,22 @@ const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
   { value: "dark", label: "深色", icon: Moon },
 ];
 
+type DocumentWidth = "standard" | "wide" | "full";
+
+const documentWidths: Array<{
+  value: DocumentWidth;
+  label: string;
+  icon: typeof Columns3;
+}> = [
+  { value: "standard", label: "标准", icon: Columns3 },
+  { value: "wide", label: "宽", icon: Scaling },
+  { value: "full", label: "全屏", icon: Maximize2 },
+];
+
 export function App({ api }: AppProps) {
   const preview = useDirectoryPreview(api);
+  const [documentWidth, setDocumentWidth] = useState<DocumentWidth>("standard");
+  const [sidebarWidth, setSidebarWidth] = useState(256);
   const loading =
     preview.phase === "loading-files" || preview.phase === "loading-document";
 
@@ -104,7 +125,10 @@ export function App({ api }: AppProps) {
 
   return (
     <TooltipProvider delay={350}>
-      <SidebarProvider className="app-shell">
+      <SidebarProvider
+        className="app-shell"
+        style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+      >
         <Sidebar collapsible="offcanvas">
           <SidebarHeader className="border-b border-sidebar-border">
             <div className="flex h-8 items-center px-2">
@@ -139,14 +163,25 @@ export function App({ api }: AppProps) {
               </SidebarGroup>
             </ScrollArea>
           </SidebarContent>
+          <SidebarResizeHandle
+            width={sidebarWidth}
+            onResize={setSidebarWidth}
+          />
         </Sidebar>
 
         <SidebarInset className="reader-inset">
           <header className="reader-toolbar">
             <SidebarTrigger aria-label="切换文件导航" />
             <Separator orientation="vertical" className="toolbar-separator" />
-            <DocumentPath path={preview.selectedPath} />
+            <DocumentTitle
+              title={preview.document?.title ?? null}
+              path={preview.selectedPath}
+            />
             <div className="toolbar-actions">
+              <DocumentWidthMenu
+                width={documentWidth}
+                onChange={setDocumentWidth}
+              />
               <Tooltip>
                 <TooltipTrigger
                   render={
@@ -172,7 +207,7 @@ export function App({ api }: AppProps) {
           </header>
 
           <ScrollArea className="reader-scroll">
-            <div className="reader-canvas">
+            <div className={`reader-canvas reader-canvas-${documentWidth}`}>
               {preview.assetError !== null ? (
                 <div className="asset-warning" role="status">
                   <ImageOff aria-hidden="true" />
@@ -196,16 +231,124 @@ export function App({ api }: AppProps) {
   );
 }
 
-function DocumentPath({ path }: { path: string | null }) {
-  const label = path ?? "未选择文档";
+function DocumentTitle({
+  title,
+  path,
+}: {
+  title: string | null;
+  path: string | null;
+}) {
+  const label = title ?? "未选择文档";
   return (
-    <nav
-      className="document-path"
-      aria-label="当前文档路径"
+    <section
+      className="document-title"
+      aria-label="当前文档标题"
       title={path ?? undefined}
     >
       {label}
-    </nav>
+    </section>
+  );
+}
+
+function SidebarResizeHandle({
+  width,
+  onResize,
+}: {
+  width: number;
+  onResize(width: number): void;
+}) {
+  const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    const startX = event.clientX;
+    const startWidth = width;
+    const handlePointerMove = (moveEvent: PointerEvent) => {
+      onResize(
+        Math.min(480, Math.max(208, startWidth + moveEvent.clientX - startX)),
+      );
+    };
+    const handlePointerUp = () => {
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", handlePointerUp);
+  };
+
+  return (
+    <SidebarRail
+      className="sidebar-resize-handle"
+      aria-label="调整侧边栏宽度"
+      title="拖动调整侧边栏宽度"
+      onPointerDown={handlePointerDown}
+      onClick={(event) => event.preventDefault()}
+    />
+  );
+}
+
+function DocumentWidthMenu({
+  width,
+  onChange,
+}: {
+  width: DocumentWidth;
+  onChange(width: DocumentWidth): void;
+}) {
+  const current =
+    documentWidths.find((item) => item.value === width) ?? documentWidths[0];
+  const CurrentIcon = current.icon;
+  return (
+    <Menu.Root>
+      <Menu.Trigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`文档宽度：${current.label}`}
+          />
+        }
+      >
+        <CurrentIcon aria-hidden="true" />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner
+          className="theme-menu-positioner"
+          align="end"
+          sideOffset={6}
+        >
+          <Menu.Popup className="theme-menu-popup">
+            <Menu.Group>
+              <Menu.GroupLabel className="theme-menu-label">
+                文档宽度
+              </Menu.GroupLabel>
+              <Menu.RadioGroup
+                value={width}
+                onValueChange={(value) => {
+                  if (
+                    value === "standard" ||
+                    value === "wide" ||
+                    value === "full"
+                  )
+                    onChange(value);
+                }}
+              >
+                {documentWidths.map(({ value, label, icon: Icon }) => (
+                  <Menu.RadioItem
+                    key={value}
+                    value={value}
+                    className="theme-menu-item"
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{label}</span>
+                    <Menu.RadioItemIndicator className="theme-menu-indicator">
+                      <Check aria-hidden="true" />
+                    </Menu.RadioItemIndicator>
+                  </Menu.RadioItem>
+                ))}
+              </Menu.RadioGroup>
+            </Menu.Group>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
   );
 }
 
@@ -217,6 +360,8 @@ function ThemeMenu({
   onChange(mode: Mode): void;
 }) {
   const currentLabel = modes.find((item) => item.value === mode)?.label ?? mode;
+  const CurrentIcon =
+    modes.find((item) => item.value === mode)?.icon ?? SunMoon;
 
   const handleChange = (value: string) => {
     if (value === "light" || value === "dark" || value === "auto") {
@@ -235,7 +380,7 @@ function ThemeMenu({
           />
         }
       >
-        <SunMoon aria-hidden="true" />
+        <CurrentIcon aria-hidden="true" />
       </Menu.Trigger>
       <Menu.Portal>
         <Menu.Positioner

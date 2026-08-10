@@ -39,9 +39,9 @@ describe("App directory preview", () => {
       document.getElementById("m2h-markdown-styles")?.getAttribute("href"),
     ).toBe("/ui/markdown.css?mode=auto");
     expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
-    expect(
-      screen.getByRole("navigation", { name: "当前文档路径" }).textContent,
-    ).toBe("README.md");
+    const title = screen.getByRole("region", { name: "当前文档标题" });
+    expect(title.textContent).toBe("Readme API Title");
+    expect(title.getAttribute("title")).toBe("README.md");
     expect(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
     ).toBeTruthy();
@@ -200,6 +200,56 @@ describe("App directory preview", () => {
     expect(screen.getByRole("button", { name: "显示主题：深色" })).toBeTruthy();
     expect(window.location.search).toBe("?mode=dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
+  });
+
+  it("switches document width presets and uses matching toolbar icons", async () => {
+    const user = userEvent.setup();
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    expect(screen.getByRole("button", { name: "文档宽度：标准" })).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "文档宽度：标准" }));
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: "全屏" }),
+    );
+    expect(screen.getByRole("button", { name: "文档宽度：全屏" })).toBeTruthy();
+    expect(document.querySelector(".reader-canvas-full")).toBeTruthy();
+
+    expect(
+      screen
+        .getByRole("button", { name: "显示主题：跟随系统" })
+        .querySelector(".lucide-monitor-cog"),
+    ).toBeTruthy();
+    await user.click(
+      screen.getByRole("button", { name: "显示主题：跟随系统" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: "浅色" }),
+    );
+    expect(
+      screen
+        .getByRole("button", { name: "显示主题：浅色" })
+        .querySelector(".lucide-sun"),
+    ).toBeTruthy();
+  });
+
+  it("exposes full file names and resizes the desktop sidebar by dragging", async () => {
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    const file = screen.getByRole("button", {
+      name: "Readme API Title，README.md",
+    });
+    expect(file.getAttribute("title")).toBe("README.md");
+    const resize = screen.getByRole("button", { name: "调整侧边栏宽度" });
+    fireEvent.pointerDown(resize, { clientX: 256 });
+    fireEvent.pointerMove(window, { clientX: 356 });
+    fireEvent.pointerUp(window);
+    expect(
+      document
+        .querySelector('[data-slot="sidebar-wrapper"]')
+        ?.getAttribute("style"),
+    ).toContain("356px");
   });
 
   it("shows empty, API, deleted-document, and attachment errors", async () => {

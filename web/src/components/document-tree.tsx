@@ -112,6 +112,7 @@ function TreeItem({
         isActive={active}
         aria-current={active ? "page" : undefined}
         aria-label={`${node.file.title}，${node.path}`}
+        title={node.name}
         className="h-8 text-sm"
         onClick={() => onSelect(node.path)}
       >
@@ -136,6 +137,7 @@ function DirectoryItem({
       <SidebarMenuButton
         aria-expanded={open}
         aria-label={node.name}
+        title={node.name}
         className="h-8 text-sm font-medium"
         onClick={() => onToggle(node.path)}
       >
