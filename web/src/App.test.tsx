@@ -24,7 +24,7 @@ describe("App directory preview", () => {
     const api = createAPI();
     render(<App api={api} />);
 
-    await screen.findByRole("heading", { level: 1, name: "Readme API Title" });
+    await screen.findByText("Body for README.md");
     expect(api.listFiles).toHaveBeenCalledTimes(1);
     expect(api.getDocument).toHaveBeenCalledWith(
       "README.md",
@@ -38,8 +38,13 @@ describe("App directory preview", () => {
     expect(
       document.getElementById("m2h-markdown-styles")?.getAttribute("href"),
     ).toBe("/ui/markdown.css?mode=auto");
-    expect(screen.getByText("Body for README.md")).toBeTruthy();
-    expect(screen.getByText("2 篇文档")).toBeTruthy();
+    expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
+    expect(
+      screen.getByRole("navigation", { name: "当前文档路径" }).textContent,
+    ).toBe("README.md");
+    expect(
+      screen.getByRole("button", { name: "显示主题：跟随系统" }),
+    ).toBeTruthy();
   });
 
   it("restores a dark deep link and expands the selected directory", async () => {
@@ -57,7 +62,7 @@ describe("App directory preview", () => {
     });
     render(<App api={api} />);
 
-    await screen.findByRole("heading", { level: 1, name: "Setup API Title" });
+    await screen.findByRole("heading", { level: 2, name: "Install" });
     expect(api.getDocument).toHaveBeenCalledWith(
       "guides/setup.md",
       expect.any(AbortSignal),
@@ -85,6 +90,7 @@ describe("App directory preview", () => {
   });
 
   it("preserves cross-document fragments for keyboard navigation and theme changes", async () => {
+    const user = userEvent.setup();
     const api = createAPI({
       getDocument: vi.fn().mockImplementation(async (path: string) => {
         if (path === "README.md") {
@@ -105,12 +111,17 @@ describe("App directory preview", () => {
     const link = await screen.findByRole("link", { name: "Setup section" });
 
     fireEvent.keyDown(link, { key: "Enter" });
-    await screen.findByRole("heading", { level: 1, name: "Setup API Title" });
+    await screen.findByRole("heading", { level: 2, name: "Install" });
     expect(
       window.location.pathname + window.location.search + window.location.hash,
     ).toBe("/doc/guides/setup.md?mode=auto#install");
 
-    await userEvent.click(screen.getByRole("button", { name: "深色" }));
+    await user.click(
+      screen.getByRole("button", { name: "显示主题：跟随系统" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: "深色" }),
+    );
     expect(window.location.search + window.location.hash).toBe(
       "?mode=dark#install",
     );
@@ -120,23 +131,21 @@ describe("App directory preview", () => {
     const user = userEvent.setup();
     const api = createAPI();
     render(<App api={api} />);
-    await screen.findByRole("heading", { level: 1, name: "Readme API Title" });
+    await screen.findByText("Body for README.md");
 
     await user.click(screen.getByRole("button", { name: "guides" }));
     await user.click(
       screen.getByRole("button", { name: "Setup API Title，guides/setup.md" }),
     );
-    await screen.findByRole("heading", { level: 1, name: "Setup API Title" });
+    await screen.findByText("Body for guides/setup.md");
     expect(window.location.pathname + window.location.search).toBe(
       "/doc/guides/setup.md?mode=auto",
     );
 
     window.history.replaceState(null, "", "/doc/README.md?mode=light");
     window.dispatchEvent(new PopStateEvent("popstate"));
-    await screen.findByRole("heading", { level: 1, name: "Readme API Title" });
-    expect(
-      screen.getByRole("button", { name: "浅色" }).getAttribute("aria-pressed"),
-    ).toBe("true");
+    await screen.findByText("Body for README.md");
+    expect(screen.getByRole("button", { name: "显示主题：浅色" })).toBeTruthy();
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
 
@@ -152,40 +161,43 @@ describe("App directory preview", () => {
       });
     const api = createAPI({ listFiles });
     render(<App api={api} />);
-    await screen.findByRole("heading", { level: 1, name: "Readme API Title" });
+    await screen.findByText("Body for README.md");
 
     await user.click(screen.getByRole("button", { name: "guides" }));
     await user.click(
       screen.getByRole("button", { name: "Setup API Title，guides/setup.md" }),
     );
-    await screen.findByRole("heading", { level: 1, name: "Setup API Title" });
+    await screen.findByText("Body for guides/setup.md");
 
     await user.click(screen.getByRole("button", { name: "刷新文件列表" }));
-    await screen.findByRole("heading", { level: 1, name: "Setup API Title" });
+    await screen.findByText("Body for guides/setup.md");
     expect(window.location.pathname).toBe("/doc/guides/setup.md");
 
     await user.click(screen.getByRole("button", { name: "刷新文件列表" }));
-    await screen.findByRole("heading", { level: 1, name: "Readme API Title" });
+    await screen.findByText("Body for README.md");
     expect(window.location.pathname + window.location.search).toBe(
       "/doc/README.md?mode=auto",
     );
     expect(listFiles).toHaveBeenCalledTimes(3);
   });
 
-  it("supports keyboard tree toggles and explicit theme controls", async () => {
+  it("supports keyboard tree toggles and the theme menu", async () => {
     const user = userEvent.setup();
     render(<App api={createAPI()} />);
-    await screen.findByRole("heading", { level: 1, name: "Readme API Title" });
+    await screen.findByText("Body for README.md");
 
     const folder = screen.getByRole("button", { name: "guides" });
     folder.focus();
     await user.keyboard("{Enter}");
     expect(folder.getAttribute("aria-expanded")).toBe("true");
 
-    await user.click(screen.getByRole("button", { name: "深色" }));
-    expect(
-      screen.getByRole("button", { name: "深色" }).getAttribute("aria-pressed"),
-    ).toBe("true");
+    await user.click(
+      screen.getByRole("button", { name: "显示主题：跟随系统" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: "深色" }),
+    );
+    expect(screen.getByRole("button", { name: "显示主题：深色" })).toBeTruthy();
     expect(window.location.search).toBe("?mode=dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
@@ -198,7 +210,9 @@ describe("App directory preview", () => {
         })}
       />,
     );
-    await screen.findByText("这个目录还是空的");
+    expect(await screen.findAllByText("目录中没有 Markdown 文件")).toHaveLength(
+      2,
+    );
     expect(window.location.pathname + window.location.search).toBe(
       "/?mode=auto",
     );

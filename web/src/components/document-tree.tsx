@@ -2,6 +2,7 @@ import { ChevronRight, FileText, Folder, FolderOpen } from "lucide-react";
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import type { FileSummary } from "@/api";
 import {
+  SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
@@ -58,7 +59,7 @@ export function DocumentTree({
   };
 
   return (
-    <ul aria-label="Markdown 文件树" className="document-tree">
+    <SidebarMenu aria-label="Markdown 文件树">
       {tree.map((node) => (
         <TreeItem
           key={`${node.type}:${node.path}`}
@@ -70,7 +71,7 @@ export function DocumentTree({
           activeItem={activeItem}
         />
       ))}
-    </ul>
+    </SidebarMenu>
   );
 }
 
@@ -105,17 +106,17 @@ function TreeItem({
   }
   const active = node.path === selectedPath;
   return (
-    <SidebarMenuItem className="tree-file-item">
+    <SidebarMenuItem>
       <SidebarMenuButton
         ref={active ? activeItem : undefined}
         isActive={active}
         aria-current={active ? "page" : undefined}
         aria-label={`${node.file.title}，${node.path}`}
-        className="tree-file-button"
+        className="h-8 text-sm"
         onClick={() => onSelect(node.path)}
       >
         <FileText aria-hidden="true" />
-        <span>{node.name}</span>
+        <span className="truncate">{node.name}</span>
       </SidebarMenuButton>
     </SidebarMenuItem>
   );
@@ -131,24 +132,26 @@ function DirectoryItem({
 }: TreeItemProps & { node: DirectoryNode }) {
   const open = expanded.has(node.path);
   return (
-    <li className="tree-directory-item">
-      <button
-        type="button"
-        className="tree-directory-button"
+    <SidebarMenuItem>
+      <SidebarMenuButton
         aria-expanded={open}
+        aria-label={node.name}
+        className="h-8 text-sm font-medium"
         onClick={() => onToggle(node.path)}
       >
         <ChevronRight
           aria-hidden="true"
-          className={open ? "tree-chevron is-open" : "tree-chevron"}
+          className={
+            open ? "rotate-90 transition-transform" : "transition-transform"
+          }
         />
         {open ? (
           <FolderOpen aria-hidden="true" />
         ) : (
           <Folder aria-hidden="true" />
         )}
-        <span>{node.name}</span>
-      </button>
+        <span className="truncate">{node.name}</span>
+      </SidebarMenuButton>
       {open ? (
         <SidebarMenuSub>
           {node.children.map((child) => (
@@ -164,6 +167,6 @@ function DirectoryItem({
           ))}
         </SidebarMenuSub>
       ) : null}
-    </li>
+    </SidebarMenuItem>
   );
 }

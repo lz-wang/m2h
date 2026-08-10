@@ -1,4 +1,6 @@
+import { Menu } from "@base-ui/react/menu";
 import {
+  Check,
   FileQuestion,
   ImageOff,
   Inbox,
@@ -7,10 +9,10 @@ import {
   Moon,
   RefreshCw,
   Sun,
+  SunMoon,
   TriangleAlert,
 } from "lucide-react";
 import type {
-  CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
   SyntheticEvent,
@@ -24,9 +26,9 @@ import { Separator } from "./components/ui/separator";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarProvider,
@@ -46,16 +48,15 @@ interface AppProps {
 }
 
 const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
+  { value: "auto", label: "跟随系统", icon: MonitorCog },
   { value: "light", label: "浅色", icon: Sun },
   { value: "dark", label: "深色", icon: Moon },
-  { value: "auto", label: "跟随系统", icon: MonitorCog },
 ];
 
 export function App({ api }: AppProps) {
   const preview = useDirectoryPreview(api);
   const loading =
     preview.phase === "loading-files" || preview.phase === "loading-document";
-  const fileCountLabel = `${preview.files.length} 篇文档`;
 
   const selectMarkdownTarget = (targetElement: EventTarget | null): boolean => {
     if (!(targetElement instanceof Element)) {
@@ -103,33 +104,55 @@ export function App({ api }: AppProps) {
 
   return (
     <TooltipProvider delay={350}>
-      <SidebarProvider
-        className="app-shell"
-        style={
-          {
-            "--sidebar-width": "20rem",
-            "--sidebar-width-icon": "3.25rem",
-          } as CSSProperties
-        }
-      >
-        <Sidebar collapsible="offcanvas" className="sidebar-ledger">
-          <SidebarHeader className="ledger-header">
-            <div className="brand-lockup">
-              <div className="brand-mark" aria-hidden="true">
-                <span>M</span>
-                <i>2</i>
-                <span>H</span>
-              </div>
-              <div>
-                <p className="brand-kicker">LOCAL MARKDOWN INDEX</p>
-                <p className="brand-name">m2h archive</p>
-              </div>
+      <SidebarProvider className="app-shell">
+        <Sidebar collapsible="offcanvas">
+          <SidebarHeader className="border-b border-sidebar-border">
+            <div className="flex h-8 items-center px-2">
+              <span className="text-sm font-semibold">m2h</span>
+            </div>
+          </SidebarHeader>
+          <SidebarContent>
+            <ScrollArea className="tree-scroll">
+              <SidebarGroup>
+                <SidebarGroupLabel className="justify-between">
+                  <span>Files</span>
+                  <span className="text-xs tabular-nums text-sidebar-foreground/60">
+                    <span aria-hidden="true">{preview.files.length}</span>
+                    <span className="sr-only">
+                      {preview.files.length} 个 Markdown 文件
+                    </span>
+                  </span>
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  {preview.files.length > 0 ? (
+                    <DocumentTree
+                      files={preview.files}
+                      selectedPath={preview.selectedPath}
+                      onSelect={(path) => void preview.select(path)}
+                    />
+                  ) : (
+                    <p className="tree-placeholder">
+                      {loading ? "正在加载文件…" : "目录中没有 Markdown 文件"}
+                    </p>
+                  )}
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </ScrollArea>
+          </SidebarContent>
+        </Sidebar>
+
+        <SidebarInset className="reader-inset">
+          <header className="reader-toolbar">
+            <SidebarTrigger aria-label="切换文件导航" />
+            <Separator orientation="vertical" className="toolbar-separator" />
+            <DocumentPath path={preview.selectedPath} />
+            <div className="toolbar-actions">
               <Tooltip>
                 <TooltipTrigger
                   render={
                     <Button
                       variant="ghost"
-                      size="icon"
+                      size="icon-sm"
                       aria-label="刷新文件列表"
                       disabled={preview.phase === "loading-files"}
                       onClick={() => void preview.refresh()}
@@ -142,74 +165,9 @@ export function App({ api }: AppProps) {
                     </Button>
                   }
                 />
-                <TooltipContent side="right">重新扫描目录</TooltipContent>
+                <TooltipContent side="bottom">重新扫描目录</TooltipContent>
               </Tooltip>
-            </div>
-            <Separator />
-            <div className="ledger-meta">
-              <span>INDEX / 01</span>
-              <span aria-live="polite">{fileCountLabel}</span>
-            </div>
-          </SidebarHeader>
-          <SidebarContent>
-            <ScrollArea className="tree-scroll">
-              <SidebarGroup>
-                <SidebarGroupContent>
-                  {preview.files.length > 0 ? (
-                    <DocumentTree
-                      files={preview.files}
-                      selectedPath={preview.selectedPath}
-                      onSelect={(path) => void preview.select(path)}
-                    />
-                  ) : (
-                    <p className="tree-placeholder">
-                      {loading ? "正在编制索引…" : "目录中没有 Markdown"}
-                    </p>
-                  )}
-                </SidebarGroupContent>
-              </SidebarGroup>
-            </ScrollArea>
-          </SidebarContent>
-          <SidebarFooter className="ledger-footer">
-            <p>depth & glob 由服务端统一执行</p>
-            <p>⌘ / Ctrl + B 切换索引</p>
-          </SidebarFooter>
-        </Sidebar>
-
-        <SidebarInset className="reader-inset">
-          <header className="reader-header">
-            <div className="reader-heading-row">
-              <SidebarTrigger
-                aria-label="切换文件导航"
-                className="sidebar-trigger"
-              />
-              <div className="reader-heading-copy">
-                <p className="document-path">
-                  {preview.selectedPath ?? "NO DOCUMENT SELECTED"}
-                </p>
-                <h1 title={preview.document?.title}>
-                  {preview.document?.title ?? "Markdown archive"}
-                </h1>
-              </div>
-              <fieldset className="mode-switcher">
-                <legend className="sr-only">显示主题</legend>
-                {modes.map(({ value, label, icon: Icon }) => (
-                  <Button
-                    key={value}
-                    variant="ghost"
-                    size="icon-sm"
-                    aria-label={label}
-                    aria-pressed={preview.mode === value}
-                    onClick={() => preview.setMode(value)}
-                  >
-                    <Icon aria-hidden="true" />
-                  </Button>
-                ))}
-              </fieldset>
-            </div>
-            <div className="header-rule" aria-hidden="true">
-              <span />
-              <i />
+              <ThemeMenu mode={preview.mode} onChange={preview.setMode} />
             </div>
           </header>
 
@@ -238,6 +196,81 @@ export function App({ api }: AppProps) {
   );
 }
 
+function DocumentPath({ path }: { path: string | null }) {
+  const label = path ?? "未选择文档";
+  return (
+    <nav
+      className="document-path"
+      aria-label="当前文档路径"
+      title={path ?? undefined}
+    >
+      {label}
+    </nav>
+  );
+}
+
+function ThemeMenu({
+  mode,
+  onChange,
+}: {
+  mode: Mode;
+  onChange(mode: Mode): void;
+}) {
+  const currentLabel = modes.find((item) => item.value === mode)?.label ?? mode;
+
+  const handleChange = (value: string) => {
+    if (value === "light" || value === "dark" || value === "auto") {
+      onChange(value);
+    }
+  };
+
+  return (
+    <Menu.Root>
+      <Menu.Trigger
+        render={
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label={`显示主题：${currentLabel}`}
+          />
+        }
+      >
+        <SunMoon aria-hidden="true" />
+      </Menu.Trigger>
+      <Menu.Portal>
+        <Menu.Positioner
+          className="theme-menu-positioner"
+          align="end"
+          sideOffset={6}
+        >
+          <Menu.Popup className="theme-menu-popup">
+            <Menu.Group>
+              <Menu.GroupLabel className="theme-menu-label">
+                显示主题
+              </Menu.GroupLabel>
+              <Menu.RadioGroup value={mode} onValueChange={handleChange}>
+                {modes.map(({ value, label, icon: Icon }) => (
+                  <Menu.RadioItem
+                    key={value}
+                    value={value}
+                    className="theme-menu-item"
+                  >
+                    <Icon aria-hidden="true" />
+                    <span>{label}</span>
+                    <Menu.RadioItemIndicator className="theme-menu-indicator">
+                      <Check aria-hidden="true" />
+                    </Menu.RadioItemIndicator>
+                  </Menu.RadioItem>
+                ))}
+              </Menu.RadioGroup>
+            </Menu.Group>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
+  );
+}
+
 interface PreviewContentProps {
   phase: ReturnType<typeof useDirectoryPreview>["phase"];
   error: string | null;
@@ -261,8 +294,7 @@ function PreviewContent({
     return (
       <section className="state-panel" aria-live="polite" aria-busy="true">
         <LoaderCircle className="is-spinning" aria-hidden="true" />
-        <p>{phase === "loading-files" ? "正在建立文档索引" : "正在装订文档"}</p>
-        <span>内容始终从当前磁盘版本读取</span>
+        <p>{phase === "loading-files" ? "正在加载文件" : "正在加载文档"}</p>
       </section>
     );
   }
@@ -270,7 +302,7 @@ function PreviewContent({
     return (
       <section className="state-panel" aria-live="polite">
         <Inbox aria-hidden="true" />
-        <p>这个目录还是空的</p>
+        <p>目录中没有 Markdown 文件</p>
         <span>添加 .md 或 .markdown 文件后点击刷新。</span>
       </section>
     );
