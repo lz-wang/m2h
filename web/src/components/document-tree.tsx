@@ -41,7 +41,10 @@ export function DocumentTree({
       return next;
     });
     const frame = window.requestAnimationFrame(() => {
-      activeItem.current?.scrollIntoView?.({ block: "nearest" });
+      activeItem.current?.scrollIntoView?.({
+        block: "center",
+        inline: "nearest",
+      });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [selectedPath]);
@@ -112,8 +115,19 @@ function TreeItem({
         isActive={active}
         aria-current={active ? "page" : undefined}
         aria-label={`${node.file.title}，${node.path}`}
-        title={node.name}
-        className="h-8 text-sm"
+        className="document-tree-file h-8 text-sm"
+        tooltip={{
+          hidden: false,
+          side: "right",
+          align: "start",
+          className: "tree-tooltip",
+          children: (
+            <>
+              <span className="tree-tooltip-name">{node.name}</span>
+              <span className="tree-tooltip-title">{node.file.title}</span>
+            </>
+          ),
+        }}
         onClick={() => onSelect(node.path)}
       >
         <FileText aria-hidden="true" />

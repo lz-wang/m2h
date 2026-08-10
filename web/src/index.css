@@ -174,19 +174,66 @@ body,
   background: var(--background);
 }
 
+.reader-toolbar [data-slot="button"],
+.document-title,
+.toolbar-separator {
+  align-self: center;
+}
+
+.reader-toolbar [data-slot="button"],
+.document-title {
+  height: 1.75rem;
+}
+
 .toolbar-separator {
   height: 1rem;
   align-self: center;
 }
 
 .document-title {
+  display: flex;
   min-width: 0;
   flex: 1;
+  align-items: center;
+  align-self: center;
   overflow: hidden;
   color: var(--foreground);
   font-size: 0.875rem;
   font-weight: 600;
-  line-height: 1.25rem;
+  line-height: 1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-tree-file[data-active="true"] {
+  background: color-mix(
+    in oklch,
+    var(--sidebar-accent) 88%,
+    var(--sidebar-foreground) 4%
+  );
+  box-shadow:
+    inset 3px 0 0
+    color-mix(in oklch, var(--sidebar-foreground) 58%, transparent),
+    inset 0 0 0 1px color-mix(in oklch, var(--sidebar-border) 72%, transparent);
+  color: var(--sidebar-accent-foreground);
+  font-weight: 600;
+}
+
+.tree-tooltip {
+  display: flex;
+  max-width: 22rem;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.tree-tooltip-name {
+  font-weight: 600;
+}
+
+.tree-tooltip-title {
+  max-width: 100%;
+  overflow: hidden;
+  opacity: 0.78;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
