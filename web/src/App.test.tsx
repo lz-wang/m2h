@@ -13,6 +13,7 @@ const initialFiles: FileListResponse = {
 };
 
 beforeEach(() => {
+  window.localStorage.clear();
   window.history.replaceState(null, "", "/");
   document.getElementById("m2h-markdown-styles")?.remove();
   document.documentElement.className = "";
@@ -41,7 +42,6 @@ describe("App directory preview", () => {
     expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
     const title = screen.getByRole("region", { name: "当前文档标题" });
     expect(title.textContent).toBe("Readme API Title");
-    expect(title.getAttribute("title")).toBe("README.md");
     expect(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
     ).toBeTruthy();
@@ -77,6 +77,12 @@ describe("App directory preview", () => {
         .getByRole("button", { name: "Setup API Title，guides/setup.md" })
         .getAttribute("aria-current"),
     ).toBe("page");
+    await waitFor(() =>
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
+        block: "center",
+        inline: "nearest",
+      }),
+    );
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(
       document.getElementById("m2h-markdown-styles")?.getAttribute("href"),
@@ -233,14 +239,48 @@ describe("App directory preview", () => {
     ).toBeTruthy();
   });
 
+  it("shows consistent tooltips for the title and every toolbar action", async () => {
+    const user = userEvent.setup();
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    const targets = [
+      [screen.getByRole("button", { name: "切换文件导航" }), "收起文件导航"],
+      [screen.getByRole("region", { name: "当前文档标题" }), "README.md"],
+      [screen.getByRole("button", { name: "文档宽度：标准" }), "调整文档宽度"],
+      [screen.getByRole("button", { name: "刷新文件列表" }), "重新扫描目录"],
+      [
+        screen.getByRole("button", { name: "显示主题：跟随系统" }),
+        "切换显示主题",
+      ],
+    ] as const;
+
+    for (const [target, content] of targets) {
+      await user.hover(target);
+      expect(
+        await screen.findByText(content, {
+          selector: '[data-slot="tooltip-content"]',
+        }),
+      ).toBeTruthy();
+      await user.unhover(target);
+    }
+  });
+
   it("exposes full file names and resizes the desktop sidebar by dragging", async () => {
+    const user = userEvent.setup();
     render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
 
     const file = screen.getByRole("button", {
       name: "Readme API Title，README.md",
     });
-    expect(file.getAttribute("title")).toBe("README.md");
+    await user.hover(file);
+    const tooltipName = await screen.findByText("README.md", {
+      selector: ".tree-tooltip-name",
+    });
+    expect(
+      tooltipName.closest('[data-slot="tooltip-content"]')?.textContent,
+    ).toContain("Readme API Title");
     const resize = screen.getByRole("button", { name: "调整侧边栏宽度" });
     fireEvent.pointerDown(resize, { clientX: 256 });
     fireEvent.pointerMove(window, { clientX: 356 });
@@ -250,6 +290,39 @@ describe("App directory preview", () => {
         .querySelector('[data-slot="sidebar-wrapper"]')
         ?.getAttribute("style"),
     ).toContain("356px");
+    expect(
+      JSON.parse(window.localStorage.getItem("m2h.preview.layout") ?? "{}"),
+    ).toMatchObject({
+      sidebarWidth: 356,
+    });
+  });
+
+  it("restores the sidebar and document layout from local storage", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "m2h.preview.layout",
+      JSON.stringify({
+        sidebarOpen: false,
+        sidebarWidth: 420,
+        documentWidth: "wide",
+      }),
+    );
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    expect(document.querySelector(".reader-canvas-wide")).toBeTruthy();
+    expect(
+      document
+        .querySelector('[data-slot="sidebar-wrapper"]')
+        ?.getAttribute("style"),
+    ).toContain("420px");
+    expect(
+      document
+        .querySelector('[data-slot="sidebar"]')
+        ?.getAttribute("data-state"),
+    ).toBe("collapsed");
+    await user.hover(screen.getByRole("button", { name: "切换文件导航" }));
+    expect(await screen.findByText("展开文件导航")).toBeTruthy();
   });
 
   it("shows empty, API, deleted-document, and attachment errors", async () => {
