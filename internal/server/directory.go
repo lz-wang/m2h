@@ -33,10 +33,22 @@ type fileListResponse struct {
 	DefaultPath string        `json:"defaultPath"`
 }
 
+type frontMatterEntryResponse struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
+}
+
+type frontMatterResponse struct {
+	Entries []frontMatterEntryResponse `json:"entries"`
+	Date    string                     `json:"date,omitempty"`
+	Tags    []string                   `json:"tags,omitempty"`
+}
+
 type documentResponse struct {
-	Path  string `json:"path"`
-	Title string `json:"title"`
-	HTML  string `json:"html"`
+	Path        string               `json:"path"`
+	Title       string               `json:"title"`
+	HTML        string               `json:"html"`
+	FrontMatter *frontMatterResponse `json:"frontmatter"`
 }
 
 type directoryHandler struct {
@@ -158,7 +170,16 @@ func (handler *directoryHandler) serveDocument(response http.ResponseWriter, req
 		writeJSONError(response, http.StatusNotFound, "document not found")
 		return
 	}
-	rendered, err := markdown.Render(contents, markdown.RenderOptions{
+	body, frontMatter, err := markdown.ParseFrontMatter(contents)
+	if err != nil {
+		writeJSONError(
+			response,
+			http.StatusUnprocessableEntity,
+			fmt.Sprintf("invalid frontmatter: %v", err),
+		)
+		return
+	}
+	rendered, err := markdown.Render(body, markdown.RenderOptions{
 		Mode:       handler.mode,
 		Width:      handler.width,
 		Target:     markdown.TargetPreview,
@@ -170,9 +191,10 @@ func (handler *directoryHandler) serveDocument(response http.ResponseWriter, req
 		return
 	}
 	writeJSON(response, http.StatusOK, documentResponse{
-		Path:  relative,
-		Title: rendered.Title,
-		HTML:  rendered.Body,
+		Path:        relative,
+		Title:       rendered.Title,
+		HTML:        rendered.Body,
+		FrontMatter: frontMatterResponseFrom(frontMatter),
 	})
 }
 
@@ -259,6 +281,24 @@ func writeJSONError(response http.ResponseWriter, status int, message string) {
 	writeJSON(response, status, struct {
 		Error string `json:"error"`
 	}{Error: message})
+}
+
+func frontMatterResponseFrom(frontMatter *markdown.FrontMatter) *frontMatterResponse {
+	if frontMatter == nil {
+		return nil
+	}
+	entries := make([]frontMatterEntryResponse, 0, len(frontMatter.Entries))
+	for _, entry := range frontMatter.Entries {
+		entries = append(entries, frontMatterEntryResponse{
+			Key:   entry.Key,
+			Value: entry.Value,
+		})
+	}
+	return &frontMatterResponse{
+		Entries: entries,
+		Date:    frontMatter.Date,
+		Tags:    frontMatter.Tags,
+	}
 }
 
 func defaultDocument(summaries []fileSummary) string {

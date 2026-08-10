@@ -280,6 +280,101 @@ func TestDirectoryDocumentAPIRejectsUnsafeAndFilteredPaths(t *testing.T) {
 	}
 }
 
+func TestDirectoryDocumentAPIExposesFrontMatter(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(
+		t,
+		filepath.Join(root, "design.md"),
+		"---\ndate: 2026-07-11\ntags:\n  - Go\n  - Markdown\nauthor: lzwang\ndraft: false\n---\n# Design\n\nbody text\n",
+	)
+	writeTestFile(t, filepath.Join(root, "plain.md"), "# Plain\n\nno metadata\n")
+	canonical := canonicalDirectory(t, root)
+	handler := newDirectoryHandler(
+		canonical,
+		markdown.ModeAuto,
+		false,
+		files.DiscoverOptions{Depth: 2},
+		newEventHub(time.Second),
+		nil,
+	)
+
+	response := performRequest(handler, http.MethodGet, "/api/document?path=design.md")
+	if response.Code != http.StatusOK {
+		t.Fatalf("document status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var document documentResponse
+	decodeJSON(t, response, &document)
+	if document.Title != "Design" {
+		t.Fatalf("title = %q", document.Title)
+	}
+	if document.FrontMatter == nil {
+		t.Fatal("frontmatter = nil, want metadata")
+	}
+	if document.FrontMatter.Date != "2026-07-11" {
+		t.Errorf("date = %q", document.FrontMatter.Date)
+	}
+	if !reflect.DeepEqual(document.FrontMatter.Tags, []string{"Go", "Markdown"}) {
+		t.Errorf("tags = %v", document.FrontMatter.Tags)
+	}
+	wantKeys := []string{"date", "tags", "author", "draft"}
+	if len(document.FrontMatter.Entries) != len(wantKeys) {
+		t.Fatalf("entries = %+v", document.FrontMatter.Entries)
+	}
+	for i, want := range wantKeys {
+		if document.FrontMatter.Entries[i].Key != want {
+			t.Errorf("entry %d = %q, want %q", i, document.FrontMatter.Entries[i].Key, want)
+		}
+	}
+	for _, fragment := range []string{"---", "date: 2026-07-11", "author: lzwang", "draft: false"} {
+		if strings.Contains(document.HTML, fragment) {
+			t.Errorf("HTML should not contain frontmatter YAML %q: %s", fragment, document.HTML)
+		}
+	}
+	if !strings.Contains(document.HTML, "body text") {
+		t.Errorf("HTML missing body: %s", document.HTML)
+	}
+	if strings.Contains(response.Body.String(), `"frontmatter":null`) {
+		t.Errorf("response should serialize frontmatter metadata: %s", response.Body.String())
+	}
+
+	plain := performRequest(handler, http.MethodGet, "/api/document?path=plain.md")
+	if plain.Code != http.StatusOK {
+		t.Fatalf("plain document status = %d", plain.Code)
+	}
+	var plainDocument documentResponse
+	decodeJSON(t, plain, &plainDocument)
+	if plainDocument.FrontMatter != nil {
+		t.Fatalf("plain frontmatter = %+v, want nil", plainDocument.FrontMatter)
+	}
+	if !strings.Contains(plain.Body.String(), `"frontmatter":null`) {
+		t.Errorf("plain response should serialize frontmatter:null: %s", plain.Body.String())
+	}
+}
+
+func TestDirectoryDocumentAPIInvalidFrontMatter(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "broken.md"), "---\ntags: [\n---\n# Broken\n")
+	writeTestFile(t, filepath.Join(root, "scalar.md"), "---\njust text\n---\n# Scalar\n")
+	canonical := canonicalDirectory(t, root)
+	handler := newDirectoryHandler(
+		canonical,
+		markdown.ModeAuto,
+		false,
+		files.DiscoverOptions{Depth: 2},
+		newEventHub(time.Second),
+		nil,
+	)
+
+	for _, target := range []string{"broken.md", "scalar.md"} {
+		response := performRequest(handler, http.MethodGet, "/api/document?path="+target)
+		assertJSONError(t, response, http.StatusUnprocessableEntity)
+	}
+}
+
 func TestDirectoryAssetsSPAFallbackAndAPINotFound(t *testing.T) {
 	t.Parallel()
 
