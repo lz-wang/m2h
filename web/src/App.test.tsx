@@ -38,11 +38,13 @@ describe("App directory preview", () => {
     expect(
       document.getElementById("m2h-markdown-styles")?.getAttribute("href"),
     ).toBe("/ui/markdown.css?mode=auto");
-    expect(screen.getByLabelText("2 个 Markdown 文件").textContent).toBe("2");
-    expect(screen.getByLabelText("当前文档路径：README.md").textContent).toBe(
-      "README.md",
-    );
-    expect(screen.getByRole("button", { name: "显示主题：跟随系统" })).toBeTruthy();
+    expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
+    expect(
+      screen.getByRole("navigation", { name: "当前文档路径" }).textContent,
+    ).toBe("README.md");
+    expect(
+      screen.getByRole("button", { name: "显示主题：跟随系统" }),
+    ).toBeTruthy();
   });
 
   it("restores a dark deep link and expands the selected directory", async () => {
@@ -114,8 +116,12 @@ describe("App directory preview", () => {
       window.location.pathname + window.location.search + window.location.hash,
     ).toBe("/doc/guides/setup.md?mode=auto#install");
 
-    await user.click(screen.getByRole("button", { name: "显示主题：跟随系统" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "深色" }));
+    await user.click(
+      screen.getByRole("button", { name: "显示主题：跟随系统" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: "深色" }),
+    );
     expect(window.location.search + window.location.hash).toBe(
       "?mode=dark#install",
     );
@@ -185,8 +191,12 @@ describe("App directory preview", () => {
     await user.keyboard("{Enter}");
     expect(folder.getAttribute("aria-expanded")).toBe("true");
 
-    await user.click(screen.getByRole("button", { name: "显示主题：跟随系统" }));
-    await user.click(await screen.findByRole("menuitemradio", { name: "深色" }));
+    await user.click(
+      screen.getByRole("button", { name: "显示主题：跟随系统" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: "深色" }),
+    );
     expect(screen.getByRole("button", { name: "显示主题：深色" })).toBeTruthy();
     expect(window.location.search).toBe("?mode=dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
