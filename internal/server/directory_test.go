@@ -27,7 +27,7 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	canonical := canonicalDirectory(t, root)
 	options := files.DiscoverOptions{Depth: 2, Pattern: "**/*.md"}
 	var logOutput bytes.Buffer
-	handler := newDirectoryHandler(canonical, markdown.ModeAuto, false, options, newEventHub(time.Second), &logOutput)
+	handler := newDirectoryHandler(canonical, markdown.ModeAuto, false, options, newEventHub(time.Second), &logOutput, directoryTestUI())
 
 	response := performRequest(handler, http.MethodGet, "/api/files")
 	if response.Code != http.StatusOK {
@@ -186,6 +186,7 @@ func TestDirectoryDocumentAPIReadsLatestContent(t *testing.T) {
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		nil,
+		directoryTestUI(),
 	)
 
 	response := performRequest(handler, http.MethodGet, "/api/document?path=design%2Farchitecture.md")
@@ -234,6 +235,7 @@ func TestDirectoryDocumentAPIRejectsUnsafeAndFilteredPaths(t *testing.T) {
 		files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"},
 		newEventHub(time.Second),
 		nil,
+		directoryTestUI(),
 	)
 
 	badQueries := []string{
@@ -298,6 +300,7 @@ func TestDirectoryDocumentAPIExposesFrontMatter(t *testing.T) {
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		nil,
+		directoryTestUI(),
 	)
 
 	response := performRequest(handler, http.MethodGet, "/api/document?path=design.md")
@@ -367,6 +370,7 @@ func TestDirectoryDocumentAPIInvalidFrontMatter(t *testing.T) {
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		nil,
+		directoryTestUI(),
 	)
 
 	for _, target := range []string{"broken.md", "scalar.md"} {
@@ -388,6 +392,7 @@ func TestDirectoryAssetsSPAFallbackAndAPINotFound(t *testing.T) {
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		nil,
+		directoryTestUI(),
 	)
 
 	asset := performRequest(handler, http.MethodGet, "/assets/styles/site.css")
@@ -516,6 +521,7 @@ func TestDirectoryRequestLogContainsMetadataNotBody(t *testing.T) {
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		&logOutput,
+		directoryTestUI(),
 	)
 	response := performRequest(handler, http.MethodGet, "/api/document?path=guide.md")
 	if response.Code != http.StatusOK {
@@ -588,6 +594,7 @@ func TestDirectoryFilesAPIRenderFailure(t *testing.T) {
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		nil,
+		directoryTestUI(),
 	)
 	response := performRequest(handler, http.MethodGet, "/api/document?path=guide.md")
 	assertJSONError(t, response, http.StatusInternalServerError)
@@ -652,4 +659,11 @@ func titleFor(summaries []fileSummary, relative string) string {
 		}
 	}
 	return ""
+}
+
+// directoryTestUI is the embedded WebUI filesystem used by directory handler tests.
+func directoryTestUI() fstest.MapFS {
+	return fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<!doctype html><div id="root"></div>`)},
+	}
 }

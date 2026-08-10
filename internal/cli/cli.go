@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"strings"
 
@@ -27,7 +28,7 @@ const (
 )
 
 // New constructs the root command after validating the injected build version.
-func New(buildVersion string, stdout, stderr io.Writer) (*urfavecli.Command, error) {
+func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Command, error) {
 	info, err := version.Parse(buildVersion)
 	if err != nil {
 		return nil, fmt.Errorf("configure CLI: %w", err)
@@ -50,7 +51,7 @@ func New(buildVersion string, stdout, stderr io.Writer) (*urfavecli.Command, err
 		Commands: []*urfavecli.Command{
 			versionCommand(info),
 			convertCommand(),
-			previewCommand(),
+			previewCommand(ui),
 			viewCommand(),
 		},
 		OnUsageError: normalizeUsageError,
@@ -124,7 +125,7 @@ func convertAction(ctx context.Context, command *urfavecli.Command) error {
 	return fmt.Errorf("Error: %w", err)
 }
 
-func previewCommand() *urfavecli.Command {
+func previewCommand(ui fs.FS) *urfavecli.Command {
 	return &urfavecli.Command{
 		Name:      "preview",
 		Usage:     "preview Markdown in a browser",
@@ -150,14 +151,16 @@ func previewCommand() *urfavecli.Command {
 			&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob"},
 			&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth"},
 		},
-		Action:       previewAction,
+		Action: func(ctx context.Context, command *urfavecli.Command) error {
+			return previewAction(ctx, command, ui)
+		},
 		OnUsageError: normalizeUsageError,
 	}
 }
 
 var runPreview = server.Run
 
-func previewAction(ctx context.Context, command *urfavecli.Command) error {
+func previewAction(ctx context.Context, command *urfavecli.Command, ui fs.FS) error {
 	if command.Args().Len() != 1 {
 		return fmt.Errorf("Error: preview requires exactly one file or directory")
 	}
@@ -174,6 +177,7 @@ func previewAction(ctx context.Context, command *urfavecli.Command) error {
 		PatternSet: command.IsSet("glob"),
 		DepthSet:   command.IsSet("depth"),
 		Log:        command.Root().ErrWriter,
+		UI:         ui,
 	})
 	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
 		return err

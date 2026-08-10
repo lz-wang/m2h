@@ -3,10 +3,12 @@ package cli
 import (
 	"bytes"
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 
 	"github.com/lz-wang/m2h/internal/markdown"
 	"github.com/lz-wang/m2h/internal/server"
@@ -18,13 +20,20 @@ func runCommand(t *testing.T, args ...string) (string, string, error) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	command, err := New("dev-20260809-fe65804", &stdout, &stderr)
+	command, err := New("dev-20260809-fe65804", testUI(), &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
 
 	err = command.Run(context.Background(), append([]string{"m2h"}, args...))
 	return stdout.String(), stderr.String(), err
+}
+
+// testUI returns a minimal embedded WebUI filesystem for CLI tests.
+func testUI() fs.FS {
+	return fstest.MapFS{
+		"index.html": &fstest.MapFile{Data: []byte(`<!doctype html><div id="root"></div>`)},
+	}
 }
 
 func TestVersionCommandsMatch(t *testing.T) {
@@ -189,7 +198,8 @@ func TestPreviewCommandForwardsOptions(t *testing.T) {
 		t.Fatalf("preview result stdout=%q stderr=%q err=%v", stdout, stderr, err)
 	}
 	if captured.Input != "guide.md" || captured.Host != "0.0.0.0" || captured.Port != 9142 ||
-		captured.Mode != markdown.ModeDark || !captured.Browser || !captured.UnsafeHTML || captured.Log == nil {
+		captured.Mode != markdown.ModeDark || !captured.Browser || !captured.UnsafeHTML || captured.Log == nil ||
+		captured.UI == nil {
 		t.Fatalf("preview options = %+v", captured)
 	}
 }
@@ -315,7 +325,7 @@ func TestInvalidFlagValueGetsStablePrefix(t *testing.T) {
 func TestInvalidVersionFailsConstruction(t *testing.T) {
 	t.Parallel()
 
-	if _, err := New("invalid", &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
+	if _, err := New("invalid", nil, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
 		t.Fatal("New() succeeded with an invalid version")
 	}
 }

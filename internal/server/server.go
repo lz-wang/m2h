@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
 	"net"
 	"net/http"
@@ -40,6 +41,7 @@ type Options struct {
 	PatternSet bool
 	DepthSet   bool
 	Log        io.Writer
+	UI         fs.FS
 
 	OnListening func(string)
 }
@@ -97,7 +99,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 			Depth:   normalized.Depth,
 			Pattern: normalized.Pattern,
 			Log:     logger,
-		}, hub, logger)
+		}, hub, logger, options.UI)
 	} else {
 		handler = newSingleFileHandlerWithWidth(input.Path, normalized.Mode, normalized.Width, normalized.UnsafeHTML, hub)
 	}

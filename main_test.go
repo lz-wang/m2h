@@ -3,6 +3,8 @@ package main
 import (
 	"bytes"
 	"testing"
+
+	webui "github.com/lz-wang/m2h/web"
 )
 
 func TestRunReturnsExitCodeAndRoutesOutput(t *testing.T) {
@@ -34,7 +36,7 @@ func TestRunReturnsExitCodeAndRoutesOutput(t *testing.T) {
 
 			var stdout bytes.Buffer
 			var stderr bytes.Buffer
-			if got := run(test.args, &stdout, &stderr); got != test.wantCode {
+			if got := run(test.args, webui.Content(), &stdout, &stderr); got != test.wantCode {
 				t.Fatalf("run() exit code = %d, want %d", got, test.wantCode)
 			}
 			if got := stdout.String(); got != test.wantStdout {
@@ -56,7 +58,7 @@ func TestRunRejectsInvalidInjectedVersion(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if got := run([]string{"m2h", "version"}, &stdout, &stderr); got != 1 {
+	if got := run([]string{"m2h", "version"}, nil, &stdout, &stderr); got != 1 {
 		t.Fatalf("run() exit code = %d, want 1", got)
 	}
 	if !bytes.Contains(stderr.Bytes(), []byte("invalid m2h version")) {

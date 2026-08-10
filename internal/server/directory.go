@@ -19,7 +19,6 @@ import (
 	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
-	webui "github.com/lz-wang/m2h/web"
 )
 
 type fileSummary struct {
@@ -68,8 +67,9 @@ func newDirectoryHandler(
 	discovery files.DiscoverOptions,
 	events *eventHub,
 	logger io.Writer,
+	ui fs.FS,
 ) http.Handler {
-	return newDirectoryHandlerWithWidth(root, mode, markdown.WidthStandard, unsafeHTML, discovery, events, logger)
+	return newDirectoryHandlerWithWidth(root, mode, markdown.WidthStandard, unsafeHTML, discovery, events, logger, ui)
 }
 
 func newDirectoryHandlerWithWidth(
@@ -80,6 +80,7 @@ func newDirectoryHandlerWithWidth(
 	discovery files.DiscoverOptions,
 	events *eventHub,
 	logger io.Writer,
+	ui fs.FS,
 ) http.Handler {
 	handler := &directoryHandler{
 		root:       root,
@@ -88,15 +89,12 @@ func newDirectoryHandlerWithWidth(
 		unsafeHTML: unsafeHTML,
 		discovery:  discovery,
 		discover:   files.Discover,
-		ui:         webui.Content(),
+		ui:         ui,
 	}
 	return handler.routes(events, logger)
 }
 
 func (handler *directoryHandler) routes(events *eventHub, logger io.Writer) http.Handler {
-	if handler.ui == nil {
-		handler.ui = webui.Content()
-	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
