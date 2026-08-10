@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"runtime"
 	"strings"
 	"testing"
@@ -62,7 +63,7 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	if titleFor(payload.Files, "notes.md") != "notes.md" {
 		t.Fatalf("fallback title = %q", titleFor(payload.Files, "notes.md"))
 	}
-	if !strings.Contains(logOutput.String(), `method=GET route=/api/files document="" status=200`) {
+	if !regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| 192\.0\.2\.1 \[GET\] /api/files \[200\] \d+\.\dms\n$`).MatchString(logOutput.String()) {
 		t.Fatalf("request log = %q", logOutput.String())
 	}
 }
@@ -426,13 +427,30 @@ func TestDirectoryRequestLogContainsMetadataNotBody(t *testing.T) {
 		t.Fatalf("document status = %d", response.Code)
 	}
 	logged := logOutput.String()
-	for _, want := range []string{`method=GET`, `route=/api/document`, `document="guide.md"`, `status=200`, `duration=`} {
+	for _, want := range []string{` | 192.0.2.1 [GET] `, `/api/document?path=guide.md`, `[200]`} {
 		if !strings.Contains(logged, want) {
 			t.Errorf("request log does not contain %q: %s", want, logged)
 		}
 	}
 	if strings.Contains(logged, "sensitive-body-text") {
 		t.Fatalf("request log contains document body: %s", logged)
+	}
+	if !regexp.MustCompile(` \d+\.\dms\n$`).MatchString(logged) {
+		t.Fatalf("request log duration does not have one decimal place: %s", logged)
+	}
+}
+
+func TestClientIP(t *testing.T) {
+	t.Parallel()
+
+	for remoteAddress, want := range map[string]string{
+		"192.0.2.1:1234":   "192.0.2.1",
+		"[2001:db8::1]:80": "2001:db8::1",
+		"local-client":     "local-client",
+	} {
+		if got := clientIP(remoteAddress); got != want {
+			t.Errorf("clientIP(%q) = %q, want %q", remoteAddress, got, want)
+		}
 	}
 }
 

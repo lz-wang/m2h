@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -385,37 +386,23 @@ func requestLogger(next http.Handler, logger io.Writer) http.Handler {
 		if status == 0 {
 			status = http.StatusOK
 		}
-		_, _ = fmt.Fprintf(
-			logger,
-			"m2h: request method=%s route=%s document=%q status=%d duration=%s\n",
-			request.Method,
-			requestRoute(request.URL.Path),
-			sanitizeLogValue(requestDocumentPath(request)),
+		_, _ = fmt.Fprintf(logger, "%s | %s [%s] %s [%d] %.1fms\n",
+			started.Format("2006-01-02 15:04:05"),
+			sanitizeLogValue(clientIP(request.RemoteAddr)),
+			sanitizeLogValue(request.Method),
+			sanitizeLogValue(request.URL.RequestURI()),
 			status,
-			time.Since(started).Round(time.Microsecond),
+			float64(time.Since(started).Microseconds())/1000,
 		)
 	})
 }
 
-func requestRoute(requestPath string) string {
-	switch {
-	case strings.HasPrefix(requestPath, "/doc/"):
-		return "/doc/*"
-	case strings.HasPrefix(requestPath, "/assets/"):
-		return "/assets/*"
-	default:
-		return requestPath
+func clientIP(remoteAddress string) string {
+	host, _, err := net.SplitHostPort(remoteAddress)
+	if err == nil {
+		return host
 	}
-}
-
-func requestDocumentPath(request *http.Request) string {
-	if request.URL.Path == "/api/document" {
-		return request.URL.Query().Get("path")
-	}
-	if strings.HasPrefix(request.URL.Path, "/doc/") {
-		return strings.TrimPrefix(request.URL.Path, "/doc/")
-	}
-	return ""
+	return remoteAddress
 }
 
 func sanitizeLogValue(value string) string {
