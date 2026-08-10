@@ -32,6 +32,7 @@ type Options struct {
 	Host       string
 	Port       int
 	Mode       markdown.Mode
+	Width      markdown.Width
 	Browser    bool
 	UnsafeHTML bool
 	Pattern    string
@@ -92,13 +93,13 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	hub := newEventHub(deps.keepAlive)
 	var handler http.Handler
 	if input.Kind == files.KindDirectory {
-		handler = newDirectoryHandler(input.Path, normalized.Mode, normalized.UnsafeHTML, files.DiscoverOptions{
+		handler = newDirectoryHandlerWithWidth(input.Path, normalized.Mode, normalized.Width, normalized.UnsafeHTML, files.DiscoverOptions{
 			Depth:   normalized.Depth,
 			Pattern: normalized.Pattern,
 			Log:     logger,
 		}, hub, logger)
 	} else {
-		handler = newSingleFileHandler(input.Path, normalized.Mode, normalized.UnsafeHTML, hub)
+		handler = newSingleFileHandlerWithWidth(input.Path, normalized.Mode, normalized.Width, normalized.UnsafeHTML, hub)
 	}
 	httpServer := &http.Server{
 		Handler:  handler,
@@ -129,7 +130,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 
 	address := previewURL(normalized.Host, listener.Addr())
 	if input.Kind == files.KindDirectory {
-		address += "?mode=" + string(normalized.Mode)
+		address += "?mode=" + string(normalized.Mode) + "&width=" + string(normalized.Width)
 	}
 	_, _ = fmt.Fprintf(logger, "m2h: previewing %s at %s\n", input.Path, address)
 	if normalized.OnListening != nil {
@@ -173,6 +174,9 @@ func normalizeOptions(options Options) (Options, error) {
 	if options.Port == 0 {
 		options.Port = DefaultPort
 	}
+	if options.Width == "" {
+		options.Width = markdown.WidthStandard
+	}
 	if options.Port < 1 || options.Port > 65535 {
 		return Options{}, fmt.Errorf("invalid port %d: expected 1 through 65535", options.Port)
 	}
@@ -180,6 +184,11 @@ func normalizeOptions(options Options) (Options, error) {
 	case markdown.ModeLight, markdown.ModeDark, markdown.ModeAuto:
 	default:
 		return Options{}, fmt.Errorf("invalid mode %q: expected light, dark, or auto", options.Mode)
+	}
+	switch options.Width {
+	case markdown.WidthStandard, markdown.WidthWide, markdown.WidthFull:
+	default:
+		return Options{}, fmt.Errorf("invalid width %q: expected standard, wide, or full", options.Width)
 	}
 	if err := files.ValidateDiscoverOptions(files.DiscoverOptions{Depth: options.Depth, Pattern: options.Pattern}); err != nil {
 		return Options{}, err

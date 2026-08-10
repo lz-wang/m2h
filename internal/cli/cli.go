@@ -22,6 +22,7 @@ const (
 	defaultDepth = 2
 	defaultHost  = server.DefaultHost
 	defaultMode  = "auto"
+	defaultWidth = "standard"
 	defaultPort  = server.DefaultPort
 )
 
@@ -85,6 +86,7 @@ func convertCommand() *urfavecli.Command {
 			&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob"},
 			&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth"},
 			modeFlag(),
+			widthFlag(),
 			&urfavecli.BoolFlag{
 				Name:        "copy-assets",
 				Value:       true,
@@ -108,6 +110,7 @@ func convertAction(ctx context.Context, command *urfavecli.Command) error {
 		Pattern:       command.String("glob"),
 		Depth:         command.Int("depth"),
 		Mode:          markdown.Mode(command.String("mode")),
+		Width:         markdown.Width(command.String("width")),
 		CopyAssets:    command.Bool("copy-assets"),
 		UnsafeHTML:    command.Bool("unsafe-html"),
 		PatternSet:    command.IsSet("glob"),
@@ -142,6 +145,7 @@ func previewCommand() *urfavecli.Command {
 			},
 			&urfavecli.BoolFlag{Name: "browser", Usage: "open the default browser after listening"},
 			modeFlag(),
+			widthFlag(),
 			&urfavecli.BoolFlag{Name: "unsafe-html", Usage: "allow raw HTML in Markdown"},
 			&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob"},
 			&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth"},
@@ -162,6 +166,7 @@ func previewAction(ctx context.Context, command *urfavecli.Command) error {
 		Host:       command.String("host"),
 		Port:       command.Int("port"),
 		Mode:       markdown.Mode(command.String("mode")),
+		Width:      markdown.Width(command.String("width")),
 		Browser:    command.Bool("browser"),
 		UnsafeHTML: command.Bool("unsafe-html"),
 		Pattern:    command.String("glob"),
@@ -217,6 +222,23 @@ func modeFlag() *urfavecli.StringFlag {
 				return nil
 			default:
 				return fmt.Errorf("Error: --mode must be one of light, dark, or auto")
+			}
+		},
+	}
+}
+
+func widthFlag() *urfavecli.StringFlag {
+	return &urfavecli.StringFlag{
+		Name:             "width",
+		Value:            defaultWidth,
+		Usage:            "document width: standard, wide, or full",
+		ValidateDefaults: true,
+		Validator: func(value string) error {
+			switch value {
+			case "standard", "wide", "full":
+				return nil
+			default:
+				return fmt.Errorf("Error: --width must be one of standard, wide, or full")
 			}
 		},
 	}

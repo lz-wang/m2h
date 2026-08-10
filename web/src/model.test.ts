@@ -18,26 +18,35 @@ const files: FileSummary[] = [
 describe("route model", () => {
   it("reads, normalizes, and writes document routes", () => {
     expect(
-      readRoute("/doc/guide/space%20name.md", "?mode=dark", "#install"),
+      readRoute(
+        "/doc/guide/space%20name.md",
+        "?mode=dark&width=wide",
+        "#install",
+      ),
     ).toEqual({
       path: "guide/space name.md",
       mode: "dark",
+      width: "wide",
       hash: "#install",
     });
     expect(readRoute("/doc/%", "?mode=invalid")).toEqual({
       path: null,
       mode: "auto",
+      width: "standard",
       hash: "",
     });
     expect(readRoute("/", "?mode=light")).toEqual({
       path: null,
       mode: "light",
+      width: "standard",
       hash: "",
     });
-    expect(routeURL("guide/space name.md", "auto", "install")).toBe(
-      "/doc/guide/space%20name.md?mode=auto#install",
+    expect(routeURL("guide/space name.md", "auto", "full", "install")).toBe(
+      "/doc/guide/space%20name.md?mode=auto&width=full#install",
     );
-    expect(routeURL(null, "light")).toBe("/?mode=light");
+    expect(routeURL(null, "light", "standard")).toBe(
+      "/?mode=light&width=standard",
+    );
   });
 
   it("chooses the requested, default, first, or empty document", () => {

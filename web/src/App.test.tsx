@@ -32,7 +32,7 @@ describe("App directory preview", () => {
       expect.any(AbortSignal),
     );
     expect(window.location.pathname + window.location.search).toBe(
-      "/doc/README.md?mode=auto",
+      "/doc/README.md?mode=auto&width=standard",
     );
     expect(document.title).toBe("Readme API Title");
     expect(document.documentElement.dataset.mode).toBe("auto");
@@ -51,7 +51,7 @@ describe("App directory preview", () => {
     window.history.replaceState(
       null,
       "",
-      "/doc/guides/setup.md?mode=dark#install",
+      "/doc/guides/setup.md?mode=dark&width=standard#install",
     );
     const api = createAPI({
       getDocument: vi.fn().mockResolvedValue({
@@ -114,7 +114,7 @@ describe("App directory preview", () => {
     await screen.findByRole("heading", { level: 2, name: "Install" });
     expect(
       window.location.pathname + window.location.search + window.location.hash,
-    ).toBe("/doc/guides/setup.md?mode=auto#install");
+    ).toBe("/doc/guides/setup.md?mode=auto&width=standard#install");
 
     await user.click(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
@@ -123,7 +123,7 @@ describe("App directory preview", () => {
       await screen.findByRole("menuitemradio", { name: "深色" }),
     );
     expect(window.location.search + window.location.hash).toBe(
-      "?mode=dark#install",
+      "?mode=dark&width=standard#install",
     );
   });
 
@@ -139,10 +139,14 @@ describe("App directory preview", () => {
     );
     await screen.findByText("Body for guides/setup.md");
     expect(window.location.pathname + window.location.search).toBe(
-      "/doc/guides/setup.md?mode=auto",
+      "/doc/guides/setup.md?mode=auto&width=standard",
     );
 
-    window.history.replaceState(null, "", "/doc/README.md?mode=light");
+    window.history.replaceState(
+      null,
+      "",
+      "/doc/README.md?mode=light&width=standard",
+    );
     window.dispatchEvent(new PopStateEvent("popstate"));
     await screen.findByText("Body for README.md");
     expect(screen.getByRole("button", { name: "显示主题：浅色" })).toBeTruthy();
@@ -176,7 +180,7 @@ describe("App directory preview", () => {
     await user.click(screen.getByRole("button", { name: "刷新文件列表" }));
     await screen.findByText("Body for README.md");
     expect(window.location.pathname + window.location.search).toBe(
-      "/doc/README.md?mode=auto",
+      "/doc/README.md?mode=auto&width=standard",
     );
     expect(listFiles).toHaveBeenCalledTimes(3);
   });
@@ -198,7 +202,7 @@ describe("App directory preview", () => {
       await screen.findByRole("menuitemradio", { name: "深色" }),
     );
     expect(screen.getByRole("button", { name: "显示主题：深色" })).toBeTruthy();
-    expect(window.location.search).toBe("?mode=dark");
+    expect(window.location.search).toBe("?mode=dark&width=standard");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
 
@@ -214,6 +218,7 @@ describe("App directory preview", () => {
     );
     expect(screen.getByRole("button", { name: "文档宽度：全屏" })).toBeTruthy();
     expect(document.querySelector(".reader-canvas-full")).toBeTruthy();
+    expect(window.location.search).toBe("?mode=auto&width=full");
 
     expect(
       screen
@@ -320,7 +325,7 @@ describe("App directory preview", () => {
     });
   });
 
-  it("restores the sidebar and document layout from local storage", async () => {
+  it("restores sidebar layout but removes the legacy stored document width", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
       "m2h.preview.layout",
@@ -333,7 +338,10 @@ describe("App directory preview", () => {
     render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
 
-    expect(document.querySelector(".reader-canvas-wide")).toBeTruthy();
+    expect(document.querySelector(".reader-canvas-standard")).toBeTruthy();
+    expect(
+      JSON.parse(window.localStorage.getItem("m2h.preview.layout") ?? "{}"),
+    ).not.toHaveProperty("documentWidth");
     expect(
       document
         .querySelector('[data-slot="sidebar-wrapper"]')
@@ -360,7 +368,7 @@ describe("App directory preview", () => {
       2,
     );
     expect(window.location.pathname + window.location.search).toBe(
-      "/?mode=auto",
+      "/?mode=auto&width=standard",
     );
     view.unmount();
 

@@ -48,7 +48,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
-import { type Mode, readRoute } from "./model";
+import { type DocumentWidth, type Mode, readRoute } from "./model";
 import { useDirectoryPreview } from "./use-directory-preview";
 
 interface AppProps {
@@ -61,20 +61,16 @@ const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
   { value: "dark", label: "深色", icon: Moon },
 ];
 
-type DocumentWidth = "standard" | "wide" | "full";
-
 const layoutStorageKey = "m2h.preview.layout";
 
 interface StoredLayout {
   sidebarOpen: boolean;
   sidebarWidth: number;
-  documentWidth: DocumentWidth;
 }
 
 const defaultLayout: StoredLayout = {
   sidebarOpen: true,
   sidebarWidth: 256,
-  documentWidth: "standard",
 };
 
 const documentWidths: Array<{
@@ -90,9 +86,6 @@ const documentWidths: Array<{
 export function App({ api }: AppProps) {
   const preview = useDirectoryPreview(api);
   const [initialLayout] = useState(readStoredLayout);
-  const [documentWidth, setDocumentWidth] = useState<DocumentWidth>(
-    initialLayout.documentWidth,
-  );
   const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
   const [sidebarOpen, setSidebarOpen] = useState(initialLayout.sidebarOpen);
   const [searchQuery, setSearchQuery] = useState("");
@@ -114,12 +107,12 @@ export function App({ api }: AppProps) {
     try {
       window.localStorage.setItem(
         layoutStorageKey,
-        JSON.stringify({ sidebarOpen, sidebarWidth, documentWidth }),
+        JSON.stringify({ sidebarOpen, sidebarWidth }),
       );
     } catch {
       // Storage can be unavailable in private browsing; the layout still works.
     }
-  }, [documentWidth, sidebarOpen, sidebarWidth]);
+  }, [sidebarOpen, sidebarWidth]);
 
   const selectMarkdownTarget = (targetElement: EventTarget | null): boolean => {
     if (!(targetElement instanceof Element)) {
@@ -243,8 +236,8 @@ export function App({ api }: AppProps) {
             <DocumentTitle title={preview.document?.title ?? null} />
             <div className="toolbar-actions">
               <DocumentWidthMenu
-                width={documentWidth}
-                onChange={setDocumentWidth}
+                width={preview.width}
+                onChange={preview.setWidth}
               />
               <Tooltip>
                 <TooltipTrigger
@@ -271,7 +264,7 @@ export function App({ api }: AppProps) {
           </header>
 
           <ScrollArea className="reader-scroll">
-            <div className={`reader-canvas reader-canvas-${documentWidth}`}>
+            <div className={`reader-canvas reader-canvas-${preview.width}`}>
               {preview.assetError !== null ? (
                 <div className="asset-warning" role="status">
                   <ImageOff aria-hidden="true" />
@@ -305,7 +298,6 @@ function readStoredLayout(): StoredLayout {
     }
     const candidate = value as Record<string, unknown>;
     const sidebarWidth = candidate.sidebarWidth;
-    const documentWidth = candidate.documentWidth;
     return {
       sidebarOpen:
         typeof candidate.sidebarOpen === "boolean"
@@ -315,12 +307,6 @@ function readStoredLayout(): StoredLayout {
         typeof sidebarWidth === "number" && Number.isFinite(sidebarWidth)
           ? Math.min(480, Math.max(208, sidebarWidth))
           : defaultLayout.sidebarWidth,
-      documentWidth:
-        documentWidth === "standard" ||
-        documentWidth === "wide" ||
-        documentWidth === "full"
-          ? documentWidth
-          : defaultLayout.documentWidth,
     };
   } catch {
     return defaultLayout;

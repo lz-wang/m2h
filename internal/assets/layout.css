@@ -32,6 +32,14 @@ body.m2h-page {
   padding: 45px;
 }
 
+html[data-width="wide"] .markdown-body {
+  max-width: 1280px;
+}
+
+html[data-width="full"] .markdown-body {
+  max-width: none;
+}
+
 @media (prefers-color-scheme: dark) {
   html.m2h-mode-auto {
     --m2h-page-background: #0d1117;

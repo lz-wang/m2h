@@ -187,6 +187,7 @@ func TestRunValidatesBeforeFilesystemAndNetwork(t *testing.T) {
 		{name: "empty input", options: Options{Mode: markdown.ModeAuto}, want: "input path is required"},
 		{name: "port", options: Options{Input: missing, Port: 70000, Mode: markdown.ModeAuto}, want: "invalid port"},
 		{name: "mode", options: Options{Input: missing, Mode: "sepia"}, want: "invalid mode"},
+		{name: "width", options: Options{Input: missing, Mode: markdown.ModeAuto, Width: "narrow"}, want: "invalid width"},
 		{name: "depth", options: Options{Input: missing, Mode: markdown.ModeAuto, Depth: -1}, want: "invalid depth"},
 		{name: "glob", options: Options{Input: missing, Mode: markdown.ModeAuto, Pattern: "["}, want: "invalid glob"},
 	}
@@ -268,8 +269,8 @@ func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
 	if watchCalled {
 		t.Fatal("directory preview created a watcher")
 	}
-	if !strings.HasSuffix(listeningAddress, "/?mode=dark") {
-		t.Fatalf("directory preview address = %q, want explicit mode query", listeningAddress)
+	if !strings.HasSuffix(listeningAddress, "/?mode=dark&width=standard") {
+		t.Fatalf("directory preview address = %q, want explicit mode and width query", listeningAddress)
 	}
 }
 

@@ -72,7 +72,7 @@ func TestCommandHelpDocumentsContract(t *testing.T) {
 			command: "convert",
 			want: []string{
 				"--output", "-o", "--glob", "--depth", "-d", "(default: 2)",
-				"--mode", "(default: \"auto\")", "--copy-assets", "(default: true)",
+				"--mode", "(default: \"auto\")", "--width", "(default: \"standard\")", "--copy-assets", "(default: true)",
 				"--unsafe-html",
 			},
 		},
@@ -80,7 +80,7 @@ func TestCommandHelpDocumentsContract(t *testing.T) {
 			command: "preview",
 			want: []string{
 				"--host", "(default: \"127.0.0.1\")", "--port", "-p", "(default: 8793)",
-				"--browser", "--mode", "(default: \"auto\")", "--unsafe-html", "--glob",
+				"--browser", "--mode", "(default: \"auto\")", "--width", "(default: \"standard\")", "--unsafe-html", "--glob",
 				"--depth", "-d", "(default: 2)",
 			},
 		},
@@ -221,7 +221,7 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 	}
 	output := filepath.Join(root, "public", "index.html")
 
-	stdout, stderr, err := runCommand(t, "convert", source, "--output", output, "--mode", "dark")
+	stdout, stderr, err := runCommand(t, "convert", source, "--output", output, "--mode", "dark", "--width", "wide")
 	if err != nil {
 		t.Fatalf("convert returned error: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`<title>Guide</title>`, `href="next.html"`, `class="m2h-mode-dark"`} {
+	for _, want := range []string{`<title>Guide</title>`, `href="next.html"`, `class="m2h-mode-dark"`, `data-width="wide"`} {
 		if !bytes.Contains(html, []byte(want)) {
 			t.Errorf("HTML does not contain %q", want)
 		}
@@ -281,6 +281,20 @@ func TestModeValidationRunsBeforeFeatureHandlers(t *testing.T) {
 			t.Fatalf("m2h %s accepted an invalid mode", command)
 		}
 		if got, want := err.Error(), "Error: --mode must be one of light, dark, or auto"; got != want {
+			t.Fatalf("m2h %s error = %q, want %q", command, got, want)
+		}
+	}
+}
+
+func TestWidthValidationRunsBeforeFeatureHandlers(t *testing.T) {
+	t.Parallel()
+
+	for _, command := range []string{"convert", "preview"} {
+		_, _, err := runCommand(t, command, "README.md", "--width", "narrow")
+		if err == nil {
+			t.Fatalf("m2h %s accepted an invalid width", command)
+		}
+		if got, want := err.Error(), "Error: --width must be one of standard, wide, or full"; got != want {
 			t.Fatalf("m2h %s error = %q, want %q", command, got, want)
 		}
 	}
