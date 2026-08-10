@@ -116,12 +116,11 @@ export function App({ api }: AppProps) {
               <SidebarGroup>
                 <SidebarGroupLabel className="justify-between">
                   <span>Files</span>
-                  <span
-                    className="text-xs tabular-nums text-sidebar-foreground/60"
-                    aria-label={`${preview.files.length} 个 Markdown 文件`}
-                    aria-live="polite"
-                  >
-                    {preview.files.length}
+                  <span className="text-xs tabular-nums text-sidebar-foreground/60">
+                    <span aria-hidden="true">{preview.files.length}</span>
+                    <span className="sr-only">
+                      {preview.files.length} 个 Markdown 文件
+                    </span>
                   </span>
                 </SidebarGroupLabel>
                 <SidebarGroupContent>
@@ -200,13 +199,9 @@ export function App({ api }: AppProps) {
 function DocumentPath({ path }: { path: string | null }) {
   const label = path ?? "未选择文档";
   return (
-    <div
-      className="document-path"
-      aria-label={`当前文档路径：${label}`}
-      title={path ?? undefined}
-    >
+    <nav className="document-path" aria-label="当前文档路径" title={path ?? undefined}>
       {label}
-    </div>
+    </nav>
   );
 }
 
