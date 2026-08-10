@@ -243,9 +243,12 @@ describe("App directory preview", () => {
       name: "Readme API Title，README.md",
     });
     await user.hover(file);
-    const fileTooltip = await screen.findByRole("tooltip");
-    expect(fileTooltip.textContent).toContain("README.md");
-    expect(fileTooltip.textContent).toContain("Readme API Title");
+    const tooltipName = await screen.findByText("README.md", {
+      selector: ".tree-tooltip-name",
+    });
+    expect(
+      tooltipName.closest('[data-slot="tooltip-content"]')?.textContent,
+    ).toContain("Readme API Title");
     const resize = screen.getByRole("button", { name: "调整侧边栏宽度" });
     fireEvent.pointerDown(resize, { clientX: 256 });
     fireEvent.pointerMove(window, { clientX: 356 });

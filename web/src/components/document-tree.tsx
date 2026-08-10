@@ -8,11 +8,6 @@ import {
   SidebarMenuSub,
 } from "@/components/ui/sidebar";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import {
   ancestorDirectories,
   buildTree,
   type DirectoryNode,
@@ -112,27 +107,29 @@ function TreeItem({
   const active = node.path === selectedPath;
   return (
     <SidebarMenuItem>
-      <Tooltip>
-        <TooltipTrigger
-          render={
-            <SidebarMenuButton
-              ref={active ? activeItem : undefined}
-              isActive={active}
-              aria-current={active ? "page" : undefined}
-              aria-label={`${node.file.title}，${node.path}`}
-              className="document-tree-file h-8 text-sm"
-              onClick={() => onSelect(node.path)}
-            >
-              <FileText aria-hidden="true" />
-              <span className="truncate">{node.name}</span>
-            </SidebarMenuButton>
-          }
-        />
-        <TooltipContent side="right" align="start" className="tree-tooltip">
-          <span className="tree-tooltip-name">{node.name}</span>
-          <span className="tree-tooltip-title">{node.file.title}</span>
-        </TooltipContent>
-      </Tooltip>
+      <SidebarMenuButton
+        ref={active ? activeItem : undefined}
+        isActive={active}
+        aria-current={active ? "page" : undefined}
+        aria-label={`${node.file.title}，${node.path}`}
+        className="document-tree-file h-8 text-sm"
+        tooltip={{
+          hidden: false,
+          side: "right",
+          align: "start",
+          className: "tree-tooltip",
+          children: (
+            <>
+              <span className="tree-tooltip-name">{node.name}</span>
+              <span className="tree-tooltip-title">{node.file.title}</span>
+            </>
+          ),
+        }}
+        onClick={() => onSelect(node.path)}
+      >
+        <FileText aria-hidden="true" />
+        <span className="truncate">{node.name}</span>
+      </SidebarMenuButton>
     </SidebarMenuItem>
   );
 }
