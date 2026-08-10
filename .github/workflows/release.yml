@@ -136,9 +136,8 @@ jobs:
       - name: Prepare WebDAV payload
         shell: bash
         run: |
-          source="dist/m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}"
-          cp "${source}" bin
-          sha256sum bin > bin.sha256
+          filename="m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}"
+          (cd dist && sha256sum "${filename}" > "${filename}.sha256")
 
       - name: Upload to WebDAV
         continue-on-error: true
@@ -149,8 +148,8 @@ jobs:
           webdav_password: ${{ secrets.WEBDAV_PASSWORD }}
           webdav_upload_path: "/Shares/github/${{ github.repository }}/${{ matrix.goos }}/${{ matrix.goarch }}/${{ needs.prepare.outputs.version }}"
           files: |
-            bin
-            bin.sha256
+            dist/m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}
+            dist/m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}.sha256
 
       - name: Package release archive
         shell: bash
