@@ -141,7 +141,9 @@ function DirectoryItem({
       >
         <ChevronRight
           aria-hidden="true"
-          className={open ? "rotate-90 transition-transform" : "transition-transform"}
+          className={
+            open ? "rotate-90 transition-transform" : "transition-transform"
+          }
         />
         {open ? (
           <FolderOpen aria-hidden="true" />
