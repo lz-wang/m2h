@@ -1,5 +1,5 @@
 import { ChevronRight, FileText, Folder, FolderOpen } from "lucide-react";
-import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FileSummary } from "@/api";
 import {
   SidebarMenu,
@@ -17,19 +17,20 @@ import {
 interface DocumentTreeProps {
   files: FileSummary[];
   selectedPath: string | null;
+  searching?: boolean;
   onSelect(path: string): void;
 }
 
 export function DocumentTree({
   files,
   selectedPath,
+  searching = false,
   onSelect,
 }: DocumentTreeProps) {
   const tree = useMemo(() => buildTree(files), [files]);
   const [expanded, setExpanded] = useState<Set<string>>(
     () => new Set(ancestorDirectories(selectedPath)),
   );
-  const activeItem = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
     const ancestors = ancestorDirectories(selectedPath);
@@ -40,13 +41,6 @@ export function DocumentTree({
       }
       return next;
     });
-    const frame = window.requestAnimationFrame(() => {
-      activeItem.current?.scrollIntoView?.({
-        block: "center",
-        inline: "nearest",
-      });
-    });
-    return () => window.cancelAnimationFrame(frame);
   }, [selectedPath]);
 
   const toggle = (path: string) => {
@@ -71,7 +65,7 @@ export function DocumentTree({
           selectedPath={selectedPath}
           onSelect={onSelect}
           onToggle={toggle}
-          activeItem={activeItem}
+          searching={searching}
         />
       ))}
     </SidebarMenu>
@@ -84,7 +78,7 @@ interface TreeItemProps {
   selectedPath: string | null;
   onSelect(path: string): void;
   onToggle(path: string): void;
-  activeItem: RefObject<HTMLButtonElement | null>;
+  searching: boolean;
 }
 
 function TreeItem({
@@ -93,7 +87,7 @@ function TreeItem({
   selectedPath,
   onSelect,
   onToggle,
-  activeItem,
+  searching,
 }: TreeItemProps) {
   if (node.type === "directory") {
     return (
@@ -103,7 +97,7 @@ function TreeItem({
         selectedPath={selectedPath}
         onSelect={onSelect}
         onToggle={onToggle}
-        activeItem={activeItem}
+        searching={searching}
       />
     );
   }
@@ -111,7 +105,6 @@ function TreeItem({
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
-        ref={active ? activeItem : undefined}
         isActive={active}
         aria-current={active ? "page" : undefined}
         aria-label={`${node.file.title}，${node.path}`}
@@ -143,9 +136,9 @@ function DirectoryItem({
   selectedPath,
   onSelect,
   onToggle,
-  activeItem,
+  searching,
 }: TreeItemProps & { node: DirectoryNode }) {
-  const open = expanded.has(node.path);
+  const open = searching || expanded.has(node.path);
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
@@ -178,7 +171,7 @@ function DirectoryItem({
               selectedPath={selectedPath}
               onSelect={onSelect}
               onToggle={onToggle}
-              activeItem={activeItem}
+              searching={searching}
             />
           ))}
         </SidebarMenuSub>

@@ -77,12 +77,6 @@ describe("App directory preview", () => {
         .getByRole("button", { name: "Setup API Title，guides/setup.md" })
         .getAttribute("aria-current"),
     ).toBe("page");
-    await waitFor(() =>
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
-        block: "center",
-        inline: "nearest",
-      }),
-    );
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(
       document.getElementById("m2h-markdown-styles")?.getAttribute("href"),
@@ -239,14 +233,13 @@ describe("App directory preview", () => {
     ).toBeTruthy();
   });
 
-  it("shows consistent tooltips for the title and every toolbar action", async () => {
+  it("shows consistent tooltips for every toolbar action except the title", async () => {
     const user = userEvent.setup();
     render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
 
     const targets = [
       [screen.getByRole("button", { name: "切换文件导航" }), "收起文件导航"],
-      [screen.getByRole("region", { name: "当前文档标题" }), "README.md"],
       [screen.getByRole("button", { name: "文档宽度：标准" }), "调整文档宽度"],
       [screen.getByRole("button", { name: "刷新文件列表" }), "重新扫描目录"],
       [
@@ -264,6 +257,36 @@ describe("App directory preview", () => {
       ).toBeTruthy();
       await user.unhover(target);
     }
+
+    await user.hover(screen.getByRole("region", { name: "当前文档标题" }));
+    expect(
+      screen.queryByText("README.md", { selector: '[role="tooltip"]' }),
+    ).toBeNull();
+  });
+
+  it("filters documents locally by title and file name", async () => {
+    const user = userEvent.setup();
+    const api = createAPI();
+    render(<App api={api} />);
+    await screen.findByText("Body for README.md");
+
+    const search = screen.getByRole("searchbox", { name: "搜索文档" });
+    await user.type(search, "setup api");
+    expect(
+      screen.getByRole("button", {
+        name: "Setup API Title，guides/setup.md",
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Readme API Title，README.md" }),
+    ).toBeNull();
+    expect(screen.getByText("1 个 Markdown 文件")).toBeTruthy();
+
+    await user.clear(search);
+    await user.type(search, "missing.md");
+    expect(screen.getByText("没有匹配的文档")).toBeTruthy();
+    expect(api.listFiles).toHaveBeenCalledTimes(1);
+    expect(api.getDocument).toHaveBeenCalledTimes(1);
   });
 
   it("exposes full file names and resizes the desktop sidebar by dragging", async () => {

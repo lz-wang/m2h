@@ -11,6 +11,7 @@ import {
   Moon,
   RefreshCw,
   Scaling,
+  Search,
   Sun,
   SunMoon,
   TriangleAlert,
@@ -22,13 +23,13 @@ import type {
   PointerEvent as ReactPointerEvent,
   SyntheticEvent,
 } from "react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import type { PreviewAPI } from "./api";
 import { DocumentTree } from "./components/document-tree";
 import { Button } from "./components/ui/button";
+import { Input } from "./components/ui/input";
 import { ScrollArea } from "./components/ui/scroll-area";
-import { Separator } from "./components/ui/separator";
 import {
   Sidebar,
   SidebarContent,
@@ -94,6 +95,18 @@ export function App({ api }: AppProps) {
   );
   const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
   const [sidebarOpen, setSidebarOpen] = useState(initialLayout.sidebarOpen);
+  const [searchQuery, setSearchQuery] = useState("");
+  const filteredFiles = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    if (query === "") {
+      return preview.files;
+    }
+    return preview.files.filter(
+      (file) =>
+        file.name.toLocaleLowerCase().includes(query) ||
+        file.title.toLocaleLowerCase().includes(query),
+    );
+  }, [preview.files, searchQuery]);
   const loading =
     preview.phase === "loading-files" || preview.phase === "loading-document";
 
@@ -161,9 +174,16 @@ export function App({ api }: AppProps) {
         onOpenChange={setSidebarOpen}
       >
         <Sidebar collapsible="offcanvas">
-          <SidebarHeader className="border-b border-sidebar-border">
-            <div className="flex h-8 items-center px-2">
-              <span className="text-sm font-semibold">m2h</span>
+          <SidebarHeader>
+            <div className="sidebar-search">
+              <Search aria-hidden="true" />
+              <Input
+                type="search"
+                value={searchQuery}
+                aria-label="搜索文档"
+                placeholder="搜索标题或文件名"
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
             </div>
           </SidebarHeader>
           <SidebarContent>
@@ -172,22 +192,27 @@ export function App({ api }: AppProps) {
                 <SidebarGroupLabel className="justify-between">
                   <span>Files</span>
                   <span className="text-xs tabular-nums text-sidebar-foreground/60">
-                    <span aria-hidden="true">{preview.files.length}</span>
+                    <span aria-hidden="true">{filteredFiles.length}</span>
                     <span className="sr-only">
-                      {preview.files.length} 个 Markdown 文件
+                      {filteredFiles.length} 个 Markdown 文件
                     </span>
                   </span>
                 </SidebarGroupLabel>
                 <SidebarGroupContent>
-                  {preview.files.length > 0 ? (
+                  {filteredFiles.length > 0 ? (
                     <DocumentTree
-                      files={preview.files}
+                      files={filteredFiles}
+                      searching={searchQuery.trim() !== ""}
                       selectedPath={preview.selectedPath}
                       onSelect={(path) => void preview.select(path)}
                     />
                   ) : (
                     <p className="tree-placeholder">
-                      {loading ? "正在加载文件…" : "目录中没有 Markdown 文件"}
+                      {loading
+                        ? "正在加载文件…"
+                        : searchQuery.trim() !== ""
+                          ? "没有匹配的文档"
+                          : "目录中没有 Markdown 文件"}
                     </p>
                   )}
                 </SidebarGroupContent>
@@ -215,11 +240,7 @@ export function App({ api }: AppProps) {
                 {sidebarOpen ? "收起文件导航" : "展开文件导航"}
               </TooltipContent>
             </Tooltip>
-            <Separator orientation="vertical" className="toolbar-separator" />
-            <DocumentTitle
-              title={preview.document?.title ?? null}
-              path={preview.selectedPath}
-            />
+            <DocumentTitle title={preview.document?.title ?? null} />
             <div className="toolbar-actions">
               <DocumentWidthMenu
                 width={documentWidth}
@@ -306,27 +327,12 @@ function readStoredLayout(): StoredLayout {
   }
 }
 
-function DocumentTitle({
-  title,
-  path,
-}: {
-  title: string | null;
-  path: string | null;
-}) {
+function DocumentTitle({ title }: { title: string | null }) {
   const label = title ?? "未选择文档";
   return (
-    <Tooltip>
-      <TooltipTrigger
-        render={
-          <section className="document-title" aria-label="当前文档标题" />
-        }
-      >
-        {label}
-      </TooltipTrigger>
-      <TooltipContent side="bottom">
-        {path ?? "当前没有选择文档"}
-      </TooltipContent>
-    </Tooltip>
+    <section className="document-title" aria-label="当前文档标题">
+      {label}
+    </section>
   );
 }
 
