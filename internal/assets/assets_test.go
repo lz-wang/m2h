@@ -24,7 +24,7 @@ func TestStylesheetContractSnapshot(t *testing.T) {
 				"@media (max-width: 767px)",
 				"padding: 15px",
 				".chroma",
-				"--color-prettylights-syntax-keyword",
+				"--m2h-syntax-keyword",
 			} {
 				if !strings.Contains(stylesheet, want) {
 					t.Errorf("Stylesheet(%q) does not contain %q", mode, want)
@@ -40,6 +40,22 @@ func TestStylesheetContractSnapshot(t *testing.T) {
 	if !strings.Contains(auto, "@media (prefers-color-scheme: dark)") ||
 		!strings.Contains(auto, "@media (prefers-color-scheme: light)") {
 		t.Fatal("auto stylesheet does not include light and dark media rules")
+	}
+
+	dark, err := Stylesheet("dark")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		".m2h-mode-dark .chroma",
+		"--m2h-syntax-keyword: #ff7b72",
+		"--m2h-syntax-string: #a5d6ff",
+		"--m2h-syntax-comment: #9198a1",
+		"--m2h-syntax-background: #151b23",
+	} {
+		if !strings.Contains(dark, want) {
+			t.Errorf("dark stylesheet does not contain GitHub dark syntax rule %q", want)
+		}
 	}
 }
 

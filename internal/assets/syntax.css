@@ -1,12 +1,43 @@
 .chroma {
-  color: var(--fgColor-default);
-  background-color: var(--bgColor-muted);
+  --m2h-syntax-comment: #59636e;
+  --m2h-syntax-entity: #8250df;
+  --m2h-syntax-invalid: #d1242f;
+  --m2h-syntax-keyword: #cf222e;
+  --m2h-syntax-markup-deleted-bg: #ffebe9;
+  --m2h-syntax-markup-deleted-text: #82071e;
+  --m2h-syntax-markup-heading: #0550ae;
+  --m2h-syntax-markup-inserted-bg: #dafbe1;
+  --m2h-syntax-markup-inserted-text: #116329;
+  --m2h-syntax-muted: #59636e;
+  --m2h-syntax-string: #0a3069;
+  --m2h-syntax-text: #1f2328;
+  --m2h-syntax-variable: #953800;
+  --m2h-syntax-background: #f6f8fa;
+  color: var(--m2h-syntax-text);
+  background-color: var(--m2h-syntax-background);
+}
+
+.m2h-mode-dark .chroma {
+  --m2h-syntax-comment: #9198a1;
+  --m2h-syntax-entity: #d2a8ff;
+  --m2h-syntax-invalid: #f85149;
+  --m2h-syntax-keyword: #ff7b72;
+  --m2h-syntax-markup-deleted-bg: #67060c;
+  --m2h-syntax-markup-deleted-text: #ffdcd7;
+  --m2h-syntax-markup-heading: #1f6feb;
+  --m2h-syntax-markup-inserted-bg: #033a16;
+  --m2h-syntax-markup-inserted-text: #aff5b4;
+  --m2h-syntax-muted: #9198a1;
+  --m2h-syntax-string: #a5d6ff;
+  --m2h-syntax-text: #f0f6fc;
+  --m2h-syntax-variable: #ffa657;
+  --m2h-syntax-background: #151b23;
 }
 
 .chroma .err,
 .chroma .gr,
 .chroma .gt {
-  color: var(--color-prettylights-syntax-invalid-illegal-text);
+  color: var(--m2h-syntax-invalid);
 }
 
 .chroma .k,
@@ -17,7 +48,7 @@
 .chroma .kr,
 .chroma .kt,
 .chroma .nt {
-  color: var(--color-prettylights-syntax-keyword);
+  color: var(--m2h-syntax-keyword);
 }
 
 .chroma .na,
@@ -30,7 +61,7 @@
 .chroma .ne,
 .chroma .nf,
 .chroma .nl {
-  color: var(--color-prettylights-syntax-entity);
+  color: var(--m2h-syntax-entity);
 }
 
 .chroma .l,
@@ -56,7 +87,7 @@
 .chroma .sr,
 .chroma .s1,
 .chroma .ss {
-  color: var(--color-prettylights-syntax-string);
+  color: var(--m2h-syntax-string);
 }
 
 .chroma .c,
@@ -66,29 +97,29 @@
 .chroma .cs,
 .chroma .cp,
 .chroma .cpf {
-  color: var(--color-prettylights-syntax-comment);
+  color: var(--m2h-syntax-comment);
 }
 
 .chroma .gd {
-  color: var(--color-prettylights-syntax-markup-deleted-text);
-  background-color: var(--color-prettylights-syntax-markup-deleted-bg);
+  color: var(--m2h-syntax-markup-deleted-text);
+  background-color: var(--m2h-syntax-markup-deleted-bg);
 }
 
 .chroma .gi {
-  color: var(--color-prettylights-syntax-markup-inserted-text);
-  background-color: var(--color-prettylights-syntax-markup-inserted-bg);
+  color: var(--m2h-syntax-markup-inserted-text);
+  background-color: var(--m2h-syntax-markup-inserted-bg);
 }
 
 .chroma .gh,
 .chroma .gu {
-  color: var(--color-prettylights-syntax-markup-heading);
+  color: var(--m2h-syntax-markup-heading);
   font-weight: 600;
 }
 
 .chroma .o,
 .chroma .ow,
 .chroma .p {
-  color: var(--fgColor-muted);
+  color: var(--m2h-syntax-muted);
 }
 
 .chroma .n,
@@ -99,5 +130,24 @@
 .chroma .vg,
 .chroma .vi,
 .chroma .vm {
-  color: var(--color-prettylights-syntax-variable);
+  color: var(--m2h-syntax-variable);
+}
+
+@media (prefers-color-scheme: dark) {
+  .m2h-mode-auto .chroma {
+    --m2h-syntax-comment: #9198a1;
+    --m2h-syntax-entity: #d2a8ff;
+    --m2h-syntax-invalid: #f85149;
+    --m2h-syntax-keyword: #ff7b72;
+    --m2h-syntax-markup-deleted-bg: #67060c;
+    --m2h-syntax-markup-deleted-text: #ffdcd7;
+    --m2h-syntax-markup-heading: #1f6feb;
+    --m2h-syntax-markup-inserted-bg: #033a16;
+    --m2h-syntax-markup-inserted-text: #aff5b4;
+    --m2h-syntax-muted: #9198a1;
+    --m2h-syntax-string: #a5d6ff;
+    --m2h-syntax-text: #f0f6fc;
+    --m2h-syntax-variable: #ffa657;
+    --m2h-syntax-background: #151b23;
+  }
 }
