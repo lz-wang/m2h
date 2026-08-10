@@ -12,6 +12,7 @@ require (
 	github.com/urfave/cli/v3 v3.10.1
 	github.com/yuin/goldmark v1.8.5
 	github.com/yuin/goldmark-highlighting/v2 v2.0.0-20230729083705-37449abec8cc
+	go.yaml.in/yaml/v3 v3.0.5
 )
 
 require (
