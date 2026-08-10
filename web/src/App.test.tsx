@@ -13,6 +13,7 @@ const initialFiles: FileListResponse = {
 };
 
 beforeEach(() => {
+  window.localStorage.clear();
   window.history.replaceState(null, "", "/");
   document.getElementById("m2h-markdown-styles")?.remove();
   document.documentElement.className = "";
@@ -234,13 +235,17 @@ describe("App directory preview", () => {
   });
 
   it("exposes full file names and resizes the desktop sidebar by dragging", async () => {
+    const user = userEvent.setup();
     render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
 
     const file = screen.getByRole("button", {
       name: "Readme API Title，README.md",
     });
-    expect(file.getAttribute("title")).toBe("README.md");
+    await user.hover(file);
+    const fileTooltip = await screen.findByRole("tooltip");
+    expect(fileTooltip.textContent).toContain("README.md");
+    expect(fileTooltip.textContent).toContain("Readme API Title");
     const resize = screen.getByRole("button", { name: "调整侧边栏宽度" });
     fireEvent.pointerDown(resize, { clientX: 256 });
     fireEvent.pointerMove(window, { clientX: 356 });
@@ -250,6 +255,39 @@ describe("App directory preview", () => {
         .querySelector('[data-slot="sidebar-wrapper"]')
         ?.getAttribute("style"),
     ).toContain("356px");
+    expect(
+      JSON.parse(window.localStorage.getItem("m2h.preview.layout") ?? "{}"),
+    ).toMatchObject({
+      sidebarWidth: 356,
+    });
+  });
+
+  it("restores the sidebar and document layout from local storage", async () => {
+    const user = userEvent.setup();
+    window.localStorage.setItem(
+      "m2h.preview.layout",
+      JSON.stringify({
+        sidebarOpen: false,
+        sidebarWidth: 420,
+        documentWidth: "wide",
+      }),
+    );
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    expect(document.querySelector(".reader-canvas-wide")).toBeTruthy();
+    expect(
+      document
+        .querySelector('[data-slot="sidebar-wrapper"]')
+        ?.getAttribute("style"),
+    ).toContain("420px");
+    expect(
+      document
+        .querySelector('[data-slot="sidebar"]')
+        ?.getAttribute("data-state"),
+    ).toBe("collapsed");
+    await user.hover(screen.getByRole("button", { name: "切换文件导航" }));
+    expect(await screen.findByText("展开文件导航")).toBeTruthy();
   });
 
   it("shows empty, API, deleted-document, and attachment errors", async () => {

@@ -174,19 +174,52 @@ body,
   background: var(--background);
 }
 
+.reader-toolbar .toolbar-control,
+.reader-toolbar .toolbar-actions > * {
+  align-self: center;
+}
+
 .toolbar-separator {
   height: 1rem;
   align-self: center;
 }
 
 .document-title {
+  display: flex;
+  height: 1.75rem;
   min-width: 0;
   flex: 1;
+  align-items: center;
   overflow: hidden;
   color: var(--foreground);
   font-size: 0.875rem;
   font-weight: 600;
   line-height: 1.25rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.document-tree-file[data-active="true"] {
+  background: color-mix(in oklch, var(--sidebar-accent) 78%, transparent);
+  box-shadow: inset 2px 0 0
+    color-mix(in oklch, var(--sidebar-foreground) 45%, transparent);
+}
+
+.tree-tooltip {
+  display: flex;
+  max-width: 22rem;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.tree-tooltip-name {
+  font-weight: 600;
+}
+
+.tree-tooltip-title {
+  max-width: 100%;
+  overflow: hidden;
+  opacity: 0.78;
   text-overflow: ellipsis;
   white-space: nowrap;
 }

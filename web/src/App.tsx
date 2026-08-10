@@ -22,7 +22,7 @@ import type {
   PointerEvent as ReactPointerEvent,
   SyntheticEvent,
 } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import type { PreviewAPI } from "./api";
 import { DocumentTree } from "./components/document-tree";
@@ -62,6 +62,20 @@ const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
 
 type DocumentWidth = "standard" | "wide" | "full";
 
+const layoutStorageKey = "m2h.preview.layout";
+
+interface StoredLayout {
+  sidebarOpen: boolean;
+  sidebarWidth: number;
+  documentWidth: DocumentWidth;
+}
+
+const defaultLayout: StoredLayout = {
+  sidebarOpen: true,
+  sidebarWidth: 256,
+  documentWidth: "standard",
+};
+
 const documentWidths: Array<{
   value: DocumentWidth;
   label: string;
@@ -74,10 +88,25 @@ const documentWidths: Array<{
 
 export function App({ api }: AppProps) {
   const preview = useDirectoryPreview(api);
-  const [documentWidth, setDocumentWidth] = useState<DocumentWidth>("standard");
-  const [sidebarWidth, setSidebarWidth] = useState(256);
+  const [initialLayout] = useState(readStoredLayout);
+  const [documentWidth, setDocumentWidth] = useState<DocumentWidth>(
+    initialLayout.documentWidth,
+  );
+  const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
+  const [sidebarOpen, setSidebarOpen] = useState(initialLayout.sidebarOpen);
   const loading =
     preview.phase === "loading-files" || preview.phase === "loading-document";
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        layoutStorageKey,
+        JSON.stringify({ sidebarOpen, sidebarWidth, documentWidth }),
+      );
+    } catch {
+      // Storage can be unavailable in private browsing; the layout still works.
+    }
+  }, [documentWidth, sidebarOpen, sidebarWidth]);
 
   const selectMarkdownTarget = (targetElement: EventTarget | null): boolean => {
     if (!(targetElement instanceof Element)) {
@@ -128,6 +157,8 @@ export function App({ api }: AppProps) {
       <SidebarProvider
         className="app-shell"
         style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
+        open={sidebarOpen}
+        onOpenChange={setSidebarOpen}
       >
         <Sidebar collapsible="offcanvas">
           <SidebarHeader className="border-b border-sidebar-border">
@@ -171,7 +202,19 @@ export function App({ api }: AppProps) {
 
         <SidebarInset className="reader-inset">
           <header className="reader-toolbar">
-            <SidebarTrigger aria-label="切换文件导航" />
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <SidebarTrigger
+                    className="toolbar-control"
+                    aria-label="切换文件导航"
+                  />
+                }
+              />
+              <TooltipContent side="bottom">
+                {sidebarOpen ? "收起文件导航" : "展开文件导航"}
+              </TooltipContent>
+            </Tooltip>
             <Separator orientation="vertical" className="toolbar-separator" />
             <DocumentTitle
               title={preview.document?.title ?? null}
@@ -229,6 +272,38 @@ export function App({ api }: AppProps) {
       </SidebarProvider>
     </TooltipProvider>
   );
+}
+
+function readStoredLayout(): StoredLayout {
+  try {
+    const value: unknown = JSON.parse(
+      window.localStorage.getItem(layoutStorageKey) ?? "null",
+    );
+    if (typeof value !== "object" || value === null) {
+      return defaultLayout;
+    }
+    const candidate = value as Record<string, unknown>;
+    const sidebarWidth = candidate.sidebarWidth;
+    const documentWidth = candidate.documentWidth;
+    return {
+      sidebarOpen:
+        typeof candidate.sidebarOpen === "boolean"
+          ? candidate.sidebarOpen
+          : defaultLayout.sidebarOpen,
+      sidebarWidth:
+        typeof sidebarWidth === "number" && Number.isFinite(sidebarWidth)
+          ? Math.min(480, Math.max(208, sidebarWidth))
+          : defaultLayout.sidebarWidth,
+      documentWidth:
+        documentWidth === "standard" ||
+        documentWidth === "wide" ||
+        documentWidth === "full"
+          ? documentWidth
+          : defaultLayout.documentWidth,
+    };
+  } catch {
+    return defaultLayout;
+  }
 }
 
 function DocumentTitle({
