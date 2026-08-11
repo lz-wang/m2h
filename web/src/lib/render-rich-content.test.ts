@@ -134,4 +134,29 @@ describe("renderRichContent", () => {
 
     expect(order).toEqual(["mermaid", "katex"]);
   });
+
+  it("skips KaTeX when a stale render is reported after mermaid resolves", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+
+    // Mermaid runs (the mock resolves), but the render is no longer current, so
+    // KaTeX must not scan the now-stale root.
+    await renderRichContent(root, () => false);
+
+    expect(mermaidMock.run).toHaveBeenCalledTimes(1);
+    expect(renderMathInElementMock).not.toHaveBeenCalled();
+  });
+
+  it("still renders KaTeX when the freshness check reports current", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+
+    await renderRichContent(root, () => true);
+
+    expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
+  });
 });

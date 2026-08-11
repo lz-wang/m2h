@@ -33,10 +33,22 @@ function ensureMermaidInitialized(): void {
  * Enhance already-rendered Markdown HTML inside `root` by rendering Mermaid
  * diagrams and KaTeX math. Safe to call repeatedly; errors from individual
  * blocks are suppressed so a broken diagram never breaks the whole document.
+ *
+ * `isCurrent` is an optional freshness check consulted after Mermaid resolves.
+ * Because Mermaid renders asynchronously, a slow diagram can finish after the
+ * caller has swapped `root` for a different document; passing `isCurrent`
+ * keeps such a stale render from applying KaTeX to content that no longer
+ * belongs to it.
  */
-export async function renderRichContent(root: HTMLElement): Promise<void> {
+export async function renderRichContent(
+  root: HTMLElement,
+  isCurrent?: () => boolean,
+): Promise<void> {
   ensureMermaidInitialized();
   await renderMermaid(root);
+  if (isCurrent !== undefined && !isCurrent()) {
+    return;
+  }
   renderMath(root);
 }
 

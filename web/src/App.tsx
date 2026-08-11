@@ -536,6 +536,7 @@ function PreviewContent({
   onErrorCapture,
 }: PreviewContentProps) {
   const contentRef = useRef<HTMLElement>(null);
+  const renderGenerationRef = useRef(0);
 
   // React owns the <article> container; the Markdown body DOM is owned by
   // the rich-content renderer. Writing innerHTML in a layout effect keeps UI
@@ -547,6 +548,10 @@ function PreviewContent({
   // document, where `html` is the same string) remounts the node, so without
   // `phase` the fresh <article> would render empty. Theme, width and sidebar
   // changes never alter `html` or `phase`, so they cannot disturb the DOM.
+  //
+  // The generation guard pairs with renderRichContent's freshness check so a
+  // slow Mermaid render that outlives its document does not apply KaTeX after
+  // the body has been swapped; cleanup invalidates the in-flight render.
   useLayoutEffect(() => {
     if (phase !== "ready") {
       return;
@@ -555,8 +560,17 @@ function PreviewContent({
     if (root === null || html === null) {
       return;
     }
+    const generation = ++renderGenerationRef.current;
     root.innerHTML = html;
-    void renderRichContent(root);
+    void renderRichContent(
+      root,
+      () => renderGenerationRef.current === generation,
+    );
+    return () => {
+      if (renderGenerationRef.current === generation) {
+        renderGenerationRef.current++;
+      }
+    };
   }, [html, phase]);
 
   if (phase === "loading-files" || phase === "loading-document") {

@@ -14,6 +14,7 @@
 - 当前维护：目录预览请求日志采用紧凑的访问日志格式，包含时间戳、客户端 IP、方法、请求位置、状态码和一位小数的毫秒耗时。
 - 当前维护：目录预览、单文件 `preview` 与 `convert` 输出统一支持 GitHub Markdown 扩展——GitHub 兼容标题锚点（保留中文等 Unicode 的 slug、重复标题去重）、脚注、emoji 短代码（Unicode、离线无 CDN）与 alerts（五种、内嵌 octicon）；扩展集中在 `internal/markdown` 的 Goldmark AST 层，终端 `view` 复用 emoji，脚注与 alerts 因 Glamour 限制安全降级为字面文本与普通引用块。
 - 当前维护：目录预览的 Markdown 正文 DOM 所有权归富内容渲染器，React 仅持有 `<article>` 容器；切换主题、宽度、侧栏等界面状态不再重置 KaTeX 公式与 Mermaid 图表，刷新当前文档也能正确重渲染。
+- 当前维护：目录预览富内容渲染接受新鲜度回调与代际守卫，文档快速切换时上一份文档慢一拍的 Mermaid 不再把 KaTeX 套用到新文档正文。
 - 已完成提交：
   - `ab493ce docs(init): 初始化项目基础文档`
   - `f7e9552 chore(init): 初始化项目工程骨架`
