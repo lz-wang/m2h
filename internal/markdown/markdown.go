@@ -195,6 +195,7 @@ func newEngine(unsafeHTML bool) goldmark.Markdown {
 	engine := NewGFM(
 		extension.Footnote,
 		emoji.New(emoji.WithRenderingMethod(emoji.Unicode)),
+		AlertExtension,
 		highlighting.NewHighlighting(
 			highlighting.WithStyle("github"),
 			highlighting.WithFormatOptions(html.WithClasses(true)),

@@ -483,3 +483,78 @@ func TestRenderEmojiDoesNotBreakURLs(t *testing.T) {
 		t.Errorf("URL containing a shortcode was broken:\n%s", result.Body)
 	}
 }
+
+func TestRenderGitHubAlerts(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("> [!NOTE]\n> Note body.\n\n" +
+		"> [!TIP]\n> Tip body.\n\n" +
+		"> [!IMPORTANT]\n> Important body.\n\n" +
+		"> [!WARNING]\n> Warning body.\n\n" +
+		"> [!CAUTION]\n> Caution body.\n")
+	result, err := Render(source, RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "alerts.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`class="markdown-alert markdown-alert-note"`,
+		"Note body",
+		`class="markdown-alert markdown-alert-tip"`,
+		"Tip body",
+		`class="markdown-alert markdown-alert-important"`,
+		"Important body",
+		`class="markdown-alert markdown-alert-warning"`,
+		"Warning body",
+		`class="markdown-alert markdown-alert-caution"`,
+		"Caution body",
+		`<p class="markdown-alert-title">`,
+		"<svg",
+		">Note</p>",
+		">Caution</p>",
+	} {
+		if !strings.Contains(result.Body, want) {
+			t.Errorf("body missing %q:\n%s", want, result.Body)
+		}
+	}
+}
+
+func TestRenderAlertsFallbackToBlockquote(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("> Plain quote.\n\n> [!UNKNOWN]\n> Not a real alert.\n\nText [!NOTE] inline.\n")
+	result, err := Render(source, RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "fallback.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(result.Body, "markdown-alert") {
+		t.Errorf("plain or unknown-marker blockquote was converted to an alert:\n%s", result.Body)
+	}
+	for _, want := range []string{"<blockquote>", "Plain quote", "Not a real alert", "[!NOTE]"} {
+		if !strings.Contains(result.Body, want) {
+			t.Errorf("body missing %q:\n%s", want, result.Body)
+		}
+	}
+}
+
+func TestRenderAlertWithBlankLineAfterMarker(t *testing.T) {
+	t.Parallel()
+
+	// When the marker sits on its own paragraph (blank line before the body),
+	// the transformer drops the empty first paragraph instead of slicing lines.
+	result, err := Render([]byte("> [!NOTE]\n>\n> Body after a blank line.\n"), RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "alert-blank.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Body, `markdown-alert-note`) {
+		t.Errorf("alert not rendered:\n%s", result.Body)
+	}
+	if !strings.Contains(result.Body, "Body after a blank line") {
+		t.Errorf("alert body lost:\n%s", result.Body)
+	}
+}
