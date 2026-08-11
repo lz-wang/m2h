@@ -1,6 +1,6 @@
 # m2h 开发进度
 
-最后更新：2026-08-11
+最后更新：2026-08-12
 
 ## 当前状态
 
@@ -12,6 +12,7 @@
 - 当前维护：浏览器 dark 与深色系统 auto 模式的代码块使用 GitHub dark 语法配色，并由共享样式覆盖 convert 与 preview。
 - 当前维护：`convert` 与 `preview` 通过 `--width` 统一设置标准、宽或全屏正文；目录预览在地址栏持久化宽度并移除旧 localStorage 宽度，侧栏布局仍在本地保存。
 - 当前维护：目录预览请求日志采用紧凑的访问日志格式，包含时间戳、客户端 IP、方法、请求位置、状态码和一位小数的毫秒耗时。
+- 当前维护：目录预览、单文件 `preview` 与 `convert` 输出统一支持 GitHub Markdown 扩展——GitHub 兼容标题锚点（保留中文等 Unicode 的 slug、重复标题去重）、脚注、emoji 短代码（Unicode、离线无 CDN）与 alerts（五种、内嵌 octicon）；扩展集中在 `internal/markdown` 的 Goldmark AST 层，终端 `view` 复用 emoji，脚注与 alerts 因 Glamour 限制安全降级为字面文本与普通引用块。
 - 已完成提交：
   - `ab493ce docs(init): 初始化项目基础文档`
   - `f7e9552 chore(init): 初始化项目工程骨架`
@@ -62,7 +63,7 @@
 
 ### Markdown 与链接
 
-- Markdown 语法固定为 Goldmark 标准 GFM，不提供额外扩展选项。
+- Markdown 语法基于标准 GFM，并统一支持 GitHub 风格标题锚点、脚注、emoji 短代码与 alerts；扩展集中在 `internal/markdown` 的 Goldmark AST 层，不提供额外开关。
 - raw HTML 和危险 URL 默认禁用，只有 `--unsafe-html` 显式启用 `html.WithUnsafe()`。
 - 本地 Markdown 链接由一个 AST renderer 统一改写，并保留 query 与 fragment：
 

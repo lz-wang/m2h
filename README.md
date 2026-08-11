@@ -164,11 +164,22 @@ $ m2h view README.md --mode auto
 
 ## Markdown 与页面样式
 
-- Markdown 语法固定为标准 GFM，不提供额外扩展选项；代码块支持语法高亮。
-- `convert` 与 `preview` 共用同一个 AST 解析、标题提取、链接改写和完整页面渲染核心；`view` 复用相同的标准 GFM 配置，但使用独立的终端 ANSI renderer，不复制浏览器 HTML/CSS 路径。
+- Markdown 语法基于标准 GFM，并统一支持 GitHub 风格标题锚点、脚注、emoji 短代码与 alerts；代码块支持语法高亮。
+- `convert` 与 `preview` 共用同一个 AST 解析、标题提取、链接改写和完整页面渲染核心；`view` 复用相同的标准 GFM 与 emoji 配置，但使用独立的终端 ANSI renderer，不复制浏览器 HTML/CSS 路径。
 - HTML 使用内置的 `github-markdown-css` 5.9.0，正文最大宽度为 `980px`。
 - 桌面端正文 padding 为 `45px`；宽度不超过 `767px` 时为 `15px`。
 - raw HTML 与危险 URL 默认不渲染，只有显式传入 `--unsafe-html` 才允许 raw HTML。
+
+### GitHub Markdown 扩展
+
+`convert`、单文件 `preview` 与目录预览共用同一套 GitHub Markdown 扩展，由后端 Goldmark 在 AST 层统一解析，前端只负责展示，不引入新的前端解析器。
+
+- **标题锚点**：标题自动生成 GitHub 兼容的 `id`（保留中文等 Unicode 文本，重复标题加 `-1`/`-2` 后缀），`[跳转](#小节)` 形式的页内链接可直接跳转，且不会被改写为 `.html`/`.md`。
+- **脚注**：`正文[^1]` 与 `[^1]: 脚注内容` 渲染为带引用编号与回链的脚注区。
+- **emoji 短代码**：`:smile:` 展开为 Unicode emoji（如 😄），不依赖 CDN；行内代码与围栏代码块内的短代码保持字面。
+- **alerts**：`> [!NOTE]`、`> [!TIP]`、`> [!IMPORTANT]`、`> [!WARNING]`、`> [!CAUTION]` 渲染为 GitHub 风格提示框，标题内嵌固定图标；未知的标记与普通引用仍保持普通引用块。
+
+终端 `view` 中 emoji 同样展开为 Unicode；脚注与 alerts 因终端渲染器限制，分别保留为字面文本与普通引用块，正文不会丢失。
 
 ### 数学公式与图表
 
