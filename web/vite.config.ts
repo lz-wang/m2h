@@ -25,6 +25,7 @@ export default defineConfig({
       include: [
         "src/App.tsx",
         "src/api.ts",
+        "src/lib/render-rich-content.ts",
         "src/model.ts",
         "src/use-directory-preview.ts",
         "src/components/document-tree.tsx",
