@@ -409,6 +409,27 @@ body,
   margin-left: 1rem;
 }
 
+/*
+ * Rich-content presentation for KaTeX math and Mermaid diagrams. These only
+ * take effect after render-rich-content.ts enhances the rendered Markdown.
+ */
+.markdown-body .mermaid {
+  margin: 1rem 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.markdown-body .mermaid svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.markdown-body .katex-display {
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.25rem 0;
+}
+
 .reader-frontmatter {
   box-sizing: border-box;
   width: 100%;

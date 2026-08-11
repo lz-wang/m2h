@@ -23,7 +23,7 @@ import type {
   PointerEvent as ReactPointerEvent,
   SyntheticEvent,
 } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { FrontMatter, PreviewAPI } from "./api";
 import { DocumentTree } from "./components/document-tree";
@@ -49,6 +49,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
+import { renderRichContent } from "./lib/render-rich-content";
 import { type DocumentWidth, type Mode, readRoute } from "./model";
 import { useDirectoryPreview } from "./use-directory-preview";
 
@@ -534,6 +535,19 @@ function PreviewContent({
   onKeyDown,
   onErrorCapture,
 }: PreviewContentProps) {
+  const contentRef = useRef<HTMLElement>(null);
+
+  // dangerouslySetInnerHTML commits before effects run, so by the time this
+  // fires the rendered body is in the DOM and safe to enhance. Re-run whenever
+  // the document switches.
+  useEffect(() => {
+    const root = contentRef.current;
+    if (root === null || html === null) {
+      return;
+    }
+    void renderRichContent(root);
+  }, [html]);
+
   if (phase === "loading-files" || phase === "loading-document") {
     return (
       <section className="state-panel" aria-live="polite" aria-busy="true">
@@ -579,6 +593,7 @@ function PreviewContent({
         </div>
       ) : null}
       <article
+        ref={contentRef}
         className="markdown-body reader-document"
         onClick={onClick}
         onKeyDown={onKeyDown}
