@@ -95,6 +95,49 @@ describe("App directory preview", () => {
     );
   });
 
+  it("keeps deeply nested tree items aligned to the root trailing edge", async () => {
+    const path = "internal/markdown/testdata/gfm.md";
+    const title = "GFM Fixture";
+    const file = { path, name: "gfm.md", title };
+    const api = createAPI({
+      listFiles: vi.fn().mockResolvedValue({
+        files: [file],
+        defaultPath: path,
+      }),
+      getDocument: vi.fn().mockResolvedValue({
+        path,
+        title,
+        html: "<p>Nested fixture</p>",
+      }),
+    });
+    render(<App api={api} />);
+
+    const fileButton = await screen.findByRole("button", {
+      name: `${title}，${path}`,
+    });
+    const submenus: HTMLElement[] = [];
+    for (
+      let ancestor = fileButton.parentElement;
+      ancestor !== null;
+      ancestor = ancestor.parentElement
+    ) {
+      if (
+        ancestor instanceof HTMLElement &&
+        ancestor.dataset.sidebar === "menu-sub"
+      ) {
+        submenus.push(ancestor);
+      }
+    }
+
+    expect(submenus).toHaveLength(3);
+    for (const submenu of submenus) {
+      expect(submenu.classList).toContain("ml-3.5");
+      expect(submenu.classList).toContain("pl-2.5");
+      expect(submenu.classList).not.toContain("mx-3.5");
+      expect(submenu.classList).not.toContain("px-2.5");
+    }
+  });
+
   it("preserves cross-document fragments for keyboard navigation and theme changes", async () => {
     const user = userEvent.setup();
     const api = createAPI({

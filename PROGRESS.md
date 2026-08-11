@@ -8,6 +8,7 @@
 - 当前可用能力：完整构建、测试和六平台发布工具链，m2h CLI 帮助与版本命令，共享 GFM 渲染核心，完整 `convert`，单文件实时 `preview`，具备文件树、可调侧栏与正文宽度、历史路由、三种主题、手动刷新、可访问状态反馈和安全 API 的 React 目录预览，以及支持背景探测、`NO_COLOR` 和取消的单文件终端 `view`。
 - 当前维护：目录预览、单文件 `preview` 与 `convert` 输出统一支持 KaTeX 数学公式（`$...$`/`$$...$$`）与 Mermaid 图表；运行时 vendor 进 `internal/assets/rich/` 并 `go:embed`，`convert` 写入共享 `.m2h/` 目录、单文件 `preview` 经 `/m2h-assets/` 提供，不依赖 CDN、可离线打开。
 - 当前维护：目录预览按层级恢复 `ul`/`ol` 的 `disc`/`decimal`/`circle`/`square` 标记，修复 Tailwind Preflight 重置导致的列表项目符号丢失。
+- 当前维护：目录预览侧边栏的多级文件项只在左侧累积层级缩进，右侧与顶级文件项对齐，选中背景不再随目录深度逐层缩短。
 - 当前维护：GitHub Actions 的 WebDAV 构建与发布上传保留 `m2h_<os>_<arch>[.exe]` 真实文件名，并生成同名 `.sha256` 校验文件。
 - 当前维护：浏览器 dark 与深色系统 auto 模式的代码块使用 GitHub dark 语法配色，并由共享样式覆盖 convert 与 preview。
 - 当前维护：`convert` 与 `preview` 通过 `--width` 统一设置标准、宽或全屏正文；目录预览在地址栏持久化宽度并移除旧 localStorage 宽度，侧栏布局仍在本地保存。
@@ -252,8 +253,9 @@
 ### 测试与验收
 
 - [x] Vitest 覆盖默认选择、深链接恢复、前进/后退、树展开、搜索、刷新与删除回退，以及宽度预设、侧栏拖动、标题行为和主题图标。
+- [x] 三级目录回归测试确认子菜单只保留左侧缩进，深层文件项右侧与顶级文件项对齐。
 - [x] 组件可通过键盘操作，有可访问名称、焦点可见，不用仅颜色表达状态。
-- [x] `npm run lint`、`npm run test` 和 `npm run build` 通过；前端 statements/branches/functions/lines 覆盖率为 91.44%/82.59%/94.38%/91.68%。`make check` 当前受本地缺少 `goimports-reviser` 限制，CI 需继续执行完整检查。
+- [x] `npm run lint`、`npm run test` 和 `npm run build` 通过；前端 statements/branches/functions/lines 覆盖率为 91.17%/82.35%/95.04%/91.37%。`make check` 当前受本地缺少 `goimports-reviser` 限制，CI 需继续执行完整检查。
 - [ ] 手动浏览器验收桌面/移动布局、长标题、深层树、大文件滚动、三种主题和页面标题（自动化组件、HTTP、生产构建和独立工作目录二进制 smoke test 已通过，保留给用户做浏览器验收）。
 
 ## 阶段 7：`view` 终端预览
