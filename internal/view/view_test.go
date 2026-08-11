@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	xansi "github.com/charmbracelet/x/ansi"
+
 	"github.com/lz-wang/m2h/internal/markdown"
 )
 
@@ -61,6 +63,63 @@ func TestRenderMarkdownSanitizesDangerousHyperlinks(t *testing.T) {
 	}
 	if !bytes.Contains(rendered, []byte("https://example.com")) || bytes.Contains(rendered, []byte("javascript:")) {
 		t.Fatalf("rendered links = %q", rendered)
+	}
+}
+
+func TestRenderMarkdownExpandsEmoji(t *testing.T) {
+	rendered, err := renderMarkdown([]byte("Hello :smile:"), "dark")
+	if err != nil {
+		t.Fatalf("renderMarkdown() error = %v", err)
+	}
+	if !bytes.Contains(rendered, []byte("😄")) || bytes.Contains(rendered, []byte(":smile:")) {
+		t.Fatalf("emoji shortcode not expanded to Unicode: %q", rendered)
+	}
+}
+
+func TestRenderMarkdownDegradesAlertsAndFootnotes(t *testing.T) {
+	// Glamour has no real renderer for GitHub alert nodes or Goldmark footnote
+	// nodes, so the terminal profile leaves both extensions off on purpose:
+	// alerts stay ordinary blockquotes and footnotes stay literal text. The
+	// contract is that view never panics and never drops the body text.
+	rendered, err := renderMarkdown([]byte("> [!NOTE]\n> Alert body.\n\nText[^1]\n\n[^1]: Footnote content.\n"), "dark")
+	if err != nil {
+		t.Fatalf("renderMarkdown() error = %v", err)
+	}
+	// Glamour interleaves ANSI style codes between words, so strip them before
+	// asserting the body text survives.
+	plain := xansi.Strip(string(rendered))
+	for _, want := range []string{"Alert body", "Text", "Footnote content"} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("terminal output lost %q: %q", want, plain)
+		}
+	}
+}
+
+func TestReadSourceReportsOpenErrors(t *testing.T) {
+	t.Parallel()
+
+	if _, err := readSource(context.Background(), filepath.Join(t.TempDir(), "missing.md")); err == nil {
+		t.Fatal("readSource() accepted a missing file")
+	}
+}
+
+func TestRunAutoDetectsBackgroundWithFileOutput(t *testing.T) {
+	t.Setenv("NO_COLOR", "")
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer r.Close()
+	defer w.Close()
+	go io.Copy(io.Discard, r)
+
+	source := filepath.Join(t.TempDir(), "guide.md")
+	writeViewFile(t, source, "# Guide")
+	// A writable *os.File output exercises Run's real wiring through to
+	// writeOutput (lipgloss.Fprint) and the auto background-detection path,
+	// neither of which the mocked run() tests touch.
+	if err := Run(context.Background(), Options{Input: source, Mode: markdown.ModeAuto, Output: w}); err != nil {
+		t.Fatalf("Run() error = %v", err)
 	}
 }
 

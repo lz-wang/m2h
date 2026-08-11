@@ -12,6 +12,7 @@ import (
 	"charm.land/glamour/v2/styles"
 	"charm.land/lipgloss/v2"
 	xansi "github.com/charmbracelet/x/ansi"
+	emoji "github.com/yuin/goldmark-emoji"
 	goldmarkrenderer "github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
@@ -190,7 +191,7 @@ func renderMarkdown(source []byte, style string) ([]byte, error) {
 			}), 1000),
 		),
 	)
-	engine := markdown.NewGFM()
+	engine := markdown.NewGFM(emoji.New())
 	engine.SetRenderer(terminalRenderer)
 	document := engine.Parser().Parse(text.NewReader(source))
 	if err := markdown.SanitizeDangerousURLs(document); err != nil {
