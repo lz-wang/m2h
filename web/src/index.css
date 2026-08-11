@@ -128,6 +128,23 @@
   html {
     @apply font-sans;
   }
+  /*
+   * Tailwind Preflight resets list markers globally; restore them only inside the
+   * rendered Markdown so shadcn/Base UI menus and sidebars keep their marker-less
+   * look. github-markdown-css ships padding/margin but not list-style-type.
+   */
+  .markdown-body ul {
+    list-style: disc;
+  }
+  .markdown-body ol {
+    list-style: decimal;
+  }
+  .markdown-body ul ul {
+    list-style: circle;
+  }
+  .markdown-body ul ul ul {
+    list-style: square;
+  }
 }
 
 html,
