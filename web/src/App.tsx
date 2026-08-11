@@ -23,7 +23,7 @@ import type {
   PointerEvent as ReactPointerEvent,
   SyntheticEvent,
 } from "react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { FrontMatter, PreviewAPI } from "./api";
 import { DocumentTree } from "./components/document-tree";
@@ -537,16 +537,27 @@ function PreviewContent({
 }: PreviewContentProps) {
   const contentRef = useRef<HTMLElement>(null);
 
-  // dangerouslySetInnerHTML commits before effects run, so by the time this
-  // fires the rendered body is in the DOM and safe to enhance. Re-run whenever
-  // the document switches.
-  useEffect(() => {
+  // React owns the <article> container; the Markdown body DOM is owned by
+  // the rich-content renderer. Writing innerHTML in a layout effect keeps UI
+  // state changes (theme, width, sidebar) from resetting KaTeX/Mermaid
+  // enhancements, and runs before paint so there is no empty-body flash.
+  //
+  // The effect keys on `phase` as well as `html`. Only the "ready" phase
+  // renders the <article>; re-entering "ready" (e.g. refreshing the current
+  // document, where `html` is the same string) remounts the node, so without
+  // `phase` the fresh <article> would render empty. Theme, width and sidebar
+  // changes never alter `html` or `phase`, so they cannot disturb the DOM.
+  useLayoutEffect(() => {
+    if (phase !== "ready") {
+      return;
+    }
     const root = contentRef.current;
     if (root === null || html === null) {
       return;
     }
+    root.innerHTML = html;
     void renderRichContent(root);
-  }, [html]);
+  }, [html, phase]);
 
   if (phase === "loading-files" || phase === "loading-document") {
     return (
@@ -598,7 +609,6 @@ function PreviewContent({
         onClick={onClick}
         onKeyDown={onKeyDown}
         onErrorCapture={onErrorCapture}
-        dangerouslySetInnerHTML={{ __html: html }}
       />
     </>
   );

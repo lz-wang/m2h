@@ -487,6 +487,50 @@ describe("App directory preview", () => {
     await screen.findByText("Body for README.md");
     expect(screen.queryByText("Frontmatter")).toBeNull();
   });
+
+  it("preserves enhanced Markdown DOM across theme changes", async () => {
+    const user = userEvent.setup();
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    const article = document.querySelector<HTMLElement>(".reader-document");
+    if (article === null) {
+      throw new Error("reader article was not rendered");
+    }
+
+    // Simulate KaTeX / Mermaid replacing the original Markdown DOM. Any UI
+    // state change must not reset this imperative enhancement.
+    article.innerHTML = '<div data-rich-enhanced="true">enhanced content</div>';
+
+    await user.click(
+      screen.getByRole("button", { name: "显示主题：跟随系统" }),
+    );
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: "深色" }),
+    );
+
+    expect(article.querySelector('[data-rich-enhanced="true"]')).not.toBeNull();
+    expect(article.textContent).toBe("enhanced content");
+  });
+
+  it("preserves enhanced Markdown DOM across width changes", async () => {
+    const user = userEvent.setup();
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    const article = document.querySelector<HTMLElement>(".reader-document");
+    if (article === null) {
+      throw new Error("reader article was not rendered");
+    }
+
+    article.innerHTML = '<div data-rich-enhanced="true">enhanced content</div>';
+
+    await user.click(screen.getByRole("button", { name: "文档宽度：标准" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "宽" }));
+
+    expect(article.querySelector('[data-rich-enhanced="true"]')).not.toBeNull();
+    expect(article.textContent).toBe("enhanced content");
+  });
 });
 
 function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
