@@ -446,3 +446,40 @@ func TestRenderFootnotes(t *testing.T) {
 		t.Errorf("expected >=2 references to #fn:1, got %d:\n%s", got, result.Body)
 	}
 }
+
+func TestRenderEmojiShortcodes(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("Hello :smile: :rocket: `:smile:` and :not_a_real_emoji:\n\n" +
+		"```\n:smile:\n```\n")
+	result, err := Render(source, RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "emoji.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := result.Body
+	if !strings.Contains(body, "Hello 😄 🚀") {
+		t.Errorf("shortcode not expanded to Unicode emoji:\n%s", body)
+	}
+	if !strings.Contains(body, "<code>:smile:</code>") {
+		t.Errorf("inline code shortcode was expanded instead of kept literal:\n%s", body)
+	}
+	if !strings.Contains(body, ":not_a_real_emoji:") {
+		t.Errorf("unknown shortcode was removed or expanded:\n%s", body)
+	}
+}
+
+func TestRenderEmojiDoesNotBreakURLs(t *testing.T) {
+	t.Parallel()
+
+	result, err := Render([]byte("https://x.com/:smile:/path\n"), RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "url.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Body, "https://x.com/:smile:/path") {
+		t.Errorf("URL containing a shortcode was broken:\n%s", result.Body)
+	}
+}

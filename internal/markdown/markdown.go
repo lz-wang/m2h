@@ -11,6 +11,7 @@ import (
 
 	"github.com/alecthomas/chroma/v2/formatters/html"
 	"github.com/yuin/goldmark"
+	emoji "github.com/yuin/goldmark-emoji"
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
@@ -193,6 +194,7 @@ func newEngine(unsafeHTML bool) goldmark.Markdown {
 
 	engine := NewGFM(
 		extension.Footnote,
+		emoji.New(emoji.WithRenderingMethod(emoji.Unicode)),
 		highlighting.NewHighlighting(
 			highlighting.WithStyle("github"),
 			highlighting.WithFormatOptions(html.WithClasses(true)),

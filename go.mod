@@ -11,6 +11,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/urfave/cli/v3 v3.10.1
 	github.com/yuin/goldmark v1.8.5
+	github.com/yuin/goldmark-emoji v1.0.5
 	github.com/yuin/goldmark-highlighting/v2 v2.0.0-20230729083705-37449abec8cc
 	go.yaml.in/yaml/v3 v3.0.5
 )
@@ -33,7 +34,6 @@ require (
 	github.com/muesli/cancelreader v0.2.2 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e // indirect
-	github.com/yuin/goldmark-emoji v1.0.5 // indirect
 	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/sync v0.18.0 // indirect
 	golang.org/x/sys v0.46.0 // indirect
