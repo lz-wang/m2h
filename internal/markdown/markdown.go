@@ -14,6 +14,7 @@ import (
 	highlighting "github.com/yuin/goldmark-highlighting/v2"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
+	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/renderer"
 	goldmarkhtml "github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/text"
@@ -99,7 +100,8 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 	}
 
 	engine := newEngine(normalized.UnsafeHTML)
-	document := engine.Parser().Parse(text.NewReader(source))
+	context := parser.NewContext(parser.WithIDs(newGitHubIDs()))
+	document := engine.Parser().Parse(text.NewReader(source), parser.WithContext(context))
 	if err := rewriteDocument(document, normalized); err != nil {
 		return Result{}, err
 	}
@@ -149,7 +151,8 @@ func Title(source []byte, sourcePath string) (string, error) {
 		return "", err
 	}
 	engine := newEngine(false)
-	document := engine.Parser().Parse(text.NewReader(source))
+	context := parser.NewContext(parser.WithIDs(newGitHubIDs()))
+	document := engine.Parser().Parse(text.NewReader(source), parser.WithContext(context))
 	return extractTitle(document, source, normalized), nil
 }
 
@@ -195,6 +198,7 @@ func newEngine(unsafeHTML bool) goldmark.Markdown {
 		),
 	)
 	engine.Renderer().AddOptions(rendererOptions...)
+	engine.Parser().AddOptions(parser.WithAutoHeadingID())
 	return engine
 }
 

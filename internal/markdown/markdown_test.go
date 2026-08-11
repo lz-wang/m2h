@@ -215,6 +215,7 @@ func TestRenderRejectsInvalidOptions(t *testing.T) {
 		{Mode: "sepia", Target: TargetConvert, SourcePath: "doc.md"},
 		{Mode: ModeAuto, Target: "terminal", SourcePath: "doc.md"},
 		{Mode: ModeAuto, Target: TargetPreview, SourcePath: "../outside.md"},
+		{Mode: ModeAuto, Target: TargetConvert, SourcePath: "doc.md", Width: "huge"},
 	} {
 		if _, err := Render([]byte("text"), options); err == nil {
 			t.Fatalf("Render() accepted invalid options: %+v", options)
@@ -357,5 +358,63 @@ func TestTitleUsesSharedASTExtraction(t *testing.T) {
 	}
 	if _, err := Title([]byte("text"), "../outside.md"); err == nil {
 		t.Fatal("Title() accepted an escaping source path")
+	}
+}
+
+func TestRenderGitHubHeadingIDs(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("# GitHub Extensions\n\n## 7. 代码\n\n[跳转到第 7 节](#7-代码)\n\n## API\n\n## API\n")
+	result, err := Render(source, RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "anchors.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, want := range []string{
+		`<h2 id="7-代码">7. 代码</h2>`,
+		`<h2 id="api">API</h2>`,
+		`<h2 id="api-1">API</h2>`,
+	} {
+		if !strings.Contains(result.Body, want) {
+			t.Errorf("body missing %q:\n%s", want, result.Body)
+		}
+	}
+
+	// Fragment links stay in-page and are not rewritten to .html/.md. Goldmark
+	// percent-encodes the non-ASCII bytes in the href (standard, browser-safe);
+	// browsers decode the fragment before matching the Unicode id, so the anchor
+	// still resolves without JavaScript.
+	if !strings.Contains(result.Body, `href="#7-`) || !strings.Contains(result.Body, "跳转到第 7 节</a>") {
+		t.Errorf("fragment link to #7-代码 missing or rewritten:\n%s", result.Body)
+	}
+}
+
+func TestRenderStripsDangerousImageURL(t *testing.T) {
+	t.Parallel()
+
+	result, err := Render([]byte("![danger](javascript:alert(1))"), RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "doc.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(strings.ToLower(result.Body), "javascript:") {
+		t.Fatalf("dangerous image URL was not stripped: %s", result.Body)
+	}
+}
+
+func TestRenderPreviewImageOutsideRootUnchanged(t *testing.T) {
+	t.Parallel()
+
+	result, err := Render([]byte("![escape](../../outside.png)"), RenderOptions{
+		Mode: ModeAuto, Target: TargetPreview, SourcePath: "design/current.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(result.Body, `src="../../outside.png"`) {
+		t.Fatalf("out-of-root image was rewritten instead of left unchanged: %s", result.Body)
 	}
 }
