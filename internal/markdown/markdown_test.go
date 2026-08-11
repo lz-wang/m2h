@@ -418,3 +418,31 @@ func TestRenderPreviewImageOutsideRootUnchanged(t *testing.T) {
 		t.Fatalf("out-of-root image was rewritten instead of left unchanged: %s", result.Body)
 	}
 }
+
+func TestRenderFootnotes(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("正文有一个脚注[^1]，再次引用同一脚注[^1]。\n\n" +
+		"[^1]: 脚注内容含 [链接](guide.md) 和 `代码`。\n")
+	result, err := Render(source, RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "footnotes.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`class="footnote-ref"`,
+		`class="footnotes"`,
+		`href="#fn:1"`,
+		"脚注内容含",
+		`href="guide.html"`,
+		`<code>代码</code>`,
+	} {
+		if !strings.Contains(result.Body, want) {
+			t.Errorf("body missing %q:\n%s", want, result.Body)
+		}
+	}
+	if got := strings.Count(result.Body, `href="#fn:1"`); got < 2 {
+		t.Errorf("expected >=2 references to #fn:1, got %d:\n%s", got, result.Body)
+	}
+}

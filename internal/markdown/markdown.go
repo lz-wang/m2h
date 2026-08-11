@@ -192,6 +192,7 @@ func newEngine(unsafeHTML bool) goldmark.Markdown {
 	}
 
 	engine := NewGFM(
+		extension.Footnote,
 		highlighting.NewHighlighting(
 			highlighting.WithStyle("github"),
 			highlighting.WithFormatOptions(html.WithClasses(true)),

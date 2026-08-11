@@ -51,3 +51,22 @@ html[data-width="full"] .markdown-body {
     padding: 15px;
   }
 }
+
+/*
+ * Goldmark's Footnote extension emits class="footnote-ref" anchors and a
+ * leading <hr> inside the footnotes section, while github-markdown-css styles
+ * the equivalent [data-footnote-ref] markers and draws its own top border.
+ * Mirror the bracket decorations and drop the redundant rule so convert and
+ * preview share one footnote look.
+ */
+.markdown-body .footnote-ref::before {
+  content: "[";
+}
+
+.markdown-body .footnote-ref::after {
+  content: "]";
+}
+
+.markdown-body .footnotes > hr {
+  display: none;
+}
