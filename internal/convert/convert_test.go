@@ -510,6 +510,33 @@ func TestRunReportsMissingInputAndInvalidOutputParent(t *testing.T) {
 	}
 }
 
+func TestRunConvertPreservesRichContent(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	source := writeFixture(t, root, "guide.md",
+		"# Guide\n\nInline $E = mc^2$ here.\n\n```mermaid\nflowchart LR\n    A-->B\n```\n")
+	if err := Run(context.Background(), defaultOptions(source)); err != nil {
+		t.Fatal(err)
+	}
+
+	html, err := os.ReadFile(filepath.Join(root, "guide.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(html)
+	for _, want := range []string{
+		`href=".m2h/katex.min.css"`,
+		`src=".m2h/rich-content.js"`,
+		`class="language-mermaid"`,
+		"$E = mc^2$",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("convert output missing %q", want)
+		}
+	}
+}
+
 func TestRunConvertWritesRichAssetsNextToSingleFile(t *testing.T) {
 	t.Parallel()
 

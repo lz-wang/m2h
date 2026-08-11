@@ -1,11 +1,13 @@
 # m2h 开发进度
 
-最后更新：2026-08-10
+最后更新：2026-08-11
 
 ## 当前状态
 
 - 当前里程碑：阶段 1–8 已完成，产品目标已经交付，后续进入常规维护与新版本迭代。
 - 当前可用能力：完整构建、测试和六平台发布工具链，m2h CLI 帮助与版本命令，共享 GFM 渲染核心，完整 `convert`，单文件实时 `preview`，具备文件树、可调侧栏与正文宽度、历史路由、三种主题、手动刷新、可访问状态反馈和安全 API 的 React 目录预览，以及支持背景探测、`NO_COLOR` 和取消的单文件终端 `view`。
+- 当前维护：目录预览、单文件 `preview` 与 `convert` 输出统一支持 KaTeX 数学公式（`$...$`/`$$...$$`）与 Mermaid 图表；运行时 vendor 进 `internal/assets/rich/` 并 `go:embed`，`convert` 写入共享 `.m2h/` 目录、单文件 `preview` 经 `/m2h-assets/` 提供，不依赖 CDN、可离线打开。
+- 当前维护：目录预览按层级恢复 `ul`/`ol` 的 `disc`/`decimal`/`circle`/`square` 标记，修复 Tailwind Preflight 重置导致的列表项目符号丢失。
 - 当前维护：GitHub Actions 的 WebDAV 构建与发布上传保留 `m2h_<os>_<arch>[.exe]` 真实文件名，并生成同名 `.sha256` 校验文件。
 - 当前维护：浏览器 dark 与深色系统 auto 模式的代码块使用 GitHub dark 语法配色，并由共享样式覆盖 convert 与 preview。
 - 当前维护：`convert` 与 `preview` 通过 `--width` 统一设置标准、宽或全屏正文；目录预览在地址栏持久化宽度并移除旧 localStorage 宽度，侧栏布局仍在本地保存。

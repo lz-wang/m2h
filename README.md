@@ -170,6 +170,34 @@ $ m2h view README.md --mode auto
 - 桌面端正文 padding 为 `45px`；宽度不超过 `767px` 时为 `15px`。
 - raw HTML 与危险 URL 默认不渲染，只有显式传入 `--unsafe-html` 才允许 raw HTML。
 
+### 数学公式与图表
+
+数学公式与 Mermaid 图表作为浏览器端 HTML 表现层渲染，目录预览、单文件 `preview` 与 `convert` 输出行为一致；运行时内嵌于二进制，不依赖 CDN，生成的 HTML 可离线打开。
+
+数学公式使用 KaTeX，推荐用 `$...$`（行内）和 `$$...$$`（行间）：
+
+```text
+行内：$E = mc^2$
+
+行间：
+$$
+\int_0^\infty e^{-x^2}\,dx = \frac{\sqrt{\pi}}{2}
+$$
+```
+
+需要字面美元符号时写作 `\$`。`\(...\)` 与 `\[...\]` 因 CommonMark 反斜杠转义会被吞掉反斜杠，请改用 `$` 形式。
+
+Mermaid 图表使用 `mermaid` 围栏代码块：
+
+````text
+```mermaid
+flowchart LR
+    Markdown --> HTML
+```
+````
+
+`convert` 在输出目录写入共享的 `.m2h/` 运行时（KaTeX、Mermaid 与字体），单文件 `preview` 通过 `/m2h-assets/` 路由提供同一套资源。
+
 ## 参数错误
 
 未知参数和不适用于当前输入类型的参数会直接失败，不会静默忽略：

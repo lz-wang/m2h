@@ -222,6 +222,72 @@ func TestRenderRejectsInvalidOptions(t *testing.T) {
 	}
 }
 
+func TestRenderRichMarkdownFixture(t *testing.T) {
+	t.Parallel()
+
+	source, err := os.ReadFile("testdata/rich.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	convert, err := Render(source, RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "rich.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := Render(source, RenderOptions{
+		Mode: ModeAuto, Target: TargetPreview, SourcePath: "rich.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Lists, fenced code and math delimiters must survive the shared renderer so
+	// the browser-side rich-content layer (KaTeX/Mermaid) and the list CSS fix
+	// have something to operate on. Convert and preview share the same body.
+	for _, result := range []Result{convert, preview} {
+		for _, want := range []string{
+			"<ul>",
+			"<li>A</li>",
+			"<li>B.1</li>",
+			"<ol>",
+			`class="language-mermaid"`,
+			`class="chroma"`,
+			"$E = mc^2$",
+			"$$",
+			"\\int_0^\\infty",
+			"\\frac{\\sqrt{\\pi}}{2}",
+		} {
+			if !strings.Contains(result.Body, want) {
+				t.Errorf("rendered body missing %q", want)
+			}
+		}
+	}
+}
+
+// TestRenderBackslashMathDelimitersAreConsumed locks the known limitation that
+// CommonMark backslash escaping consumes the backslash from \( \) and \[ \],
+// so only $...$ and $$...$$ reliably reach the KaTeX auto-render layer.
+func TestRenderBackslashMathDelimitersAreConsumed(t *testing.T) {
+	t.Parallel()
+
+	result, err := Render([]byte(`\( a \) \[ b \]`), RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "math.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(result.Body, `\(`) || strings.Contains(result.Body, `\[`) {
+		t.Fatalf("backslash math delimiters were preserved, expected them consumed: %s", result.Body)
+	}
+	for _, want := range []string{"( a )", "[ b ]"} {
+		if !strings.Contains(result.Body, want) {
+			t.Errorf("expected rendered %q in %s", want, result.Body)
+		}
+	}
+}
+
 func TestRenderInjectsRichContentAssets(t *testing.T) {
 	t.Parallel()
 
