@@ -90,6 +90,7 @@ export function App({ api }: AppProps) {
   const [initialLayout] = useState(readStoredLayout);
   const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
   const [sidebarOpen, setSidebarOpen] = useState(initialLayout.sidebarOpen);
+  const [sidebarResizing, setSidebarResizing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const filteredFiles = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
@@ -168,7 +169,7 @@ export function App({ api }: AppProps) {
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
       >
-        <Sidebar collapsible="offcanvas">
+        <Sidebar collapsible="offcanvas" resizing={sidebarResizing}>
           <SidebarHeader>
             <div className="sidebar-search">
               <Search aria-hidden="true" />
@@ -217,6 +218,8 @@ export function App({ api }: AppProps) {
           <SidebarResizeHandle
             width={sidebarWidth}
             onResize={setSidebarWidth}
+            onResizeStart={() => setSidebarResizing(true)}
+            onResizeEnd={() => setSidebarResizing(false)}
           />
         </Sidebar>
 
@@ -337,25 +340,42 @@ function DocumentTitle({
 function SidebarResizeHandle({
   width,
   onResize,
+  onResizeStart,
+  onResizeEnd,
 }: {
   width: number;
   onResize(width: number): void;
+  onResizeStart(): void;
+  onResizeEnd(): void;
 }) {
   const handlePointerDown = (event: ReactPointerEvent<HTMLButtonElement>) => {
     event.preventDefault();
     const startX = event.clientX;
     const startWidth = width;
+    const wrapper = event.currentTarget.closest(
+      '[data-slot="sidebar-wrapper"]',
+    );
+    let nextWidth = startWidth;
     const handlePointerMove = (moveEvent: PointerEvent) => {
-      onResize(
-        Math.min(480, Math.max(208, startWidth + moveEvent.clientX - startX)),
+      nextWidth = Math.min(
+        480,
+        Math.max(208, startWidth + moveEvent.clientX - startX),
       );
+      if (wrapper instanceof HTMLElement) {
+        wrapper.style.setProperty("--sidebar-width", `${nextWidth}px`);
+      }
     };
-    const handlePointerUp = () => {
+    const handlePointerEnd = () => {
       window.removeEventListener("pointermove", handlePointerMove);
-      window.removeEventListener("pointerup", handlePointerUp);
+      window.removeEventListener("pointerup", handlePointerEnd);
+      window.removeEventListener("pointercancel", handlePointerEnd);
+      onResize(nextWidth);
+      onResizeEnd();
     };
+    onResizeStart();
     window.addEventListener("pointermove", handlePointerMove);
-    window.addEventListener("pointerup", handlePointerUp);
+    window.addEventListener("pointerup", handlePointerEnd);
+    window.addEventListener("pointercancel", handlePointerEnd);
   };
 
   return (

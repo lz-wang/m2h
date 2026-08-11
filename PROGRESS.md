@@ -9,6 +9,7 @@
 - 当前维护：目录预览、单文件 `preview` 与 `convert` 输出统一支持 KaTeX 数学公式（`$...$`/`$$...$$`）与 Mermaid 图表；运行时 vendor 进 `internal/assets/rich/` 并 `go:embed`，`convert` 写入共享 `.m2h/` 目录、单文件 `preview` 经 `/m2h-assets/` 提供，不依赖 CDN、可离线打开。
 - 当前维护：目录预览按层级恢复 `ul`/`ol` 的 `disc`/`decimal`/`circle`/`square` 标记，修复 Tailwind Preflight 重置导致的列表项目符号丢失。
 - 当前维护：目录预览侧边栏的多级文件项只在左侧累积层级缩进，右侧与顶级文件项对齐，选中背景不再随目录深度逐层缩短。
+- 当前维护：目录预览侧边栏拖动调整宽度时临时禁用 200ms 布局过渡，直接更新 CSS 宽度变量，并仅在拖动结束时提交 React 状态与本地存储；点击开合仍保留原过渡。
 - 当前维护：GitHub Actions 的 WebDAV 构建与发布上传保留 `m2h_<os>_<arch>[.exe]` 真实文件名，并生成同名 `.sha256` 校验文件。
 - 当前维护：浏览器 dark 与深色系统 auto 模式的代码块使用 GitHub dark 语法配色，并由共享样式覆盖 convert 与 preview。
 - 当前维护：`convert` 与 `preview` 通过 `--width` 统一设置标准、宽或全屏正文；目录预览在地址栏持久化宽度并移除旧 localStorage 宽度，侧栏布局仍在本地保存。
@@ -254,8 +255,9 @@
 
 - [x] Vitest 覆盖默认选择、深链接恢复、前进/后退、树展开、搜索、刷新与删除回退，以及宽度预设、侧栏拖动、标题行为和主题图标。
 - [x] 三级目录回归测试确认子菜单只保留左侧缩进，深层文件项右侧与顶级文件项对齐。
+- [x] 侧边栏拖动回归测试确认拖动期间禁用布局 transition、宽度实时更新但延迟持久化，结束后恢复点击开合 transition 并保存最终宽度。
 - [x] 组件可通过键盘操作，有可访问名称、焦点可见，不用仅颜色表达状态。
-- [x] `npm run lint`、`npm run test` 和 `npm run build` 通过；前端 statements/branches/functions/lines 覆盖率为 91.17%/82.35%/95.04%/91.37%。`make check` 当前受本地缺少 `goimports-reviser` 限制，CI 需继续执行完整检查。
+- [x] `npm run lint`、`npm run test` 和 `npm run build` 通过；前端 statements/branches/functions/lines 覆盖率为 91.40%/82.14%/95.14%/91.60%。`make check` 当前受本地缺少 `goimports-reviser` 限制，CI 需继续执行完整检查。
 - [ ] 手动浏览器验收桌面/移动布局、长标题、深层树、大文件滚动、三种主题和页面标题（自动化组件、HTTP、生产构建和独立工作目录二进制 smoke test 已通过，保留给用户做浏览器验收）。
 
 ## 阶段 7：`view` 终端预览

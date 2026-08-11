@@ -343,7 +343,7 @@ describe("App directory preview", () => {
     expect(api.getDocument).toHaveBeenCalledTimes(1);
   });
 
-  it("exposes full file names and resizes the desktop sidebar by dragging", async () => {
+  it("exposes full file names and resizes the desktop sidebar without drag transitions", async () => {
     const user = userEvent.setup();
     render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
@@ -359,9 +359,40 @@ describe("App directory preview", () => {
       tooltipName.closest('[data-slot="tooltip-content"]')?.textContent,
     ).toContain("Readme API Title");
     const resize = screen.getByRole("button", { name: "调整侧边栏宽度" });
+    const sidebar = document.querySelector<HTMLElement>(
+      '[data-slot="sidebar"]',
+    );
+    const gap = document.querySelector<HTMLElement>(
+      '[data-slot="sidebar-gap"]',
+    );
+    const container = document.querySelector<HTMLElement>(
+      '[data-slot="sidebar-container"]',
+    );
+    if (sidebar === null || gap === null || container === null) {
+      throw new Error("desktop sidebar layout was not rendered");
+    }
+
+    expect(gap.classList).toContain("transition-[width]");
+    expect(container.classList).toContain("transition-[left,right,width]");
     fireEvent.pointerDown(resize, { clientX: 256 });
+    expect(sidebar.dataset.resizing).toBe("true");
+    expect(gap.classList).toContain("transition-none");
+    expect(container.classList).toContain("transition-none");
     fireEvent.pointerMove(window, { clientX: 356 });
+    expect(
+      document
+        .querySelector('[data-slot="sidebar-wrapper"]')
+        ?.getAttribute("style"),
+    ).toContain("356px");
+    expect(
+      JSON.parse(window.localStorage.getItem("m2h.preview.layout") ?? "{}"),
+    ).toMatchObject({
+      sidebarWidth: 256,
+    });
     fireEvent.pointerUp(window);
+    expect(sidebar.dataset.resizing).toBeUndefined();
+    expect(gap.classList).toContain("transition-[width]");
+    expect(container.classList).toContain("transition-[left,right,width]");
     expect(
       document
         .querySelector('[data-slot="sidebar-wrapper"]')
