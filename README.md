@@ -50,10 +50,10 @@ m2h_<version>_windows_{amd64,arm64}.zip
 
 ```console
 $ m2h version
-0.8.0
+0.9.0
 
 $ m2h --version
-0.8.0
+0.9.0
 ```
 
 正式发布只输出不带 `v` 的语义化版本。非 tag 开发构建使用 `dev-<commit date>-<commit7>`，例如 `dev-20260810-a12bc34`；日期取 Git commit date，不取构建日期。

@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- 当前里程碑：阶段 1–8 已完成，产品目标已经交付，后续进入常规维护与新版本迭代。
+- 当前里程碑：阶段 1–8 已完成，产品目标已经交付；`v0.9.0` 汇集富内容渲染、GitHub Markdown 扩展与目录预览维护修复，后续进入常规维护与新版本迭代。
 - 当前可用能力：完整构建、测试和六平台发布工具链，m2h CLI 帮助与版本命令，共享 GFM 渲染核心，完整 `convert`，单文件实时 `preview`，具备文件树、可调侧栏与正文宽度、历史路由、三种主题、手动刷新、可访问状态反馈和安全 API 的 React 目录预览，以及支持背景探测、`NO_COLOR` 和取消的单文件终端 `view`。
 - 当前维护：目录预览、单文件 `preview` 与 `convert` 输出统一支持 KaTeX 数学公式（`$...$`/`$$...$$`）与 Mermaid 图表；运行时 vendor 进 `internal/assets/rich/` 并 `go:embed`，`convert` 写入共享 `.m2h/` 目录、单文件 `preview` 经 `/m2h-assets/` 提供，不依赖 CDN、可离线打开。
 - 当前维护：目录预览按层级恢复 `ul`/`ol` 的 `disc`/`decimal`/`circle`/`square` 标记，修复 Tailwind Preflight 重置导致的列表项目符号丢失。
@@ -26,6 +26,7 @@
   - `1ccd26c feat(web): 完成阶段 6 目录预览界面`
   - `15eca8f feat(view): 完成阶段 7 终端预览`
   - `chore(release): 完成阶段 8 发布收口`（本阶段提交）
+  - `chore(release): 发布 v0.9.0`
 - CI 状态：阶段 7 的 main 与 `v0.7.0` release workflow 已通过测试、Codecov、六平台构建、Artifacts、WebDAV、Linux/macOS/Windows 原生 smoke、GitHub Release 与通知；v0.7.0 的 12 个 Release 资产、正文、SHA-256 和 Darwin arm64 终端 view 已核验。阶段 8 将原生 smoke 扩展到 version、convert、preview、view 四条命令，并完成干净环境、六包结构、版本和校验和复核。
 
 本文件是实现顺序、范围和验收状态的唯一进度来源。用户命令契约见 `README.md`，发布摘要见 `CHANGELOG.md`。
