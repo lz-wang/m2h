@@ -558,3 +558,48 @@ func TestRenderAlertWithBlankLineAfterMarker(t *testing.T) {
 		t.Errorf("alert body lost:\n%s", result.Body)
 	}
 }
+
+func TestRenderGitHubExtensionsFixture(t *testing.T) {
+	t.Parallel()
+
+	source, err := os.ReadFile("testdata/github-extensions.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	convert, err := Render(source, RenderOptions{Mode: ModeAuto, Target: TargetConvert, SourcePath: "github-extensions.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	preview, err := Render(source, RenderOptions{Mode: ModeAuto, Target: TargetPreview, SourcePath: "github-extensions.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// All four GitHub extensions render identically across convert and preview.
+	for _, result := range []Result{convert, preview} {
+		for _, want := range []string{
+			`<h2 id="7-代码">7. 代码</h2>`,
+			`class="footnotes"`,
+			"这是脚注内容",
+			"Hello 😄 🚀",
+			`<code>:smile:</code>`,
+			`class="markdown-alert markdown-alert-note"`,
+			`class="markdown-alert markdown-alert-tip"`,
+			`class="markdown-alert markdown-alert-important"`,
+			`class="markdown-alert markdown-alert-warning"`,
+			`class="markdown-alert markdown-alert-caution"`,
+			"Useful information",
+			"Negative consequences",
+		} {
+			if !strings.Contains(result.Body, want) {
+				t.Errorf("body missing %q:\n%s", want, result.Body)
+			}
+		}
+	}
+
+	// Fragment links stay in-page and are not rewritten to .html/.md.
+	if !strings.Contains(convert.Body, `href="#7-`) {
+		t.Errorf("fragment link missing or rewritten in convert:\n%s", convert.Body)
+	}
+}
