@@ -518,6 +518,13 @@ func TestRenderGitHubAlerts(t *testing.T) {
 			t.Errorf("body missing %q:\n%s", want, result.Body)
 		}
 	}
+
+	// Markers must be consumed by the alert title, not echoed into the body.
+	for _, marker := range []string{"[!NOTE]", "[!TIP]", "[!IMPORTANT]", "[!WARNING]", "[!CAUTION]"} {
+		if strings.Contains(result.Body, marker) {
+			t.Errorf("alert marker %q leaked into body:\n%s", marker, result.Body)
+		}
+	}
 }
 
 func TestRenderAlertsFallbackToBlockquote(t *testing.T) {

@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"fmt"
+	"strings"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
@@ -83,7 +84,7 @@ func (t *alertTransformer) Transform(doc *ast.Document, reader text.Reader, _ pa
 		return ast.WalkSkipChildren, nil
 	})
 	for _, m := range matches {
-		convertAlert(m.node, m.typ)
+		convertAlert(m.node, m.typ, source)
 	}
 }
 
@@ -130,16 +131,16 @@ func parseAlertMarker(line []byte) (AlertType, bool) {
 // convertAlert rewrites a matched blockquote in place: it drops the marker
 // line, moves the remaining children into a new Alert node, and replaces the
 // blockquote with it.
-func convertAlert(bq *ast.Blockquote, typ AlertType) {
-	para := bq.FirstChild().(*ast.Paragraph)
-	lines := para.Lines()
-	if lines.Len() <= 1 {
-		lines.Clear()
-	} else {
-		lines.SetSliced(1, lines.Len())
-	}
-	if para.Lines().Len() == 0 && !para.HasChildren() {
-		bq.RemoveChild(bq, para)
+func convertAlert(bq *ast.Blockquote, typ AlertType, source []byte) {
+	if para, ok := bq.FirstChild().(*ast.Paragraph); ok {
+		marker := "[!" + strings.ToUpper(string(typ)) + "]"
+		removeMarkerInline(para, source, marker)
+		// Lines() are stale once inline children exist, but clear them anyway so
+		// renderers that consult raw segments do not resurrect the marker.
+		para.Lines().Clear()
+		if para.FirstChild() == nil {
+			bq.RemoveChild(bq, para)
+		}
 	}
 
 	alert := &Alert{Variant: typ}
@@ -151,6 +152,26 @@ func convertAlert(bq *ast.Blockquote, typ AlertType) {
 	}
 	if parent := bq.Parent(); parent != nil {
 		parent.ReplaceChild(parent, bq, alert)
+	}
+}
+
+// removeMarkerInline drops the leading inline children of para whose text
+// concatenates to marker (e.g. "[!NOTE]"). AST transformers run after inline
+// parsing, so by the time the transformer sees the blockquote the marker no
+// longer lives in para.Lines() but in the text children Goldmark produced from
+// it; editing Lines() alone leaves the marker visible in the rendered body.
+func removeMarkerInline(para *ast.Paragraph, source []byte, marker string) {
+	var drop []ast.Node
+	var acc []byte
+	for c := para.FirstChild(); c != nil; c = c.NextSibling() {
+		acc = append(acc, c.Text(source)...)
+		drop = append(drop, c)
+		if string(bytes.TrimSpace(acc)) == marker {
+			for _, n := range drop {
+				para.RemoveChild(para, n)
+			}
+			return
+		}
 	}
 }
 
