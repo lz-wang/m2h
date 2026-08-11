@@ -54,6 +54,7 @@ type RenderOptions struct {
 	Target     Target
 	SourcePath string
 	UnsafeHTML bool
+	AssetBase  string
 }
 
 // Result contains both the reusable rendered body and a complete HTML page.
@@ -72,10 +73,15 @@ var pageTemplate = template.Must(template.New("document").Parse(`<!doctype html>
   <style>
 {{.Styles}}
   </style>
+{{if .AssetBase}}  <link rel="stylesheet" href="{{.AssetBase}}katex.min.css">{{end}}
 </head>
 <body class="m2h-page">
   <article class="markdown-body">
 {{.Body}}  </article>
+{{if .AssetBase}}  <script src="{{.AssetBase}}katex.min.js"></script>
+  <script src="{{.AssetBase}}auto-render.min.js"></script>
+  <script src="{{.AssetBase}}mermaid.min.js"></script>
+  <script src="{{.AssetBase}}rich-content.js"></script>{{end}}
 {{if .LiveReload}}  <script>
     const events = new EventSource("/api/events");
     events.addEventListener("document-changed", () => window.location.reload());
@@ -118,6 +124,7 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 		Styles     template.CSS
 		Body       template.HTML
 		LiveReload bool
+		AssetBase  string
 	}{
 		Mode:       normalized.Mode,
 		Width:      normalized.Width,
@@ -126,6 +133,7 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 		Styles:     template.CSS(stylesheet),
 		Body:       template.HTML(body.String()),
 		LiveReload: normalized.Target == TargetPreview,
+		AssetBase:  normalized.AssetBase,
 	}
 	if err := pageTemplate.Execute(&page, data); err != nil {
 		return Result{}, err

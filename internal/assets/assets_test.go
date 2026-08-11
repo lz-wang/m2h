@@ -1,6 +1,10 @@
 package assets
 
 import (
+	"io/fs"
+	"os"
+	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -76,5 +80,78 @@ func TestVendoredMetadata(t *testing.T) {
 	license := GitHubMarkdownCSSLicense()
 	if !strings.Contains(license, "MIT License") || !strings.Contains(license, "Sindre Sorhus") {
 		t.Fatal("vendored github-markdown-css license is incomplete")
+	}
+}
+
+func TestRichAssetsEmbedded(t *testing.T) {
+	t.Parallel()
+
+	rich := RichFS()
+	for _, name := range []string{
+		"katex.min.css",
+		"katex.min.js",
+		"auto-render.min.js",
+		"mermaid.min.js",
+		"rich-content.js",
+		"fonts/KaTeX_AMS-Regular.woff2",
+		"LICENSE.katex",
+		"LICENSE.mermaid",
+	} {
+		info, err := fs.Stat(rich, name)
+		if err != nil {
+			t.Errorf("RichFS missing %q: %v", name, err)
+			continue
+		}
+		if info.Size() == 0 {
+			t.Errorf("embedded rich asset %q is empty", name)
+		}
+	}
+}
+
+func TestWriteRichAssets(t *testing.T) {
+	t.Parallel()
+
+	target := t.TempDir()
+	if err := WriteRichAssets(target); err != nil {
+		t.Fatalf("WriteRichAssets returned error: %v", err)
+	}
+
+	for _, rel := range []string{
+		"katex.min.css",
+		"katex.min.js",
+		"auto-render.min.js",
+		"mermaid.min.js",
+		"rich-content.js",
+		"fonts/KaTeX_AMS-Regular.woff2",
+	} {
+		info, err := os.Stat(filepath.Join(target, filepath.FromSlash(rel)))
+		if err != nil {
+			t.Errorf("WriteRichAssets did not write %q: %v", rel, err)
+			continue
+		}
+		if info.Size() == 0 {
+			t.Errorf("WriteRichAssets wrote empty %q", rel)
+		}
+	}
+
+	// Re-running must refresh the directory without error (idempotent overwrite).
+	if err := WriteRichAssets(target); err != nil {
+		t.Fatalf("WriteRichAssets second run returned error: %v", err)
+	}
+}
+
+func TestWriteRichAssetsReportsUnwritableTarget(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission semantics differ on Windows")
+	}
+	parent := t.TempDir()
+	locked := filepath.Join(parent, "locked")
+	if err := os.Mkdir(locked, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+
+	if err := WriteRichAssets(filepath.Join(locked, RichAssetDir)); err == nil {
+		t.Fatal("WriteRichAssets succeeded against an unwritable target")
 	}
 }

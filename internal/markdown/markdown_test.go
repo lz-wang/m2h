@@ -222,6 +222,54 @@ func TestRenderRejectsInvalidOptions(t *testing.T) {
 	}
 }
 
+func TestRenderInjectsRichContentAssets(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("# Title\n\nbody")
+
+	withAssets, err := Render(source, RenderOptions{
+		Mode: ModeAuto, Target: TargetPreview, SourcePath: "guide.md",
+		AssetBase: "/m2h-assets/",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`<link rel="stylesheet" href="/m2h-assets/katex.min.css">`,
+		`<script src="/m2h-assets/katex.min.js"></script>`,
+		`<script src="/m2h-assets/auto-render.min.js"></script>`,
+		`<script src="/m2h-assets/mermaid.min.js"></script>`,
+		`<script src="/m2h-assets/rich-content.js"></script>`,
+	} {
+		if !strings.Contains(withAssets.HTML, want) {
+			t.Errorf("HTML with AssetBase missing %q", want)
+		}
+	}
+
+	withoutAssets, err := Render(source, RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "guide.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, unwanted := range []string{"katex.min.css", "mermaid.min.js", "rich-content.js"} {
+		if strings.Contains(withoutAssets.HTML, unwanted) {
+			t.Errorf("HTML without AssetBase unexpectedly contains %q", unwanted)
+		}
+	}
+
+	nested, err := Render(source, RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "guide.md",
+		AssetBase: "../../.m2h/",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(nested.HTML, `href="../../.m2h/katex.min.css"`) {
+		t.Errorf("relative asset base not preserved: %s", nested.HTML)
+	}
+}
+
 func TestTitleUsesSharedASTExtraction(t *testing.T) {
 	t.Parallel()
 

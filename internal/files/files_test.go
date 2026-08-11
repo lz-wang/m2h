@@ -292,6 +292,46 @@ func TestDiscoverExcludesOutputSubtree(t *testing.T) {
 	}
 }
 
+func TestDiscoverHonorsExcludes(t *testing.T) {
+	root := t.TempDir()
+	runtime := filepath.Join(root, ".m2h")
+	writeTestFile(t, filepath.Join(root, "guide.md"), "guide")
+	writeTestFile(t, filepath.Join(root, "image.png"), "image")
+	writeTestFile(t, filepath.Join(runtime, "katex.min.css"), "katex")
+	writeTestFile(t, filepath.Join(runtime, "fonts", "KaTeX_AMS-Regular.woff2"), "font")
+
+	result, err := Discover(context.Background(), root, DiscoverOptions{
+		Depth:    3,
+		Excludes: []string{runtime},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := entryPaths(result.Markdown), []string{"guide.md"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Markdown = %#v, want %#v", got, want)
+	}
+	if got, want := entryPaths(result.Assets), []string{"image.png"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("Assets = %#v, want %#v (runtime leaked through Excludes)", got, want)
+	}
+}
+
+func TestDiscoverRejectsUnresolvableExclude(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission semantics differ on Windows")
+	}
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "guide.md"), "guide")
+	locked := filepath.Join(root, "locked")
+	if err := os.Mkdir(locked, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
+	missing := filepath.Join(locked, "missing")
+	if _, err := Discover(context.Background(), root, DiscoverOptions{Depth: 2, Excludes: []string{missing}}); err == nil {
+		t.Fatal("Discover accepted an unresolvable exclude path")
+	}
+}
+
 func TestDiscoverValidatesBeforeFilesystemAccess(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	if _, err := Discover(context.Background(), missing, DiscoverOptions{Depth: 2, Pattern: "["}); err == nil || !strings.Contains(err.Error(), "invalid glob") {

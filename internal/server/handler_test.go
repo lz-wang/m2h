@@ -150,6 +150,53 @@ func TestSingleFileHandlerServesOnlySafeAssets(t *testing.T) {
 	}
 }
 
+func TestSingleFileHandlerServesRichAssets(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	source := filepath.Join(root, "guide.md")
+	writeTestFile(t, source, "# Guide\n\n$E=mc^2$")
+	handler := newSingleFileHandler(source, markdown.ModeAuto, false, newEventHub(time.Second))
+
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET / status = %d", response.Code)
+	}
+	for _, want := range []string{
+		`href="/m2h-assets/katex.min.css"`,
+		`src="/m2h-assets/rich-content.js"`,
+	} {
+		if !strings.Contains(response.Body.String(), want) {
+			t.Errorf("preview HTML missing %q", want)
+		}
+	}
+
+	for _, asset := range []string{
+		"/m2h-assets/katex.min.css",
+		"/m2h-assets/mermaid.min.js",
+		"/m2h-assets/rich-content.js",
+		"/m2h-assets/fonts/KaTeX_AMS-Regular.woff2",
+	} {
+		resp := httptest.NewRecorder()
+		handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, asset, nil))
+		if resp.Code != http.StatusOK {
+			t.Errorf("%s status = %d, want 200", asset, resp.Code)
+		}
+		if resp.Body.Len() == 0 {
+			t.Errorf("%s returned empty body", asset)
+		}
+	}
+
+	for _, unsafe := range []string{"/m2h-assets/%2e%2e/guide.md", "/m2h-assets/..%2fguide.md"} {
+		resp := httptest.NewRecorder()
+		handler.ServeHTTP(resp, httptest.NewRequest(http.MethodGet, unsafe, nil))
+		if resp.Code == http.StatusOK && strings.Contains(resp.Body.String(), "markdown-body") {
+			t.Errorf("unsafe %s served document content", unsafe)
+		}
+	}
+}
+
 func TestAssetPathDecodingAndValidation(t *testing.T) {
 	t.Parallel()
 

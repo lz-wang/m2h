@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
 )
@@ -39,6 +40,7 @@ func newSingleFileHandlerWithWidth(source string, mode markdown.Mode, width mark
 	mux := http.NewServeMux()
 	mux.Handle("/api/events", events)
 	mux.Handle("/assets/", newAssetHandler(handler.root))
+	mux.Handle(assets.RichServePrefix, http.StripPrefix(assets.RichServePrefix, http.FileServer(http.FS(assets.RichFS()))))
 	mux.HandleFunc("/", handler.serveDocument)
 	return mux
 }
@@ -65,6 +67,7 @@ func (handler *singleFileHandler) serveDocument(response http.ResponseWriter, re
 		Target:     markdown.TargetPreview,
 		SourcePath: filepath.Base(handler.source),
 		UnsafeHTML: handler.unsafeHTML,
+		AssetBase:  assets.RichServePrefix,
 	})
 	if err != nil {
 		http.Error(response, fmt.Sprintf("render Markdown: %v", err), http.StatusInternalServerError)

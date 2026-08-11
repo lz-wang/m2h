@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/markdown"
 )
 
@@ -506,5 +507,109 @@ func TestRunReportsMissingInputAndInvalidOutputParent(t *testing.T) {
 	options.Output = filepath.Join(blocker, "output")
 	if err := Run(context.Background(), options); err == nil || !strings.Contains(err.Error(), "output") {
 		t.Fatalf("Run() error = %v, want invalid output parent", err)
+	}
+}
+
+func TestRunConvertWritesRichAssetsNextToSingleFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	source := writeFixture(t, root, "guide.md", "# Guide\n\n$E=mc^2$")
+	if err := Run(context.Background(), defaultOptions(source)); err != nil {
+		t.Fatal(err)
+	}
+
+	html, err := os.ReadFile(filepath.Join(root, "guide.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(html), `href=".m2h/katex.min.css"`) {
+		t.Errorf("single-file HTML missing relative rich-content link: %s", html)
+	}
+	if !strings.Contains(string(html), `src=".m2h/rich-content.js"`) {
+		t.Errorf("single-file HTML missing rich-content bootstrap: %s", html)
+	}
+	for _, rel := range []string{
+		".m2h/katex.min.css",
+		".m2h/mermaid.min.js",
+		".m2h/rich-content.js",
+		".m2h/fonts/KaTeX_AMS-Regular.woff2",
+	} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
+			t.Errorf("single-file convert did not write %q: %v", rel, err)
+		}
+	}
+}
+
+func TestRunDirectoryWritesSharedRichAssetsWithDepthAwareBase(t *testing.T) {
+	t.Parallel()
+
+	source := t.TempDir()
+	output := t.TempDir()
+	writeFixture(t, source, "index.md", "# Index")
+	writeFixture(t, source, "a/b/deep.md", "# Deep")
+
+	options := defaultOptions(source)
+	options.Output = output
+	if err := Run(context.Background(), options); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(output, ".m2h", "katex.min.css")); err != nil {
+		t.Fatalf("directory convert did not write shared .m2h/: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(output, "a", "b", assets.RichAssetDir)); !os.IsNotExist(err) {
+		t.Fatalf("nested %s should not exist, got %v", assets.RichAssetDir, err)
+	}
+
+	root, err := os.ReadFile(filepath.Join(output, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(root), `href=".m2h/katex.min.css"`) {
+		t.Errorf("root HTML missing .m2h base: %s", root)
+	}
+
+	nested, err := os.ReadFile(filepath.Join(output, "a", "b", "deep.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(nested), `href="../../.m2h/katex.min.css"`) {
+		t.Errorf("nested HTML missing depth-aware base: %s", nested)
+	}
+}
+
+func TestRunDirectoryRichRuntimeStableAcrossRuns(t *testing.T) {
+	t.Parallel()
+
+	source := t.TempDir()
+	writeFixture(t, source, "index.md", "# Index")
+	writeFixture(t, source, "image.png", "png")
+	options := defaultOptions(source) // output == source
+
+	if err := Run(context.Background(), options); err != nil {
+		t.Fatalf("first run failed: %v", err)
+	}
+	// Re-running into the same source must stay stable: the previously written
+	// .m2h/ runtime is excluded from discovery rather than reprocessed.
+	if err := Run(context.Background(), options); err != nil {
+		t.Fatalf("second run failed: %v", err)
+	}
+
+	richDirs := 0
+	err := filepath.WalkDir(source, func(_ string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() && entry.Name() == assets.RichAssetDir {
+			richDirs++
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if richDirs != 1 {
+		t.Fatalf("expected exactly one %s directory after rerun, got %d", assets.RichAssetDir, richDirs)
 	}
 }

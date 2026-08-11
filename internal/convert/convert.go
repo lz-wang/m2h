@@ -13,6 +13,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
 )
@@ -135,12 +136,17 @@ func runFile(ctx context.Context, source string, options Options) error {
 		Target:     markdown.TargetConvert,
 		SourcePath: filepath.Base(source),
 		UnsafeHTML: options.UnsafeHTML,
+		AssetBase:  assets.RichAssetDir + "/",
 	})
 	if err != nil {
 		return fmt.Errorf("render Markdown %q: %w", source, err)
 	}
 	if err := writeAtomic(destination, []byte(rendered.HTML), 0o644); err != nil {
 		return fmt.Errorf("write HTML %q: %w", destination, err)
+	}
+	assetDir := filepath.Join(filepath.Dir(destination), assets.RichAssetDir)
+	if err := assets.WriteRichAssets(assetDir); err != nil {
+		return fmt.Errorf("write rich-content assets %q: %w", assetDir, err)
 	}
 	return nil
 }
@@ -158,6 +164,7 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) error
 		Depth:       options.Depth,
 		Pattern:     options.Pattern,
 		ExcludeRoot: excludeRoot,
+		Excludes:    []string{filepath.Join(outputRoot, assets.RichAssetDir)},
 		Log:         options.Log,
 	})
 	if err != nil {
@@ -206,6 +213,7 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) error
 			Target:     markdown.TargetConvert,
 			SourcePath: plans[index].sourcePath,
 			UnsafeHTML: options.UnsafeHTML,
+			AssetBase:  richAssetBase(plans[index].sourcePath),
 		})
 		if err != nil {
 			return fmt.Errorf("render Markdown %q: %w", plans[index].source, err)
@@ -224,6 +232,15 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) error
 		}
 		if err != nil {
 			return fmt.Errorf("write %q from %q: %w", plan.destination, plan.source, err)
+		}
+	}
+
+	// Only emit the shared rich-content runtime when at least one HTML file was
+	// generated, so an empty glob match leaves the output directory untouched.
+	if len(discovered.Markdown) > 0 {
+		assetDir := filepath.Join(outputRoot, assets.RichAssetDir)
+		if err := assets.WriteRichAssets(assetDir); err != nil {
+			return fmt.Errorf("write rich-content assets %q: %w", assetDir, err)
 		}
 	}
 	return nil
@@ -279,6 +296,18 @@ func samePath(left, right string) bool {
 		return false
 	}
 	return destinationKey(leftAbsolute) == destinationKey(rightAbsolute)
+}
+
+// richAssetBase returns the relative URL prefix a generated HTML file must use
+// to reach the shared rich-content asset directory at the output root. A file
+// nested one directory deeper needs one extra "../" segment.
+func richAssetBase(relativePath string) string {
+	directory := path.Dir(files.NormalizeRelativePath(relativePath))
+	levels := 0
+	if directory != "." && directory != "" {
+		levels = strings.Count(directory, "/") + 1
+	}
+	return strings.Repeat("../", levels) + assets.RichAssetDir + "/"
 }
 
 func changeExtension(relative string) string {

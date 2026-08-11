@@ -41,6 +41,7 @@ type DiscoverOptions struct {
 	Depth       int
 	Pattern     string
 	ExcludeRoot string
+	Excludes    []string
 	Log         io.Writer
 }
 
@@ -123,6 +124,10 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 	if err != nil {
 		return Discovery{}, err
 	}
+	excludes, err := normalizeExcludes(options.Excludes)
+	if err != nil {
+		return Discovery{}, err
+	}
 	logger := options.Log
 	if logger == nil {
 		logger = io.Discard
@@ -139,7 +144,7 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 		if current == input.Path {
 			return nil
 		}
-		if excludeRoot != "" && IsWithin(excludeRoot, current) {
+		if isExcluded(excludeRoot, excludes, current) {
 			if entry.IsDir() {
 				return filepath.SkipDir
 			}
@@ -240,6 +245,33 @@ func normalizeExcludeRoot(value string) (string, error) {
 		return "", fmt.Errorf("resolve excluded output %q: %w", value, err)
 	}
 	return absolute, nil
+}
+
+func normalizeExcludes(values []string) ([]string, error) {
+	excludes := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" {
+			continue
+		}
+		absolute, err := CanonicalPath(value)
+		if err != nil {
+			return nil, fmt.Errorf("resolve excluded path %q: %w", value, err)
+		}
+		excludes = append(excludes, absolute)
+	}
+	return excludes, nil
+}
+
+func isExcluded(excludeRoot string, excludes []string, current string) bool {
+	if excludeRoot != "" && IsWithin(excludeRoot, current) {
+		return true
+	}
+	for _, exclude := range excludes {
+		if IsWithin(exclude, current) {
+			return true
+		}
+	}
+	return false
 }
 
 func directoryDepth(relative string) int {
