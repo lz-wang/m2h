@@ -12,6 +12,7 @@ import { App } from "./App";
 import { APIError, type FileListResponse, type PreviewAPI } from "./api";
 
 const initialFiles: FileListResponse = {
+  kind: "directory",
   files: [
     { path: "README.md", name: "README.md", title: "Readme API Title" },
     { path: "guides/setup.md", name: "setup.md", title: "Setup API Title" },
@@ -83,6 +84,28 @@ describe("App directory preview", () => {
     expect(getDocument).toHaveBeenCalledTimes(2);
   });
 
+  it("hides file navigation for a single-file preview", async () => {
+    const api = createAPI({
+      listFiles: vi.fn().mockResolvedValue({
+        kind: "single",
+        files: [
+          { path: "README.md", name: "README.md", title: "Readme API Title" },
+        ],
+        defaultPath: "README.md",
+      }),
+    });
+    render(<App api={api} />);
+
+    await screen.findByText("Body for README.md");
+    expect(screen.queryByRole("button", { name: "切换文件导航" })).toBeNull();
+    expect(screen.queryByRole("searchbox", { name: "搜索文档" })).toBeNull();
+    // Shared toolbar controls remain available in single-file mode.
+    expect(screen.getByRole("button", { name: "文档宽度：标准" })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "显示主题：跟随系统" }),
+    ).toBeTruthy();
+  });
+
   it("restores a dark deep link and expands the selected directory", async () => {
     window.history.replaceState(
       null,
@@ -131,6 +154,7 @@ describe("App directory preview", () => {
     const file = { path, name: "gfm.md", title };
     const api = createAPI({
       listFiles: vi.fn().mockResolvedValue({
+        kind: "directory",
         files: [file],
         defaultPath: path,
       }),
@@ -456,7 +480,11 @@ describe("App directory preview", () => {
     let view = render(
       <App
         api={createAPI({
-          listFiles: vi.fn().mockResolvedValue({ files: [], defaultPath: "" }),
+          listFiles: vi.fn().mockResolvedValue({
+            kind: "directory",
+            files: [],
+            defaultPath: "",
+          }),
         })}
       />,
     );

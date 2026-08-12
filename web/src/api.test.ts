@@ -15,6 +15,7 @@ describe("browser API", () => {
       .mockResolvedValueOnce(
         new Response(
           JSON.stringify({
+            kind: "directory",
             files: [{ path: "README.md", name: "README.md", title: "Readme" }],
             defaultPath: "README.md",
           }),
@@ -45,6 +46,7 @@ describe("browser API", () => {
       );
 
     await expect(browserAPI.listFiles()).resolves.toEqual({
+      kind: "directory",
       files: [{ path: "README.md", name: "README.md", title: "Readme" }],
       defaultPath: "README.md",
     });
@@ -65,6 +67,37 @@ describe("browser API", () => {
     expect(fetchMock.mock.calls[1]?.[0]).toBe(
       "/api/document?path=space+name.md",
     );
+  });
+
+  it("normalizes the preview kind", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          kind: "single",
+          files: [{ path: "README.md", name: "README.md", title: "Readme" }],
+          defaultPath: "README.md",
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.listFiles()).resolves.toMatchObject({
+      kind: "single",
+    });
+
+    // A missing or unrecognized kind falls back to directory so the WebUI keeps
+    // the richer navigation UI when the server contract is uncertain.
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          files: [{ path: "README.md", name: "README.md", title: "Readme" }],
+          defaultPath: "README.md",
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.listFiles()).resolves.toMatchObject({
+      kind: "directory",
+    });
   });
 
   it("surfaces JSON HTTP errors", async () => {

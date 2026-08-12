@@ -4,7 +4,12 @@ export interface FileSummary {
   title: string;
 }
 
+// PreviewKind reports whether the server is previewing one file or a directory,
+// so the WebUI can hide file navigation when there is nothing to navigate.
+export type PreviewKind = "single" | "directory";
+
 export interface FileListResponse {
+  kind: PreviewKind;
   files: FileSummary[];
   defaultPath: string;
 }
@@ -87,7 +92,11 @@ function parseFileList(payload: unknown): FileListResponse {
     }
     return { path: value.path, name: value.name, title: value.title };
   });
-  return { files, defaultPath: payload.defaultPath };
+  return {
+    kind: payload.kind === "single" ? "single" : "directory",
+    files,
+    defaultPath: payload.defaultPath,
+  };
 }
 
 function parseFrontMatter(payload: unknown): FrontMatter | null {

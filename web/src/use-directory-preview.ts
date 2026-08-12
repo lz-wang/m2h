@@ -6,6 +6,7 @@ import {
   type DocumentResponse,
   type FileSummary,
   type PreviewAPI,
+  type PreviewKind,
 } from "./api";
 import {
   chooseDocument,
@@ -23,6 +24,7 @@ export type PreviewPhase =
   | "error";
 
 export interface DirectoryPreviewState {
+  kind: PreviewKind;
   files: FileSummary[];
   selectedPath: string | null;
   document: DocumentResponse | null;
@@ -55,6 +57,7 @@ export function useDirectoryPreview(
     ),
   );
   const [files, setFiles] = useState<FileSummary[]>([]);
+  const [kind, setKind] = useState<PreviewKind>("directory");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [documentResponse, setDocumentResponse] =
     useState<DocumentResponse | null>(null);
@@ -153,6 +156,7 @@ export function useDirectoryPreview(
         filesRef.current = loaded.files;
         defaultPathRef.current = loaded.defaultPath;
         setFiles(loaded.files);
+        setKind(loaded.kind);
         const target = chooseDocument(
           loaded.files,
           requested,
@@ -325,6 +329,7 @@ export function useDirectoryPreview(
   }, []);
 
   return {
+    kind,
     files,
     selectedPath,
     document: documentResponse,

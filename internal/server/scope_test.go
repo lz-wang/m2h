@@ -157,3 +157,14 @@ func TestAllowsDocumentDirectory(t *testing.T) {
 		}
 	}
 }
+
+func TestPreviewScopeKind(t *testing.T) {
+	t.Parallel()
+
+	if (previewScope{root: t.TempDir(), file: "guide.md"}).kind() != previewSingle {
+		t.Fatal("single-file scope kind != single")
+	}
+	if (previewScope{root: t.TempDir()}).kind() != previewDirectory {
+		t.Fatal("directory scope kind != directory")
+	}
+}

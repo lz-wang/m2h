@@ -93,6 +93,9 @@ const documentWidths: Array<{
 export function App({ api }: AppProps) {
   const preview = useDirectoryPreview(api);
   usePreviewEvents(preview.reloadCurrent);
+  // A single-file scope has nothing to switch between, so the file sidebar and
+  // its toolbar trigger stay hidden; every other control remains shared.
+  const navigationAvailable = preview.kind === "directory";
   const [initialLayout] = useState(readStoredLayout);
   const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
   const [sidebarOpen, setSidebarOpen] = useState(initialLayout.sidebarOpen);
@@ -187,75 +190,79 @@ export function App({ api }: AppProps) {
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
       >
-        <Sidebar collapsible="offcanvas" resizing={sidebarResizing}>
-          <SidebarHeader>
-            <div className="sidebar-search">
-              <Search aria-hidden="true" />
-              <Input
-                type="search"
-                value={searchQuery}
-                aria-label="搜索文档"
-                placeholder="搜索标题或文件名"
-                onChange={(event) => setSearchQuery(event.target.value)}
-              />
-            </div>
-          </SidebarHeader>
-          <SidebarContent>
-            <ScrollArea className="tree-scroll">
-              <SidebarGroup>
-                <SidebarGroupLabel className="justify-between">
-                  <span>Files</span>
-                  <span className="text-xs tabular-nums text-sidebar-foreground/60">
-                    <span aria-hidden="true">{filteredFiles.length}</span>
-                    <span className="sr-only">
-                      {filteredFiles.length} 个 Markdown 文件
+        {navigationAvailable ? (
+          <Sidebar collapsible="offcanvas" resizing={sidebarResizing}>
+            <SidebarHeader>
+              <div className="sidebar-search">
+                <Search aria-hidden="true" />
+                <Input
+                  type="search"
+                  value={searchQuery}
+                  aria-label="搜索文档"
+                  placeholder="搜索标题或文件名"
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                />
+              </div>
+            </SidebarHeader>
+            <SidebarContent>
+              <ScrollArea className="tree-scroll">
+                <SidebarGroup>
+                  <SidebarGroupLabel className="justify-between">
+                    <span>Files</span>
+                    <span className="text-xs tabular-nums text-sidebar-foreground/60">
+                      <span aria-hidden="true">{filteredFiles.length}</span>
+                      <span className="sr-only">
+                        {filteredFiles.length} 个 Markdown 文件
+                      </span>
                     </span>
-                  </span>
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  {filteredFiles.length > 0 ? (
-                    <DocumentTree
-                      files={filteredFiles}
-                      searching={searchQuery.trim() !== ""}
-                      selectedPath={preview.selectedPath}
-                      onSelect={(path) => void preview.select(path)}
-                    />
-                  ) : (
-                    <p className="tree-placeholder">
-                      {loading
-                        ? "正在加载文件…"
-                        : searchQuery.trim() !== ""
-                          ? "没有匹配的文档"
-                          : "目录中没有 Markdown 文件"}
-                    </p>
-                  )}
-                </SidebarGroupContent>
-              </SidebarGroup>
-            </ScrollArea>
-          </SidebarContent>
-          <SidebarResizeHandle
-            width={sidebarWidth}
-            onResize={setSidebarWidth}
-            onResizeStart={() => setSidebarResizing(true)}
-            onResizeEnd={() => setSidebarResizing(false)}
-          />
-        </Sidebar>
+                  </SidebarGroupLabel>
+                  <SidebarGroupContent>
+                    {filteredFiles.length > 0 ? (
+                      <DocumentTree
+                        files={filteredFiles}
+                        searching={searchQuery.trim() !== ""}
+                        selectedPath={preview.selectedPath}
+                        onSelect={(path) => void preview.select(path)}
+                      />
+                    ) : (
+                      <p className="tree-placeholder">
+                        {loading
+                          ? "正在加载文件…"
+                          : searchQuery.trim() !== ""
+                            ? "没有匹配的文档"
+                            : "目录中没有 Markdown 文件"}
+                      </p>
+                    )}
+                  </SidebarGroupContent>
+                </SidebarGroup>
+              </ScrollArea>
+            </SidebarContent>
+            <SidebarResizeHandle
+              width={sidebarWidth}
+              onResize={setSidebarWidth}
+              onResizeStart={() => setSidebarResizing(true)}
+              onResizeEnd={() => setSidebarResizing(false)}
+            />
+          </Sidebar>
+        ) : null}
 
         <SidebarInset className="reader-inset">
           <header className="reader-toolbar">
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <SidebarTrigger
-                    className="toolbar-control"
-                    aria-label="切换文件导航"
-                  />
-                }
-              />
-              <TooltipContent side="bottom">
-                {sidebarOpen ? "收起文件导航" : "展开文件导航"}
-              </TooltipContent>
-            </Tooltip>
+            {navigationAvailable ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <SidebarTrigger
+                      className="toolbar-control"
+                      aria-label="切换文件导航"
+                    />
+                  }
+                />
+                <TooltipContent side="bottom">
+                  {sidebarOpen ? "收起文件导航" : "展开文件导航"}
+                </TooltipContent>
+              </Tooltip>
+            ) : null}
             <DocumentTitle
               title={preview.document?.title ?? null}
               frontmatter={preview.document?.frontmatter ?? null}

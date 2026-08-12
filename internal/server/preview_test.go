@@ -36,6 +36,9 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	}
 	var payload fileListResponse
 	decodeJSON(t, response, &payload)
+	if payload.Kind != previewDirectory {
+		t.Fatalf("directory kind = %q, want %q", payload.Kind, previewDirectory)
+	}
 
 	discovered, err := files.Discover(context.Background(), root+string(os.PathSeparator), options)
 	if err != nil {

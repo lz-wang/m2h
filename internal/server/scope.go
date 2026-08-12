@@ -19,6 +19,22 @@ type previewScope struct {
 	discovery files.DiscoverOptions
 }
 
+// previewKind tells the WebUI whether navigation is meaningful: a single-file
+// scope has nothing to switch between, so the file sidebar is hidden.
+type previewKind string
+
+const (
+	previewSingle    previewKind = "single"
+	previewDirectory previewKind = "directory"
+)
+
+func (scope previewScope) kind() previewKind {
+	if scope.isSingleFile() {
+		return previewSingle
+	}
+	return previewDirectory
+}
+
 // newPreviewScope builds the scope for a resolved input. The single-file name
 // is kept literally and never reinterpreted as a glob, so files named with
 // glob metacharacters (foo[1].md, foo*.md) remain addressable.

@@ -28,6 +28,7 @@ type fileSummary struct {
 }
 
 type fileListResponse struct {
+	Kind        previewKind   `json:"kind"`
 	Files       []fileSummary `json:"files"`
 	DefaultPath string        `json:"defaultPath"`
 }
@@ -133,6 +134,7 @@ func (handler *previewHandler) serveFiles(response http.ResponseWriter, request 
 		})
 	}
 	writeJSON(response, http.StatusOK, fileListResponse{
+		Kind:        handler.scope.kind(),
 		Files:       summaries,
 		DefaultPath: defaultDocument(summaries),
 	})

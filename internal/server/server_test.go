@@ -77,6 +77,9 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 	if len(list.Files) != 1 || list.Files[0].Path != "guide.md" || list.DefaultPath != "guide.md" {
 		t.Fatalf("single-file list = %+v", list)
 	}
+	if list.Kind != previewSingle {
+		t.Fatalf("single-file kind = %q, want %q", list.Kind, previewSingle)
+	}
 
 	document, err := http.Get(address + "api/document?path=guide.md")
 	if err != nil {
