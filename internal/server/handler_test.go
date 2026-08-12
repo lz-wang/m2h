@@ -33,7 +33,6 @@ func TestSingleFileHandlerRendersLatestDocument(t *testing.T) {
 		`class="m2h-mode-dark"`,
 		`src="/assets/images/demo.png"`,
 		`href="/assets/files/demo.txt"`,
-		`new EventSource("/api/events")`,
 		"<details>raw HTML</details>",
 	} {
 		if !strings.Contains(response.Body.String(), want) {

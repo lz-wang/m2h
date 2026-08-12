@@ -1,4 +1,5 @@
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -51,6 +52,35 @@ describe("App directory preview", () => {
     expect(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
     ).toBeTruthy();
+  });
+
+  it("hot-swaps the document body on a server-sent document-changed event", async () => {
+    const getDocument = vi
+      .fn<PreviewAPI["getDocument"]>()
+      .mockResolvedValueOnce({
+        path: "README.md",
+        title: "Readme API Title",
+        html: "<p>Original body</p>",
+        frontmatter: null,
+      })
+      .mockResolvedValueOnce({
+        path: "README.md",
+        title: "Readme API Title",
+        html: "<p>Updated body</p>",
+        frontmatter: null,
+      });
+    const api = createAPI({ getDocument });
+    const events = stubEventSource();
+    render(<App api={api} />);
+
+    await screen.findByText("Original body");
+    expect(getDocument).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      events.dispatch("document-changed");
+    });
+    await screen.findByText("Updated body");
+    expect(getDocument).toHaveBeenCalledTimes(2);
   });
 
   it("restores a dark deep link and expands the selected directory", async () => {
@@ -720,5 +750,56 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
       };
     }),
     ...overrides,
+  };
+}
+
+// stubEventSource replaces window.EventSource with a mock the test can dispatch
+// onto. It mirrors the real EventSource surface used by usePreviewEvents.
+function stubEventSource(): { dispatch(type: string): void } {
+  const sources: Array<{
+    dispatch(type: string): void;
+  }> = [];
+
+  class DispatchableEventSource {
+    readonly url: string;
+    private readonly listeners = new Map<string, Set<(event: Event) => void>>();
+
+    constructor(url: string) {
+      this.url = url;
+      sources.push(this);
+    }
+
+    addEventListener(type: string, listener: (event: Event) => void): void {
+      let listeners = this.listeners.get(type);
+      if (listeners === undefined) {
+        listeners = new Set();
+        this.listeners.set(type, listeners);
+      }
+      listeners.add(listener);
+    }
+
+    removeEventListener(type: string, listener: (event: Event) => void): void {
+      this.listeners.get(type)?.delete(listener);
+    }
+
+    close(): void {
+      // No-op: real EventSource teardown is irrelevant to these tests.
+    }
+
+    dispatch(type: string): void {
+      const event = new Event(type);
+      this.listeners.get(type)?.forEach((listener) => {
+        listener(event);
+      });
+    }
+  }
+
+  vi.stubGlobal("EventSource", DispatchableEventSource);
+  return {
+    dispatch(type: string) {
+      sources.forEach((source) => {
+        source.dispatch(type);
+      });
+    },
   };
 }

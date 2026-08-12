@@ -88,3 +88,22 @@ Object.defineProperty(window, "cancelAnimationFrame", {
   configurable: true,
   value: (handle: number) => window.clearTimeout(handle),
 });
+
+// <App> opens an SSE stream on mount. jsdom's EventSource would attempt a real
+// HTTP connection, so install a harmless no-op by default; focused tests
+// re-stub EventSource with a dispatchable mock via vi.stubGlobal.
+class EventSourceStub {
+  url: string;
+  constructor(url: string) {
+    this.url = url;
+  }
+  addEventListener(): void {}
+  removeEventListener(): void {}
+  close(): void {}
+}
+
+Object.defineProperty(window, "EventSource", {
+  configurable: true,
+  writable: true,
+  value: EventSourceStub,
+});

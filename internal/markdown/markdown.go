@@ -92,11 +92,6 @@ var pageTemplate = template.Must(template.New("document").Parse(`<!doctype html>
   <script src="{{.AssetBase}}auto-render.min.js"></script>
   <script src="{{.AssetBase}}mermaid.min.js"></script>
   <script src="{{.AssetBase}}rich-content.js"></script>{{end}}
-{{if .LiveReload}}  <script>
-    const events = new EventSource("/api/events");
-    events.addEventListener("document-changed", () => window.location.reload());
-  </script>
-{{end}}
 </body>
 </html>
 `))
@@ -130,23 +125,21 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 
 	var page bytes.Buffer
 	data := struct {
-		Mode       Mode
-		Width      Width
-		Target     Target
-		Title      string
-		Styles     template.CSS
-		Body       template.HTML
-		LiveReload bool
-		AssetBase  string
+		Mode      Mode
+		Width     Width
+		Target    Target
+		Title     string
+		Styles    template.CSS
+		Body      template.HTML
+		AssetBase string
 	}{
-		Mode:       normalized.Mode,
-		Width:      normalized.Width,
-		Target:     normalized.Target,
-		Title:      title,
-		Styles:     template.CSS(stylesheet),
-		Body:       template.HTML(body.String()),
-		LiveReload: normalized.Target == TargetPreview,
-		AssetBase:  normalized.AssetBase,
+		Mode:      normalized.Mode,
+		Width:     normalized.Width,
+		Target:    normalized.Target,
+		Title:     title,
+		Styles:    template.CSS(stylesheet),
+		Body:      template.HTML(body.String()),
+		AssetBase: normalized.AssetBase,
 	}
 	if err := pageTemplate.Execute(&page, data); err != nil {
 		return Result{}, err

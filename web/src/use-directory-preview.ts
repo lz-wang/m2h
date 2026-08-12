@@ -33,6 +33,7 @@ export interface DirectoryPreviewState {
   error: string | null;
   assetError: string | null;
   refresh(): Promise<void>;
+  reloadCurrent(): Promise<void>;
   select(path: string, hash?: string): Promise<void>;
   setMode(mode: Mode): void;
   setWidth(width: DocumentWidth): void;
@@ -265,6 +266,17 @@ export function useDirectoryPreview(
     await loadFiles(selectedPathRef.current, window.location.hash);
   }, [loadFiles]);
 
+  // reloadCurrent re-fetches only the open document without touching history,
+  // so a server-sent "document-changed" event can hot-swap the body while
+  // preserving sidebar, theme, width, TOC and URL state.
+  const reloadCurrent = useCallback(async () => {
+    const path = selectedPathRef.current;
+    if (path === null) {
+      return;
+    }
+    await loadDocument(path, "none", window.location.hash);
+  }, [loadDocument]);
+
   const select = useCallback(
     async (path: string, hash = "") => {
       if (!filesRef.current.some((file) => file.path === path)) {
@@ -323,6 +335,7 @@ export function useDirectoryPreview(
     error,
     assetError,
     refresh,
+    reloadCurrent,
     select,
     setMode,
     setWidth,

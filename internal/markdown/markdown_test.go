@@ -226,13 +226,10 @@ func TestConvertAndPreviewShareRenderedBody(t *testing.T) {
 	if convert.HTML == preview.HTML {
 		t.Fatal("target-specific outer documents are identical")
 	}
-	if strings.Contains(convert.HTML, "EventSource") {
-		t.Fatal("convert HTML contains preview live-reload client")
-	}
-	for _, want := range []string{"new EventSource(\"/api/events\")", `addEventListener("document-changed"`} {
-		if !strings.Contains(preview.HTML, want) {
-			t.Errorf("preview HTML does not contain %q: %s", want, preview.HTML)
-		}
+	// Live reload is now owned by the React WebUI; the rendered HTML document
+	// (preview or convert) must never embed a live-reload client itself.
+	if strings.Contains(convert.HTML, "EventSource") || strings.Contains(preview.HTML, "EventSource") {
+		t.Fatal("rendered HTML embeds a live-reload client")
 	}
 }
 

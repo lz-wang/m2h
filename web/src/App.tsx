@@ -55,6 +55,7 @@ import {
 import { renderRichContent } from "./lib/render-rich-content";
 import { type DocumentWidth, type Mode, readRoute } from "./model";
 import { useDirectoryPreview } from "./use-directory-preview";
+import { usePreviewEvents } from "./use-preview-events";
 import { useTocSpy } from "./use-toc-spy";
 
 interface AppProps {
@@ -91,6 +92,7 @@ const documentWidths: Array<{
 
 export function App({ api }: AppProps) {
   const preview = useDirectoryPreview(api);
+  usePreviewEvents(preview.reloadCurrent);
   const [initialLayout] = useState(readStoredLayout);
   const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
   const [sidebarOpen, setSidebarOpen] = useState(initialLayout.sidebarOpen);
