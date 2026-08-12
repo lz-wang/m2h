@@ -38,7 +38,7 @@ describe("App directory preview", () => {
       expect.any(AbortSignal),
     );
     expect(window.location.pathname + window.location.search).toBe(
-      "/doc/README.md?mode=auto&width=standard",
+      "/doc/README.md",
     );
     expect(document.title).toBe("Readme API Title");
     expect(document.documentElement.dataset.mode).toBe("auto");
@@ -57,7 +57,7 @@ describe("App directory preview", () => {
     window.history.replaceState(
       null,
       "",
-      "/doc/guides/setup.md?mode=dark&width=standard#install",
+      "/doc/guides/setup.md?mode=dark#install",
     );
     const api = createAPI({
       getDocument: vi.fn().mockResolvedValue({
@@ -163,7 +163,7 @@ describe("App directory preview", () => {
     await screen.findByRole("heading", { level: 2, name: "Install" });
     expect(
       window.location.pathname + window.location.search + window.location.hash,
-    ).toBe("/doc/guides/setup.md?mode=auto&width=standard#install");
+    ).toBe("/doc/guides/setup.md#install");
 
     await user.click(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
@@ -172,7 +172,7 @@ describe("App directory preview", () => {
       await screen.findByRole("menuitemradio", { name: "深色" }),
     );
     expect(window.location.search + window.location.hash).toBe(
-      "?mode=dark&width=standard#install",
+      "?mode=dark#install",
     );
   });
 
@@ -188,14 +188,10 @@ describe("App directory preview", () => {
     );
     await screen.findByText("Body for guides/setup.md");
     expect(window.location.pathname + window.location.search).toBe(
-      "/doc/guides/setup.md?mode=auto&width=standard",
+      "/doc/guides/setup.md",
     );
 
-    window.history.replaceState(
-      null,
-      "",
-      "/doc/README.md?mode=light&width=standard",
-    );
+    window.history.replaceState(null, "", "/doc/README.md?mode=light");
     window.dispatchEvent(new PopStateEvent("popstate"));
     await screen.findByText("Body for README.md");
     expect(screen.getByRole("button", { name: "显示主题：浅色" })).toBeTruthy();
@@ -229,7 +225,7 @@ describe("App directory preview", () => {
     await user.click(screen.getByRole("button", { name: "刷新文件列表" }));
     await screen.findByText("Body for README.md");
     expect(window.location.pathname + window.location.search).toBe(
-      "/doc/README.md?mode=auto&width=standard",
+      "/doc/README.md",
     );
     expect(listFiles).toHaveBeenCalledTimes(3);
   });
@@ -251,7 +247,7 @@ describe("App directory preview", () => {
       await screen.findByRole("menuitemradio", { name: "深色" }),
     );
     expect(screen.getByRole("button", { name: "显示主题：深色" })).toBeTruthy();
-    expect(window.location.search).toBe("?mode=dark&width=standard");
+    expect(window.location.search).toBe("?mode=dark");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
   });
 
@@ -267,7 +263,7 @@ describe("App directory preview", () => {
     );
     expect(screen.getByRole("button", { name: "文档宽度：全屏" })).toBeTruthy();
     expect(document.querySelector(".reader-canvas-full")).toBeTruthy();
-    expect(window.location.search).toBe("?mode=auto&width=full");
+    expect(window.location.search).toBe("?width=full");
 
     expect(
       screen
@@ -447,9 +443,7 @@ describe("App directory preview", () => {
     expect(await screen.findAllByText("目录中没有 Markdown 文件")).toHaveLength(
       2,
     );
-    expect(window.location.pathname + window.location.search).toBe(
-      "/?mode=auto&width=standard",
-    );
+    expect(window.location.pathname + window.location.search).toBe("/");
     view.unmount();
 
     view = render(

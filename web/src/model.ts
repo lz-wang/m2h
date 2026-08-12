@@ -63,16 +63,24 @@ export function routeURL(
   width: DocumentWidth,
   hash = "",
 ): string {
-  const parameters = new URLSearchParams({ mode, width });
+  const parameters = new URLSearchParams();
+  if (mode !== "auto") {
+    parameters.set("mode", mode);
+  }
+  if (width !== "standard") {
+    parameters.set("width", width);
+  }
+  const query = parameters.toString();
+  const search = query === "" ? "" : `?${query}`;
   const suffix = normalizeHash(hash);
   if (path === null) {
-    return `/?${parameters.toString()}${suffix}`;
+    return `/${search}${suffix}`;
   }
   const encoded = path
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
-  return `/doc/${encoded}?${parameters.toString()}${suffix}`;
+  return `/doc/${encoded}${search}${suffix}`;
 }
 
 export function chooseDocument(

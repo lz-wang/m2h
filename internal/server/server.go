@@ -10,6 +10,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -131,7 +132,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 
 	address := previewURL(normalized.Host, listener.Addr())
 	if input.Kind == files.KindDirectory {
-		address += "?mode=" + string(normalized.Mode) + "&width=" + string(normalized.Width)
+		address = directoryPreviewURL(address, normalized.Mode, normalized.Width)
 	}
 	_, _ = fmt.Fprintf(logger, "m2h: previewing %s at %s\n", input.Path, address)
 	if normalized.OnListening != nil {
@@ -210,4 +211,18 @@ func previewURL(host string, address net.Addr) string {
 		}
 	}
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
+}
+
+func directoryPreviewURL(address string, mode markdown.Mode, width markdown.Width) string {
+	parameters := url.Values{}
+	if mode != markdown.ModeAuto {
+		parameters.Set("mode", string(mode))
+	}
+	if width != markdown.WidthStandard {
+		parameters.Set("width", string(width))
+	}
+	if query := parameters.Encode(); query != "" {
+		return address + "?" + query
+	}
+	return address
 }

@@ -269,8 +269,30 @@ func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
 	if watchCalled {
 		t.Fatal("directory preview created a watcher")
 	}
-	if !strings.HasSuffix(listeningAddress, "/?mode=dark&width=standard") {
-		t.Fatalf("directory preview address = %q, want explicit mode and width query", listeningAddress)
+	if !strings.HasSuffix(listeningAddress, "/?mode=dark") {
+		t.Fatalf("directory preview address = %q, want non-default mode query", listeningAddress)
+	}
+}
+
+func TestDirectoryPreviewURLOmitsDefaultParameters(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		name  string
+		mode  markdown.Mode
+		width markdown.Width
+		want  string
+	}{
+		{name: "all defaults", mode: markdown.ModeAuto, width: markdown.WidthStandard, want: "http://127.0.0.1:8793/"},
+		{name: "non-default mode", mode: markdown.ModeDark, width: markdown.WidthStandard, want: "http://127.0.0.1:8793/?mode=dark"},
+		{name: "non-default width", mode: markdown.ModeAuto, width: markdown.WidthWide, want: "http://127.0.0.1:8793/?width=wide"},
+		{name: "both non-default", mode: markdown.ModeLight, width: markdown.WidthFull, want: "http://127.0.0.1:8793/?mode=light&width=full"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if got := directoryPreviewURL("http://127.0.0.1:8793/", test.mode, test.width); got != test.want {
+				t.Fatalf("directoryPreviewURL() = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

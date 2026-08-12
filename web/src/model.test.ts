@@ -41,12 +41,14 @@ describe("route model", () => {
       width: "standard",
       hash: "",
     });
+    expect(routeURL("guide/space name.md", "auto", "standard", "install")).toBe(
+      "/doc/guide/space%20name.md#install",
+    );
     expect(routeURL("guide/space name.md", "auto", "full", "install")).toBe(
-      "/doc/guide/space%20name.md?mode=auto&width=full#install",
+      "/doc/guide/space%20name.md?width=full#install",
     );
-    expect(routeURL(null, "light", "standard")).toBe(
-      "/?mode=light&width=standard",
-    );
+    expect(routeURL(null, "light", "standard")).toBe("/?mode=light");
+    expect(routeURL(null, "dark", "wide")).toBe("/?mode=dark&width=wide");
   });
 
   it("chooses the requested, default, first, or empty document", () => {
