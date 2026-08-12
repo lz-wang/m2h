@@ -17,10 +17,6 @@ const GitHubMarkdownCSSVersion = "5.9.0"
 // runtime assets into, next to the generated HTML.
 const RichAssetDir = ".m2h"
 
-// RichServePrefix is the URL prefix single-file preview serves the embedded
-// rich-content runtime at.
-const RichServePrefix = "/m2h-assets/"
-
 var (
 	//go:embed github-markdown.css
 	githubMarkdownAuto string

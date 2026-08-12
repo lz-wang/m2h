@@ -63,12 +63,14 @@ describe("App directory preview", () => {
         title: "Readme API Title",
         html: "<p>Original body</p>",
         frontmatter: null,
+        toc: [],
       })
       .mockResolvedValueOnce({
         path: "README.md",
         title: "Readme API Title",
         html: "<p>Updated body</p>",
         frontmatter: null,
+        toc: [],
       });
     const api = createAPI({ getDocument });
     const events = stubEventSource();
@@ -775,6 +777,7 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
         title: file.title,
         html: `<p>Body for ${path}</p>`,
         frontmatter: null,
+        toc: [],
       };
     }),
     ...overrides,

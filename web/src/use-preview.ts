@@ -23,7 +23,7 @@ export type PreviewPhase =
   | "empty"
   | "error";
 
-export interface DirectoryPreviewState {
+export interface PreviewState {
   kind: PreviewKind;
   files: FileSummary[];
   selectedPath: string | null;
@@ -46,9 +46,7 @@ export interface DirectoryPreviewState {
 
 type HistoryAction = "push" | "replace" | "none";
 
-export function useDirectoryPreview(
-  api: PreviewAPI = browserAPI,
-): DirectoryPreviewState {
+export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   const initialRoute = useRef(
     readRoute(
       window.location.pathname,

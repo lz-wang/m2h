@@ -27,7 +27,7 @@ export default defineConfig({
         "src/api.ts",
         "src/lib/render-rich-content.ts",
         "src/model.ts",
-        "src/use-directory-preview.ts",
+        "src/use-preview.ts",
         "src/use-preview-events.ts",
         "src/use-toc-spy.ts",
         "src/components/document-tree.tsx",

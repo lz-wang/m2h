@@ -54,7 +54,7 @@ import {
 } from "./components/ui/tooltip";
 import { renderRichContent } from "./lib/render-rich-content";
 import { type DocumentWidth, type Mode, readRoute } from "./model";
-import { useDirectoryPreview } from "./use-directory-preview";
+import { usePreview } from "./use-preview";
 import { usePreviewEvents } from "./use-preview-events";
 import { useTocSpy } from "./use-toc-spy";
 
@@ -91,7 +91,7 @@ const documentWidths: Array<{
 ];
 
 export function App({ api }: AppProps) {
-  const preview = useDirectoryPreview(api);
+  const preview = usePreview(api);
   usePreviewEvents(preview.reloadCurrent);
   // A single-file scope has nothing to switch between, so the file sidebar and
   // its toolbar trigger stay hidden; every other control remains shared.
@@ -553,7 +553,7 @@ function ThemeMenu({
 }
 
 interface PreviewContentProps {
-  phase: ReturnType<typeof useDirectoryPreview>["phase"];
+  phase: ReturnType<typeof usePreview>["phase"];
   error: string | null;
   html: string | null;
   frontmatter: FrontMatter | null;
