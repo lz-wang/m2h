@@ -47,7 +47,6 @@ $ m2h convert docs --output public/docs --depth 3 --glob '**/plan_*.md'
 | `--copy-assets` | 是否复制非 Markdown 资源；默认 `true`。 |
 | `--mode` | 页面主题：`light`、`dark` 或 `auto`；默认 `auto`。 |
 | `--width` | 正文宽度：`standard`（980px）、`wide`（1280px）或 `full`；默认 `standard`。 |
-| `--unsafe-html` | 允许 Markdown 中的原始 HTML；默认关闭。 |
 
 ## 在浏览器中预览
 
@@ -68,7 +67,6 @@ $ m2h preview docs --browser --mode dark --width wide
 | `--browser` | 服务启动成功后打开系统默认浏览器。 |
 | `--mode` | 页面主题：`light`、`dark` 或 `auto`；默认 `auto`。 |
 | `--width` | 正文宽度：`standard`、`wide` 或 `full`；默认 `standard`。 |
-| `--unsafe-html` | 允许 Markdown 中的原始 HTML；默认关闭。 |
 | `--glob` | 按相对输入目录的路径筛选 Markdown。仅目录可用。 |
 | `--depth`, `-d` | 最大递归深度；默认 `2`。仅目录可用。 |
 
@@ -102,7 +100,7 @@ $ NO_COLOR=1 m2h view guide.md --mode dark
 | GitHub Alerts | `> [!NOTE]` 后接提示内容。 |
 | 数学公式 | `$E = mc^2$`；行间公式使用 `$$...$$` |
 | Mermaid 图表 | 使用 ```` ```mermaid ```` 围栏，例如 `flowchart LR` 与 `A --> B`。 |
-| 原始 HTML | 默认不渲染；使用 `--unsafe-html` 后可写 `<details>内容</details>`。 |
+| 原始 HTML | 直接渲染，例如 `<details>内容</details>`。 |
 
 数学公式和 Mermaid 图表的运行时资源已包含在输出中，生成的 HTML 可离线打开。
 

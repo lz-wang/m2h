@@ -37,36 +37,20 @@ func TestRenderStandardGFM(t *testing.T) {
 	}
 }
 
-func TestRenderRawHTMLAndDangerousURLs(t *testing.T) {
+func TestRenderRawHTMLAndSanitizesDangerousURLs(t *testing.T) {
 	t.Parallel()
 
 	source := []byte("<span data-raw=\"yes\">raw</span>\n\n[danger](javascript:alert(1))")
 
-	safe, err := Render(source, RenderOptions{Mode: ModeLight, Target: TargetConvert, SourcePath: "safe.md"})
+	result, err := Render(source, RenderOptions{Mode: ModeLight, Target: TargetConvert, SourcePath: "raw-html.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(safe.Body, `<span data-raw="yes">`) {
-		t.Fatalf("safe render contains raw HTML: %s", safe.Body)
+	if !strings.Contains(result.Body, `<span data-raw="yes">raw</span>`) {
+		t.Fatalf("render suppressed raw HTML: %s", result.Body)
 	}
-	if strings.Contains(strings.ToLower(safe.Body), "javascript:") {
-		t.Fatalf("safe render contains a dangerous URL: %s", safe.Body)
-	}
-
-	unsafe, err := Render(source, RenderOptions{
-		Mode:       ModeLight,
-		Target:     TargetConvert,
-		SourcePath: "unsafe.md",
-		UnsafeHTML: true,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(unsafe.Body, `<span data-raw="yes">raw</span>`) {
-		t.Fatalf("unsafe render suppressed raw HTML: %s", unsafe.Body)
-	}
-	if strings.Contains(strings.ToLower(unsafe.Body), "javascript:") {
-		t.Fatalf("unsafe render contains a dangerous Markdown URL: %s", unsafe.Body)
+	if strings.Contains(strings.ToLower(result.Body), "javascript:") {
+		t.Fatalf("render contains a dangerous Markdown URL: %s", result.Body)
 	}
 }
 

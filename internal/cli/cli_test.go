@@ -82,14 +82,13 @@ func TestCommandHelpDocumentsContract(t *testing.T) {
 			want: []string{
 				"--output", "-o", "--glob", "--depth", "-d", "(default: 2)",
 				"--mode", "(default: \"auto\")", "--width", "(default: \"standard\")", "--copy-assets", "(default: true)",
-				"--unsafe-html",
 			},
 		},
 		{
 			command: "preview",
 			want: []string{
 				"--host", "(default: \"127.0.0.1\")", "--port", "-p", "(default: 8793)",
-				"--browser", "--mode", "(default: \"auto\")", "--width", "(default: \"standard\")", "--unsafe-html", "--glob",
+				"--browser", "--mode", "(default: \"auto\")", "--width", "(default: \"standard\")", "--glob",
 				"--depth", "-d", "(default: 2)",
 			},
 		},
@@ -120,7 +119,12 @@ func TestCommandHelpDocumentsContract(t *testing.T) {
 func TestUnknownFlagsReturnStableError(t *testing.T) {
 	t.Parallel()
 
-	for _, args := range [][]string{{"--unknown"}, {"convert", "README.md", "--unknown"}} {
+	for _, args := range [][]string{
+		{"--unknown"},
+		{"convert", "README.md", "--unknown"},
+		{"convert", "README.md", "--unsafe-html"},
+		{"preview", "README.md", "--unsafe-html"},
+	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
 			t.Fatalf("m2h %v succeeded, want error", args)
@@ -192,13 +196,12 @@ func TestPreviewCommandForwardsOptions(t *testing.T) {
 		"--port", "9142",
 		"--browser",
 		"--mode", "dark",
-		"--unsafe-html",
 	)
 	if err != nil || stdout != "" || stderr != "" {
 		t.Fatalf("preview result stdout=%q stderr=%q err=%v", stdout, stderr, err)
 	}
 	if captured.Input != "guide.md" || captured.Host != "0.0.0.0" || captured.Port != 9142 ||
-		captured.Mode != markdown.ModeDark || !captured.Browser || !captured.UnsafeHTML || captured.Log == nil ||
+		captured.Mode != markdown.ModeDark || !captured.Browser || captured.Log == nil ||
 		captured.UI == nil {
 		t.Fatalf("preview options = %+v", captured)
 	}
@@ -226,7 +229,7 @@ func TestPreviewCommandValidatesArgumentsAndPort(t *testing.T) {
 func TestConvertCommandWritesHTML(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "guide.md")
-	if err := os.WriteFile(source, []byte("# Guide\n\n[Next](next.md)"), 0o644); err != nil {
+	if err := os.WriteFile(source, []byte("# Guide\n\n[Next](next.md)\n\n<details>raw HTML</details>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	output := filepath.Join(root, "public", "index.html")
@@ -242,7 +245,7 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`<title>Guide</title>`, `href="next.html"`, `class="m2h-mode-dark"`, `data-width="wide"`} {
+	for _, want := range []string{`<title>Guide</title>`, `href="next.html"`, `class="m2h-mode-dark"`, `data-width="wide"`, `<details>raw HTML</details>`} {
 		if !bytes.Contains(html, []byte(want)) {
 			t.Errorf("HTML does not contain %q", want)
 		}

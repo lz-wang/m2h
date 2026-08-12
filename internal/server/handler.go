@@ -15,27 +15,25 @@ import (
 )
 
 type singleFileHandler struct {
-	source     string
-	root       string
-	mode       markdown.Mode
-	width      markdown.Width
-	unsafeHTML bool
+	source string
+	root   string
+	mode   markdown.Mode
+	width  markdown.Width
 }
 
-func newSingleFileHandler(source string, mode markdown.Mode, unsafeHTML bool, events *eventHub) http.Handler {
-	return newSingleFileHandlerWithWidth(source, mode, markdown.WidthStandard, unsafeHTML, events)
+func newSingleFileHandler(source string, mode markdown.Mode, events *eventHub) http.Handler {
+	return newSingleFileHandlerWithWidth(source, mode, markdown.WidthStandard, events)
 }
 
-func newSingleFileHandlerWithWidth(source string, mode markdown.Mode, width markdown.Width, unsafeHTML bool, events *eventHub) http.Handler {
+func newSingleFileHandlerWithWidth(source string, mode markdown.Mode, width markdown.Width, events *eventHub) http.Handler {
 	if canonical, err := files.CanonicalPath(source); err == nil {
 		source = canonical
 	}
 	handler := &singleFileHandler{
-		source:     source,
-		root:       filepath.Dir(source),
-		mode:       mode,
-		width:      width,
-		unsafeHTML: unsafeHTML,
+		source: source,
+		root:   filepath.Dir(source),
+		mode:   mode,
+		width:  width,
 	}
 	mux := http.NewServeMux()
 	mux.Handle("/api/events", events)
@@ -66,7 +64,6 @@ func (handler *singleFileHandler) serveDocument(response http.ResponseWriter, re
 		Width:      handler.width,
 		Target:     markdown.TargetPreview,
 		SourcePath: filepath.Base(handler.source),
-		UnsafeHTML: handler.unsafeHTML,
 		AssetBase:  assets.RichServePrefix,
 	})
 	if err != nil {

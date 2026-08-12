@@ -27,7 +27,6 @@ type Options struct {
 	Mode          markdown.Mode
 	Width         markdown.Width
 	CopyAssets    bool
-	UnsafeHTML    bool
 	PatternSet    bool
 	DepthSet      bool
 	CopyAssetsSet bool
@@ -135,7 +134,6 @@ func runFile(ctx context.Context, source string, options Options) error {
 		Width:      options.Width,
 		Target:     markdown.TargetConvert,
 		SourcePath: filepath.Base(source),
-		UnsafeHTML: options.UnsafeHTML,
 		AssetBase:  assets.RichAssetDir + "/",
 	})
 	if err != nil {
@@ -212,7 +210,6 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) error
 			Width:      options.Width,
 			Target:     markdown.TargetConvert,
 			SourcePath: plans[index].sourcePath,
-			UnsafeHTML: options.UnsafeHTML,
 			AssetBase:  richAssetBase(plans[index].sourcePath),
 		})
 		if err != nil {

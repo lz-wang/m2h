@@ -35,7 +35,6 @@ type Options struct {
 	Mode       markdown.Mode
 	Width      markdown.Width
 	Browser    bool
-	UnsafeHTML bool
 	Pattern    string
 	Depth      int
 	PatternSet bool
@@ -95,13 +94,13 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	hub := newEventHub(deps.keepAlive)
 	var handler http.Handler
 	if input.Kind == files.KindDirectory {
-		handler = newDirectoryHandlerWithWidth(input.Path, normalized.Mode, normalized.Width, normalized.UnsafeHTML, files.DiscoverOptions{
+		handler = newDirectoryHandlerWithWidth(input.Path, normalized.Mode, normalized.Width, files.DiscoverOptions{
 			Depth:   normalized.Depth,
 			Pattern: normalized.Pattern,
 			Log:     logger,
 		}, hub, logger, options.UI)
 	} else {
-		handler = newSingleFileHandlerWithWidth(input.Path, normalized.Mode, normalized.Width, normalized.UnsafeHTML, hub)
+		handler = newSingleFileHandlerWithWidth(input.Path, normalized.Mode, normalized.Width, hub)
 	}
 	httpServer := &http.Server{
 		Handler:  handler,

@@ -27,7 +27,7 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	canonical := canonicalDirectory(t, root)
 	options := files.DiscoverOptions{Depth: 2, Pattern: "**/*.md"}
 	var logOutput bytes.Buffer
-	handler := newDirectoryHandler(canonical, markdown.ModeAuto, false, options, newEventHub(time.Second), &logOutput, directoryTestUI())
+	handler := newDirectoryHandler(canonical, markdown.ModeAuto, options, newEventHub(time.Second), &logOutput, directoryTestUI())
 
 	response := performRequest(handler, http.MethodGet, "/api/files")
 	if response.Code != http.StatusOK {
@@ -176,13 +176,12 @@ func TestDirectoryDocumentAPIReadsLatestContent(t *testing.T) {
 
 	root := t.TempDir()
 	source := filepath.Join(root, "design", "architecture.md")
-	writeTestFile(t, source, "# Architecture\n\n[Guide](../guide.md)\n\nold body")
+	writeTestFile(t, source, "# Architecture\n\n[Guide](../guide.md)\n\nold body\n\n<details>raw HTML</details>")
 	writeTestFile(t, filepath.Join(root, "guide.md"), "# Guide")
 	canonical := canonicalDirectory(t, root)
 	handler := newDirectoryHandler(
 		canonical,
 		markdown.ModeDark,
-		false,
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		nil,
@@ -198,7 +197,7 @@ func TestDirectoryDocumentAPIReadsLatestContent(t *testing.T) {
 	if document.Path != "design/architecture.md" || document.Title != "Architecture" {
 		t.Fatalf("document metadata = %+v", document)
 	}
-	for _, want := range []string{"old body", `href="/doc/guide.md"`} {
+	for _, want := range []string{"old body", `href="/doc/guide.md"`, "<details>raw HTML</details>"} {
 		if !strings.Contains(document.HTML, want) {
 			t.Errorf("document HTML does not contain %q: %s", want, document.HTML)
 		}
@@ -231,7 +230,6 @@ func TestDirectoryDocumentAPIRejectsUnsafeAndFilteredPaths(t *testing.T) {
 	handler := newDirectoryHandler(
 		canonical,
 		markdown.ModeAuto,
-		false,
 		files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"},
 		newEventHub(time.Second),
 		nil,
@@ -296,7 +294,6 @@ func TestDirectoryDocumentAPIExposesFrontMatter(t *testing.T) {
 	handler := newDirectoryHandler(
 		canonical,
 		markdown.ModeAuto,
-		false,
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		nil,
@@ -366,7 +363,6 @@ func TestDirectoryDocumentAPIInvalidFrontMatter(t *testing.T) {
 	handler := newDirectoryHandler(
 		canonical,
 		markdown.ModeAuto,
-		false,
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		nil,
@@ -388,7 +384,6 @@ func TestDirectoryAssetsSPAFallbackAndAPINotFound(t *testing.T) {
 	handler := newDirectoryHandler(
 		canonicalDirectory(t, root),
 		markdown.ModeAuto,
-		false,
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		nil,
@@ -517,7 +512,6 @@ func TestDirectoryRequestLogContainsMetadataNotBody(t *testing.T) {
 	handler := newDirectoryHandler(
 		canonicalDirectory(t, root),
 		markdown.ModeAuto,
-		false,
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		&logOutput,
@@ -590,7 +584,6 @@ func TestDirectoryFilesAPIRenderFailure(t *testing.T) {
 	handler := newDirectoryHandler(
 		canonicalDirectory(t, root),
 		"invalid",
-		false,
 		files.DiscoverOptions{Depth: 2},
 		newEventHub(time.Second),
 		nil,

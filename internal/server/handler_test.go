@@ -19,8 +19,8 @@ func TestSingleFileHandlerRendersLatestDocument(t *testing.T) {
 
 	root := t.TempDir()
 	source := filepath.Join(root, "guide.md")
-	writeTestFile(t, source, "# Before\n\n![image](images/demo.png)\n\n[download](files/demo.txt)")
-	handler := newSingleFileHandler(source, markdown.ModeDark, false, newEventHub(time.Second))
+	writeTestFile(t, source, "# Before\n\n![image](images/demo.png)\n\n[download](files/demo.txt)\n\n<details>raw HTML</details>")
+	handler := newSingleFileHandler(source, markdown.ModeDark, newEventHub(time.Second))
 
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))
@@ -34,6 +34,7 @@ func TestSingleFileHandlerRendersLatestDocument(t *testing.T) {
 		`src="/assets/images/demo.png"`,
 		`href="/assets/files/demo.txt"`,
 		`new EventSource("/api/events")`,
+		"<details>raw HTML</details>",
 	} {
 		if !strings.Contains(response.Body.String(), want) {
 			t.Errorf("document does not contain %q", want)
@@ -59,7 +60,7 @@ func TestSingleFileHandlerMethodsAndFailures(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "guide.md")
 	writeTestFile(t, source, "# Guide")
-	handler := newSingleFileHandler(source, markdown.ModeAuto, false, newEventHub(time.Second))
+	handler := newSingleFileHandler(source, markdown.ModeAuto, newEventHub(time.Second))
 
 	tests := []struct {
 		method string
@@ -99,7 +100,7 @@ func TestSingleFileHandlerServesOnlySafeAssets(t *testing.T) {
 	writeTestFile(t, source, "# Guide")
 	writeTestFile(t, asset, "asset body")
 	writeTestFile(t, filepath.Join(root, "private.md"), "secret")
-	handler := newSingleFileHandler(source, markdown.ModeAuto, false, newEventHub(time.Second))
+	handler := newSingleFileHandler(source, markdown.ModeAuto, newEventHub(time.Second))
 
 	for _, method := range []string{http.MethodGet, http.MethodHead} {
 		response := httptest.NewRecorder()
@@ -156,7 +157,7 @@ func TestSingleFileHandlerServesRichAssets(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "guide.md")
 	writeTestFile(t, source, "# Guide\n\n$E=mc^2$")
-	handler := newSingleFileHandler(source, markdown.ModeAuto, false, newEventHub(time.Second))
+	handler := newSingleFileHandler(source, markdown.ModeAuto, newEventHub(time.Second))
 
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/", nil))

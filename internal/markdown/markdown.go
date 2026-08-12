@@ -16,7 +16,6 @@ import (
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/extension"
 	"github.com/yuin/goldmark/parser"
-	"github.com/yuin/goldmark/renderer"
 	goldmarkhtml "github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/text"
 
@@ -55,7 +54,6 @@ type RenderOptions struct {
 	Width      Width
 	Target     Target
 	SourcePath string
-	UnsafeHTML bool
 	AssetBase  string
 }
 
@@ -100,7 +98,7 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 		return Result{}, err
 	}
 
-	engine := newEngine(normalized.UnsafeHTML)
+	engine := newEngine()
 	context := parser.NewContext(parser.WithIDs(newGitHubIDs()))
 	document := engine.Parser().Parse(text.NewReader(source), parser.WithContext(context))
 	if err := rewriteDocument(document, normalized); err != nil {
@@ -151,7 +149,7 @@ func Title(source []byte, sourcePath string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	engine := newEngine(false)
+	engine := newEngine()
 	context := parser.NewContext(parser.WithIDs(newGitHubIDs()))
 	document := engine.Parser().Parse(text.NewReader(source), parser.WithContext(context))
 	return extractTitle(document, source, normalized), nil
@@ -186,12 +184,7 @@ func SanitizeDangerousURLs(document ast.Node) error {
 	})
 }
 
-func newEngine(unsafeHTML bool) goldmark.Markdown {
-	rendererOptions := []renderer.Option{}
-	if unsafeHTML {
-		rendererOptions = append(rendererOptions, goldmarkhtml.WithUnsafe())
-	}
-
+func newEngine() goldmark.Markdown {
 	engine := NewGFM(
 		extension.Footnote,
 		emoji.New(emoji.WithRenderingMethod(emoji.Unicode)),
@@ -201,7 +194,7 @@ func newEngine(unsafeHTML bool) goldmark.Markdown {
 			highlighting.WithFormatOptions(html.WithClasses(true)),
 		),
 	)
-	engine.Renderer().AddOptions(rendererOptions...)
+	engine.Renderer().AddOptions(goldmarkhtml.WithUnsafe())
 	engine.Parser().AddOptions(parser.WithAutoHeadingID())
 	return engine
 }

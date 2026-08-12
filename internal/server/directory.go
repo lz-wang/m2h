@@ -51,45 +51,41 @@ type documentResponse struct {
 }
 
 type directoryHandler struct {
-	root       string
-	mode       markdown.Mode
-	width      markdown.Width
-	unsafeHTML bool
-	discovery  files.DiscoverOptions
-	discover   func(context.Context, string, files.DiscoverOptions) (files.Discovery, error)
-	ui         fs.FS
+	root      string
+	mode      markdown.Mode
+	width     markdown.Width
+	discovery files.DiscoverOptions
+	discover  func(context.Context, string, files.DiscoverOptions) (files.Discovery, error)
+	ui        fs.FS
 }
 
 func newDirectoryHandler(
 	root string,
 	mode markdown.Mode,
-	unsafeHTML bool,
 	discovery files.DiscoverOptions,
 	events *eventHub,
 	logger io.Writer,
 	ui fs.FS,
 ) http.Handler {
-	return newDirectoryHandlerWithWidth(root, mode, markdown.WidthStandard, unsafeHTML, discovery, events, logger, ui)
+	return newDirectoryHandlerWithWidth(root, mode, markdown.WidthStandard, discovery, events, logger, ui)
 }
 
 func newDirectoryHandlerWithWidth(
 	root string,
 	mode markdown.Mode,
 	width markdown.Width,
-	unsafeHTML bool,
 	discovery files.DiscoverOptions,
 	events *eventHub,
 	logger io.Writer,
 	ui fs.FS,
 ) http.Handler {
 	handler := &directoryHandler{
-		root:       root,
-		mode:       mode,
-		width:      width,
-		unsafeHTML: unsafeHTML,
-		discovery:  discovery,
-		discover:   files.Discover,
-		ui:         ui,
+		root:      root,
+		mode:      mode,
+		width:     width,
+		discovery: discovery,
+		discover:  files.Discover,
+		ui:        ui,
 	}
 	return handler.routes(events, logger)
 }
@@ -182,7 +178,6 @@ func (handler *directoryHandler) serveDocument(response http.ResponseWriter, req
 		Width:      handler.width,
 		Target:     markdown.TargetPreview,
 		SourcePath: relative,
-		UnsafeHTML: handler.unsafeHTML,
 	})
 	if err != nil {
 		writeJSONError(response, http.StatusInternalServerError, "render Markdown document")
