@@ -15,6 +15,8 @@
 
 <!-- 发布时只保留实际存在的“新增”和“修复”小节。 -->
 
+## [0.9.1] - 2026-08-12
+
 ### 新增
 
 - 支持通过 `brew install lz-wang/tap/m2h` 在 macOS 与 Linux 安装和升级 m2h；正式 GitHub Release 成功后会自动更新并验证 Homebrew Formula。
