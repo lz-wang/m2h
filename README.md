@@ -8,6 +8,22 @@
 
 ## 安装
 
+### Homebrew
+
+macOS 和 Linux：
+
+```console
+$ brew install lz-wang/tap/m2h
+```
+
+升级已安装的版本：
+
+```console
+$ brew upgrade m2h
+```
+
+### GitHub Releases
+
 从 [GitHub Releases](https://github.com/lz-wang/m2h/releases/latest) 下载对应平台和架构的压缩包，解压后将 `m2h`（Windows 为 `m2h.exe`）加入 `PATH`。
 
 ```text

@@ -17,6 +17,7 @@
 
 ### 新增
 
+- 支持通过 `brew install lz-wang/tap/m2h` 在 macOS 与 Linux 安装和升级 m2h；正式 GitHub Release 成功后会自动更新并验证 Homebrew Formula。
 - 目录预览新增文档目录（TOC）面板：工具栏 TOC 按钮可切换右侧目录，初始状态由 `preview --toc`（默认 `true`）控制并随 `?toc` 写入地址栏；目录条目与正文锚点共享同一套 GitHub 兼容 id（含中文与重复标题），滚动时高亮当前小节，点击平滑跳转，窄于 1200px 时隐藏。
 - 目录预览网页新增简洁的 `m>` SVG 图标，以 Markdown 折线和 HTML 尖括号表达从 Markdown 到 HTML 的转换。
 - `convert`、单文件 `preview` 与目录预览默认原样渲染 Markdown 中的 HTML，并移除 `--unsafe-html` 参数；Markdown 链接和图片中的危险 URL 仍会被安全处理。
