@@ -80,7 +80,7 @@ func TestCommandHelpDocumentsContract(t *testing.T) {
 		{
 			command: "convert",
 			want: []string{
-				"--output", "-o", "--glob", "--depth", "-d", "(default: 2)",
+				"--output", "-o", "--glob", "--depth", "-d", "(default: 4)",
 				"--mode", "(default: \"auto\")", "--width", "(default: \"standard\")", "--copy-assets", "(default: true)",
 			},
 		},
@@ -89,7 +89,7 @@ func TestCommandHelpDocumentsContract(t *testing.T) {
 			want: []string{
 				"--host", "(default: \"127.0.0.1\")", "--port", "-p", "(default: 8793)",
 				"--browser", "--mode", "(default: \"auto\")", "--width", "(default: \"standard\")", "--glob",
-				"--depth", "-d", "(default: 2)",
+				"--depth", "-d", "(default: 4)",
 			},
 		},
 		{command: "view", want: []string{"--mode", "(default: \"auto\")"}},
@@ -201,7 +201,8 @@ func TestPreviewCommandForwardsOptions(t *testing.T) {
 		t.Fatalf("preview result stdout=%q stderr=%q err=%v", stdout, stderr, err)
 	}
 	if captured.Input != "guide.md" || captured.Host != "0.0.0.0" || captured.Port != 9142 ||
-		captured.Mode != markdown.ModeDark || !captured.Browser || captured.Log == nil ||
+		captured.Mode != markdown.ModeDark || captured.Depth != defaultDepth || captured.DepthSet ||
+		!captured.Browser || captured.Log == nil ||
 		captured.UI == nil {
 		t.Fatalf("preview options = %+v", captured)
 	}

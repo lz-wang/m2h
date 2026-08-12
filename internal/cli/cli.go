@@ -20,7 +20,7 @@ import (
 )
 
 const (
-	defaultDepth = 2
+	defaultDepth = 4
 	defaultHost  = server.DefaultHost
 	defaultMode  = "auto"
 	defaultWidth = "standard"

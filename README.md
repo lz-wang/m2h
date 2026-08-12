@@ -43,7 +43,7 @@ $ m2h convert docs --output public/docs --depth 3 --glob '**/plan_*.md'
 | --- | --- |
 | `--output`, `-o` | 单文件的目标 HTML，或目录转换的目标目录。 |
 | `--glob` | 按相对输入目录的路径筛选 Markdown，例如 `'**/guide_*.md'`。仅目录可用。 |
-| `--depth`, `-d` | 最大递归深度；默认 `2`。 |
+| `--depth`, `-d` | 最大递归深度；默认 `4`。 |
 | `--copy-assets` | 是否复制非 Markdown 资源；默认 `true`。 |
 | `--mode` | 页面主题：`light`、`dark` 或 `auto`；默认 `auto`。 |
 | `--width` | 正文宽度：`standard`（980px）、`wide`（1280px）或 `full`；默认 `standard`。 |
@@ -68,7 +68,7 @@ $ m2h preview docs --browser --mode dark --width wide
 | `--mode` | 页面主题：`light`、`dark` 或 `auto`；默认 `auto`。 |
 | `--width` | 正文宽度：`standard`、`wide` 或 `full`；默认 `standard`。 |
 | `--glob` | 按相对输入目录的路径筛选 Markdown。仅目录可用。 |
-| `--depth`, `-d` | 最大递归深度；默认 `2`。仅目录可用。 |
+| `--depth`, `-d` | 最大递归深度；默认 `4`。仅目录可用。 |
 
 单文件预览会在文件变化后自动刷新。目录预览可通过界面中的刷新按钮重新扫描文件；选择始终保留在 URL 中，非默认主题和正文宽度也会保留，自动主题与标准宽度则省略，便于分享和返回。
 
