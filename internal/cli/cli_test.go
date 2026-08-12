@@ -62,7 +62,7 @@ func TestRootHelpDocumentsCommands(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("root help wrote stderr %q", stderr)
 	}
-	for _, want := range []string{"preview", "version", "--version", "-v", "--output"} {
+	for _, want := range []string{"web", "version", "--version", "-v", "--output"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("root help does not contain %q:\n%s", want, stdout)
 		}
@@ -87,12 +87,13 @@ func TestHelpDocumentsContract(t *testing.T) {
 			},
 		},
 		{
-			name: "preview",
-			args: []string{"preview", "--help"},
+			name: "web",
+			args: []string{"web", "--help"},
 			want: []string{
 				"--host", "(default: \"127.0.0.1\")", "--port", "-p", "(default: 8793)",
-				"--browser", "--mode", "(default: \"auto\")", "--width", "(default: \"standard\")",
-				"--toc", "(default: true)", "--glob", "--depth", "-d", "(default: 4)",
+				"--[no-]open", "(default: true)", "--mode", "(default: \"auto\")",
+				"--width", "(default: \"standard\")", "--toc", "(default: true)",
+				"--glob", "--depth", "-d", "(default: 4)",
 			},
 		},
 	}
@@ -126,7 +127,7 @@ func TestUnknownFlagsReturnStableError(t *testing.T) {
 		{"README.md", "--unknown"},
 		{"README.md", "--unsafe-html"},
 		{"README.md", "--toc"},
-		{"preview", "README.md", "--unsafe-html"},
+		{"web", "README.md", "--unsafe-html"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -138,7 +139,7 @@ func TestUnknownFlagsReturnStableError(t *testing.T) {
 	}
 }
 
-func TestPreviewCommandForwardsOptions(t *testing.T) {
+func TestWebForwardsOptions(t *testing.T) {
 	previous := runPreview
 	t.Cleanup(func() { runPreview = previous })
 
@@ -149,28 +150,27 @@ func TestPreviewCommandForwardsOptions(t *testing.T) {
 	}
 	stdout, stderr, err := runCommand(
 		t,
-		"preview", "guide.md",
+		"web", "guide.md",
 		"--host", "0.0.0.0",
 		"--port", "9142",
-		"--browser",
 		"--mode", "dark",
 	)
 	if err != nil || stdout != "" || stderr != "" {
-		t.Fatalf("preview result stdout=%q stderr=%q err=%v", stdout, stderr, err)
+		t.Fatalf("web result stdout=%q stderr=%q err=%v", stdout, stderr, err)
 	}
 	if captured.Input != "guide.md" || captured.Host != "0.0.0.0" || captured.Port != 9142 ||
 		captured.Mode != markdown.ModeDark || captured.Depth != defaultDepth || captured.DepthSet ||
 		!captured.Browser || captured.Log == nil ||
 		captured.UI == nil {
-		t.Fatalf("preview options = %+v", captured)
+		t.Fatalf("web options = %+v", captured)
 	}
-	// --toc defaults to true but the flag is unset, so TOCSet must be false.
+	// --open and --toc default to true but neither flag is set explicitly.
 	if !captured.TOC || captured.TOCSet {
-		t.Fatalf("preview toc = %+v, want TOC=true TOCSet=false", captured)
+		t.Fatalf("web toc = %+v, want TOC=true TOCSet=false", captured)
 	}
 }
 
-func TestPreviewCommandForwardsTOCFlag(t *testing.T) {
+func TestWebOpensBrowserByDefault(t *testing.T) {
 	previous := runPreview
 	t.Cleanup(func() { runPreview = previous })
 
@@ -179,34 +179,68 @@ func TestPreviewCommandForwardsTOCFlag(t *testing.T) {
 		captured = options
 		return nil
 	}
-	_, _, err := runCommand(t, "preview", "guide.md", "--toc=false")
-	if err != nil {
-		t.Fatalf("preview --toc=false returned error: %v", err)
+	if _, _, err := runCommand(t, "web", "guide.md"); err != nil {
+		t.Fatalf("web returned error: %v", err)
 	}
-	if captured.TOC || !captured.TOCSet {
-		t.Fatalf("preview toc = %+v, want TOC=false TOCSet=true", captured)
-	}
-
-	_, _, err = runCommand(t, "preview", "guide.md", "--toc=true")
-	if err != nil {
-		t.Fatalf("preview --toc=true returned error: %v", err)
-	}
-	if !captured.TOC || !captured.TOCSet {
-		t.Fatalf("preview toc = %+v, want TOC=true TOCSet=true", captured)
+	if !captured.Browser {
+		t.Fatalf("web Browser = false, want true by default")
 	}
 }
 
-func TestPreviewCommandValidatesArgumentsAndPort(t *testing.T) {
+func TestWebNoOpen(t *testing.T) {
+	previous := runPreview
+	t.Cleanup(func() { runPreview = previous })
+
+	var captured server.Options
+	runPreview = func(_ context.Context, options server.Options) error {
+		captured = options
+		return nil
+	}
+	if _, _, err := runCommand(t, "web", "guide.md", "--no-open"); err != nil {
+		t.Fatalf("web --no-open returned error: %v", err)
+	}
+	if captured.Browser {
+		t.Fatalf("web Browser = true, want false with --no-open")
+	}
+}
+
+func TestWebForwardsTOCFlag(t *testing.T) {
+	previous := runPreview
+	t.Cleanup(func() { runPreview = previous })
+
+	var captured server.Options
+	runPreview = func(_ context.Context, options server.Options) error {
+		captured = options
+		return nil
+	}
+	_, _, err := runCommand(t, "web", "guide.md", "--toc=false")
+	if err != nil {
+		t.Fatalf("web --toc=false returned error: %v", err)
+	}
+	if captured.TOC || !captured.TOCSet {
+		t.Fatalf("web toc = %+v, want TOC=false TOCSet=true", captured)
+	}
+
+	_, _, err = runCommand(t, "web", "guide.md", "--toc=true")
+	if err != nil {
+		t.Fatalf("web --toc=true returned error: %v", err)
+	}
+	if !captured.TOC || !captured.TOCSet {
+		t.Fatalf("web toc = %+v, want TOC=true TOCSet=true", captured)
+	}
+}
+
+func TestWebValidatesArgumentsAndPort(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
 		args []string
 		want string
 	}{
-		{args: []string{"preview"}, want: "Error: preview requires exactly one file or directory"},
-		{args: []string{"preview", "one.md", "two.md"}, want: "Error: preview requires exactly one file or directory"},
-		{args: []string{"preview", "missing.md", "--port", "0"}, want: "Error: --port must be between 1 and 65535"},
-		{args: []string{"preview", "missing.md", "--port", "65536"}, want: "Error: --port must be between 1 and 65535"},
+		{args: []string{"web"}, want: "Error: web requires exactly one file or directory"},
+		{args: []string{"web", "one.md", "two.md"}, want: "Error: web requires exactly one file or directory"},
+		{args: []string{"web", "missing.md", "--port", "0"}, want: "Error: --port must be between 1 and 65535"},
+		{args: []string{"web", "missing.md", "--port", "65536"}, want: "Error: --port must be between 1 and 65535"},
 	} {
 		_, _, err := runCommand(t, test.args...)
 		if err == nil || err.Error() != test.want {
@@ -306,7 +340,7 @@ func TestModeValidationRunsBeforeFeatureHandlers(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"README.md", "--mode", "sepia"},
-		{"preview", "README.md", "--mode", "sepia"},
+		{"web", "README.md", "--mode", "sepia"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -323,7 +357,7 @@ func TestWidthValidationRunsBeforeFeatureHandlers(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"README.md", "--width", "narrow"},
-		{"preview", "README.md", "--width", "narrow"},
+		{"web", "README.md", "--width", "narrow"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -338,7 +372,7 @@ func TestWidthValidationRunsBeforeFeatureHandlers(t *testing.T) {
 func TestInvalidFlagValueGetsStablePrefix(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := runCommand(t, "preview", "README.md", "--port", "many")
+	_, _, err := runCommand(t, "web", "README.md", "--port", "many")
 	if err == nil {
 		t.Fatal("preview accepted a non-integer port")
 	}

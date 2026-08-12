@@ -50,7 +50,7 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 		),
 		Commands: []*urfavecli.Command{
 			versionCommand(info),
-			previewCommand(ui),
+			webCommand(ui),
 		},
 		OnUsageError: normalizeUsageError,
 	}
@@ -127,10 +127,10 @@ func convertAction(ctx context.Context, command *urfavecli.Command) error {
 	return fmt.Errorf("Error: %w", err)
 }
 
-func previewCommand(ui fs.FS) *urfavecli.Command {
+func webCommand(ui fs.FS) *urfavecli.Command {
 	return &urfavecli.Command{
-		Name:      "preview",
-		Usage:     "preview Markdown in a browser",
+		Name:      "web",
+		Usage:     "view Markdown in a browser",
 		ArgsUsage: "<file|directory>",
 		Flags: []urfavecli.Flag{
 			&urfavecli.StringFlag{Name: "host", Value: defaultHost, Usage: "listen host"},
@@ -146,7 +146,7 @@ func previewCommand(ui fs.FS) *urfavecli.Command {
 					return nil
 				},
 			},
-			&urfavecli.BoolFlag{Name: "browser", Usage: "open the default browser after listening"},
+			&urfavecli.BoolWithInverseFlag{Name: "open", Value: true, Usage: "open the default browser after listening"},
 			modeFlag(),
 			widthFlag(),
 			&urfavecli.BoolFlag{
@@ -159,7 +159,7 @@ func previewCommand(ui fs.FS) *urfavecli.Command {
 			&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth"},
 		},
 		Action: func(ctx context.Context, command *urfavecli.Command) error {
-			return previewAction(ctx, command, ui)
+			return webAction(ctx, command, ui)
 		},
 		OnUsageError: normalizeUsageError,
 	}
@@ -167,9 +167,9 @@ func previewCommand(ui fs.FS) *urfavecli.Command {
 
 var runPreview = server.Run
 
-func previewAction(ctx context.Context, command *urfavecli.Command, ui fs.FS) error {
+func webAction(ctx context.Context, command *urfavecli.Command, ui fs.FS) error {
 	if command.Args().Len() != 1 {
-		return fmt.Errorf("Error: preview requires exactly one file or directory")
+		return fmt.Errorf("Error: web requires exactly one file or directory")
 	}
 	err := runPreview(ctx, server.Options{
 		Input:      command.Args().First(),
@@ -177,7 +177,7 @@ func previewAction(ctx context.Context, command *urfavecli.Command, ui fs.FS) er
 		Port:       command.Int("port"),
 		Mode:       markdown.Mode(command.String("mode")),
 		Width:      markdown.Width(command.String("width")),
-		Browser:    command.Bool("browser"),
+		Browser:    command.Bool("open"),
 		TOC:        command.Bool("toc"),
 		Pattern:    command.String("glob"),
 		Depth:      command.Int("depth"),
