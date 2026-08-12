@@ -4,7 +4,7 @@
 
 # m2h
 
-`m2h` 是一个 Markdown 命令行工具：将文件转换为可离线打开的 HTML，在浏览器中预览文件或目录，或直接在终端阅读。
+`m2h` 是一个 Markdown → HTML 命令行工具，支持将 Markdown 转换为可离线打开的 HTML，以及在浏览器中实时预览单个文件或目录。
 
 ## 安装
 
@@ -39,7 +39,6 @@ m2h_<version>_windows_{amd64,arm64}.zip
 ```console
 $ m2h convert README.md
 $ m2h preview docs --browser
-$ m2h view README.md
 ```
 
 使用 `m2h version` 或 `m2h --version` 查看当前版本。
@@ -101,18 +100,9 @@ $ m2h preview docs --browser --mode dark --width wide
 
 单文件与目录预览共用同一 Web 界面：保存 Markdown 后通过局部刷新更新当前文档正文，保留主题、宽度、文档目录与导航状态。预览选项始终保留在 URL 中，非默认主题、正文宽度与关闭的文档目录（`?toc=false`）也会保留，自动主题、标准宽度与开启的文档目录则省略，便于分享和返回。目录预览额外提供可搜索的文件侧边栏；正文右侧的文档目录列出 H2–H4 标题，滚动时高亮当前小节，点击可跳转。
 
-## 在终端中阅读
-
-```console
-$ m2h view README.md
-$ NO_COLOR=1 m2h view guide.md --mode dark
-```
-
-`view` 只接受单个 Markdown 文件，不启动 Web 服务。`--mode` 可选 `light`、`dark` 或 `auto`；`auto` 会尝试匹配终端背景。设置非空的 `NO_COLOR` 或将输出重定向时，会自动移除 ANSI 颜色。
-
 ## GFM 兼容性
 
-`convert` 与浏览器 `preview` 使用相同的渲染规则。下表中的特性均可用于生成的 HTML 和浏览器预览；`view` 支持基础 GFM 与 emoji，脚注和 alerts 会分别以字面文本和普通引用显示，数学公式与 Mermaid 图表不在终端渲染。
+`convert` 与 `preview` 共用同一套 Markdown 解析和 HTML 渲染规则，因此 GFM、脚注、GitHub Alerts、数学公式、Mermaid、原始 HTML 等语义在两种模式下保持一致。
 
 | 特性 | 简单示例 |
 | --- | --- |

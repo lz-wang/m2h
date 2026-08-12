@@ -8,6 +8,7 @@
 
 - `新增`：面向用户的新特性。
 - `修复`：面向用户的故障修复。
+- `移除`：面向用户的特性或能力移除。
 
 内部重构、测试、构建和文档维护不进入发布摘要，除非它们直接交付新特性或修复用户可见故障。
 
@@ -16,6 +17,12 @@
 ### 新增
 
 - 统一预览架构：单文件与目录预览共用同一 React WebUI、HTTP handler 与 Markdown 渲染管线；新增 `previewScope` 表达预览的可访问文档边界，单文件不再以独立 HTML 形式渲染。Markdown 文件保存后通过 Server-Sent Events 局部刷新当前文档正文，不再整页 reload，主题、宽度、文档目录与导航状态均被保留（目录预览因此首次支持文件变更自动刷新）。`/api/files` 新增 `kind` 字段区分单文件与目录预览，单文件模式下隐藏文件侧边栏，仅保留正文与工具栏。
+
+### 移除
+
+- 移除 `view` 子命令及终端 Markdown 渲染能力。
+- 移除 Glamour、Lipgloss 和 ANSI terminal renderer 相关依赖。
+- CLI 收敛为 `convert`、`preview` 和 `version`。
 
 ### 修复
 
