@@ -268,7 +268,7 @@ export function useDirectoryPreview(
   const select = useCallback(
     async (path: string, hash = "") => {
       if (!filesRef.current.some((file) => file.path === path)) {
-        setError("所选文档已不在文件列表中，请刷新后重试。");
+        setError("所选文档已不在文件列表中，请重新加载后重试。");
         setPhase("error");
         return;
       }
@@ -359,7 +359,7 @@ function applyTheme(mode: Mode, autoDark?: boolean): void {
 
 function documentError(reason: unknown): string {
   if (reason instanceof APIError && reason.status === 404) {
-    return "文档已被删除或不再符合当前筛选条件，请刷新文件列表。";
+    return "文档已被删除或不再符合当前筛选条件，请重新加载后重试。";
   }
   if (reason instanceof APIError && reason.status === 422) {
     return "Frontmatter 格式无效，请检查 YAML。";

@@ -7,7 +7,6 @@ import {
   Inbox,
   LoaderCircle,
   Maximize2,
-  MonitorCog,
   Moon,
   RefreshCw,
   Scaling,
@@ -63,7 +62,7 @@ interface AppProps {
 }
 
 const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
-  { value: "auto", label: "跟随系统", icon: MonitorCog },
+  { value: "auto", label: "跟随系统", icon: SunMoon },
   { value: "light", label: "浅色", icon: Sun },
   { value: "dark", label: "深色", icon: Moon },
 ];
@@ -264,32 +263,12 @@ export function App({ api }: AppProps) {
                 width={preview.width}
                 onChange={preview.setWidth}
               />
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label="刷新文件列表"
-                      disabled={preview.phase === "loading-files"}
-                      onClick={() => void preview.refresh()}
-                    >
-                      <RefreshCw
-                        className={
-                          preview.phase === "loading-files" ? "is-spinning" : ""
-                        }
-                      />
-                    </Button>
-                  }
-                />
-                <TooltipContent side="bottom">重新扫描目录</TooltipContent>
-              </Tooltip>
+              <ThemeMenu mode={preview.mode} onChange={preview.setMode} />
               <TOCToggle
                 enabled={preview.toc}
                 available={tocItems.length > 0}
                 onChange={preview.setTOC}
               />
-              <ThemeMenu mode={preview.mode} onChange={preview.setMode} />
             </div>
           </header>
 
@@ -636,7 +615,7 @@ function PreviewContent({
       <section className="state-panel" aria-live="polite">
         <Inbox aria-hidden="true" />
         <p>目录中没有 Markdown 文件</p>
-        <span>添加 .md 或 .markdown 文件后点击刷新。</span>
+        <span>添加 .md 或 .markdown 文件后重新打开预览。</span>
       </section>
     );
   }

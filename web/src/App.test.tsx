@@ -198,36 +198,11 @@ describe("App directory preview", () => {
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
 
-  it("keeps the current document on refresh and falls back after deletion", async () => {
-    const user = userEvent.setup();
-    const listFiles = vi
-      .fn<PreviewAPI["listFiles"]>()
-      .mockResolvedValueOnce(initialFiles)
-      .mockResolvedValueOnce(initialFiles)
-      .mockResolvedValueOnce({
-        files: initialFiles.files.filter((file) => file.path === "README.md"),
-        defaultPath: "README.md",
-      });
-    const api = createAPI({ listFiles });
-    render(<App api={api} />);
+  it("does not expose a manual directory refresh control", async () => {
+    render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
 
-    await user.click(screen.getByRole("button", { name: "guides" }));
-    await user.click(
-      screen.getByRole("button", { name: "Setup API Title，guides/setup.md" }),
-    );
-    await screen.findByText("Body for guides/setup.md");
-
-    await user.click(screen.getByRole("button", { name: "刷新文件列表" }));
-    await screen.findByText("Body for guides/setup.md");
-    expect(window.location.pathname).toBe("/doc/guides/setup.md");
-
-    await user.click(screen.getByRole("button", { name: "刷新文件列表" }));
-    await screen.findByText("Body for README.md");
-    expect(window.location.pathname + window.location.search).toBe(
-      "/doc/README.md",
-    );
-    expect(listFiles).toHaveBeenCalledTimes(3);
+    expect(screen.queryByRole("button", { name: "刷新文件列表" })).toBeNull();
   });
 
   it("supports keyboard tree toggles and the theme menu", async () => {
@@ -268,7 +243,7 @@ describe("App directory preview", () => {
     expect(
       screen
         .getByRole("button", { name: "显示主题：跟随系统" })
-        .querySelector(".lucide-monitor-cog"),
+        .querySelector(".lucide-sun-moon"),
     ).toBeTruthy();
     await user.click(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
@@ -283,7 +258,7 @@ describe("App directory preview", () => {
     ).toBeTruthy();
   });
 
-  it("shows consistent tooltips for every toolbar action except the title", async () => {
+  it("shows consistent tooltips for non-TOC toolbar actions except the title", async () => {
     const user = userEvent.setup();
     render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
@@ -291,7 +266,6 @@ describe("App directory preview", () => {
     const targets = [
       [screen.getByRole("button", { name: "切换文件导航" }), "收起文件导航"],
       [screen.getByRole("button", { name: "文档宽度：标准" }), "调整文档宽度"],
-      [screen.getByRole("button", { name: "刷新文件列表" }), "重新扫描目录"],
       [
         screen.getByRole("button", { name: "显示主题：跟随系统" }),
         "切换显示主题",
@@ -312,6 +286,22 @@ describe("App directory preview", () => {
     expect(
       screen.queryByText("README.md", { selector: '[role="tooltip"]' }),
     ).toBeNull();
+  });
+
+  it("places the TOC control at the right edge of the toolbar", async () => {
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    const tocToggle = screen.getByRole("button", {
+      name: "当前文档没有目录",
+    });
+    const themeToggle = screen.getByRole("button", {
+      name: "显示主题：跟随系统",
+    });
+    expect(
+      tocToggle.compareDocumentPosition(themeToggle) &
+        Node.DOCUMENT_POSITION_PRECEDING,
+    ).toBe(Node.DOCUMENT_POSITION_PRECEDING);
   });
 
   it("filters documents locally by title and file name", async () => {

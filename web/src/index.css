@@ -209,7 +209,7 @@ body,
   height: 3rem;
   flex-shrink: 0;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.25rem;
   padding: 0 0.75rem;
   background: var(--background);
 }
@@ -259,7 +259,7 @@ body,
   display: inline-flex;
   min-width: 0;
   align-items: center;
-  gap: 0.25rem;
+  gap: 0.125rem;
 }
 
 .document-meta-item > svg {
@@ -693,7 +693,7 @@ body,
 
 @media (max-width: 767px) {
   .reader-toolbar {
-    gap: 0.4rem;
+    gap: 0.25rem;
     padding: 0 0.5rem;
   }
 
