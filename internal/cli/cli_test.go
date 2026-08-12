@@ -38,7 +38,7 @@ func testUI() fs.FS {
 func TestVersionCommandsMatch(t *testing.T) {
 	t.Parallel()
 
-	for _, args := range [][]string{{"version"}, {"--version"}} {
+	for _, args := range [][]string{{"--version"}, {"-v"}} {
 		stdout, stderr, err := runCommand(t, args...)
 		if err != nil {
 			t.Fatalf("m2h %v returned error: %v", args, err)
@@ -62,7 +62,7 @@ func TestRootHelpDocumentsCommands(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("root help wrote stderr %q", stderr)
 	}
-	for _, want := range []string{"web", "version", "--version", "-v", "--output"} {
+	for _, want := range []string{"web", "--version", "-v", "--output"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("root help does not contain %q:\n%s", want, stdout)
 		}
@@ -132,6 +132,27 @@ func TestUnknownFlagsReturnStableError(t *testing.T) {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
 			t.Fatalf("m2h %v succeeded, want error", args)
+		}
+		if got, want := err.Error(), "Error: unknown option"; got != want {
+			t.Fatalf("m2h %v error = %q, want %q", args, got, want)
+		}
+	}
+}
+
+func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{
+		{"web", "README.md", "--output", "out.html"},
+		{"web", "README.md", "--copy-assets=false"},
+		{"README.md", "--port", "9000"},
+		{"README.md", "--host", "0.0.0.0"},
+		{"README.md", "--toc"},
+		{"README.md", "--open"},
+	} {
+		_, _, err := runCommand(t, args...)
+		if err == nil {
+			t.Fatalf("m2h %v succeeded, want unknown option", args)
 		}
 		if got, want := err.Error(), "Error: unknown option"; got != want {
 			t.Fatalf("m2h %v error = %q, want %q", args, got, want)

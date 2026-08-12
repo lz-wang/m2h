@@ -35,8 +35,8 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 
 	command := &urfavecli.Command{
 		Name:        "m2h",
-		Usage:       "convert and preview GitHub-flavored Markdown as HTML",
-		UsageText:   "m2h [global options] command [command options]",
+		Usage:       "convert GitHub-flavored Markdown to HTML",
+		UsageText:   "m2h [options] <file|directory>\n   m2h web [options] <file|directory>",
 		HideVersion: true,
 		Writer:      stdout,
 		ErrWriter:   stderr,
@@ -46,10 +46,10 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 				Name:    "version",
 				Aliases: []string{"v"},
 				Usage:   "print the m2h version",
+				Local:   true,
 			},
 		),
 		Commands: []*urfavecli.Command{
-			versionCommand(info),
 			webCommand(ui),
 		},
 		OnUsageError: normalizeUsageError,
@@ -64,24 +64,13 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 	return command, nil
 }
 
-func versionCommand(info version.Info) *urfavecli.Command {
-	return &urfavecli.Command{
-		Name:  "version",
-		Usage: "print the m2h version",
-		Action: func(_ context.Context, command *urfavecli.Command) error {
-			return info.Write(command.Root().Writer)
-		},
-		OnUsageError: normalizeUsageError,
-	}
-}
-
 // conversionFlags returns the Markdown-to-HTML options for the default convert
 // action on the root command.
 func conversionFlags() []urfavecli.Flag {
 	return []urfavecli.Flag{
-		&urfavecli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "write to an HTML file or output directory"},
-		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob"},
-		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth"},
+		&urfavecli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "write to an HTML file or output directory", Local: true},
+		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
+		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
 		modeFlag(),
 		widthFlag(),
 		&urfavecli.BoolFlag{
@@ -89,6 +78,7 @@ func conversionFlags() []urfavecli.Flag {
 			Value:       true,
 			DefaultText: "true",
 			Usage:       "copy non-Markdown assets in directory mode",
+			Local:       true,
 		},
 	}
 }
@@ -133,12 +123,13 @@ func webCommand(ui fs.FS) *urfavecli.Command {
 		Usage:     "view Markdown in a browser",
 		ArgsUsage: "<file|directory>",
 		Flags: []urfavecli.Flag{
-			&urfavecli.StringFlag{Name: "host", Value: defaultHost, Usage: "listen host"},
+			&urfavecli.StringFlag{Name: "host", Value: defaultHost, Usage: "listen host", Local: true},
 			&urfavecli.IntFlag{
 				Name:    "port",
 				Aliases: []string{"p"},
 				Value:   defaultPort,
 				Usage:   "listen port",
+				Local:   true,
 				Validator: func(value int) error {
 					if value < 1 || value > 65535 {
 						return fmt.Errorf("Error: --port must be between 1 and 65535")
@@ -146,7 +137,7 @@ func webCommand(ui fs.FS) *urfavecli.Command {
 					return nil
 				},
 			},
-			&urfavecli.BoolWithInverseFlag{Name: "open", Value: true, Usage: "open the default browser after listening"},
+			&urfavecli.BoolWithInverseFlag{Name: "open", Value: true, Usage: "open the default browser after listening", Local: true},
 			modeFlag(),
 			widthFlag(),
 			&urfavecli.BoolFlag{
@@ -154,9 +145,10 @@ func webCommand(ui fs.FS) *urfavecli.Command {
 				Value:       defaultTOC,
 				DefaultText: "true",
 				Usage:       "show the document table of contents",
+				Local:       true,
 			},
-			&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob"},
-			&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth"},
+			&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
+			&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
 		},
 		Action: func(ctx context.Context, command *urfavecli.Command) error {
 			return webAction(ctx, command, ui)
@@ -199,6 +191,7 @@ func modeFlag() *urfavecli.StringFlag {
 		Value:            defaultMode,
 		Usage:            "color mode: light, dark, or auto",
 		ValidateDefaults: true,
+		Local:            true,
 		Validator: func(value string) error {
 			switch value {
 			case "light", "dark", "auto":
@@ -216,6 +209,7 @@ func widthFlag() *urfavecli.StringFlag {
 		Value:            defaultWidth,
 		Usage:            "document width: standard, wide, or full",
 		ValidateDefaults: true,
+		Local:            true,
 		Validator: func(value string) error {
 			switch value {
 			case "standard", "wide", "full":
