@@ -2,6 +2,8 @@
   <img src="web/public/favicon.svg" alt="m2h Logo" width="120" height="120">
 </p>
 
+[![codecov](https://codecov.io/gh/lz-wang/m2h/graph/badge.svg?token=iNo6LuOlzm)](https://codecov.io/gh/lz-wang/m2h)
+
 # m2h
 
 `m2h` 是一个 Markdown → HTML 命令行工具，支持将 Markdown 转换为可离线打开的 HTML，以及在浏览器中实时预览单个文件或目录。
@@ -98,11 +100,9 @@ $ m2h web docs --mode dark --width wide
 | `--glob` | 按相对输入目录的路径筛选 Markdown。仅目录可用。 |
 | `--depth`, `-d` | 最大递归深度；默认 `4`。仅目录可用。 |
 
-单文件与目录预览共用同一 Web 界面：保存 Markdown 后通过局部刷新更新当前文档正文，保留主题、宽度、文档目录与导航状态。预览选项始终保留在 URL 中，非默认主题、正文宽度与关闭的文档目录（`?toc=false`）也会保留，自动主题、标准宽度与开启的文档目录则省略，便于分享和返回。目录预览额外提供可搜索的文件侧边栏；侧边栏底部可在新页面打开 GitHub 仓库与当前版本发布信息，开发版进入 Releases 列表；正文右侧的文档目录列出 H2–H4 标题，滚动时高亮当前小节，点击可跳转。
-
 ## GFM 兼容性
 
-默认转换与 `web` 共用同一套 Markdown 解析和 HTML 渲染规则，因此 GFM、脚注、GitHub Alerts、数学公式、Mermaid、原始 HTML 等语义在两种模式下保持一致。
+GFM语法参考 [https://github.github.com/gfm/](https://github.github.com/gfm/)
 
 | 特性 | 简单示例 |
 | --- | --- |
