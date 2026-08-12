@@ -160,17 +160,17 @@ func Title(source []byte, sourcePath string) (string, error) {
 	return extractTitle(document, source, normalized), nil
 }
 
-// NewGFM creates a Markdown engine with m2h's standard GFM extensions plus any
+// newGFM creates a Markdown engine with m2h's standard GFM extensions plus any
 // renderer-specific extensions supplied by the caller.
-func NewGFM(extraExtensions ...goldmark.Extender) goldmark.Markdown {
+func newGFM(extraExtensions ...goldmark.Extender) goldmark.Markdown {
 	extensions := append([]goldmark.Extender{extension.GFM}, extraExtensions...)
 	return goldmark.New(goldmark.WithExtensions(extensions...))
 }
 
-// SanitizeDangerousURLs removes link and image destinations that Goldmark's
+// sanitizeDangerousURLs removes link and image destinations that Goldmark's
 // HTML renderer would reject, allowing alternate renderers to share the same
 // default-safe URL contract.
-func SanitizeDangerousURLs(document ast.Node) error {
+func sanitizeDangerousURLs(document ast.Node) error {
 	return ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -190,7 +190,7 @@ func SanitizeDangerousURLs(document ast.Node) error {
 }
 
 func newEngine() goldmark.Markdown {
-	engine := NewGFM(
+	engine := newGFM(
 		extension.Footnote,
 		emoji.New(emoji.WithRenderingMethod(emoji.Unicode)),
 		AlertExtension,
@@ -242,7 +242,7 @@ func normalizeSourcePath(sourcePath string) (string, error) {
 }
 
 func rewriteDocument(document ast.Node, options RenderOptions) error {
-	if err := SanitizeDangerousURLs(document); err != nil {
+	if err := sanitizeDangerousURLs(document); err != nil {
 		return err
 	}
 	return ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
