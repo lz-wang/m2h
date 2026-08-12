@@ -36,10 +36,12 @@ type Options struct {
 	Mode       markdown.Mode
 	Width      markdown.Width
 	Browser    bool
+	TOC        bool
 	Pattern    string
 	Depth      int
 	PatternSet bool
 	DepthSet   bool
+	TOCSet     bool
 	Log        io.Writer
 	UI         fs.FS
 
@@ -132,7 +134,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 
 	address := previewURL(normalized.Host, listener.Addr())
 	if input.Kind == files.KindDirectory {
-		address = directoryPreviewURL(address, normalized.Mode, normalized.Width)
+		address = directoryPreviewURL(address, normalized.Mode, normalized.Width, normalized.TOC)
 	}
 	_, _ = fmt.Fprintf(logger, "m2h: previewing %s at %s\n", input.Path, address)
 	if normalized.OnListening != nil {
@@ -179,6 +181,9 @@ func normalizeOptions(options Options) (Options, error) {
 	if options.Width == "" {
 		options.Width = markdown.WidthStandard
 	}
+	if !options.TOCSet {
+		options.TOC = true
+	}
 	if options.Port < 1 || options.Port > 65535 {
 		return Options{}, fmt.Errorf("invalid port %d: expected 1 through 65535", options.Port)
 	}
@@ -213,13 +218,16 @@ func previewURL(host string, address net.Addr) string {
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
 }
 
-func directoryPreviewURL(address string, mode markdown.Mode, width markdown.Width) string {
+func directoryPreviewURL(address string, mode markdown.Mode, width markdown.Width, toc bool) string {
 	parameters := url.Values{}
 	if mode != markdown.ModeAuto {
 		parameters.Set("mode", string(mode))
 	}
 	if width != markdown.WidthStandard {
 		parameters.Set("width", string(width))
+	}
+	if !toc {
+		parameters.Set("toc", "false")
 	}
 	if query := parameters.Encode(); query != "" {
 		return address + "?" + query

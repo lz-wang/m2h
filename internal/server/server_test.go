@@ -274,6 +274,38 @@ func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
 	}
 }
 
+func TestRunDirectoryPreviewURLRespectsTOCFlag(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "README.md"), "# Directory")
+	ctx, cancel := context.WithCancel(context.Background())
+	listeningAddress := ""
+	deps := testDependencies()
+	deps.listen = func(string, string) (net.Listener, error) {
+		return net.Listen("tcp", "127.0.0.1:0")
+	}
+	deps.watch = func(context.Context, string, time.Duration, func(), io.Writer) error {
+		return errors.New("directory watcher must not run")
+	}
+	err := run(ctx, Options{
+		Input:  root + string(os.PathSeparator),
+		Mode:   markdown.ModeDark,
+		TOC:    false,
+		TOCSet: true,
+		OnListening: func(address string) {
+			listeningAddress = address
+			cancel()
+		},
+	}, deps)
+	if err != nil {
+		t.Fatalf("directory run error = %v", err)
+	}
+	if !strings.HasSuffix(listeningAddress, "/?mode=dark&toc=false") {
+		t.Fatalf("directory preview address = %q, want toc=false query", listeningAddress)
+	}
+}
+
 func TestDirectoryPreviewURLOmitsDefaultParameters(t *testing.T) {
 	t.Parallel()
 
@@ -281,15 +313,19 @@ func TestDirectoryPreviewURLOmitsDefaultParameters(t *testing.T) {
 		name  string
 		mode  markdown.Mode
 		width markdown.Width
+		toc   bool
 		want  string
 	}{
-		{name: "all defaults", mode: markdown.ModeAuto, width: markdown.WidthStandard, want: "http://127.0.0.1:8793/"},
-		{name: "non-default mode", mode: markdown.ModeDark, width: markdown.WidthStandard, want: "http://127.0.0.1:8793/?mode=dark"},
-		{name: "non-default width", mode: markdown.ModeAuto, width: markdown.WidthWide, want: "http://127.0.0.1:8793/?width=wide"},
-		{name: "both non-default", mode: markdown.ModeLight, width: markdown.WidthFull, want: "http://127.0.0.1:8793/?mode=light&width=full"},
+		{name: "all defaults", mode: markdown.ModeAuto, width: markdown.WidthStandard, toc: true, want: "http://127.0.0.1:8793/"},
+		{name: "non-default mode", mode: markdown.ModeDark, width: markdown.WidthStandard, toc: true, want: "http://127.0.0.1:8793/?mode=dark"},
+		{name: "non-default width", mode: markdown.ModeAuto, width: markdown.WidthWide, toc: true, want: "http://127.0.0.1:8793/?width=wide"},
+		{name: "both non-default", mode: markdown.ModeLight, width: markdown.WidthFull, toc: true, want: "http://127.0.0.1:8793/?mode=light&width=full"},
+		{name: "toc disabled", mode: markdown.ModeAuto, width: markdown.WidthStandard, toc: false, want: "http://127.0.0.1:8793/?toc=false"},
+		{name: "toc disabled with mode", mode: markdown.ModeDark, width: markdown.WidthStandard, toc: false, want: "http://127.0.0.1:8793/?mode=dark&toc=false"},
+		{name: "toc disabled with width", mode: markdown.ModeAuto, width: markdown.WidthWide, toc: false, want: "http://127.0.0.1:8793/?toc=false&width=wide"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := directoryPreviewURL("http://127.0.0.1:8793/", test.mode, test.width); got != test.want {
+			if got := directoryPreviewURL("http://127.0.0.1:8793/", test.mode, test.width, test.toc); got != test.want {
 				t.Fatalf("directoryPreviewURL() = %q, want %q", got, test.want)
 			}
 		})

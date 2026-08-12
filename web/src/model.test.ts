@@ -27,28 +27,64 @@ describe("route model", () => {
       path: "guide/space name.md",
       mode: "dark",
       width: "wide",
+      toc: true,
       hash: "#install",
     });
     expect(readRoute("/doc/%", "?mode=invalid")).toEqual({
       path: null,
       mode: "auto",
       width: "standard",
+      toc: true,
       hash: "",
     });
     expect(readRoute("/", "?mode=light")).toEqual({
       path: null,
       mode: "light",
       width: "standard",
+      toc: true,
       hash: "",
     });
-    expect(routeURL("guide/space name.md", "auto", "standard", "install")).toBe(
-      "/doc/guide/space%20name.md#install",
+    expect(readRoute("/doc/guide.md", "?toc=false")).toEqual({
+      path: "guide.md",
+      mode: "auto",
+      width: "standard",
+      toc: false,
+      hash: "",
+    });
+    // Unknown toc values fall back to the default (enabled), only the literal
+    // "false" disables it.
+    expect(readRoute("/doc/guide.md", "?toc=true").toc).toBe(true);
+    expect(readRoute("/doc/guide.md", "?toc=0").toc).toBe(true);
+    expect(
+      routeURL(
+        "guide/space name.md",
+        { mode: "auto", width: "standard", toc: true },
+        "install",
+      ),
+    ).toBe("/doc/guide/space%20name.md#install");
+    expect(
+      routeURL(
+        "guide/space name.md",
+        { mode: "auto", width: "full", toc: true },
+        "install",
+      ),
+    ).toBe("/doc/guide/space%20name.md?width=full#install");
+    expect(
+      routeURL(null, { mode: "light", width: "standard", toc: true }),
+    ).toBe("/?mode=light");
+    expect(routeURL(null, { mode: "dark", width: "wide", toc: true })).toBe(
+      "/?mode=dark&width=wide",
     );
-    expect(routeURL("guide/space name.md", "auto", "full", "install")).toBe(
-      "/doc/guide/space%20name.md?width=full#install",
+    expect(
+      routeURL("guide/space name.md", {
+        mode: "auto",
+        width: "standard",
+        toc: false,
+      }),
+    ).toBe("/doc/guide/space%20name.md?toc=false");
+    expect(routeURL(null, { mode: "dark", width: "wide", toc: false })).toBe(
+      "/?mode=dark&width=wide&toc=false",
     );
-    expect(routeURL(null, "light", "standard")).toBe("/?mode=light");
-    expect(routeURL(null, "dark", "wide")).toBe("/?mode=dark&width=wide");
   });
 
   it("chooses the requested, default, first, or empty document", () => {

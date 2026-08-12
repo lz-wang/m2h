@@ -7,7 +7,16 @@ export interface RouteState {
   path: string | null;
   mode: Mode;
   width: DocumentWidth;
+  toc: boolean;
   hash: string;
+}
+
+// ViewOptions bundles the URL-backed view preferences so routeURL stays stable
+// as new preferences are added instead of growing a positional argument list.
+export interface ViewOptions {
+  mode: Mode;
+  width: DocumentWidth;
+  toc: boolean;
 }
 
 export interface DirectoryNode {
@@ -38,37 +47,43 @@ export function readRoute(
   const width: DocumentWidth = isDocumentWidth(requestedWidth)
     ? requestedWidth
     : "standard";
+  // TOC defaults to true; only the explicit "false" value disables it. Any
+  // other value (including a missing parameter) keeps it on.
+  const toc = parameters.get("toc") !== "false";
   if (!pathname.startsWith("/doc/")) {
-    return { path: null, mode, width, hash: normalizeHash(hash) };
+    return { path: null, mode, width, toc, hash: normalizeHash(hash) };
   }
   const encoded = pathname.slice("/doc/".length);
   if (encoded === "") {
-    return { path: null, mode, width, hash: normalizeHash(hash) };
+    return { path: null, mode, width, toc, hash: normalizeHash(hash) };
   }
   try {
     return {
       path: decodeURIComponent(encoded),
       mode,
       width,
+      toc,
       hash: normalizeHash(hash),
     };
   } catch {
-    return { path: null, mode, width, hash: normalizeHash(hash) };
+    return { path: null, mode, width, toc, hash: normalizeHash(hash) };
   }
 }
 
 export function routeURL(
   path: string | null,
-  mode: Mode,
-  width: DocumentWidth,
+  options: ViewOptions,
   hash = "",
 ): string {
   const parameters = new URLSearchParams();
-  if (mode !== "auto") {
-    parameters.set("mode", mode);
+  if (options.mode !== "auto") {
+    parameters.set("mode", options.mode);
   }
-  if (width !== "standard") {
-    parameters.set("width", width);
+  if (options.width !== "standard") {
+    parameters.set("width", options.width);
+  }
+  if (!options.toc) {
+    parameters.set("toc", "false");
   }
   const query = parameters.toString();
   const search = query === "" ? "" : `?${query}`;

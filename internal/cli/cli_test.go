@@ -88,8 +88,8 @@ func TestCommandHelpDocumentsContract(t *testing.T) {
 			command: "preview",
 			want: []string{
 				"--host", "(default: \"127.0.0.1\")", "--port", "-p", "(default: 8793)",
-				"--browser", "--mode", "(default: \"auto\")", "--width", "(default: \"standard\")", "--glob",
-				"--depth", "-d", "(default: 4)",
+				"--browser", "--mode", "(default: \"auto\")", "--width", "(default: \"standard\")",
+				"--toc", "(default: true)", "--glob", "--depth", "-d", "(default: 4)",
 			},
 		},
 		{command: "view", want: []string{"--mode", "(default: \"auto\")"}},
@@ -123,6 +123,7 @@ func TestUnknownFlagsReturnStableError(t *testing.T) {
 		{"--unknown"},
 		{"convert", "README.md", "--unknown"},
 		{"convert", "README.md", "--unsafe-html"},
+		{"convert", "README.md", "--toc"},
 		{"preview", "README.md", "--unsafe-html"},
 	} {
 		_, _, err := runCommand(t, args...)
@@ -205,6 +206,36 @@ func TestPreviewCommandForwardsOptions(t *testing.T) {
 		!captured.Browser || captured.Log == nil ||
 		captured.UI == nil {
 		t.Fatalf("preview options = %+v", captured)
+	}
+	// --toc defaults to true but the flag is unset, so TOCSet must be false.
+	if !captured.TOC || captured.TOCSet {
+		t.Fatalf("preview toc = %+v, want TOC=true TOCSet=false", captured)
+	}
+}
+
+func TestPreviewCommandForwardsTOCFlag(t *testing.T) {
+	previous := runPreview
+	t.Cleanup(func() { runPreview = previous })
+
+	var captured server.Options
+	runPreview = func(_ context.Context, options server.Options) error {
+		captured = options
+		return nil
+	}
+	_, _, err := runCommand(t, "preview", "guide.md", "--toc=false")
+	if err != nil {
+		t.Fatalf("preview --toc=false returned error: %v", err)
+	}
+	if captured.TOC || !captured.TOCSet {
+		t.Fatalf("preview toc = %+v, want TOC=false TOCSet=true", captured)
+	}
+
+	_, _, err = runCommand(t, "preview", "guide.md", "--toc=true")
+	if err != nil {
+		t.Fatalf("preview --toc=true returned error: %v", err)
+	}
+	if !captured.TOC || !captured.TOCSet {
+		t.Fatalf("preview toc = %+v, want TOC=true TOCSet=true", captured)
 	}
 }
 

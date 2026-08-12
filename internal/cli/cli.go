@@ -25,6 +25,7 @@ const (
 	defaultMode  = "auto"
 	defaultWidth = "standard"
 	defaultPort  = server.DefaultPort
+	defaultTOC   = true
 )
 
 // New constructs the root command after validating the injected build version.
@@ -153,6 +154,12 @@ func previewCommand(ui fs.FS) *urfavecli.Command {
 			&urfavecli.BoolFlag{Name: "browser", Usage: "open the default browser after listening"},
 			modeFlag(),
 			widthFlag(),
+			&urfavecli.BoolFlag{
+				Name:        "toc",
+				Value:       defaultTOC,
+				DefaultText: "true",
+				Usage:       "show the document table of contents",
+			},
 			&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob"},
 			&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth"},
 		},
@@ -176,10 +183,12 @@ func previewAction(ctx context.Context, command *urfavecli.Command, ui fs.FS) er
 		Mode:       markdown.Mode(command.String("mode")),
 		Width:      markdown.Width(command.String("width")),
 		Browser:    command.Bool("browser"),
+		TOC:        command.Bool("toc"),
 		Pattern:    command.String("glob"),
 		Depth:      command.Int("depth"),
 		PatternSet: command.IsSet("glob"),
 		DepthSet:   command.IsSet("depth"),
+		TOCSet:     command.IsSet("toc"),
 		Log:        command.Root().ErrWriter,
 		UI:         ui,
 	})

@@ -28,6 +28,7 @@ export interface DirectoryPreviewState {
   document: DocumentResponse | null;
   mode: Mode;
   width: DocumentWidth;
+  toc: boolean;
   phase: PreviewPhase;
   error: string | null;
   assetError: string | null;
@@ -35,6 +36,7 @@ export interface DirectoryPreviewState {
   select(path: string, hash?: string): Promise<void>;
   setMode(mode: Mode): void;
   setWidth(width: DocumentWidth): void;
+  setTOC(toc: boolean): void;
   reportAssetError(source: string): void;
   retry(): Promise<void>;
 }
@@ -59,6 +61,7 @@ export function useDirectoryPreview(
   const [width, setWidthState] = useState<DocumentWidth>(
     initialRoute.current.width,
   );
+  const [toc, setTOCState] = useState<boolean>(initialRoute.current.toc);
   const [phase, setPhase] = useState<PreviewPhase>("loading-files");
   const [error, setError] = useState<string | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
@@ -67,16 +70,25 @@ export function useDirectoryPreview(
   const selectedPathRef = useRef<string | null>(null);
   const modeRef = useRef<Mode>(initialRoute.current.mode);
   const widthRef = useRef<DocumentWidth>(initialRoute.current.width);
+  const tocRef = useRef<boolean>(initialRoute.current.toc);
   const listController = useRef<AbortController | null>(null);
   const documentController = useRef<AbortController | null>(null);
   const documentRequest = useRef(0);
 
   const writeRoute = useCallback(
-    (path: string | null, nextMode: Mode, action: HistoryAction, hash = "") => {
+    (path: string | null, action: HistoryAction, hash = "") => {
       if (action === "none") {
         return;
       }
-      const url = routeURL(path, nextMode, widthRef.current, hash);
+      const url = routeURL(
+        path,
+        {
+          mode: modeRef.current,
+          width: widthRef.current,
+          toc: tocRef.current,
+        },
+        hash,
+      );
       if (action === "push") {
         window.history.pushState(null, "", url);
       } else {
@@ -87,12 +99,7 @@ export function useDirectoryPreview(
   );
 
   const loadDocument = useCallback(
-    async (
-      path: string,
-      nextMode: Mode,
-      historyAction: HistoryAction,
-      hash = "",
-    ) => {
+    async (path: string, historyAction: HistoryAction, hash = "") => {
       documentController.current?.abort();
       const controller = new AbortController();
       documentController.current = controller;
@@ -104,7 +111,7 @@ export function useDirectoryPreview(
       setAssetError(null);
       setError(null);
       setPhase("loading-document");
-      writeRoute(path, nextMode, historyAction, hash);
+      writeRoute(path, historyAction, hash);
       try {
         const loaded = await api.getDocument(path, controller.signal);
         if (request !== documentRequest.current || controller.signal.aborted) {
@@ -128,7 +135,7 @@ export function useDirectoryPreview(
   );
 
   const loadFiles = useCallback(
-    async (requested: string | null, nextMode: Mode, requestedHash = "") => {
+    async (requested: string | null, requestedHash = "") => {
       listController.current?.abort();
       documentController.current?.abort();
       documentRequest.current += 1;
@@ -155,11 +162,11 @@ export function useDirectoryPreview(
           setSelectedPath(null);
           setDocumentResponse(null);
           setPhase("empty");
-          writeRoute(null, nextMode, "replace");
+          writeRoute(null, "replace");
           return;
         }
         const targetHash = target === requested ? requestedHash : "";
-        await loadDocument(target, nextMode, "replace", targetHash);
+        await loadDocument(target, "replace", targetHash);
       } catch (reason: unknown) {
         if (controller.signal.aborted || isAbortError(reason)) {
           return;
@@ -172,11 +179,7 @@ export function useDirectoryPreview(
   );
 
   useEffect(() => {
-    void loadFiles(
-      initialRoute.current.path,
-      initialRoute.current.mode,
-      initialRoute.current.hash,
-    );
+    void loadFiles(initialRoute.current.path, initialRoute.current.hash);
     return () => {
       listController.current?.abort();
       documentController.current?.abort();
@@ -192,8 +195,10 @@ export function useDirectoryPreview(
       );
       modeRef.current = route.mode;
       widthRef.current = route.width;
+      tocRef.current = route.toc;
       setModeState(route.mode);
       setWidthState(route.width);
+      setTOCState(route.toc);
       const target = chooseDocument(
         filesRef.current,
         route.path,
@@ -204,16 +209,24 @@ export function useDirectoryPreview(
         setSelectedPath(null);
         setDocumentResponse(null);
         setPhase("empty");
-        writeRoute(null, route.mode, "replace");
+        writeRoute(null, "replace");
         return;
       }
       const targetHash = target === route.path ? route.hash : "";
-      const canonical = routeURL(target, route.mode, route.width, targetHash);
+      const canonical = routeURL(
+        target,
+        {
+          mode: route.mode,
+          width: route.width,
+          toc: route.toc,
+        },
+        targetHash,
+      );
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       if (canonical !== current) {
         window.history.replaceState(null, "", canonical);
       }
-      void loadDocument(target, route.mode, "none", targetHash);
+      void loadDocument(target, "none", targetHash);
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -249,11 +262,7 @@ export function useDirectoryPreview(
   }, [documentResponse]);
 
   const refresh = useCallback(async () => {
-    await loadFiles(
-      selectedPathRef.current,
-      modeRef.current,
-      window.location.hash,
-    );
+    await loadFiles(selectedPathRef.current, window.location.hash);
   }, [loadFiles]);
 
   const select = useCallback(
@@ -265,7 +274,7 @@ export function useDirectoryPreview(
       }
       const action: HistoryAction =
         path === selectedPathRef.current ? "replace" : "push";
-      await loadDocument(path, modeRef.current, action, hash);
+      await loadDocument(path, action, hash);
     },
     [loadDocument],
   );
@@ -274,12 +283,7 @@ export function useDirectoryPreview(
     (nextMode: Mode) => {
       modeRef.current = nextMode;
       setModeState(nextMode);
-      writeRoute(
-        selectedPathRef.current,
-        nextMode,
-        "replace",
-        window.location.hash,
-      );
+      writeRoute(selectedPathRef.current, "replace", window.location.hash);
     },
     [writeRoute],
   );
@@ -288,12 +292,16 @@ export function useDirectoryPreview(
     (nextWidth: DocumentWidth) => {
       widthRef.current = nextWidth;
       setWidthState(nextWidth);
-      writeRoute(
-        selectedPathRef.current,
-        modeRef.current,
-        "replace",
-        window.location.hash,
-      );
+      writeRoute(selectedPathRef.current, "replace", window.location.hash);
+    },
+    [writeRoute],
+  );
+
+  const setTOC = useCallback(
+    (nextTOC: boolean) => {
+      tocRef.current = nextTOC;
+      setTOCState(nextTOC);
+      writeRoute(selectedPathRef.current, "replace", window.location.hash);
     },
     [writeRoute],
   );
@@ -310,6 +318,7 @@ export function useDirectoryPreview(
     document: documentResponse,
     mode,
     width,
+    toc,
     phase,
     error,
     assetError,
@@ -317,6 +326,7 @@ export function useDirectoryPreview(
     select,
     setMode,
     setWidth,
+    setTOC,
     reportAssetError,
     retry: refresh,
   };
