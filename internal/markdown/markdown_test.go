@@ -56,6 +56,48 @@ func TestRenderRawHTMLAndSanitizesDangerousURLs(t *testing.T) {
 	}
 }
 
+func TestRenderRewritesPreviewRawHTMLURLs(t *testing.T) {
+	t.Parallel()
+
+	source := []byte(`<p align="center">
+  <img src="web/public/favicon.svg?raw=1#icon" alt="m2h Logo">
+  <a href="docs/guide.md#install">Guide</a>
+</p>`)
+	preview, err := Render(source, RenderOptions{
+		Mode:       ModeAuto,
+		Target:     TargetPreview,
+		SourcePath: "README.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`src="/assets/web/public/favicon.svg?raw=1#icon"`,
+		`href="/doc/docs/guide.md#install"`,
+	} {
+		if !strings.Contains(preview.Body, want) {
+			t.Errorf("preview raw HTML missing rewritten URL %q: %s", want, preview.Body)
+		}
+	}
+
+	convert, err := Render(source, RenderOptions{
+		Mode:       ModeAuto,
+		Target:     TargetConvert,
+		SourcePath: "README.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`src="web/public/favicon.svg?raw=1#icon"`,
+		`href="docs/guide.md#install"`,
+	} {
+		if !strings.Contains(convert.Body, want) {
+			t.Errorf("convert raw HTML changed URL %q: %s", want, convert.Body)
+		}
+	}
+}
+
 func TestRenderRewritesLocalLinksAtASTLevel(t *testing.T) {
 	t.Parallel()
 

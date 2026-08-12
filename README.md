@@ -129,7 +129,7 @@ $ NO_COLOR=1 m2h view guide.md --mode dark
 | GitHub Alerts | `> [!NOTE]` 后接提示内容。 |
 | 数学公式 | `$E = mc^2$`；行间公式使用 `$$...$$` |
 | Mermaid 图表 | 使用 ```` ```mermaid ```` 围栏，例如 `flowchart LR` 与 `A --> B`。 |
-| 原始 HTML | 直接渲染，例如 `<details>内容</details>`。 |
+| 原始 HTML | 直接渲染，例如 `<details>内容</details>`；`preview` 会通过安全附件路由加载标签中的相对本地资源。 |
 
 数学公式和 Mermaid 图表的运行时资源已包含在输出中，生成的 HTML 可离线打开。
 

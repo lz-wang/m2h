@@ -109,6 +109,7 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 	}
 
 	engine := newEngine()
+	addRawHTMLURLRewriter(engine, normalized)
 	context := parser.NewContext(parser.WithIDs(newGitHubIDs()))
 	document := engine.Parser().Parse(text.NewReader(source), parser.WithContext(context))
 	if err := rewriteDocument(document, normalized); err != nil {
