@@ -25,6 +25,9 @@ func TestStylesheetContractSnapshot(t *testing.T) {
 				".markdown-body",
 				"max-width: 980px",
 				"padding: 45px",
+				".m2h-code-copy",
+				"padding-right: 3.25rem",
+				"place-items: center",
 				"@media (max-width: 767px)",
 				"padding: 15px",
 				".chroma",
@@ -104,6 +107,24 @@ func TestRichAssetsEmbedded(t *testing.T) {
 		}
 		if info.Size() == 0 {
 			t.Errorf("embedded rich asset %q is empty", name)
+		}
+	}
+}
+
+func TestRichContentRuntimeAddsCodeCopyButtons(t *testing.T) {
+	t.Parallel()
+
+	runtime, err := fs.ReadFile(RichFS(), "rich-content.js")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"m2h-code-copy",
+		"window.isSecureContext",
+		`document.execCommand("copy")`,
+	} {
+		if !strings.Contains(string(runtime), want) {
+			t.Errorf("rich-content runtime does not contain %q", want)
 		}
 	}
 }

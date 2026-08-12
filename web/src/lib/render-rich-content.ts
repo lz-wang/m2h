@@ -13,6 +13,13 @@ import renderMathInElement from "katex/contrib/auto-render";
 import "katex/dist/katex.min.css";
 import mermaid from "mermaid";
 
+const COPY_ICON =
+  '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><rect x="5.25" y="5.25" width="7.25" height="7.25" rx="1.25"></rect><path d="M10.75 5.25V3.5c0-.69-.56-1.25-1.25-1.25H3.5c-.69 0-1.25.56-1.25 1.25v6c0 .69.56 1.25 1.25 1.25h1.75"></path></svg>';
+const COPIED_ICON =
+  '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><path d="m3.5 8.25 2.1 2.1 4.9-4.9"></path></svg>';
+const COPY_FAILED_ICON =
+  '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><path d="m4.5 4.5 7 7m0-7-7 7"></path></svg>';
+
 let mermaidInitialized = false;
 
 function ensureMermaidInitialized(): void {
@@ -45,11 +52,82 @@ export async function renderRichContent(
   isCurrent?: () => boolean,
 ): Promise<void> {
   ensureMermaidInitialized();
+  addCodeCopyButtons(root);
   await renderMermaid(root);
   if (isCurrent !== undefined && !isCurrent()) {
     return;
   }
   renderMath(root);
+}
+
+function addCodeCopyButtons(root: HTMLElement): void {
+  for (const pre of root.querySelectorAll<HTMLPreElement>("pre")) {
+    const code = pre.firstElementChild;
+    if (!(code instanceof HTMLElement) || code.tagName !== "CODE") {
+      continue;
+    }
+    if (pre.querySelector(".m2h-code-copy") !== null) {
+      continue;
+    }
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "m2h-code-copy";
+    button.innerHTML = COPY_ICON;
+    button.setAttribute("aria-label", "复制代码");
+    button.title = "复制代码";
+    button.addEventListener("click", () => {
+      void copyCode(code.textContent ?? "").then((copied) => {
+        setCopyStatus(button, copied);
+      });
+    });
+    pre.append(button);
+  }
+}
+
+async function copyCode(value: string): Promise<boolean> {
+  // navigator.clipboard is deliberately only attempted in a secure context.
+  // m2h serves previews over HTTP by default, where execCommand remains the
+  // browser-compatible, user-gesture fallback.
+  if (window.isSecureContext) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return true;
+    } catch {
+      // Fall through when clipboard permission is unavailable or denied.
+    }
+  }
+
+  const textarea = document.createElement("textarea");
+  textarea.value = value;
+  textarea.setAttribute("aria-hidden", "true");
+  textarea.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
+  document.body.append(textarea);
+  textarea.select();
+  try {
+    return document.execCommand("copy");
+  } catch {
+    return false;
+  } finally {
+    textarea.remove();
+  }
+}
+
+function setCopyStatus(button: HTMLButtonElement, copied: boolean): void {
+  button.innerHTML = copied ? COPIED_ICON : COPY_FAILED_ICON;
+  button.dataset.copyState = copied ? "success" : "error";
+  button.setAttribute(
+    "aria-label",
+    copied ? "代码已复制" : "复制代码失败，请手动复制",
+  );
+  button.title = copied ? "已复制" : "复制失败，请手动复制";
+
+  window.setTimeout(() => {
+    button.innerHTML = COPY_ICON;
+    button.removeAttribute("data-copy-state");
+    button.setAttribute("aria-label", "复制代码");
+    button.title = "复制代码";
+  }, 2_000);
 }
 
 function renderMath(root: HTMLElement): void {

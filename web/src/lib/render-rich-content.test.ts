@@ -1,3 +1,4 @@
+import { waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 interface MermaidRunOptions {
@@ -84,6 +85,92 @@ describe("renderRichContent", () => {
     expect(root.querySelector("pre")).not.toBeNull();
     expect(root.querySelector("div.mermaid")).toBeNull();
     expect(mermaidMock.run).not.toHaveBeenCalled();
+    expect(
+      root.querySelector<HTMLButtonElement>(".m2h-code-copy"),
+    ).not.toBeNull();
+  });
+
+  it("adds a copy control that uses execCommand on HTTP", async () => {
+    const restoreExecCommand = replaceProperty(
+      document,
+      "execCommand",
+      vi.fn(() => true),
+    );
+    try {
+      const { renderRichContent } = await import("./render-rich-content");
+      const root = document.createElement("div");
+      root.innerHTML =
+        '<pre><code class="language-go">func main()</code></pre>';
+
+      await renderRichContent(root);
+
+      const button = root.querySelector<HTMLButtonElement>(".m2h-code-copy");
+      if (button === null) {
+        throw new Error("code copy button was not added");
+      }
+      expect(button.type).toBe("button");
+      expect(button.getAttribute("aria-label")).toBe("复制代码");
+      expect(button.title).toBe("复制代码");
+      expect(button.textContent).toBe("");
+      expect(button.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+
+      button.click();
+      await waitFor(() =>
+        expect(button.getAttribute("aria-label")).toBe("代码已复制"),
+      );
+      expect(button.title).toBe("已复制");
+      expect(document.execCommand).toHaveBeenCalledWith("copy");
+    } finally {
+      restoreExecCommand();
+    }
+  });
+
+  it("uses Clipboard API in a secure context and falls back after a rejection", async () => {
+    const restoreSecureContext = replaceProperty(
+      window,
+      "isSecureContext",
+      true,
+    );
+    const writeText = vi
+      .fn<(value: string) => Promise<void>>()
+      .mockRejectedValueOnce(new DOMException("denied", "NotAllowedError"))
+      .mockResolvedValueOnce(undefined);
+    const restoreClipboard = replaceProperty(navigator, "clipboard", {
+      writeText,
+    });
+    const restoreExecCommand = replaceProperty(
+      document,
+      "execCommand",
+      vi.fn(() => true),
+    );
+    try {
+      const { renderRichContent } = await import("./render-rich-content");
+      const root = document.createElement("div");
+      root.innerHTML =
+        "<pre><code>first</code></pre><pre><code>second</code></pre>";
+
+      await renderRichContent(root);
+
+      const buttons =
+        root.querySelectorAll<HTMLButtonElement>(".m2h-code-copy");
+      buttons[0]?.click();
+      await waitFor(() =>
+        expect(buttons[0]?.getAttribute("aria-label")).toBe("代码已复制"),
+      );
+      expect(document.execCommand).toHaveBeenCalledWith("copy");
+
+      buttons[1]?.click();
+      await waitFor(() =>
+        expect(buttons[1]?.getAttribute("aria-label")).toBe("代码已复制"),
+      );
+      expect(writeText).toHaveBeenCalledWith("first");
+      expect(writeText).toHaveBeenCalledWith("second");
+      expect(document.execCommand).toHaveBeenCalledTimes(1);
+    } finally {
+      restoreExecCommand();
+      restoreClipboard();
+      restoreSecureContext();
+    }
   });
 
   it("skips mermaid code that is not wrapped in a pre element", async () => {
@@ -160,3 +247,19 @@ describe("renderRichContent", () => {
     expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
   });
 });
+
+function replaceProperty(
+  target: object,
+  property: PropertyKey,
+  value: unknown,
+): () => void {
+  const descriptor = Object.getOwnPropertyDescriptor(target, property);
+  Object.defineProperty(target, property, { configurable: true, value });
+  return () => {
+    if (descriptor === undefined) {
+      Reflect.deleteProperty(target, property);
+      return;
+    }
+    Object.defineProperty(target, property, descriptor);
+  };
+}
