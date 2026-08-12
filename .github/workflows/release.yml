@@ -395,7 +395,7 @@ jobs:
 
             test do
               (testpath/"example.md").write "# m2h\\n"
-              system bin/"m2h", "convert", "example.md"
+              system bin/"m2h", "example.md"
               assert_path_exists testpath/"example.html"
               assert_match "<h1", (testpath/"example.html").read
             end
