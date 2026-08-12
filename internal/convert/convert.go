@@ -33,6 +33,52 @@ type Options struct {
 	Log           io.Writer
 }
 
+// Result describes the files produced by a successful conversion.
+type Result struct {
+	HTMLFiles    []string
+	CopiedAssets int
+}
+
+// WriteSummary writes a concise, human-readable conversion summary.
+func (result Result) WriteSummary(writer io.Writer) error {
+	if writer == nil {
+		return fmt.Errorf("conversion result writer is nil")
+	}
+
+	fileLabel := "files"
+	if len(result.HTMLFiles) == 1 {
+		fileLabel = "file"
+	}
+	if _, err := fmt.Fprintf(writer, "Converted %d Markdown %s", len(result.HTMLFiles), fileLabel); err != nil {
+		return err
+	}
+	if result.CopiedAssets > 0 {
+		assetLabel := "assets"
+		if result.CopiedAssets == 1 {
+			assetLabel = "asset"
+		}
+		if _, err := fmt.Fprintf(writer, "; copied %d %s", result.CopiedAssets, assetLabel); err != nil {
+			return err
+		}
+	}
+	if _, err := fmt.Fprintln(writer, "."); err != nil {
+		return err
+	}
+	if len(result.HTMLFiles) == 0 {
+		_, err := fmt.Fprintln(writer, "Output HTML files: none.")
+		return err
+	}
+	if _, err := fmt.Fprintln(writer, "Output HTML files:"); err != nil {
+		return err
+	}
+	for _, output := range result.HTMLFiles {
+		if _, err := fmt.Fprintf(writer, "- %s\n", output); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 type plannedFile struct {
 	source       string
 	sourcePath   string
@@ -44,19 +90,25 @@ type plannedFile struct {
 
 // Run validates options before resolving the input and performs the conversion.
 func Run(ctx context.Context, options Options) error {
+	_, err := RunWithResult(ctx, options)
+	return err
+}
+
+// RunWithResult validates options, performs the conversion, and returns the generated HTML files.
+func RunWithResult(ctx context.Context, options Options) (Result, error) {
 	if options.Width == "" {
 		options.Width = markdown.WidthStandard
 	}
 	if err := validateOptions(options); err != nil {
-		return err
+		return Result{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("convert: %w", err)
+		return Result{}, fmt.Errorf("convert: %w", err)
 	}
 
 	input, err := files.Resolve(options.Input)
 	if err != nil {
-		return err
+		return Result{}, err
 	}
 	switch input.Kind {
 	case files.KindFile:
@@ -64,7 +116,7 @@ func Run(ctx context.Context, options Options) error {
 	case files.KindDirectory:
 		return runDirectory(ctx, input.Path, options)
 	default:
-		return fmt.Errorf("convert %q: unsupported input kind", input.Path)
+		return Result{}, fmt.Errorf("convert %q: unsupported input kind", input.Path)
 	}
 }
 
@@ -89,21 +141,21 @@ func validateOptions(options Options) error {
 	return files.ValidateDiscoverOptions(files.DiscoverOptions{Depth: options.Depth, Pattern: options.Pattern})
 }
 
-func runFile(ctx context.Context, source string, options Options) error {
+func runFile(ctx context.Context, source string, options Options) (Result, error) {
 	if options.PatternSet {
-		return fmt.Errorf("--glob can only be used when converting a directory")
+		return Result{}, fmt.Errorf("--glob can only be used when converting a directory")
 	}
 	if options.DepthSet {
-		return fmt.Errorf("--depth can only be used when converting a directory")
+		return Result{}, fmt.Errorf("--depth can only be used when converting a directory")
 	}
 	if options.CopyAssetsSet {
-		return fmt.Errorf("--copy-assets can only be used when converting a directory")
+		return Result{}, fmt.Errorf("--copy-assets can only be used when converting a directory")
 	}
 	if !files.IsMarkdown(source) {
-		return fmt.Errorf("convert %q: expected a Markdown file", source)
+		return Result{}, fmt.Errorf("convert %q: expected a Markdown file", source)
 	}
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("convert %q: %w", source, err)
+		return Result{}, fmt.Errorf("convert %q: %w", source, err)
 	}
 
 	destination := options.Output
@@ -112,22 +164,22 @@ func runFile(ctx context.Context, source string, options Options) error {
 	} else {
 		absolute, err := files.CanonicalPath(destination)
 		if err != nil {
-			return fmt.Errorf("resolve output %q: %w", destination, err)
+			return Result{}, fmt.Errorf("resolve output %q: %w", destination, err)
 		}
 		destination = absolute
 	}
 	if samePath(source, destination) {
-		return fmt.Errorf("convert %q: output conflicts with input", source)
+		return Result{}, fmt.Errorf("convert %q: output conflicts with input", source)
 	}
 	if info, err := os.Stat(destination); err == nil && info.IsDir() {
-		return fmt.Errorf("convert %q: output %q is a directory", source, destination)
+		return Result{}, fmt.Errorf("convert %q: output %q is a directory", source, destination)
 	} else if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("inspect output %q: %w", destination, err)
+		return Result{}, fmt.Errorf("inspect output %q: %w", destination, err)
 	}
 
 	contents, err := os.ReadFile(source)
 	if err != nil {
-		return fmt.Errorf("read Markdown %q: %w", source, err)
+		return Result{}, fmt.Errorf("read Markdown %q: %w", source, err)
 	}
 	rendered, err := markdown.Render(contents, markdown.RenderOptions{
 		Mode:       options.Mode,
@@ -137,22 +189,22 @@ func runFile(ctx context.Context, source string, options Options) error {
 		AssetBase:  assets.RichAssetDir + "/",
 	})
 	if err != nil {
-		return fmt.Errorf("render Markdown %q: %w", source, err)
+		return Result{}, fmt.Errorf("render Markdown %q: %w", source, err)
 	}
 	if err := writeAtomic(destination, []byte(rendered.HTML), 0o644); err != nil {
-		return fmt.Errorf("write HTML %q: %w", destination, err)
+		return Result{}, fmt.Errorf("write HTML %q: %w", destination, err)
 	}
 	assetDir := filepath.Join(filepath.Dir(destination), assets.RichAssetDir)
 	if err := assets.WriteRichAssets(assetDir); err != nil {
-		return fmt.Errorf("write rich-content assets %q: %w", assetDir, err)
+		return Result{}, fmt.Errorf("write rich-content assets %q: %w", assetDir, err)
 	}
-	return nil
+	return Result{HTMLFiles: []string{destination}}, nil
 }
 
-func runDirectory(ctx context.Context, sourceRoot string, options Options) error {
+func runDirectory(ctx context.Context, sourceRoot string, options Options) (Result, error) {
 	outputRoot, err := directoryOutputRoot(sourceRoot, options.Output)
 	if err != nil {
-		return err
+		return Result{}, err
 	}
 	excludeRoot := ""
 	if !samePath(sourceRoot, outputRoot) && files.IsWithin(sourceRoot, outputRoot) {
@@ -166,7 +218,7 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) error
 		Log:         options.Log,
 	})
 	if err != nil {
-		return err
+		return Result{}, err
 	}
 
 	plans := make([]plannedFile, 0, len(discovered.Markdown)+len(discovered.Assets))
@@ -190,7 +242,7 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) error
 		}
 	}
 	if err := detectConflicts(plans); err != nil {
-		return err
+		return Result{}, err
 	}
 	sortPlans(plans)
 
@@ -199,11 +251,11 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) error
 			continue
 		}
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("convert directory %q: %w", sourceRoot, err)
+			return Result{}, fmt.Errorf("convert directory %q: %w", sourceRoot, err)
 		}
 		contents, err := os.ReadFile(plans[index].source)
 		if err != nil {
-			return fmt.Errorf("read Markdown %q: %w", plans[index].source, err)
+			return Result{}, fmt.Errorf("read Markdown %q: %w", plans[index].source, err)
 		}
 		rendered, err := markdown.Render(contents, markdown.RenderOptions{
 			Mode:       options.Mode,
@@ -213,14 +265,15 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) error
 			AssetBase:  richAssetBase(plans[index].sourcePath),
 		})
 		if err != nil {
-			return fmt.Errorf("render Markdown %q: %w", plans[index].source, err)
+			return Result{}, fmt.Errorf("render Markdown %q: %w", plans[index].source, err)
 		}
 		plans[index].renderedHTML = []byte(rendered.HTML)
 	}
 
+	result := Result{HTMLFiles: make([]string, 0, len(discovered.Markdown))}
 	for _, plan := range plans {
 		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("convert directory %q: %w", sourceRoot, err)
+			return Result{}, fmt.Errorf("convert directory %q: %w", sourceRoot, err)
 		}
 		if plan.markdown {
 			err = writeAtomic(plan.destination, plan.renderedHTML, plan.mode)
@@ -228,7 +281,12 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) error
 			err = copyAtomic(plan.source, plan.destination, plan.mode)
 		}
 		if err != nil {
-			return fmt.Errorf("write %q from %q: %w", plan.destination, plan.source, err)
+			return Result{}, fmt.Errorf("write %q from %q: %w", plan.destination, plan.source, err)
+		}
+		if plan.markdown {
+			result.HTMLFiles = append(result.HTMLFiles, plan.destination)
+		} else {
+			result.CopiedAssets++
 		}
 	}
 
@@ -237,10 +295,10 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) error
 	if len(discovered.Markdown) > 0 {
 		assetDir := filepath.Join(outputRoot, assets.RichAssetDir)
 		if err := assets.WriteRichAssets(assetDir); err != nil {
-			return fmt.Errorf("write rich-content assets %q: %w", assetDir, err)
+			return Result{}, fmt.Errorf("write rich-content assets %q: %w", assetDir, err)
 		}
 	}
-	return nil
+	return result, nil
 }
 
 func directoryOutputRoot(sourceRoot, output string) (string, error) {

@@ -100,11 +100,13 @@ func convertCommand() *urfavecli.Command {
 	}
 }
 
+var runConvert = convert.RunWithResult
+
 func convertAction(ctx context.Context, command *urfavecli.Command) error {
 	if command.Args().Len() != 1 {
 		return fmt.Errorf("Error: convert requires exactly one file or directory")
 	}
-	err := convert.Run(ctx, convert.Options{
+	result, err := runConvert(ctx, convert.Options{
 		Input:         command.Args().First(),
 		Output:        command.String("output"),
 		Pattern:       command.String("glob"),
@@ -118,7 +120,13 @@ func convertAction(ctx context.Context, command *urfavecli.Command) error {
 		Log:           command.Root().ErrWriter,
 	})
 	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
-		return err
+		if err != nil {
+			return err
+		}
+		if err := result.WriteSummary(command.Root().Writer); err != nil {
+			return fmt.Errorf("Error: write conversion result: %w", err)
+		}
+		return nil
 	}
 	return fmt.Errorf("Error: %w", err)
 }

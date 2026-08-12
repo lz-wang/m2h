@@ -35,6 +35,50 @@ func defaultOptions(input string) Options {
 	}
 }
 
+func TestResultWriteSummary(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		result Result
+		want   string
+	}{
+		{
+			name: "no Markdown files",
+			want: "Converted 0 Markdown files.\nOutput HTML files: none.\n",
+		},
+		{
+			name:   "one Markdown file",
+			result: Result{HTMLFiles: []string{"/tmp/guide.html"}},
+			want:   "Converted 1 Markdown file.\nOutput HTML files:\n- /tmp/guide.html\n",
+		},
+		{
+			name:   "multiple files and copied assets",
+			result: Result{HTMLFiles: []string{"/tmp/a.html", "/tmp/b.html"}, CopiedAssets: 2},
+			want:   "Converted 2 Markdown files; copied 2 assets.\nOutput HTML files:\n- /tmp/a.html\n- /tmp/b.html\n",
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			var output bytes.Buffer
+			if err := test.result.WriteSummary(&output); err != nil {
+				t.Fatalf("WriteSummary() returned error: %v", err)
+			}
+			if got := output.String(); got != test.want {
+				t.Fatalf("WriteSummary() output = %q, want %q", got, test.want)
+			}
+		})
+	}
+
+	if err := (Result{}).WriteSummary(nil); err == nil {
+		t.Fatal("WriteSummary(nil) succeeded")
+	}
+}
+
 func snapshotDirectory(t *testing.T, root string) map[string]string {
 	t.Helper()
 	snapshot := map[string]string{}
@@ -93,6 +137,30 @@ func TestRunConvertsSingleFileToDefaultAndExplicitOutput(t *testing.T) {
 	}
 	if !bytes.Contains(explicitHTML, []byte(`class="m2h-mode-dark"`)) {
 		t.Fatal("explicit output did not use dark mode")
+	}
+}
+
+func TestRunWithResultReportsGeneratedHTMLAndCopiedAssets(t *testing.T) {
+	source := t.TempDir()
+	output := filepath.Join(t.TempDir(), "public")
+	writeFixture(t, source, "guide.md", "# Guide")
+	writeFixture(t, source, "images/logo.svg", "svg")
+
+	options := defaultOptions(source)
+	options.Output = output
+	result, err := RunWithResult(context.Background(), options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resolvedOutput, err := filepath.EvalSymlinks(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := result.HTMLFiles, []string{filepath.Join(resolvedOutput, "guide.html")}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("HTML files = %v, want %v", got, want)
+	}
+	if got, want := result.CopiedAssets, 1; got != want {
+		t.Fatalf("copied assets = %d, want %d", got, want)
 	}
 }
 

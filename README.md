@@ -39,6 +39,14 @@ $ m2h convert docs --output public/docs --depth 3 --glob '**/plan_*.md'
 
 目录转换默认会复制非 Markdown 资源；使用 `--copy-assets=false` 可关闭。相对 Markdown 链接会改为对应的 `.html` 链接，图片和其他本地资源路径保持不变。
 
+转换成功后，`convert` 会向标准输出打印转换数量、复制资源数量（如有）与每个生成 HTML 的绝对路径：
+
+```text
+Converted 1 Markdown file.
+Output HTML files:
+- /work/project/README.html
+```
+
 | 选项 | 说明 |
 | --- | --- |
 | `--output`, `-o` | 单文件的目标 HTML，或目录转换的目标目录。 |

@@ -18,6 +18,7 @@
 ### 新增
 
 - `convert`、单文件 `preview` 与目录预览默认原样渲染 Markdown 中的 HTML，并移除 `--unsafe-html` 参数；Markdown 链接和图片中的危险 URL 仍会被安全处理。
+- `convert` 成功完成后会打印转换文件数、复制资源数（如有）以及生成 HTML 的绝对路径。
 
 ### 修复
 

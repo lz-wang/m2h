@@ -239,7 +239,11 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 	if err != nil {
 		t.Fatalf("convert returned error: %v", err)
 	}
-	if stdout != "" || stderr != "" {
+	resolvedOutput, err := filepath.EvalSymlinks(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "Converted 1 Markdown file.\nOutput HTML files:\n- " + resolvedOutput + "\n"; stdout != want || stderr != "" {
 		t.Fatalf("convert output stdout=%q stderr=%q", stdout, stderr)
 	}
 	html, err := os.ReadFile(output)
@@ -250,6 +254,30 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 		if !bytes.Contains(html, []byte(want)) {
 			t.Errorf("HTML does not contain %q", want)
 		}
+	}
+}
+
+func TestConvertCommandWritesDirectoryResult(t *testing.T) {
+	source := t.TempDir()
+	output := filepath.Join(t.TempDir(), "public")
+	if err := os.WriteFile(filepath.Join(source, "guide.md"), []byte("# Guide"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(source, "logo.svg"), []byte("svg"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCommand(t, "convert", source, "--output", output)
+	if err != nil {
+		t.Fatalf("convert returned error: %v", err)
+	}
+	resolvedOutput, err := filepath.EvalSymlinks(output)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Converted 1 Markdown file; copied 1 asset.\nOutput HTML files:\n- " + filepath.Join(resolvedOutput, "guide.html") + "\n"
+	if stdout != want || stderr != "" {
+		t.Fatalf("convert output stdout=%q stderr=%q, want stdout=%q stderr=\"\"", stdout, stderr, want)
 	}
 }
 
