@@ -25,6 +25,7 @@ export type PreviewPhase =
 
 export interface PreviewState {
   kind: PreviewKind;
+  version: string;
   files: FileSummary[];
   selectedPath: string | null;
   document: DocumentResponse | null;
@@ -56,6 +57,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   );
   const [files, setFiles] = useState<FileSummary[]>([]);
   const [kind, setKind] = useState<PreviewKind>("directory");
+  const [version, setVersion] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
   const [documentResponse, setDocumentResponse] =
     useState<DocumentResponse | null>(null);
@@ -155,6 +157,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         defaultPathRef.current = loaded.defaultPath;
         setFiles(loaded.files);
         setKind(loaded.kind);
+        setVersion(loaded.version);
         const target = chooseDocument(
           loaded.files,
           requested,
@@ -328,6 +331,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
 
   return {
     kind,
+    version,
     files,
     selectedPath,
     document: documentResponse,

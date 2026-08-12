@@ -35,10 +35,11 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- run(ctx, Options{
-			Input: source,
-			Mode:  markdown.ModeAuto,
-			Log:   &logOutput,
-			UI:    directoryTestUI(),
+			Input:   source,
+			Mode:    markdown.ModeAuto,
+			Log:     &logOutput,
+			UI:      directoryTestUI(),
+			Version: "1.2.3",
 			OnListening: func(address string) {
 				listening <- address
 			},
@@ -79,6 +80,9 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 	}
 	if list.Kind != previewSingle {
 		t.Fatalf("single-file kind = %q, want %q", list.Kind, previewSingle)
+	}
+	if list.Version != "1.2.3" {
+		t.Fatalf("single-file version = %q, want 1.2.3", list.Version)
 	}
 
 	document, err := http.Get(address + "api/document?path=guide.md")
@@ -222,6 +226,7 @@ func TestRunValidatesBeforeFilesystemAndNetwork(t *testing.T) {
 		{name: "port", options: Options{Input: missing, Port: 70000, Mode: markdown.ModeAuto}, want: "invalid port"},
 		{name: "mode", options: Options{Input: missing, Mode: "sepia"}, want: "invalid mode"},
 		{name: "width", options: Options{Input: missing, Mode: markdown.ModeAuto, Width: "narrow"}, want: "invalid width"},
+		{name: "version", options: Options{Input: missing, Mode: markdown.ModeAuto, Version: "latest"}, want: "invalid preview version"},
 		{name: "depth", options: Options{Input: missing, Mode: markdown.ModeAuto, Depth: -1}, want: "invalid depth"},
 		{name: "glob", options: Options{Input: missing, Mode: markdown.ModeAuto, Pattern: "["}, want: "invalid glob"},
 	}

@@ -19,6 +19,7 @@ import (
 	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
+	appversion "github.com/lz-wang/m2h/internal/version"
 )
 
 type fileSummary struct {
@@ -31,6 +32,7 @@ type fileListResponse struct {
 	Kind        previewKind   `json:"kind"`
 	Files       []fileSummary `json:"files"`
 	DefaultPath string        `json:"defaultPath"`
+	Version     string        `json:"version"`
 }
 
 type frontMatterEntryResponse struct {
@@ -62,10 +64,11 @@ type documentResponse struct {
 // single-file and directory preview. The only difference between the two is the
 // previewScope, which decides which Markdown files exist and are addressable.
 type previewHandler struct {
-	scope previewScope
-	mode  markdown.Mode
-	width markdown.Width
-	ui    fs.FS
+	scope   previewScope
+	mode    markdown.Mode
+	width   markdown.Width
+	ui      fs.FS
+	version string
 
 	discover func(context.Context, previewScope) (files.Discovery, error)
 }
@@ -78,11 +81,24 @@ func newPreviewHandler(
 	logger io.Writer,
 	ui fs.FS,
 ) http.Handler {
+	return newPreviewHandlerWithVersion(scope, mode, width, events, logger, ui, appversion.Development)
+}
+
+func newPreviewHandlerWithVersion(
+	scope previewScope,
+	mode markdown.Mode,
+	width markdown.Width,
+	events *eventHub,
+	logger io.Writer,
+	ui fs.FS,
+	buildVersion string,
+) http.Handler {
 	handler := &previewHandler{
-		scope: scope,
-		mode:  mode,
-		width: width,
-		ui:    ui,
+		scope:   scope,
+		mode:    mode,
+		width:   width,
+		ui:      ui,
+		version: buildVersion,
 		discover: func(ctx context.Context, scope previewScope) (files.Discovery, error) {
 			return scope.discover(ctx)
 		},
@@ -137,6 +153,7 @@ func (handler *previewHandler) serveFiles(response http.ResponseWriter, request 
 		Kind:        handler.scope.kind(),
 		Files:       summaries,
 		DefaultPath: defaultDocument(summaries),
+		Version:     handler.version,
 	})
 }
 

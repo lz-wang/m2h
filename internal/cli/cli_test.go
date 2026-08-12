@@ -181,7 +181,7 @@ func TestWebForwardsOptions(t *testing.T) {
 	}
 	if captured.Input != "guide.md" || captured.Host != "0.0.0.0" || captured.Port != 9142 ||
 		captured.Mode != markdown.ModeDark || captured.Depth != defaultDepth || captured.DepthSet ||
-		!captured.Browser || captured.Log == nil ||
+		!captured.Browser || captured.Log == nil || captured.Version != "dev-20260809-fe65804" ||
 		captured.UI == nil {
 		t.Fatalf("web options = %+v", captured)
 	}

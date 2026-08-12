@@ -17,6 +17,7 @@ import (
 
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
+	appversion "github.com/lz-wang/m2h/internal/version"
 	"github.com/lz-wang/m2h/internal/watcher"
 )
 
@@ -44,6 +45,7 @@ type Options struct {
 	TOCSet     bool
 	Log        io.Writer
 	UI         fs.FS
+	Version    string
 
 	OnListening func(string)
 }
@@ -100,7 +102,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		Pattern: normalized.Pattern,
 		Log:     logger,
 	})
-	handler := newPreviewHandler(scope, normalized.Mode, normalized.Width, hub, logger, options.UI)
+	handler := newPreviewHandlerWithVersion(scope, normalized.Mode, normalized.Width, hub, logger, options.UI, normalized.Version)
 	httpServer := &http.Server{
 		Handler:  handler,
 		ErrorLog: log.New(logger, "m2h: http: ", 0),
@@ -164,6 +166,12 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 func normalizeOptions(options Options) (Options, error) {
 	if strings.TrimSpace(options.Input) == "" {
 		return Options{}, fmt.Errorf("input path is required")
+	}
+	if options.Version == "" {
+		options.Version = appversion.Development
+	}
+	if _, err := appversion.Parse(options.Version); err != nil {
+		return Options{}, fmt.Errorf("invalid preview version: %w", err)
 	}
 	if options.Host == "" {
 		options.Host = DefaultHost

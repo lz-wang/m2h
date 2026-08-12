@@ -37,6 +37,7 @@ import { ScrollArea } from "./components/ui/scroll-area";
 import {
   Sidebar,
   SidebarContent,
+  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -69,6 +70,8 @@ const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
 ];
 
 const layoutStorageKey = "m2h.preview.layout";
+const repositoryURL = "https://github.com/lz-wang/m2h";
+const releaseVersionPattern = /^\d+\.\d+\.\d+$/;
 
 interface StoredLayout {
   sidebarOpen: boolean;
@@ -237,6 +240,7 @@ export function App({ api }: AppProps) {
                 </SidebarGroup>
               </ScrollArea>
             </SidebarContent>
+            <ProjectFooter version={preview.version} />
             <SidebarResizeHandle
               width={sidebarWidth}
               onResize={setSidebarWidth}
@@ -312,6 +316,54 @@ export function App({ api }: AppProps) {
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
+  );
+}
+
+function ProjectFooter({ version }: { version: string }) {
+  const releaseVersion = releaseVersionPattern.test(version);
+  const versionLabel = releaseVersion ? `v${version}` : version;
+  const versionURL = releaseVersion
+    ? `${repositoryURL}/releases/tag/${versionLabel}`
+    : `${repositoryURL}/releases`;
+
+  return (
+    <SidebarFooter className="flex-row items-center justify-start gap-1 px-3 py-2">
+      <a
+        href={repositoryURL}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="在新页面打开 m2h GitHub 仓库"
+        title="GitHub"
+        className="flex size-8 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+      >
+        <GitHubIcon />
+      </a>
+      {version !== "" ? (
+        <a
+          href={versionURL}
+          target="_blank"
+          rel="noreferrer"
+          aria-label={`在新页面打开 m2h ${versionLabel} 发布信息`}
+          title="查看发布信息"
+          className="rounded-md px-2 py-1 font-mono text-[11px] tabular-nums text-sidebar-foreground/55 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+        >
+          {versionLabel}
+        </a>
+      ) : null}
+    </SidebarFooter>
+  );
+}
+
+function GitHubIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      className="size-4"
+      viewBox="0 0 24 24"
+      fill="currentColor"
+    >
+      <path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.3c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0C17.5 5.9 18.5 6.2 18.5 6.2c.7 1.7.3 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z" />
+    </svg>
   );
 }
 

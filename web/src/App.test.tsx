@@ -13,6 +13,7 @@ import { APIError, type FileListResponse, type PreviewAPI } from "./api";
 
 const initialFiles: FileListResponse = {
   kind: "directory",
+  version: "0.9.1",
   files: [
     { path: "README.md", name: "README.md", title: "Readme API Title" },
     { path: "guides/setup.md", name: "setup.md", title: "Setup API Title" },
@@ -55,6 +56,52 @@ describe("App directory preview", () => {
     ).toBeTruthy();
   });
 
+  it("opens the project and release links from the sidebar footer in new tabs", async () => {
+    const view = render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    const repository = screen.getByRole("link", {
+      name: "在新页面打开 m2h GitHub 仓库",
+    });
+    expect(repository.getAttribute("href")).toBe(
+      "https://github.com/lz-wang/m2h",
+    );
+    expect(repository.getAttribute("target")).toBe("_blank");
+    expect(repository.getAttribute("rel")).toContain("noreferrer");
+
+    const release = screen.getByRole("link", {
+      name: "在新页面打开 m2h v0.9.1 发布信息",
+    });
+    const footer = repository.closest('[data-slot="sidebar-footer"]');
+    expect(footer?.classList).toContain("justify-start");
+    expect(footer?.classList).toContain("gap-1");
+    expect(footer?.classList).not.toContain("justify-between");
+    expect(repository.nextElementSibling).toBe(release);
+    expect(release.getAttribute("href")).toBe(
+      "https://github.com/lz-wang/m2h/releases/tag/v0.9.1",
+    );
+    expect(release.getAttribute("target")).toBe("_blank");
+    view.unmount();
+
+    render(
+      <App
+        api={createAPI({
+          listFiles: vi.fn().mockResolvedValue({
+            ...initialFiles,
+            version: "dev-20260812-abcdef0",
+          }),
+        })}
+      />,
+    );
+    const development = await screen.findByRole("link", {
+      name: "在新页面打开 m2h dev-20260812-abcdef0 发布信息",
+    });
+    expect(development.getAttribute("href")).toBe(
+      "https://github.com/lz-wang/m2h/releases",
+    );
+    expect(development.getAttribute("target")).toBe("_blank");
+  });
+
   it("hot-swaps the document body on a server-sent document-changed event", async () => {
     const getDocument = vi
       .fn<PreviewAPI["getDocument"]>()
@@ -90,6 +137,7 @@ describe("App directory preview", () => {
     const api = createAPI({
       listFiles: vi.fn().mockResolvedValue({
         kind: "single",
+        version: "0.9.1",
         files: [
           { path: "README.md", name: "README.md", title: "Readme API Title" },
         ],
@@ -157,6 +205,7 @@ describe("App directory preview", () => {
     const api = createAPI({
       listFiles: vi.fn().mockResolvedValue({
         kind: "directory",
+        version: "0.9.1",
         files: [file],
         defaultPath: path,
       }),
@@ -484,6 +533,7 @@ describe("App directory preview", () => {
         api={createAPI({
           listFiles: vi.fn().mockResolvedValue({
             kind: "directory",
+            version: "0.9.1",
             files: [],
             defaultPath: "",
           }),

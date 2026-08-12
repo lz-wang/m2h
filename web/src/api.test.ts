@@ -16,6 +16,7 @@ describe("browser API", () => {
         new Response(
           JSON.stringify({
             kind: "directory",
+            version: "0.9.1",
             files: [{ path: "README.md", name: "README.md", title: "Readme" }],
             defaultPath: "README.md",
           }),
@@ -47,6 +48,7 @@ describe("browser API", () => {
 
     await expect(browserAPI.listFiles()).resolves.toEqual({
       kind: "directory",
+      version: "0.9.1",
       files: [{ path: "README.md", name: "README.md", title: "Readme" }],
       defaultPath: "README.md",
     });
@@ -74,6 +76,7 @@ describe("browser API", () => {
       new Response(
         JSON.stringify({
           kind: "single",
+          version: "dev-20260812-abcdef0",
           files: [{ path: "README.md", name: "README.md", title: "Readme" }],
           defaultPath: "README.md",
         }),
@@ -89,6 +92,7 @@ describe("browser API", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
+          version: "dev-20260812-abcdef0",
           files: [{ path: "README.md", name: "README.md", title: "Readme" }],
           defaultPath: "README.md",
         }),

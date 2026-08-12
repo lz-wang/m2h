@@ -21,6 +21,7 @@ import (
 	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
+	appversion "github.com/lz-wang/m2h/internal/version"
 )
 
 func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
@@ -38,6 +39,9 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	decodeJSON(t, response, &payload)
 	if payload.Kind != previewDirectory {
 		t.Fatalf("directory kind = %q, want %q", payload.Kind, previewDirectory)
+	}
+	if payload.Version != appversion.Development {
+		t.Fatalf("directory version = %q, want %q", payload.Version, appversion.Development)
 	}
 
 	discovered, err := files.Discover(context.Background(), root+string(os.PathSeparator), options)

@@ -16,6 +16,7 @@
 
 ### 新增
 
+- 目录预览侧边栏底部新增 GitHub 仓库与当前版本入口，均在新页面打开；正式版版本号直达对应 Release，开发版进入 Releases 列表。
 - 统一预览架构：单文件与目录预览共用同一 React WebUI、HTTP handler 与 Markdown 渲染管线；新增 `previewScope` 表达预览的可访问文档边界，单文件不再以独立 HTML 形式渲染。Markdown 文件保存后通过 Server-Sent Events 局部刷新当前文档正文，不再整页 reload，主题、宽度、文档目录与导航状态均被保留（目录预览因此首次支持文件变更自动刷新）。`/api/files` 新增 `kind` 字段区分单文件与目录预览，单文件模式下隐藏文件侧边栏，仅保留正文与工具栏。
 - `web` 子命令默认在监听成功后打开系统默认浏览器，并新增 `--no-open` 选项关闭；原 `preview --browser` 已被这一默认行为取代。
 

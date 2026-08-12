@@ -50,7 +50,7 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 			},
 		),
 		Commands: []*urfavecli.Command{
-			webCommand(ui),
+			webCommand(ui, info.String()),
 		},
 		OnUsageError: normalizeUsageError,
 	}
@@ -117,7 +117,7 @@ func convertAction(ctx context.Context, command *urfavecli.Command) error {
 	return fmt.Errorf("Error: %w", err)
 }
 
-func webCommand(ui fs.FS) *urfavecli.Command {
+func webCommand(ui fs.FS, buildVersion string) *urfavecli.Command {
 	return &urfavecli.Command{
 		Name:      "web",
 		Usage:     "view Markdown in a browser",
@@ -151,7 +151,7 @@ func webCommand(ui fs.FS) *urfavecli.Command {
 			&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
 		},
 		Action: func(ctx context.Context, command *urfavecli.Command) error {
-			return webAction(ctx, command, ui)
+			return webAction(ctx, command, ui, buildVersion)
 		},
 		OnUsageError: normalizeUsageError,
 	}
@@ -159,7 +159,7 @@ func webCommand(ui fs.FS) *urfavecli.Command {
 
 var runPreview = server.Run
 
-func webAction(ctx context.Context, command *urfavecli.Command, ui fs.FS) error {
+func webAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buildVersion string) error {
 	if command.Args().Len() != 1 {
 		return fmt.Errorf("Error: web requires exactly one file or directory")
 	}
@@ -178,6 +178,7 @@ func webAction(ctx context.Context, command *urfavecli.Command, ui fs.FS) error 
 		TOCSet:     command.IsSet("toc"),
 		Log:        command.Root().ErrWriter,
 		UI:         ui,
+		Version:    buildVersion,
 	})
 	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
 		return err

@@ -12,6 +12,7 @@ export interface FileListResponse {
   kind: PreviewKind;
   files: FileSummary[];
   defaultPath: string;
+  version: string;
 }
 
 export interface FrontMatterEntry {
@@ -76,6 +77,7 @@ async function requestJSON(
 function parseFileList(payload: unknown): FileListResponse {
   if (
     !isRecord(payload) ||
+    typeof payload.version !== "string" ||
     !Array.isArray(payload.files) ||
     typeof payload.defaultPath !== "string"
   ) {
@@ -96,6 +98,7 @@ function parseFileList(payload: unknown): FileListResponse {
     kind: payload.kind === "single" ? "single" : "directory",
     files,
     defaultPath: payload.defaultPath,
+    version: payload.version,
   };
 }
 
