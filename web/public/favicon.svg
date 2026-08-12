@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img">
+  <title>m2h：Markdown 转 HTML</title>
+  <rect x="4" y="4" width="56" height="56" rx="14" fill="#1f2328" />
+  <path
+    d="M16 40V24l8 8 8-8v16"
+    fill="none"
+    stroke="#f6f8fa"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="6"
+  />
+  <path
+    d="m40 25 8 7-8 7"
+    fill="none"
+    stroke="#58a6ff"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="6"
+  />
+</svg>

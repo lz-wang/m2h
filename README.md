@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="web/public/favicon.svg" alt="m2h Logo" width="120" height="120">
+</p>
+
 # m2h
 
 `m2h` 是一个 Markdown 命令行工具：将文件转换为可离线打开的 HTML，在浏览器中预览文件或目录，或直接在终端阅读。
