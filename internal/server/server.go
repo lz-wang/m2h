@@ -96,6 +96,8 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	if logger == nil {
 		logger = io.Discard
 	}
+	runContext, cancel := context.WithCancel(ctx)
+	defer cancel()
 	hub := newEventHub(deps.keepAlive)
 	scope := newPreviewScope(input, files.DiscoverOptions{
 		Depth:   normalized.Depth,
@@ -104,7 +106,10 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	})
 	handler := newPreviewHandlerWithVersion(scope, normalized.Mode, normalized.Width, hub, logger, options.UI, normalized.Version)
 	httpServer := &http.Server{
-		Handler:  handler,
+		Handler: handler,
+		BaseContext: func(net.Listener) context.Context {
+			return runContext
+		},
 		ErrorLog: log.New(logger, "m2h: http: ", 0),
 	}
 	requestedAddress := net.JoinHostPort(normalized.Host, strconv.Itoa(normalized.Port))
@@ -113,8 +118,6 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		return fmt.Errorf("listen on %s: %w", requestedAddress, err)
 	}
 
-	runContext, cancel := context.WithCancel(ctx)
-	defer cancel()
 	serveDone := make(chan error, 1)
 	var watchDone <-chan error
 	go func() {

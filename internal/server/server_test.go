@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -109,6 +110,53 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 		}
 	case <-time.After(2 * time.Second):
 		t.Fatal("run() did not shut down after cancellation")
+	}
+}
+
+func TestRunStopsWithActiveEventStream(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "README.md"), "# Events")
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	listening := make(chan string, 1)
+	deps := testDependencies()
+	deps.listen = func(string, string) (net.Listener, error) {
+		return net.Listen("tcp", "127.0.0.1:0")
+	}
+	done := make(chan error, 1)
+	go func() {
+		done <- run(ctx, Options{
+			Input: root,
+			Mode:  markdown.ModeAuto,
+			UI:    directoryTestUI(),
+			OnListening: func(address string) {
+				listening <- address
+			},
+		}, deps)
+	}()
+
+	response, err := http.Get(<-listening + "api/events")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		_ = response.Body.Close()
+	})
+	line, err := bufio.NewReader(response.Body).ReadString('\n')
+	if err != nil || line != ": connected\n" {
+		t.Fatalf("initial SSE line = %q, %v", line, err)
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("run() after cancellation returned %v", err)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("run() waited for the active SSE request during shutdown")
 	}
 }
 
