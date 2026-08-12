@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -350,6 +351,60 @@ func TestDirectoryDocumentAPIExposesFrontMatter(t *testing.T) {
 	}
 	if !strings.Contains(plain.Body.String(), `"frontmatter":null`) {
 		t.Errorf("plain response should serialize frontmatter:null: %s", plain.Body.String())
+	}
+}
+
+func TestDirectoryDocumentAPIExposesTableOfContents(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(
+		t,
+		filepath.Join(root, "guide.md"),
+		"# Guide\n\n## 安装\n\n## 安装\n\n### Homebrew\n\n#### C++ API\n\nplain paragraph\n",
+	)
+	writeTestFile(t, filepath.Join(root, "plain.md"), "No headings here.\n")
+	canonical := canonicalDirectory(t, root)
+	handler := newDirectoryHandler(
+		canonical,
+		markdown.ModeAuto,
+		files.DiscoverOptions{Depth: 2},
+		newEventHub(time.Second),
+		nil,
+		directoryTestUI(),
+	)
+
+	response := performRequest(handler, http.MethodGet, "/api/document?path=guide.md")
+	if response.Code != http.StatusOK {
+		t.Fatalf("document status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var document documentResponse
+	decodeJSON(t, response, &document)
+	want := []tocEntryResponse{
+		{Level: 1, ID: "guide", Text: "Guide"},
+		{Level: 2, ID: "安装", Text: "安装"},
+		{Level: 2, ID: "安装-1", Text: "安装"},
+		{Level: 3, ID: "homebrew", Text: "Homebrew"},
+		{Level: 4, ID: "c-api", Text: "C++ API"},
+	}
+	if !reflect.DeepEqual(document.TOC, want) {
+		t.Fatalf("toc = %+v, want %+v", document.TOC, want)
+	}
+	// Each toc id must point at a real anchor in the rendered HTML.
+	for _, entry := range document.TOC {
+		if !strings.Contains(document.HTML, fmt.Sprintf(`id=%q`, entry.ID)) {
+			t.Errorf("HTML missing anchor for toc entry %+v", entry)
+		}
+	}
+
+	plain := performRequest(handler, http.MethodGet, "/api/document?path=plain.md")
+	if plain.Code != http.StatusOK {
+		t.Fatalf("plain document status = %d", plain.Code)
+	}
+	var plainDocument documentResponse
+	decodeJSON(t, plain, &plainDocument)
+	if len(plainDocument.TOC) != 0 {
+		t.Fatalf("plain toc = %+v, want empty", plainDocument.TOC)
 	}
 }
 

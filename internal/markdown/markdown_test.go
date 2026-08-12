@@ -1,7 +1,9 @@
 package markdown
 
 import (
+	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -372,6 +374,52 @@ func TestRenderGitHubHeadingIDs(t *testing.T) {
 	// still resolves without JavaScript.
 	if !strings.Contains(result.Body, `href="#7-`) || !strings.Contains(result.Body, "跳转到第 7 节</a>") {
 		t.Errorf("fragment link to #7-代码 missing or rewritten:\n%s", result.Body)
+	}
+}
+
+func TestRenderExtractsHeadingsFromSharedAST(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("# 标题\n\n## 安装\n\n## 安装\n\n### Homebrew\n\n#### C++ API\n")
+	result, err := Render(source, RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "headings.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	want := []Heading{
+		{Level: 1, ID: "标题", Text: "标题"},
+		{Level: 2, ID: "安装", Text: "安装"},
+		{Level: 2, ID: "安装-1", Text: "安装"},
+		{Level: 3, ID: "homebrew", Text: "Homebrew"},
+		{Level: 4, ID: "c-api", Text: "C++ API"},
+	}
+	if !reflect.DeepEqual(result.Headings, want) {
+		t.Fatalf("Headings = %+v, want %+v", result.Headings, want)
+	}
+
+	// The extracted ids must match the ids actually rendered on the headings, so
+	// the table of contents can never drift from the anchors.
+	for _, heading := range result.Headings {
+		marker := fmt.Sprintf(`<h%d id=%q>`, heading.Level, heading.ID)
+		if !strings.Contains(result.Body, marker) {
+			t.Errorf("rendered body missing %q:\n%s", marker, result.Body)
+		}
+	}
+}
+
+func TestRenderExtractsNoHeadingsForPlainDocument(t *testing.T) {
+	t.Parallel()
+
+	result, err := Render([]byte("A paragraph without headings."), RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "plain.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Headings) != 0 {
+		t.Fatalf("Headings = %+v, want empty", result.Headings)
 	}
 }
 

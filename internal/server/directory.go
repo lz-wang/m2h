@@ -43,11 +43,18 @@ type frontMatterResponse struct {
 	Tags    []string                   `json:"tags,omitempty"`
 }
 
+type tocEntryResponse struct {
+	Level int    `json:"level"`
+	ID    string `json:"id"`
+	Text  string `json:"text"`
+}
+
 type documentResponse struct {
 	Path        string               `json:"path"`
 	Title       string               `json:"title"`
 	HTML        string               `json:"html"`
 	FrontMatter *frontMatterResponse `json:"frontmatter"`
+	TOC         []tocEntryResponse   `json:"toc"`
 }
 
 type directoryHandler struct {
@@ -188,6 +195,7 @@ func (handler *directoryHandler) serveDocument(response http.ResponseWriter, req
 		Title:       rendered.Title,
 		HTML:        rendered.Body,
 		FrontMatter: frontMatterResponseFrom(frontMatter),
+		TOC:         tocEntriesFrom(rendered.Headings),
 	})
 }
 
@@ -274,6 +282,18 @@ func writeJSONError(response http.ResponseWriter, status int, message string) {
 	writeJSON(response, status, struct {
 		Error string `json:"error"`
 	}{Error: message})
+}
+
+func tocEntriesFrom(headings []markdown.Heading) []tocEntryResponse {
+	entries := make([]tocEntryResponse, 0, len(headings))
+	for _, heading := range headings {
+		entries = append(entries, tocEntryResponse{
+			Level: heading.Level,
+			ID:    heading.ID,
+			Text:  heading.Text,
+		})
+	}
+	return entries
 }
 
 func frontMatterResponseFrom(frontMatter *markdown.FrontMatter) *frontMatterResponse {

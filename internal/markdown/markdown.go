@@ -57,11 +57,21 @@ type RenderOptions struct {
 	AssetBase  string
 }
 
+// Heading is one entry of the document's table of contents, extracted from the
+// same Goldmark AST that produced the HTML so heading ids always match the
+// rendered anchors.
+type Heading struct {
+	Level int
+	ID    string
+	Text  string
+}
+
 // Result contains both the reusable rendered body and a complete HTML page.
 type Result struct {
-	HTML  string
-	Body  string
-	Title string
+	HTML     string
+	Body     string
+	Title    string
+	Headings []Heading
 }
 
 var pageTemplate = template.Must(template.New("document").Parse(`<!doctype html>
@@ -106,6 +116,7 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 	}
 
 	title := extractTitle(document, source, normalized.SourcePath)
+	headings := extractHeadings(document, source)
 	var body bytes.Buffer
 	if err := engine.Renderer().Render(&body, source, document); err != nil {
 		return Result{}, err
@@ -140,7 +151,7 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 		return Result{}, err
 	}
 
-	return Result{HTML: page.String(), Body: body.String(), Title: title}, nil
+	return Result{HTML: page.String(), Body: body.String(), Title: title, Headings: headings}, nil
 }
 
 // Title extracts the first H1 as plain text and falls back to the filename.
@@ -339,6 +350,38 @@ func extractTitle(document ast.Node, source []byte, sourcePath string) string {
 		return title
 	}
 	return pathpkg.Base(sourcePath)
+}
+
+// extractHeadings collects every heading that received an id, in document
+// order. The ids come from the same Goldmark parser context that produced the
+// HTML anchors (GitHub-compatible slugs with CJK support and duplicate
+// suffixes), so the table of contents can never drift from the rendered ids.
+func extractHeadings(document ast.Node, source []byte) []Heading {
+	headings := make([]Heading, 0)
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		heading, ok := node.(*ast.Heading)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		rawID, ok := heading.AttributeString("id")
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		id, ok := rawID.([]byte)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		headings = append(headings, Heading{
+			Level: heading.Level,
+			ID:    string(id),
+			Text:  normalizeTitle(string(heading.Text(source))),
+		})
+		return ast.WalkContinue, nil
+	})
+	return headings
 }
 
 func normalizeTitle(value string) string {

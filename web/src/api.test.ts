@@ -32,6 +32,10 @@ describe("browser API", () => {
               date: "2026-07-11",
               tags: ["Go"],
             },
+            toc: [
+              { level: 2, id: "install", text: "Install" },
+              { level: 3, id: "homebrew", text: "Homebrew" },
+            ],
           }),
           {
             status: 200,
@@ -53,6 +57,10 @@ describe("browser API", () => {
         date: "2026-07-11",
         tags: ["Go"],
       },
+      toc: [
+        { level: 2, id: "install", text: "Install" },
+        { level: 3, id: "homebrew", text: "Homebrew" },
+      ],
     });
     expect(fetchMock.mock.calls[1]?.[0]).toBe(
       "/api/document?path=space+name.md",
@@ -111,6 +119,7 @@ describe("browser API", () => {
       title: "Null",
       html: "<p>Body</p>",
       frontmatter: null,
+      toc: [],
     });
 
     fetchMock.mockResolvedValueOnce(
@@ -124,6 +133,7 @@ describe("browser API", () => {
       title: "Missing",
       html: "",
       frontmatter: null,
+      toc: [],
     });
 
     fetchMock.mockResolvedValueOnce(
@@ -138,6 +148,53 @@ describe("browser API", () => {
       ),
     );
     await expect(browserAPI.getDocument("bad.md")).rejects.toThrow(
+      "文档响应格式无效",
+    );
+  });
+
+  it("validates the table of contents shape", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          path: "toc.md",
+          title: "Toc",
+          html: "<p>Body</p>",
+          toc: [{ level: "two", id: "install", text: "Install" }],
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.getDocument("toc.md")).rejects.toThrow(
+      "文档响应格式无效",
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          path: "notarray.md",
+          title: "NotArray",
+          html: "<p>Body</p>",
+          toc: { level: 2, id: "install", text: "Install" },
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.getDocument("notarray.md")).rejects.toThrow(
+      "文档响应格式无效",
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          path: "missing-fields.md",
+          title: "Missing",
+          html: "<p>Body</p>",
+          toc: [{ level: 2, id: "install" }],
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.getDocument("missing-fields.md")).rejects.toThrow(
       "文档响应格式无效",
     );
   });

@@ -20,11 +20,18 @@ export interface FrontMatter {
   tags?: string[];
 }
 
+export interface TocItem {
+  level: number;
+  id: string;
+  text: string;
+}
+
 export interface DocumentResponse {
   path: string;
   title: string;
   html: string;
   frontmatter: FrontMatter | null;
+  toc: TocItem[];
 }
 
 export interface PreviewAPI {
@@ -119,6 +126,29 @@ function parseFrontMatter(payload: unknown): FrontMatter | null {
   return result;
 }
 
+function parseTOC(payload: unknown): TocItem[] {
+  // The server always sends toc as an array; accept a missing field gracefully
+  // (treat as empty) but still validate the shape of every entry so a malformed
+  // response can never reach the UI as an untrusted TocItem[].
+  if (payload === undefined || payload === null) {
+    return [];
+  }
+  if (!Array.isArray(payload)) {
+    throw new Error("文档响应格式无效");
+  }
+  return payload.map((value) => {
+    if (
+      !isRecord(value) ||
+      typeof value.level !== "number" ||
+      typeof value.id !== "string" ||
+      typeof value.text !== "string"
+    ) {
+      throw new Error("文档响应格式无效");
+    }
+    return { level: value.level, id: value.id, text: value.text };
+  });
+}
+
 function parseDocument(payload: unknown): DocumentResponse {
   if (
     !isRecord(payload) ||
@@ -133,6 +163,7 @@ function parseDocument(payload: unknown): DocumentResponse {
     title: payload.title,
     html: payload.html,
     frontmatter: parseFrontMatter(payload.frontmatter),
+    toc: parseTOC(payload.toc),
   };
 }
 
