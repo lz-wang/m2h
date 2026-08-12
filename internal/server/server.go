@@ -95,16 +95,12 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		logger = io.Discard
 	}
 	hub := newEventHub(deps.keepAlive)
-	var handler http.Handler
-	if input.Kind == files.KindDirectory {
-		handler = newDirectoryHandlerWithWidth(input.Path, normalized.Mode, normalized.Width, files.DiscoverOptions{
-			Depth:   normalized.Depth,
-			Pattern: normalized.Pattern,
-			Log:     logger,
-		}, hub, logger, options.UI)
-	} else {
-		handler = newSingleFileHandlerWithWidth(input.Path, normalized.Mode, normalized.Width, hub)
-	}
+	scope := newPreviewScope(input, files.DiscoverOptions{
+		Depth:   normalized.Depth,
+		Pattern: normalized.Pattern,
+		Log:     logger,
+	})
+	handler := newPreviewHandler(scope, normalized.Mode, normalized.Width, hub, logger, options.UI)
 	httpServer := &http.Server{
 		Handler:  handler,
 		ErrorLog: log.New(logger, "m2h: http: ", 0),
@@ -132,10 +128,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		}()
 	}
 
-	address := previewURL(normalized.Host, listener.Addr())
-	if input.Kind == files.KindDirectory {
-		address = directoryPreviewURL(address, normalized.Mode, normalized.Width, normalized.TOC)
-	}
+	address := previewOptionsURL(previewURL(normalized.Host, listener.Addr()), normalized.Mode, normalized.Width, normalized.TOC)
 	_, _ = fmt.Fprintf(logger, "m2h: previewing %s at %s\n", input.Path, address)
 	if normalized.OnListening != nil {
 		normalized.OnListening(address)
@@ -218,7 +211,7 @@ func previewURL(host string, address net.Addr) string {
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
 }
 
-func directoryPreviewURL(address string, mode markdown.Mode, width markdown.Width, toc bool) string {
+func previewOptionsURL(address string, mode markdown.Mode, width markdown.Width, toc bool) string {
 	parameters := url.Values{}
 	if mode != markdown.ModeAuto {
 		parameters.Set("mode", string(mode))

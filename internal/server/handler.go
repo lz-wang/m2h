@@ -4,16 +4,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"path/filepath"
-	"strings"
 
 	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
 )
 
+// singleFileHandler renders one Markdown file as a standalone HTML document.
+//
+// TODO: preview is being unified onto the React WebUI (previewHandler). Once
+// that migration lands, this standalone handler and its full-HTML render path
+// will be removed.
 type singleFileHandler struct {
 	source string
 	root   string
@@ -75,55 +78,4 @@ func (handler *singleFileHandler) serveDocument(response http.ResponseWriter, re
 	if request.Method == http.MethodGet {
 		_, _ = io.WriteString(response, rendered.HTML)
 	}
-}
-
-type assetHandler struct {
-	root string
-}
-
-func newAssetHandler(root string) http.Handler {
-	if canonical, err := files.CanonicalPath(root); err == nil {
-		root = canonical
-	}
-	return &assetHandler{root: root}
-}
-
-func (handler *assetHandler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
-	if request.Method != http.MethodGet && request.Method != http.MethodHead {
-		response.Header().Set("Allow", "GET, HEAD")
-		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	relative, err := assetPath(request.URL)
-	if err != nil || files.IsMarkdown(relative) {
-		http.NotFound(response, request)
-		return
-	}
-	target, err := resolveRequestFile(handler.root, relative)
-	if err != nil {
-		http.NotFound(response, request)
-		return
-	}
-	asset, err := os.Open(target)
-	if err != nil {
-		http.NotFound(response, request)
-		return
-	}
-	defer asset.Close()
-	info, err := asset.Stat()
-	if err != nil || !info.Mode().IsRegular() {
-		http.NotFound(response, request)
-		return
-	}
-	response.Header().Set("Cache-Control", "no-cache")
-	http.ServeContent(response, request, info.Name(), info.ModTime(), asset)
-}
-
-func assetPath(requestURL *url.URL) (string, error) {
-	escaped := requestURL.EscapedPath()
-	if !strings.HasPrefix(escaped, "/assets/") {
-		return "", fmt.Errorf("invalid asset route")
-	}
-	return safeRelativePath(strings.TrimPrefix(escaped, "/assets/"))
 }

@@ -57,53 +57,45 @@ type documentResponse struct {
 	TOC         []tocEntryResponse   `json:"toc"`
 }
 
-type directoryHandler struct {
-	root      string
-	mode      markdown.Mode
-	width     markdown.Width
-	discovery files.DiscoverOptions
-	discover  func(context.Context, string, files.DiscoverOptions) (files.Discovery, error)
-	ui        fs.FS
+// previewHandler serves the unified React WebUI and its JSON API for both
+// single-file and directory preview. The only difference between the two is the
+// previewScope, which decides which Markdown files exist and are addressable.
+type previewHandler struct {
+	scope previewScope
+	mode  markdown.Mode
+	width markdown.Width
+	ui    fs.FS
+
+	discover func(context.Context, previewScope) (files.Discovery, error)
 }
 
-func newDirectoryHandler(
-	root string,
-	mode markdown.Mode,
-	discovery files.DiscoverOptions,
-	events *eventHub,
-	logger io.Writer,
-	ui fs.FS,
-) http.Handler {
-	return newDirectoryHandlerWithWidth(root, mode, markdown.WidthStandard, discovery, events, logger, ui)
-}
-
-func newDirectoryHandlerWithWidth(
-	root string,
+func newPreviewHandler(
+	scope previewScope,
 	mode markdown.Mode,
 	width markdown.Width,
-	discovery files.DiscoverOptions,
 	events *eventHub,
 	logger io.Writer,
 	ui fs.FS,
 ) http.Handler {
-	handler := &directoryHandler{
-		root:      root,
-		mode:      mode,
-		width:     width,
-		discovery: discovery,
-		discover:  files.Discover,
-		ui:        ui,
+	handler := &previewHandler{
+		scope: scope,
+		mode:  mode,
+		width: width,
+		ui:    ui,
+		discover: func(ctx context.Context, scope previewScope) (files.Discovery, error) {
+			return scope.discover(ctx)
+		},
 	}
 	return handler.routes(events, logger)
 }
 
-func (handler *directoryHandler) routes(events *eventHub, logger io.Writer) http.Handler {
+func (handler *previewHandler) routes(events *eventHub, logger io.Writer) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
 	mux.Handle("/api/events", events)
 	mux.HandleFunc("/api/", jsonNotFound)
-	mux.Handle("/assets/", newAssetHandler(handler.root))
+	mux.Handle("/assets/", newAssetHandler(handler.scope.root))
 	mux.HandleFunc("/ui/markdown.css", handler.serveMarkdownStyles)
 	mux.Handle("/ui/", http.StripPrefix("/ui/", immutableUIAssets(http.FileServer(http.FS(handler.ui)))))
 	mux.HandleFunc("/doc/", handler.serveDirectoryIndex)
@@ -111,12 +103,12 @@ func (handler *directoryHandler) routes(events *eventHub, logger io.Writer) http
 	return requestLogger(mux, logger)
 }
 
-func (handler *directoryHandler) serveFiles(response http.ResponseWriter, request *http.Request) {
+func (handler *previewHandler) serveFiles(response http.ResponseWriter, request *http.Request) {
 	if request.URL.RawQuery != "" {
 		writeJSONError(response, http.StatusBadRequest, "query parameters are not supported")
 		return
 	}
-	discovered, err := handler.discover(request.Context(), handler.root, handler.discovery)
+	discovered, err := handler.discover(request.Context(), handler.scope)
 	if err != nil {
 		writeJSONError(response, http.StatusInternalServerError, "discover Markdown files")
 		return
@@ -146,7 +138,7 @@ func (handler *directoryHandler) serveFiles(response http.ResponseWriter, reques
 	})
 }
 
-func (handler *directoryHandler) serveDocument(response http.ResponseWriter, request *http.Request) {
+func (handler *previewHandler) serveDocument(response http.ResponseWriter, request *http.Request) {
 	values, exists := request.URL.Query()["path"]
 	if !exists || len(values) != 1 || len(request.URL.Query()) != 1 {
 		writeJSONError(response, http.StatusBadRequest, "exactly one path query parameter is required")
@@ -157,11 +149,11 @@ func (handler *directoryHandler) serveDocument(response http.ResponseWriter, req
 		writeJSONError(response, http.StatusBadRequest, "invalid document path")
 		return
 	}
-	if !files.IsMarkdown(relative) || !files.Matches(relative, handler.discovery) {
+	if !handler.scope.allowsDocument(relative) {
 		writeJSONError(response, http.StatusNotFound, "document not found")
 		return
 	}
-	target, err := resolveRequestFile(handler.root, relative)
+	target, err := resolveRequestFile(handler.scope.root, relative)
 	if err != nil {
 		writeJSONError(response, http.StatusNotFound, "document not found")
 		return
@@ -199,7 +191,7 @@ func (handler *directoryHandler) serveDocument(response http.ResponseWriter, req
 	})
 }
 
-func (handler *directoryHandler) serveDirectoryIndex(response http.ResponseWriter, request *http.Request) {
+func (handler *previewHandler) serveDirectoryIndex(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
 		response.Header().Set("Allow", "GET, HEAD")
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
@@ -221,7 +213,7 @@ func (handler *directoryHandler) serveDirectoryIndex(response http.ResponseWrite
 	}
 }
 
-func (handler *directoryHandler) serveMarkdownStyles(response http.ResponseWriter, request *http.Request) {
+func (handler *previewHandler) serveMarkdownStyles(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
 		response.Header().Set("Allow", "GET, HEAD")
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)

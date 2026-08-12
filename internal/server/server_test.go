@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"net"
@@ -37,6 +38,7 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 			Input: source,
 			Mode:  markdown.ModeAuto,
 			Log:   &logOutput,
+			UI:    directoryTestUI(),
 			OnListening: func(address string) {
 				listening <- address
 			},
@@ -47,17 +49,46 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 		t.Fatalf("listen request = %q", got)
 	}
 	address := <-listening
-	response, err := http.Get(address)
+
+	// A single-file preview now serves the unified React WebUI: the shell is
+	// the embedded SPA and the document arrives through the JSON API.
+	shell, err := http.Get(address)
 	if err != nil {
 		t.Fatal(err)
 	}
-	body, err := io.ReadAll(response.Body)
-	response.Body.Close()
+	shellBody, err := io.ReadAll(shell.Body)
+	shell.Body.Close()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.StatusCode != http.StatusOK || !bytes.Contains(body, []byte("<title>Running</title>")) {
-		t.Fatalf("preview response = %d %q", response.StatusCode, body)
+	if shell.StatusCode != http.StatusOK || !bytes.Contains(shellBody, []byte(`id="root"`)) {
+		t.Fatalf("preview shell = %d %q", shell.StatusCode, shellBody)
+	}
+
+	listResponse, err := http.Get(address + "api/files")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var list fileListResponse
+	if err := json.NewDecoder(listResponse.Body).Decode(&list); err != nil {
+		t.Fatal(err)
+	}
+	listResponse.Body.Close()
+	if len(list.Files) != 1 || list.Files[0].Path != "guide.md" || list.DefaultPath != "guide.md" {
+		t.Fatalf("single-file list = %+v", list)
+	}
+
+	document, err := http.Get(address + "api/document?path=guide.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	documentBody, err := io.ReadAll(document.Body)
+	document.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if document.StatusCode != http.StatusOK || !bytes.Contains(documentBody, []byte("Running")) {
+		t.Fatalf("document response = %d %q", document.StatusCode, documentBody)
 	}
 	if !strings.Contains(logOutput.String(), "m2h: previewing") {
 		t.Fatalf("preview log = %q", logOutput.String())
@@ -325,8 +356,8 @@ func TestDirectoryPreviewURLOmitsDefaultParameters(t *testing.T) {
 		{name: "toc disabled with width", mode: markdown.ModeAuto, width: markdown.WidthWide, toc: false, want: "http://127.0.0.1:8793/?toc=false&width=wide"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := directoryPreviewURL("http://127.0.0.1:8793/", test.mode, test.width, test.toc); got != test.want {
-				t.Fatalf("directoryPreviewURL() = %q, want %q", got, test.want)
+			if got := previewOptionsURL("http://127.0.0.1:8793/", test.mode, test.width, test.toc); got != test.want {
+				t.Fatalf("previewOptionsURL() = %q, want %q", got, test.want)
 			}
 		})
 	}

@@ -28,7 +28,7 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	canonical := canonicalDirectory(t, root)
 	options := files.DiscoverOptions{Depth: 2, Pattern: "**/*.md"}
 	var logOutput bytes.Buffer
-	handler := newDirectoryHandler(canonical, markdown.ModeAuto, options, newEventHub(time.Second), &logOutput, directoryTestUI())
+	handler := newPreviewHandler(previewScope{root: canonical, discovery: options}, markdown.ModeAuto, markdown.WidthStandard, newEventHub(time.Second), &logOutput, directoryTestUI())
 
 	response := performRequest(handler, http.MethodGet, "/api/files")
 	if response.Code != http.StatusOK {
@@ -72,16 +72,17 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 func TestDirectoryFilesAPIDepthGlobRefreshAndDefaultSelection(t *testing.T) {
 	root := directoryFixture(t)
 	canonical := canonicalDirectory(t, root)
-	handlerState := &directoryHandler{
-		root:      canonical,
-		mode:      markdown.ModeAuto,
-		discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"},
-		discover:  files.Discover,
+	handlerState := &previewHandler{
+		scope: previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"}},
+		mode:  markdown.ModeAuto,
+		discover: func(ctx context.Context, scope previewScope) (files.Discovery, error) {
+			return scope.discover(ctx)
+		},
 	}
 	requests := 0
-	handlerState.discover = func(ctx context.Context, root string, options files.DiscoverOptions) (files.Discovery, error) {
+	handlerState.discover = func(ctx context.Context, scope previewScope) (files.Discovery, error) {
 		requests++
-		return files.Discover(ctx, root, options)
+		return scope.discover(ctx)
 	}
 	handler := handlerState.routes(newEventHub(time.Second), nil)
 
@@ -129,11 +130,12 @@ func TestDirectoryFilesAPIEmptyAndFailures(t *testing.T) {
 	t.Parallel()
 
 	root := canonicalDirectory(t, t.TempDir())
-	handlerState := &directoryHandler{
-		root:      root,
-		mode:      markdown.ModeAuto,
-		discovery: files.DiscoverOptions{Depth: 2},
-		discover:  files.Discover,
+	handlerState := &previewHandler{
+		scope: previewScope{root: root, discovery: files.DiscoverOptions{Depth: 2}},
+		mode:  markdown.ModeAuto,
+		discover: func(ctx context.Context, scope previewScope) (files.Discovery, error) {
+			return scope.discover(ctx)
+		},
 	}
 	handler := handlerState.routes(newEventHub(time.Second), nil)
 	response := performRequest(handler, http.MethodGet, "/api/files")
@@ -151,13 +153,13 @@ func TestDirectoryFilesAPIEmptyAndFailures(t *testing.T) {
 		t.Errorf("POST /api/files Allow = %q", response.Header().Get("Allow"))
 	}
 
-	handlerState.discover = func(context.Context, string, files.DiscoverOptions) (files.Discovery, error) {
+	handlerState.discover = func(context.Context, previewScope) (files.Discovery, error) {
 		return files.Discovery{}, errors.New("scan failed")
 	}
 	response = performRequest(handler, http.MethodGet, "/api/files")
 	assertJSONError(t, response, http.StatusInternalServerError)
 
-	handlerState.discover = func(context.Context, string, files.DiscoverOptions) (files.Discovery, error) {
+	handlerState.discover = func(context.Context, previewScope) (files.Discovery, error) {
 		return files.Discovery{Markdown: []files.Entry{{AbsolutePath: filepath.Join(root, "missing.md"), RelativePath: "missing.md"}}}, nil
 	}
 	response = performRequest(handler, http.MethodGet, "/api/files")
@@ -165,7 +167,7 @@ func TestDirectoryFilesAPIEmptyAndFailures(t *testing.T) {
 
 	valid := filepath.Join(root, "valid.md")
 	writeTestFile(t, valid, "# Valid")
-	handlerState.discover = func(context.Context, string, files.DiscoverOptions) (files.Discovery, error) {
+	handlerState.discover = func(context.Context, previewScope) (files.Discovery, error) {
 		return files.Discovery{Markdown: []files.Entry{{AbsolutePath: valid, RelativePath: "../invalid.md"}}}, nil
 	}
 	response = performRequest(handler, http.MethodGet, "/api/files")
@@ -180,10 +182,10 @@ func TestDirectoryDocumentAPIReadsLatestContent(t *testing.T) {
 	writeTestFile(t, source, "# Architecture\n\n[Guide](../guide.md)\n\nold body\n\n<details>raw HTML</details>")
 	writeTestFile(t, filepath.Join(root, "guide.md"), "# Guide")
 	canonical := canonicalDirectory(t, root)
-	handler := newDirectoryHandler(
-		canonical,
+	handler := newPreviewHandler(
+		previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}},
 		markdown.ModeDark,
-		files.DiscoverOptions{Depth: 2},
+		markdown.WidthStandard,
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -228,10 +230,10 @@ func TestDirectoryDocumentAPIRejectsUnsafeAndFilteredPaths(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "deep", "topic", "details.md"), "# Deep")
 	writeTestFile(t, filepath.Join(root, "notes.txt"), "text")
 	canonical := canonicalDirectory(t, root)
-	handler := newDirectoryHandler(
-		canonical,
+	handler := newPreviewHandler(
+		previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"}},
 		markdown.ModeAuto,
-		files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"},
+		markdown.WidthStandard,
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -292,10 +294,10 @@ func TestDirectoryDocumentAPIExposesFrontMatter(t *testing.T) {
 	)
 	writeTestFile(t, filepath.Join(root, "plain.md"), "# Plain\n\nno metadata\n")
 	canonical := canonicalDirectory(t, root)
-	handler := newDirectoryHandler(
-		canonical,
+	handler := newPreviewHandler(
+		previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}},
 		markdown.ModeAuto,
-		files.DiscoverOptions{Depth: 2},
+		markdown.WidthStandard,
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -365,10 +367,10 @@ func TestDirectoryDocumentAPIExposesTableOfContents(t *testing.T) {
 	)
 	writeTestFile(t, filepath.Join(root, "plain.md"), "No headings here.\n")
 	canonical := canonicalDirectory(t, root)
-	handler := newDirectoryHandler(
-		canonical,
+	handler := newPreviewHandler(
+		previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}},
 		markdown.ModeAuto,
-		files.DiscoverOptions{Depth: 2},
+		markdown.WidthStandard,
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -415,10 +417,10 @@ func TestDirectoryDocumentAPIInvalidFrontMatter(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "broken.md"), "---\ntags: [\n---\n# Broken\n")
 	writeTestFile(t, filepath.Join(root, "scalar.md"), "---\njust text\n---\n# Scalar\n")
 	canonical := canonicalDirectory(t, root)
-	handler := newDirectoryHandler(
-		canonical,
+	handler := newPreviewHandler(
+		previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}},
 		markdown.ModeAuto,
-		files.DiscoverOptions{Depth: 2},
+		markdown.WidthStandard,
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -436,10 +438,10 @@ func TestDirectoryAssetsSPAFallbackAndAPINotFound(t *testing.T) {
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "README.md"), "# Readme")
 	writeTestFile(t, filepath.Join(root, "styles", "site.css"), "body { color: red; }")
-	handler := newDirectoryHandler(
-		canonicalDirectory(t, root),
+	handler := newPreviewHandler(
+		previewScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}},
 		markdown.ModeAuto,
-		files.DiscoverOptions{Depth: 2},
+		markdown.WidthStandard,
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -488,12 +490,13 @@ func TestDirectoryWebUIAssetsAndSharedMarkdownStyles(t *testing.T) {
 		"assets/index.js":  &fstest.MapFile{Data: []byte(`console.log("m2h")`)},
 		"assets/index.css": &fstest.MapFile{Data: []byte(`.app { color: blue; }`)},
 	}
-	handlerState := &directoryHandler{
-		root:      root,
-		mode:      markdown.ModeAuto,
-		discovery: files.DiscoverOptions{Depth: 2},
-		discover:  files.Discover,
-		ui:        ui,
+	handlerState := &previewHandler{
+		scope: previewScope{root: root, discovery: files.DiscoverOptions{Depth: 2}},
+		mode:  markdown.ModeAuto,
+		discover: func(ctx context.Context, scope previewScope) (files.Discovery, error) {
+			return scope.discover(ctx)
+		},
+		ui: ui,
 	}
 	handler := handlerState.routes(newEventHub(time.Second), nil)
 
@@ -564,10 +567,10 @@ func TestDirectoryRequestLogContainsMetadataNotBody(t *testing.T) {
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "guide.md"), "# Secret title\n\nsensitive-body-text")
 	var logOutput bytes.Buffer
-	handler := newDirectoryHandler(
-		canonicalDirectory(t, root),
+	handler := newPreviewHandler(
+		previewScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}},
 		markdown.ModeAuto,
-		files.DiscoverOptions{Depth: 2},
+		markdown.WidthStandard,
 		newEventHub(time.Second),
 		&logOutput,
 		directoryTestUI(),
@@ -636,10 +639,10 @@ func TestDirectoryFilesAPIRenderFailure(t *testing.T) {
 
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "guide.md"), "# Guide")
-	handler := newDirectoryHandler(
-		canonicalDirectory(t, root),
+	handler := newPreviewHandler(
+		previewScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}},
 		"invalid",
-		files.DiscoverOptions{Depth: 2},
+		markdown.WidthStandard,
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
