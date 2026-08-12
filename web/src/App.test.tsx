@@ -599,6 +599,117 @@ describe("App directory preview", () => {
     expect(article.querySelector('[data-rich-enhanced="true"]')).not.toBeNull();
     expect(article.textContent).toBe("enhanced content");
   });
+
+  it("renders the table of contents with H2-H4 entries and highlights the active heading", async () => {
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h1 id="top">Readme</h1><h2 id="install">Install</h2><h3 id="homebrew">Homebrew</h3><p>body</p>',
+        frontmatter: null,
+        toc: [
+          { level: 1, id: "top", text: "Readme" },
+          { level: 2, id: "install", text: "Install" },
+          { level: 3, id: "homebrew", text: "Homebrew" },
+          { level: 5, id: "deep", text: "Deep" },
+        ],
+      }),
+    });
+    render(<App api={api} />);
+
+    const nav = await screen.findByRole("navigation", { name: "文档目录" });
+    // H1 (already the document title) and H5 (too deep) are excluded.
+    expect(within(nav).getByRole("link", { name: "Install" })).toBeTruthy();
+    expect(within(nav).getByRole("link", { name: "Homebrew" })).toBeTruthy();
+    expect(within(nav).queryByRole("link", { name: "Readme" })).toBeNull();
+    expect(within(nav).queryByRole("link", { name: "Deep" })).toBeNull();
+
+    expect(screen.getByRole("button", { name: "隐藏文档目录" })).toBeTruthy();
+
+    // In jsdom every heading sits at top:0, so the scroll spy activates the
+    // last entry that has scrolled past the viewport top.
+    expect(
+      await screen.findByRole("link", {
+        name: "Homebrew",
+        current: "location",
+      }),
+    ).toBeTruthy();
+  });
+
+  it("toggles the table of contents off and on through the toolbar", async () => {
+    const user = userEvent.setup();
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="install">Install</h2>',
+        frontmatter: null,
+        toc: [{ level: 2, id: "install", text: "Install" }],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByRole("navigation", { name: "文档目录" });
+    expect(window.location.search).toBe("");
+
+    await user.click(screen.getByRole("button", { name: "隐藏文档目录" }));
+    expect(screen.queryByRole("navigation", { name: "文档目录" })).toBeNull();
+    expect(window.location.search).toBe("?toc=false");
+
+    await user.click(screen.getByRole("button", { name: "显示文档目录" }));
+    expect(
+      await screen.findByRole("navigation", { name: "文档目录" }),
+    ).toBeTruthy();
+    expect(window.location.search).toBe("");
+  });
+
+  it("disables the TOC toggle and omits the panel without H2-H4 headings", async () => {
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    const toggle = screen.getByRole("button", { name: "当前文档没有目录" });
+    expect((toggle as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("navigation", { name: "文档目录" })).toBeNull();
+  });
+
+  it("scrolls to a Unicode heading and records the hash when a TOC entry is clicked", async () => {
+    const user = userEvent.setup();
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="安装">安装</h2>',
+        frontmatter: null,
+        toc: [{ level: 2, id: "安装", text: "安装" }],
+      }),
+    });
+    render(<App api={api} />);
+    const link = await screen.findByRole("link", { name: "安装" });
+    await user.click(link);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+      expect.objectContaining({ block: "start" }),
+    );
+    expect(window.location.hash).toBe(`#${encodeURIComponent("安装")}`);
+  });
+
+  it("keeps toc and width query parameters independent", async () => {
+    const user = userEvent.setup();
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="install">Install</h2>',
+        frontmatter: null,
+        toc: [{ level: 2, id: "install", text: "Install" }],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByRole("navigation", { name: "文档目录" });
+
+    await user.click(screen.getByRole("button", { name: "隐藏文档目录" }));
+    await user.click(screen.getByRole("button", { name: "文档宽度：标准" }));
+    await user.click(await screen.findByRole("menuitemradio", { name: "宽" }));
+    expect(window.location.search).toBe("?width=wide&toc=false");
+  });
 });
 
 function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {

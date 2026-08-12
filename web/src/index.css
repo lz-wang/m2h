@@ -375,7 +375,14 @@ body,
   justify-content: center;
 }
 
+.reader-main {
+  display: flex;
+  min-height: 0;
+  flex: 1;
+}
+
 .reader-scroll {
+  min-width: 0;
   min-height: 0;
   flex: 1;
 }
@@ -449,6 +456,71 @@ body,
   max-width: none;
   margin-right: 1rem;
   margin-left: 1rem;
+}
+
+/*
+ * Anchored headings sit just below the fixed toolbar; give them scroll margin
+ * so in-page navigation (TOC clicks, fragment links) lands fully visible.
+ */
+.markdown-body :is(h1, h2, h3, h4, h5, h6) {
+  scroll-margin-top: 1rem;
+}
+
+.reader-toc-toggle[aria-pressed="true"]:not(:disabled) {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.reader-toc {
+  display: flex;
+  width: 15rem;
+  flex: 0 0 15rem;
+  flex-direction: column;
+  border-left: 1px solid var(--border);
+  background: var(--background);
+}
+
+.reader-toc-scroll {
+  height: 100%;
+  overflow-y: auto;
+}
+
+.reader-toc-content {
+  padding: 1rem 1rem 2rem;
+}
+
+.reader-toc-title {
+  margin: 0 0 0.625rem;
+  color: var(--foreground);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.reader-toc-link {
+  display: block;
+  padding: 0.25rem 0;
+  border-left: 2px solid transparent;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1.25rem;
+  text-decoration: none;
+}
+
+.reader-toc-link:hover {
+  color: var(--foreground);
+}
+
+.reader-toc-link[data-active="true"] {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.reader-toc-link[data-level="3"] {
+  padding-left: 0.75rem;
+}
+
+.reader-toc-link[data-level="4"] {
+  padding-left: 1.5rem;
 }
 
 .frontmatter-panel {
@@ -605,6 +677,17 @@ body,
 @keyframes spin {
   to {
     transform: rotate(360deg);
+  }
+}
+
+/*
+ * The fixed TOC rail is only useful with enough horizontal room for the file
+ * sidebar plus the document plus the rail; below 1200px hide it so the document
+ * is not crowded. A popover fallback for narrow screens is deferred.
+ */
+@media (max-width: 1199px) {
+  .reader-toc {
+    display: none;
   }
 }
 

@@ -25,9 +25,13 @@ import type {
 } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
-import type { FrontMatter, PreviewAPI } from "./api";
+import type { FrontMatter, PreviewAPI, TocItem } from "./api";
 import { DocumentTree } from "./components/document-tree";
 import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
+import {
+  TableOfContentsPanel,
+  TOCToggle,
+} from "./components/table-of-contents";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { ScrollArea } from "./components/ui/scroll-area";
@@ -52,6 +56,7 @@ import {
 import { renderRichContent } from "./lib/render-rich-content";
 import { type DocumentWidth, type Mode, readRoute } from "./model";
 import { useDirectoryPreview } from "./use-directory-preview";
+import { useTocSpy } from "./use-toc-spy";
 
 interface AppProps {
   api?: PreviewAPI;
@@ -105,6 +110,18 @@ export function App({ api }: AppProps) {
   }, [preview.files, searchQuery]);
   const loading =
     preview.phase === "loading-files" || preview.phase === "loading-document";
+  // The TOC lists H2-H4 only: the first H1 is already the document title shown
+  // in the toolbar, and H5/H6 are too deep for a narrow rail.
+  const tocItems = useMemo<TocItem[]>(
+    () =>
+      (preview.document?.toc ?? []).filter(
+        (item) => item.level >= 2 && item.level <= 4,
+      ),
+    [preview.document],
+  );
+  const tocVisible = preview.toc && tocItems.length > 0;
+  const readerMainRef = useRef<HTMLDivElement>(null);
+  const activeHeadingID = useTocSpy(tocItems, readerMainRef, tocVisible);
 
   useEffect(() => {
     try {
@@ -267,30 +284,43 @@ export function App({ api }: AppProps) {
                 />
                 <TooltipContent side="bottom">重新扫描目录</TooltipContent>
               </Tooltip>
+              <TOCToggle
+                enabled={preview.toc}
+                available={tocItems.length > 0}
+                onChange={preview.setTOC}
+              />
               <ThemeMenu mode={preview.mode} onChange={preview.setMode} />
             </div>
           </header>
 
-          <ScrollArea className="reader-scroll">
-            <div className={`reader-canvas reader-canvas-${preview.width}`}>
-              {preview.assetError !== null ? (
-                <div className="asset-warning" role="status">
-                  <ImageOff aria-hidden="true" />
-                  <span>{preview.assetError}</span>
-                </div>
-              ) : null}
-              <PreviewContent
-                phase={preview.phase}
-                error={preview.error}
-                html={preview.document?.html ?? null}
-                frontmatter={preview.document?.frontmatter ?? null}
-                onRetry={() => void preview.retry()}
-                onClick={handleMarkdownClick}
-                onKeyDown={handleMarkdownKeyDown}
-                onErrorCapture={handleAssetError}
+          <div className="reader-main" ref={readerMainRef}>
+            <ScrollArea className="reader-scroll">
+              <div className={`reader-canvas reader-canvas-${preview.width}`}>
+                {preview.assetError !== null ? (
+                  <div className="asset-warning" role="status">
+                    <ImageOff aria-hidden="true" />
+                    <span>{preview.assetError}</span>
+                  </div>
+                ) : null}
+                <PreviewContent
+                  phase={preview.phase}
+                  error={preview.error}
+                  html={preview.document?.html ?? null}
+                  frontmatter={preview.document?.frontmatter ?? null}
+                  onRetry={() => void preview.retry()}
+                  onClick={handleMarkdownClick}
+                  onKeyDown={handleMarkdownKeyDown}
+                  onErrorCapture={handleAssetError}
+                />
+              </div>
+            </ScrollArea>
+            {tocVisible ? (
+              <TableOfContentsPanel
+                items={tocItems}
+                activeID={activeHeadingID}
               />
-            </div>
-          </ScrollArea>
+            ) : null}
+          </div>
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
