@@ -37,28 +37,28 @@ m2h_<version>_windows_{amd64,arm64}.zip
 ## 快速开始
 
 ```console
-$ m2h convert README.md
-$ m2h preview docs --browser
+$ m2h README.md
+$ m2h web docs
 ```
 
-使用 `m2h version` 或 `m2h --version` 查看当前版本。
+使用 `m2h --version` 查看当前版本。
 
 ## 转换为 HTML
 
 ```console
 # 转换单个文件，生成 README.html
-$ m2h convert README.md
+$ m2h README.md
 
 # 指定输出文件
-$ m2h convert README.md --output public/index.html
+$ m2h README.md --output public/index.html
 
 # 转换目录中的 Markdown，并保留目录结构
-$ m2h convert docs --output public/docs --depth 3 --glob '**/plan_*.md'
+$ m2h docs --output public/docs --depth 3 --glob '**/plan_*.md'
 ```
 
 目录转换默认会复制非 Markdown 资源；使用 `--copy-assets=false` 可关闭。相对 Markdown 链接会改为对应的 `.html` 链接，图片和其他本地资源路径保持不变。
 
-转换成功后，`convert` 会向标准输出打印转换数量、复制资源数量（如有）与每个生成 HTML 的绝对路径：
+转换成功后，m2h 会向标准输出打印转换数量、复制资源数量（如有）与每个生成 HTML 的绝对路径：
 
 ```text
 Converted 1 Markdown file.
@@ -79,19 +79,19 @@ Output HTML files:
 
 ```console
 # 预览单个文件；保存后局部刷新正文，不显示文件侧边栏
-$ m2h preview README.md --browser
+$ m2h web README.md
 
 # 预览目录；提供文件树、搜索、主题、正文宽度与文档目录
-$ m2h preview docs --browser --mode dark --width wide
+$ m2h web docs --mode dark --width wide
 ```
 
-服务默认监听 `http://127.0.0.1:8793`。按 `Ctrl+C` 停止服务。
+服务默认监听 `http://127.0.0.1:8793` 并自动打开浏览器，按 `Ctrl+C` 停止服务；加 `--no-open` 可仅启动服务。
 
 | 选项 | 说明 |
 | --- | --- |
 | `--host` | 监听地址；默认 `127.0.0.1`。 |
 | `--port`, `-p` | 监听端口；默认 `8793`。 |
-| `--browser` | 服务启动成功后打开系统默认浏览器。 |
+| `--open` / `--no-open` | 启动后是否打开系统默认浏览器；默认打开，使用 `--no-open` 关闭。 |
 | `--mode` | 页面主题：`light`、`dark` 或 `auto`；默认 `auto`。 |
 | `--width` | 正文宽度：`standard`、`wide` 或 `full`；默认 `standard`。 |
 | `--toc` | 是否显示文档目录；默认 `true`，关闭使用 `--toc=false`。 |
@@ -102,7 +102,7 @@ $ m2h preview docs --browser --mode dark --width wide
 
 ## GFM 兼容性
 
-`convert` 与 `preview` 共用同一套 Markdown 解析和 HTML 渲染规则，因此 GFM、脚注、GitHub Alerts、数学公式、Mermaid、原始 HTML 等语义在两种模式下保持一致。
+默认转换与 `web` 共用同一套 Markdown 解析和 HTML 渲染规则，因此 GFM、脚注、GitHub Alerts、数学公式、Mermaid、原始 HTML 等语义在两种模式下保持一致。
 
 | 特性 | 简单示例 |
 | --- | --- |
@@ -119,7 +119,7 @@ $ m2h preview docs --browser --mode dark --width wide
 | GitHub Alerts | `> [!NOTE]` 后接提示内容。 |
 | 数学公式 | `$E = mc^2$`；行间公式使用 `$$...$$` |
 | Mermaid 图表 | 使用 ```` ```mermaid ```` 围栏，例如 `flowchart LR` 与 `A --> B`。 |
-| 原始 HTML | 直接渲染，例如 `<details>内容</details>`；`preview` 会通过安全附件路由加载标签中的相对本地资源。 |
+| 原始 HTML | 直接渲染，例如 `<details>内容</details>`；`web` 会通过安全附件路由加载标签中的相对本地资源。 |
 
 数学公式和 Mermaid 图表的运行时资源已包含在输出中，生成的 HTML 可离线打开。
 

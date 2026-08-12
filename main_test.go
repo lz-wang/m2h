@@ -17,7 +17,7 @@ func TestRunReturnsExitCodeAndRoutesOutput(t *testing.T) {
 	}{
 		{
 			name:       "version",
-			args:       []string{"m2h", "version"},
+			args:       []string{"m2h", "--version"},
 			wantCode:   0,
 			wantStdout: M2HVersion + "\n",
 		},
@@ -58,7 +58,7 @@ func TestRunRejectsInvalidInjectedVersion(t *testing.T) {
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	if got := run([]string{"m2h", "version"}, nil, &stdout, &stderr); got != 1 {
+	if got := run([]string{"m2h", "--version"}, nil, &stdout, &stderr); got != 1 {
 		t.Fatalf("run() exit code = %d, want 1", got)
 	}
 	if !bytes.Contains(stderr.Bytes(), []byte("invalid m2h version")) {
