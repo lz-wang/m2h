@@ -40,25 +40,25 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 		HideVersion: true,
 		Writer:      stdout,
 		ErrWriter:   stderr,
-		Flags: []urfavecli.Flag{
+		Flags: append(
+			conversionFlags(),
 			&urfavecli.BoolFlag{
 				Name:    "version",
 				Aliases: []string{"v"},
 				Usage:   "print the m2h version",
 			},
-		},
+		),
 		Commands: []*urfavecli.Command{
 			versionCommand(info),
-			convertCommand(),
 			previewCommand(ui),
 		},
 		OnUsageError: normalizeUsageError,
 	}
-	command.Action = func(_ context.Context, current *urfavecli.Command) error {
+	command.Action = func(ctx context.Context, current *urfavecli.Command) error {
 		if current.Bool("version") {
 			return info.Write(current.Writer)
 		}
-		return urfavecli.ShowRootCommandHelp(current)
+		return convertAction(ctx, current)
 	}
 
 	return command, nil
@@ -75,34 +75,32 @@ func versionCommand(info version.Info) *urfavecli.Command {
 	}
 }
 
-func convertCommand() *urfavecli.Command {
-	return &urfavecli.Command{
-		Name:      "convert",
-		Usage:     "convert Markdown to GitHub-style HTML",
-		ArgsUsage: "<file|directory>",
-		Flags: []urfavecli.Flag{
-			&urfavecli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "write to an HTML file or output directory"},
-			&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob"},
-			&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth"},
-			modeFlag(),
-			widthFlag(),
-			&urfavecli.BoolFlag{
-				Name:        "copy-assets",
-				Value:       true,
-				DefaultText: "true",
-				Usage:       "copy non-Markdown assets in directory mode",
-			},
+// conversionFlags returns the Markdown-to-HTML options for the default convert
+// action on the root command.
+func conversionFlags() []urfavecli.Flag {
+	return []urfavecli.Flag{
+		&urfavecli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "write to an HTML file or output directory"},
+		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob"},
+		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth"},
+		modeFlag(),
+		widthFlag(),
+		&urfavecli.BoolFlag{
+			Name:        "copy-assets",
+			Value:       true,
+			DefaultText: "true",
+			Usage:       "copy non-Markdown assets in directory mode",
 		},
-		Action:       convertAction,
-		OnUsageError: normalizeUsageError,
 	}
 }
 
 var runConvert = convert.RunWithResult
 
 func convertAction(ctx context.Context, command *urfavecli.Command) error {
+	if command.Args().Len() == 0 {
+		return urfavecli.ShowRootCommandHelp(command)
+	}
 	if command.Args().Len() != 1 {
-		return fmt.Errorf("Error: convert requires exactly one file or directory")
+		return fmt.Errorf("Error: requires exactly one file or directory")
 	}
 	result, err := runConvert(ctx, convert.Options{
 		Input:         command.Args().First(),

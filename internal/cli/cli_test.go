@@ -62,29 +62,33 @@ func TestRootHelpDocumentsCommands(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("root help wrote stderr %q", stderr)
 	}
-	for _, want := range []string{"convert", "preview", "version", "--version", "-v"} {
+	for _, want := range []string{"preview", "version", "--version", "-v", "--output"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("root help does not contain %q:\n%s", want, stdout)
 		}
 	}
 }
 
-func TestCommandHelpDocumentsContract(t *testing.T) {
+func TestHelpDocumentsContract(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		command string
-		want    []string
+		name string
+		args []string
+		want []string
 	}{
 		{
-			command: "convert",
+			name: "root",
+			args: []string{"--help"},
 			want: []string{
 				"--output", "-o", "--glob", "--depth", "-d", "(default: 4)",
-				"--mode", "(default: \"auto\")", "--width", "(default: \"standard\")", "--copy-assets", "(default: true)",
+				"--mode", "(default: \"auto\")", "--width", "(default: \"standard\")",
+				"--copy-assets", "(default: true)", "--version", "-v",
 			},
 		},
 		{
-			command: "preview",
+			name: "preview",
+			args: []string{"preview", "--help"},
 			want: []string{
 				"--host", "(default: \"127.0.0.1\")", "--port", "-p", "(default: 8793)",
 				"--browser", "--mode", "(default: \"auto\")", "--width", "(default: \"standard\")",
@@ -95,10 +99,10 @@ func TestCommandHelpDocumentsContract(t *testing.T) {
 
 	for _, test := range tests {
 		test := test
-		t.Run(test.command, func(t *testing.T) {
+		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			stdout, stderr, err := runCommand(t, test.command, "--help")
+			stdout, stderr, err := runCommand(t, test.args...)
 			if err != nil {
 				t.Fatalf("help returned error: %v", err)
 			}
@@ -119,9 +123,9 @@ func TestUnknownFlagsReturnStableError(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"--unknown"},
-		{"convert", "README.md", "--unknown"},
-		{"convert", "README.md", "--unsafe-html"},
-		{"convert", "README.md", "--toc"},
+		{"README.md", "--unknown"},
+		{"README.md", "--unsafe-html"},
+		{"README.md", "--toc"},
 		{"preview", "README.md", "--unsafe-html"},
 	} {
 		_, _, err := runCommand(t, args...)
@@ -219,7 +223,7 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 	}
 	output := filepath.Join(root, "public", "index.html")
 
-	stdout, stderr, err := runCommand(t, "convert", source, "--output", output, "--mode", "dark", "--width", "wide")
+	stdout, stderr, err := runCommand(t, source, "--output", output, "--mode", "dark", "--width", "wide")
 	if err != nil {
 		t.Fatalf("convert returned error: %v", err)
 	}
@@ -251,7 +255,7 @@ func TestConvertCommandWritesDirectoryResult(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, err := runCommand(t, "convert", source, "--output", output)
+	stdout, stderr, err := runCommand(t, source, "--output", output)
 	if err != nil {
 		t.Fatalf("convert returned error: %v", err)
 	}
@@ -276,11 +280,10 @@ func TestConvertCommandValidatesArgumentsAndDirectoryOnlyFlags(t *testing.T) {
 		args []string
 		want string
 	}{
-		{args: []string{"convert"}, want: "Error: convert requires exactly one file or directory"},
-		{args: []string{"convert", source, source}, want: "Error: convert requires exactly one file or directory"},
-		{args: []string{"convert", source, "--glob", "*.md"}, want: "Error: --glob can only be used when converting a directory"},
-		{args: []string{"convert", source, "--depth", "2"}, want: "Error: --depth can only be used when converting a directory"},
-		{args: []string{"convert", source, "--copy-assets=false"}, want: "Error: --copy-assets can only be used when converting a directory"},
+		{args: []string{source, source}, want: "Error: requires exactly one file or directory"},
+		{args: []string{source, "--glob", "*.md"}, want: "Error: --glob can only be used when converting a directory"},
+		{args: []string{source, "--depth", "2"}, want: "Error: --depth can only be used when converting a directory"},
+		{args: []string{source, "--copy-assets=false"}, want: "Error: --copy-assets can only be used when converting a directory"},
 	}
 	for _, test := range tests {
 		_, _, err := runCommand(t, test.args...)
@@ -292,7 +295,7 @@ func TestConvertCommandValidatesArgumentsAndDirectoryOnlyFlags(t *testing.T) {
 
 func TestConvertCommandValidatesGlobBeforeInput(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
-	_, _, err := runCommand(t, "convert", missing, "--glob", "[")
+	_, _, err := runCommand(t, missing, "--glob", "[")
 	if err == nil || !strings.Contains(err.Error(), "invalid glob") || strings.Contains(err.Error(), "missing") {
 		t.Fatalf("convert error = %v, want invalid glob before input error", err)
 	}
@@ -301,13 +304,16 @@ func TestConvertCommandValidatesGlobBeforeInput(t *testing.T) {
 func TestModeValidationRunsBeforeFeatureHandlers(t *testing.T) {
 	t.Parallel()
 
-	for _, command := range []string{"convert", "preview"} {
-		_, _, err := runCommand(t, command, "README.md", "--mode", "sepia")
+	for _, args := range [][]string{
+		{"README.md", "--mode", "sepia"},
+		{"preview", "README.md", "--mode", "sepia"},
+	} {
+		_, _, err := runCommand(t, args...)
 		if err == nil {
-			t.Fatalf("m2h %s accepted an invalid mode", command)
+			t.Fatalf("m2h %v accepted an invalid mode", args)
 		}
 		if got, want := err.Error(), "Error: --mode must be one of light, dark, or auto"; got != want {
-			t.Fatalf("m2h %s error = %q, want %q", command, got, want)
+			t.Fatalf("m2h %v error = %q, want %q", args, got, want)
 		}
 	}
 }
@@ -315,13 +321,16 @@ func TestModeValidationRunsBeforeFeatureHandlers(t *testing.T) {
 func TestWidthValidationRunsBeforeFeatureHandlers(t *testing.T) {
 	t.Parallel()
 
-	for _, command := range []string{"convert", "preview"} {
-		_, _, err := runCommand(t, command, "README.md", "--width", "narrow")
+	for _, args := range [][]string{
+		{"README.md", "--width", "narrow"},
+		{"preview", "README.md", "--width", "narrow"},
+	} {
+		_, _, err := runCommand(t, args...)
 		if err == nil {
-			t.Fatalf("m2h %s accepted an invalid width", command)
+			t.Fatalf("m2h %v accepted an invalid width", args)
 		}
 		if got, want := err.Error(), "Error: --width must be one of standard, wide, or full"; got != want {
-			t.Fatalf("m2h %s error = %q, want %q", command, got, want)
+			t.Fatalf("m2h %v error = %q, want %q", args, got, want)
 		}
 	}
 }
