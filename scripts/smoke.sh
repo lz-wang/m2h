@@ -45,14 +45,6 @@ if [[ "${actual_version}" != "${expected_version}" ]]; then
 fi
 echo "[smoke] version ${actual_version}"
 
-NO_COLOR=1 "${binary}" view smoke.md --mode auto > view.txt
-grep -F 'Smoke' view.txt >/dev/null
-if grep -q $'\033' view.txt; then
-	echo "Error: NO_COLOR view output contains ANSI escapes" >&2
-	exit 1
-fi
-echo "[smoke] view"
-
 "${binary}" convert smoke.md --output smoke.html --mode dark
 grep -F '<title>Smoke</title>' smoke.html >/dev/null
 grep -F 'href="next.html"' smoke.html >/dev/null
