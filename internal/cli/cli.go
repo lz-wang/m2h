@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
-	"os"
 	"strings"
 
 	urfavecli "github.com/urfave/cli/v3"
@@ -16,7 +15,6 @@ import (
 	"github.com/lz-wang/m2h/internal/markdown"
 	"github.com/lz-wang/m2h/internal/server"
 	"github.com/lz-wang/m2h/internal/version"
-	"github.com/lz-wang/m2h/internal/view"
 )
 
 const (
@@ -37,7 +35,7 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 
 	command := &urfavecli.Command{
 		Name:        "m2h",
-		Usage:       "convert and preview GitHub-flavored Markdown in browsers or terminals",
+		Usage:       "convert and preview GitHub-flavored Markdown as HTML",
 		UsageText:   "m2h [global options] command [command options]",
 		HideVersion: true,
 		Writer:      stdout,
@@ -53,7 +51,6 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 			versionCommand(info),
 			convertCommand(),
 			previewCommand(ui),
-			viewCommand(),
 		},
 		OnUsageError: normalizeUsageError,
 	}
@@ -191,35 +188,6 @@ func previewAction(ctx context.Context, command *urfavecli.Command, ui fs.FS) er
 		TOCSet:     command.IsSet("toc"),
 		Log:        command.Root().ErrWriter,
 		UI:         ui,
-	})
-	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
-		return err
-	}
-	return fmt.Errorf("Error: %w", err)
-}
-
-func viewCommand() *urfavecli.Command {
-	return &urfavecli.Command{
-		Name:         "view",
-		Usage:        "render one Markdown file in the terminal",
-		ArgsUsage:    "<file>",
-		Flags:        []urfavecli.Flag{modeFlag()},
-		Action:       viewAction,
-		OnUsageError: normalizeUsageError,
-	}
-}
-
-var runView = view.Run
-
-func viewAction(ctx context.Context, command *urfavecli.Command) error {
-	if command.Args().Len() != 1 {
-		return fmt.Errorf("Error: view requires exactly one Markdown file")
-	}
-	err := runView(ctx, view.Options{
-		Input:  command.Args().First(),
-		Mode:   markdown.Mode(command.String("mode")),
-		Stdin:  os.Stdin,
-		Output: command.Root().Writer,
 	})
 	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
 		return err

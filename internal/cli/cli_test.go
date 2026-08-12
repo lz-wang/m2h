@@ -12,7 +12,6 @@ import (
 
 	"github.com/lz-wang/m2h/internal/markdown"
 	"github.com/lz-wang/m2h/internal/server"
-	"github.com/lz-wang/m2h/internal/view"
 )
 
 func runCommand(t *testing.T, args ...string) (string, string, error) {
@@ -63,7 +62,7 @@ func TestRootHelpDocumentsCommands(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("root help wrote stderr %q", stderr)
 	}
-	for _, want := range []string{"convert", "preview", "view", "version", "--version", "-v"} {
+	for _, want := range []string{"convert", "preview", "version", "--version", "-v"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("root help does not contain %q:\n%s", want, stdout)
 		}
@@ -92,7 +91,6 @@ func TestCommandHelpDocumentsContract(t *testing.T) {
 				"--toc", "(default: true)", "--glob", "--depth", "-d", "(default: 4)",
 			},
 		},
-		{command: "view", want: []string{"--mode", "(default: \"auto\")"}},
 	}
 
 	for _, test := range tests {
@@ -132,51 +130,6 @@ func TestUnknownFlagsReturnStableError(t *testing.T) {
 		}
 		if got, want := err.Error(), "Error: unknown option"; got != want {
 			t.Fatalf("m2h %v error = %q, want %q", args, got, want)
-		}
-	}
-}
-
-func TestViewCommandForwardsOptions(t *testing.T) {
-	previous := runView
-	t.Cleanup(func() { runView = previous })
-
-	var captured view.Options
-	runView = func(_ context.Context, options view.Options) error {
-		captured = options
-		return nil
-	}
-	stdout, stderr, err := runCommand(t, "view", "guide.md", "--mode", "light")
-	if err != nil || stdout != "" || stderr != "" {
-		t.Fatalf("view result stdout=%q stderr=%q err=%v", stdout, stderr, err)
-	}
-	if captured.Input != "guide.md" || captured.Mode != markdown.ModeLight || captured.Stdin != os.Stdin || captured.Output == nil {
-		t.Fatalf("view options = %+v", captured)
-	}
-}
-
-func TestViewCommandRendersMarkdown(t *testing.T) {
-	t.Setenv("NO_COLOR", "1")
-	source := filepath.Join(t.TempDir(), "guide.md")
-	if err := os.WriteFile(source, []byte("# Guide\n\n- terminal"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	stdout, stderr, err := runCommand(t, "view", source, "--mode", "dark")
-	if err != nil || stderr != "" {
-		t.Fatalf("view result stdout=%q stderr=%q err=%v", stdout, stderr, err)
-	}
-	if !strings.Contains(stdout, "Guide") || !strings.Contains(stdout, "terminal") || strings.Contains(stdout, "\x1b[") {
-		t.Fatalf("view output = %q", stdout)
-	}
-}
-
-func TestViewCommandValidatesArguments(t *testing.T) {
-	t.Parallel()
-
-	for _, args := range [][]string{{"view"}, {"view", "one.md", "two.md"}} {
-		_, _, err := runCommand(t, args...)
-		if err == nil || err.Error() != "Error: view requires exactly one Markdown file" {
-			t.Errorf("m2h %v error = %v", args, err)
 		}
 	}
 }
@@ -348,7 +301,7 @@ func TestConvertCommandValidatesGlobBeforeInput(t *testing.T) {
 func TestModeValidationRunsBeforeFeatureHandlers(t *testing.T) {
 	t.Parallel()
 
-	for _, command := range []string{"convert", "preview", "view"} {
+	for _, command := range []string{"convert", "preview"} {
 		_, _, err := runCommand(t, command, "README.md", "--mode", "sepia")
 		if err == nil {
 			t.Fatalf("m2h %s accepted an invalid mode", command)
