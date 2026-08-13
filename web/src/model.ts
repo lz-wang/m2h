@@ -1,6 +1,11 @@
 import type { FileSummary } from "./api";
 
 export type Mode = "light" | "dark" | "auto";
+// ResolvedMode is the concrete light/dark the UI settles on after resolving
+// "auto" against prefers-color-scheme. Markdown rendering surfaces that bake
+// colors in at render time (Mermaid) key off this rather than Mode so an OS
+// theme switch in "auto" still propagates without an explicit user action.
+export type ResolvedMode = "light" | "dark";
 export type DocumentWidth = "standard" | "wide" | "full";
 
 export interface RouteState {

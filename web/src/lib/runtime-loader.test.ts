@@ -55,22 +55,21 @@ describe("runtime loader", () => {
     await expect(pending).resolves.toBe(mermaidRuntime);
   });
 
-  it("initializes mermaid once with strict security and neutral theme", async () => {
+  it("attaches the mermaid runtime without configuring its theme", async () => {
     const loader = await import("./runtime-loader");
     window.mermaid = mermaidRuntime;
 
     const first = loader.loadMermaid();
     fire(headElement('script[src="/runtime/mermaid.min.js"]'), "load");
-    await first;
+    const runtime = await first;
     const second = loader.loadMermaid();
     await second;
 
-    expect(mermaidRuntime.initialize).toHaveBeenCalledTimes(1);
-    expect(mermaidRuntime.initialize).toHaveBeenCalledWith({
-      startOnLoad: false,
-      securityLevel: "strict",
-      theme: "neutral",
-    });
+    // Theme configuration is the caller's responsibility (render-rich-content),
+    // which re-runs initialize whenever the resolved theme changes; the loader
+    // only attaches the runtime and never calls initialize itself.
+    expect(runtime).toBe(mermaidRuntime);
+    expect(mermaidRuntime.initialize).not.toHaveBeenCalled();
   });
 
   it("deduplicates concurrent mermaid loads to a single script", async () => {

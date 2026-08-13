@@ -52,7 +52,7 @@ describe("renderRichContent", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root);
+    await renderRichContent(root, "light");
 
     const container = root.querySelector("div.mermaid");
     expect(container).not.toBeNull();
@@ -72,7 +72,7 @@ describe("renderRichContent", () => {
     const root = document.createElement("div");
     root.innerHTML = '<pre><code class="language-go">func main()</code></pre>';
 
-    await renderRichContent(root);
+    await renderRichContent(root, "light");
 
     expect(root.querySelector("pre")).not.toBeNull();
     expect(root.querySelector("div.mermaid")).toBeNull();
@@ -87,7 +87,7 @@ describe("renderRichContent", () => {
     const root = document.createElement("div");
     root.innerHTML = "<p>plain text and $math$ only</p>";
 
-    await renderRichContent(root);
+    await renderRichContent(root, "light");
 
     expect(loadMermaidMock).not.toHaveBeenCalled();
     expect(loadKatexMock).toHaveBeenCalledTimes(1);
@@ -99,7 +99,7 @@ describe("renderRichContent", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root);
+    await renderRichContent(root, "light");
 
     expect(loadMermaidMock).toHaveBeenCalledTimes(1);
     expect(loadKatexMock).not.toHaveBeenCalled();
@@ -110,7 +110,7 @@ describe("renderRichContent", () => {
     const root = document.createElement("div");
     root.innerHTML = "<h2>heading</h2><p>paragraph without delimiters</p>";
 
-    await renderRichContent(root);
+    await renderRichContent(root, "light");
 
     expect(loadMermaidMock).not.toHaveBeenCalled();
     expect(loadKatexMock).not.toHaveBeenCalled();
@@ -128,7 +128,7 @@ describe("renderRichContent", () => {
       root.innerHTML =
         '<pre><code class="language-go">func main()</code></pre>';
 
-      await renderRichContent(root);
+      await renderRichContent(root, "light");
 
       const button = root.querySelector<HTMLButtonElement>(".m2h-code-copy");
       if (button === null) {
@@ -175,7 +175,7 @@ describe("renderRichContent", () => {
       root.innerHTML =
         "<pre><code>first</code></pre><pre><code>second</code></pre>";
 
-      await renderRichContent(root);
+      await renderRichContent(root, "light");
 
       const buttons =
         root.querySelectorAll<HTMLButtonElement>(".m2h-code-copy");
@@ -204,7 +204,7 @@ describe("renderRichContent", () => {
     const root = document.createElement("div");
     root.innerHTML = '<code class="language-mermaid">graph TD</code>';
 
-    await renderRichContent(root);
+    await renderRichContent(root, "light");
 
     expect(mermaidMock.run).not.toHaveBeenCalled();
     expect(root.querySelector("code.language-mermaid")).not.toBeNull();
@@ -215,7 +215,7 @@ describe("renderRichContent", () => {
     const root = document.createElement("div");
     root.textContent = "$E=mc^2$";
 
-    await renderRichContent(root);
+    await renderRichContent(root, "light");
 
     expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
     const [element, options] = renderMathInElementMock.mock.calls[0];
@@ -247,9 +247,58 @@ describe("renderRichContent", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre><p>$E=mc^2$</p>';
 
-    await renderRichContent(root);
+    await renderRichContent(root, "light");
 
     expect(order).toEqual(["mermaid", "katex"]);
+  });
+
+  it("initializes mermaid with the official light theme before running diagrams", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    expect(mermaidMock.initialize).toHaveBeenCalledWith({
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "default",
+    });
+  });
+
+  it("re-initializes mermaid only when the resolved theme changes", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const lightRoot = document.createElement("div");
+    lightRoot.innerHTML =
+      '<pre><code class="language-mermaid">graph TD</code></pre>';
+    await renderRichContent(lightRoot, "light");
+
+    // Re-rendering the same light theme must not reconfigure Mermaid.
+    const lightRepeat = document.createElement("div");
+    lightRepeat.innerHTML =
+      '<pre><code class="language-mermaid">graph TD</code></pre>';
+    await renderRichContent(lightRepeat, "light");
+    expect(mermaidMock.initialize).toHaveBeenCalledTimes(1);
+
+    // Switching to dark flips the official theme and re-runs initialize so the
+    // already-baked light SVGs regenerate in the dark palette.
+    const darkRoot = document.createElement("div");
+    darkRoot.innerHTML =
+      '<pre><code class="language-mermaid">graph TD</code></pre>';
+    await renderRichContent(darkRoot, "dark");
+
+    expect(mermaidMock.initialize).toHaveBeenCalledTimes(2);
+    expect(mermaidMock.initialize).toHaveBeenNthCalledWith(1, {
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "default",
+    });
+    expect(mermaidMock.initialize).toHaveBeenNthCalledWith(2, {
+      startOnLoad: false,
+      securityLevel: "strict",
+      theme: "dark",
+    });
   });
 
   it("skips KaTeX when a stale render is reported after mermaid resolves", async () => {
@@ -260,7 +309,7 @@ describe("renderRichContent", () => {
 
     // Mermaid runs (the mock resolves), but the render is no longer current, so
     // KaTeX must not scan the now-stale root.
-    await renderRichContent(root, () => false);
+    await renderRichContent(root, "light", () => false);
 
     expect(mermaidMock.run).toHaveBeenCalledTimes(1);
     expect(renderMathInElementMock).not.toHaveBeenCalled();
@@ -272,7 +321,7 @@ describe("renderRichContent", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre><p>$E=mc^2$</p>';
 
-    await renderRichContent(root, () => true);
+    await renderRichContent(root, "light", () => true);
 
     expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
   });

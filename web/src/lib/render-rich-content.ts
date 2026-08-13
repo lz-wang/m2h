@@ -10,6 +10,7 @@
 // (the same copy convert writes into .m2h/), loaded through the runtime loader
 // only when the document contains diagrams or math.
 
+import type { ResolvedMode } from "../model";
 import {
   loadKatex,
   loadMermaid,
@@ -42,6 +43,11 @@ const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
  * requires a fenced `language-mermaid` block, KaTeX a math delimiter — so a
  * plain document preview never downloads the multi-megabyte diagram runtime.
  *
+ * `mode` is the resolved light/dark theme. Mermaid bakes diagram colors in at
+ * render time, so it is configured with the matching official theme (`default`
+ * for light, `dark` for dark) on each call; switching theme therefore requires
+ * re-running this function so diagrams regenerate in the new palette.
+ *
  * `isCurrent` is an optional freshness check consulted after Mermaid resolves.
  * Because Mermaid renders asynchronously, a slow diagram can finish after the
  * caller has swapped `root` for a different document; passing `isCurrent`
@@ -50,11 +56,13 @@ const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
  */
 export async function renderRichContent(
   root: HTMLElement,
+  mode: ResolvedMode,
   isCurrent?: () => boolean,
 ): Promise<void> {
   addCodeCopyButtons(root);
   if (hasMermaidBlocks(root)) {
     const mermaid = await loadMermaid();
+    ensureMermaidInitialized(mode, mermaid);
     await renderMermaid(mermaid, root);
   }
   if (isCurrent !== undefined && !isCurrent()) {
@@ -152,6 +160,30 @@ function setCopyStatus(button: HTMLButtonElement, copied: boolean): void {
     button.setAttribute("aria-label", "复制代码");
     button.title = "复制代码";
   }, 2_000);
+}
+
+// Mermaid's official light theme is "default" and dark theme is "dark". The
+// module tracks which one is active so `initialize` only runs when the resolved
+// theme actually changes — never on every render — while still reconfiguring
+// promptly when the user toggles between light and dark.
+type MermaidTheme = "default" | "dark";
+
+let currentMermaidTheme: MermaidTheme | null = null;
+
+function ensureMermaidInitialized(
+  mode: ResolvedMode,
+  mermaid: MermaidRuntime,
+): void {
+  const theme: MermaidTheme = mode === "dark" ? "dark" : "default";
+  if (currentMermaidTheme === theme) {
+    return;
+  }
+  mermaid.initialize({
+    startOnLoad: false,
+    securityLevel: "strict",
+    theme,
+  });
+  currentMermaidTheme = theme;
 }
 
 async function renderMermaid(

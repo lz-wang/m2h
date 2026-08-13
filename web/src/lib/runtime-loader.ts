@@ -45,8 +45,6 @@ const RUNTIME_BASE = "/runtime/";
 const scriptLoads = new Map<string, Promise<void>>();
 const styleLoads = new Map<string, Promise<void>>();
 
-let mermaidConfigured = false;
-
 function injectScript(src: string): Promise<void> {
   const pending = scriptLoads.get(src);
   if (pending !== undefined) {
@@ -94,25 +92,17 @@ function injectStyle(href: string): Promise<void> {
 }
 
 /**
- * Load the shared Mermaid runtime and initialize it once with m2h's strict,
- * theme-neutral configuration. Rejects when the script cannot be fetched or
- * does not attach `window.mermaid`.
+ * Load the shared Mermaid runtime. The loader only attaches the script and
+ * resolves with `window.mermaid`; it deliberately does not call `initialize`,
+ * because the theme must be chosen (and re-chosen on theme change) by the
+ * caller that knows the resolved light/dark mode. Rejects when the script
+ * cannot be fetched or does not attach `window.mermaid`.
  */
 export async function loadMermaid(): Promise<MermaidRuntime> {
   await injectScript(`${RUNTIME_BASE}mermaid.min.js`);
   const runtime = window.mermaid;
   if (runtime === undefined) {
     throw new Error("mermaid runtime did not attach window.mermaid");
-  }
-  if (!mermaidConfigured) {
-    runtime.initialize({
-      startOnLoad: false,
-      securityLevel: "strict",
-      // "neutral" keeps diagrams legible in both light and dark without
-      // re-rendering when the theme is toggled at runtime.
-      theme: "neutral",
-    });
-    mermaidConfigured = true;
   }
   return runtime;
 }

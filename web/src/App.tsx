@@ -54,7 +54,12 @@ import {
   TooltipTrigger,
 } from "./components/ui/tooltip";
 import { renderRichContent } from "./lib/render-rich-content";
-import { type DocumentWidth, type Mode, readRoute } from "./model";
+import {
+  type DocumentWidth,
+  type Mode,
+  type ResolvedMode,
+  readRoute,
+} from "./model";
 import { usePreview } from "./use-preview";
 import { usePreviewEvents } from "./use-preview-events";
 import { useTocSpy } from "./use-toc-spy";
@@ -299,6 +304,7 @@ export function App({ api }: AppProps) {
                   error={preview.error}
                   html={preview.document?.html ?? null}
                   frontmatter={preview.document?.frontmatter ?? null}
+                  resolvedMode={preview.resolvedMode}
                   onRetry={() => void preview.retry()}
                   onClick={handleMarkdownClick}
                   onKeyDown={handleMarkdownKeyDown}
@@ -609,6 +615,7 @@ interface PreviewContentProps {
   error: string | null;
   html: string | null;
   frontmatter: FrontMatter | null;
+  resolvedMode: ResolvedMode;
   onRetry(): void;
   onClick(event: ReactMouseEvent<HTMLElement>): void;
   onKeyDown(event: ReactKeyboardEvent<HTMLElement>): void;
@@ -620,6 +627,7 @@ function PreviewContent({
   error,
   html,
   frontmatter,
+  resolvedMode,
   onRetry,
   onClick,
   onKeyDown,
@@ -629,15 +637,17 @@ function PreviewContent({
   const renderGenerationRef = useRef(0);
 
   // React owns the <article> container; the Markdown body DOM is owned by
-  // the rich-content renderer. Writing innerHTML in a layout effect keeps UI
-  // state changes (theme, width, sidebar) from resetting KaTeX/Mermaid
-  // enhancements, and runs before paint so there is no empty-body flash.
+  // the rich-content renderer. Writing innerHTML in a layout effect runs
+  // before paint so there is no empty-body flash.
   //
-  // The effect keys on `phase` as well as `html`. Only the "ready" phase
-  // renders the <article>; re-entering "ready" (e.g. refreshing the current
-  // document, where `html` is the same string) remounts the node, so without
-  // `phase` the fresh <article> would render empty. Theme, width and sidebar
-  // changes never alter `html` or `phase`, so they cannot disturb the DOM.
+  // The effect keys on `phase`, `html`, and `resolvedMode`. Only the "ready"
+  // phase renders the <article>; re-entering "ready" (e.g. refreshing the
+  // current document, where `html` is the same string) remounts the node, so
+  // without `phase` the fresh <article> would render empty. `resolvedMode` is
+  // included because Mermaid bakes diagram colors in at render time: a light
+  // SVG stays light on a dark page, so a theme switch must re-run the body so
+  // diagrams regenerate in the new palette. Width and sidebar stay out of the
+  // deps so those changes never reset KaTeX/Mermaid enhancements.
   //
   // The generation guard pairs with renderRichContent's freshness check so a
   // slow Mermaid render that outlives its document does not apply KaTeX after
@@ -654,6 +664,7 @@ function PreviewContent({
     root.innerHTML = html;
     void renderRichContent(
       root,
+      resolvedMode,
       () => renderGenerationRef.current === generation,
     );
     return () => {
@@ -661,7 +672,7 @@ function PreviewContent({
         renderGenerationRef.current++;
       }
     };
-  }, [html, phase]);
+  }, [html, phase, resolvedMode]);
 
   if (phase === "loading-files" || phase === "loading-document") {
     return (

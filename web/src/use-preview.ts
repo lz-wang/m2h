@@ -12,6 +12,7 @@ import {
   chooseDocument,
   type DocumentWidth,
   type Mode,
+  type ResolvedMode,
   readRoute,
   routeURL,
 } from "./model";
@@ -30,6 +31,7 @@ export interface PreviewState {
   selectedPath: string | null;
   document: DocumentResponse | null;
   mode: Mode;
+  resolvedMode: ResolvedMode;
   width: DocumentWidth;
   toc: boolean;
   phase: PreviewPhase;
@@ -62,6 +64,9 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   const [documentResponse, setDocumentResponse] =
     useState<DocumentResponse | null>(null);
   const [mode, setModeState] = useState<Mode>(initialRoute.current.mode);
+  const [resolvedMode, setResolvedMode] = useState<ResolvedMode>(() =>
+    resolveMode(initialRoute.current.mode),
+  );
   const [width, setWidthState] = useState<DocumentWidth>(
     initialRoute.current.width,
   );
@@ -239,14 +244,33 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   }, [loadDocument, writeRoute]);
 
   useEffect(() => {
-    applyTheme(mode);
     const media =
-      mode === "auto" && typeof window.matchMedia === "function"
+      typeof window.matchMedia === "function"
         ? window.matchMedia("(prefers-color-scheme: dark)")
         : null;
-    const updateAutoTheme = () => applyTheme(mode, media?.matches ?? false);
-    media?.addEventListener("change", updateAutoTheme);
-    return () => media?.removeEventListener("change", updateAutoTheme);
+
+    // Resolve the concrete light/dark and mirror it into state so renderers
+    // that bake colors in at render time (Mermaid) can re-run when only the
+    // OS preference flips while mode stays "auto".
+    const apply = () => {
+      const resolved: ResolvedMode =
+        mode === "dark" || (mode === "auto" && (media?.matches ?? false))
+          ? "dark"
+          : "light";
+      setResolvedMode(resolved);
+      applyTheme(mode, resolved === "dark");
+    };
+
+    apply();
+
+    if (mode === "auto" && media !== null) {
+      media.addEventListener("change", apply);
+    }
+    return () => {
+      if (mode === "auto" && media !== null) {
+        media.removeEventListener("change", apply);
+      }
+    };
   }, [mode]);
 
   useEffect(() => {
@@ -336,6 +360,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     selectedPath,
     document: documentResponse,
     mode,
+    resolvedMode,
     width,
     toc,
     phase,
@@ -350,6 +375,19 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     reportAssetError,
     retry: refresh,
   };
+}
+
+// resolveMode collapses Mode to the concrete light/dark the UI renders. "auto"
+// consults prefers-color-scheme; explicit modes pass straight through. It
+// seeds resolvedMode before the effect runs so the first paint matches.
+function resolveMode(mode: Mode): ResolvedMode {
+  if (mode === "light" || mode === "dark") {
+    return mode;
+  }
+  return typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
 }
 
 function applyTheme(mode: Mode, autoDark?: boolean): void {

@@ -656,7 +656,7 @@ describe("App directory preview", () => {
     expect(screen.queryByText("Frontmatter")).toBeNull();
   });
 
-  it("preserves enhanced Markdown DOM across theme changes", async () => {
+  it("re-runs the document body when the resolved theme changes", async () => {
     const user = userEvent.setup();
     render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
@@ -666,8 +666,10 @@ describe("App directory preview", () => {
       throw new Error("reader article was not rendered");
     }
 
-    // Simulate KaTeX / Mermaid replacing the original Markdown DOM. Any UI
-    // state change must not reset this imperative enhancement.
+    // Mermaid bakes diagram colors in at render time, so a theme switch must
+    // re-key the body render and regenerate diagrams in the new palette. A
+    // stale manual enhancement is replaced when the server HTML re-runs
+    // through the rich-content pass.
     article.innerHTML = '<div data-rich-enhanced="true">enhanced content</div>';
 
     await user.click(
@@ -677,8 +679,8 @@ describe("App directory preview", () => {
       await screen.findByRole("menuitemradio", { name: "深色" }),
     );
 
-    expect(article.querySelector('[data-rich-enhanced="true"]')).not.toBeNull();
-    expect(article.textContent).toBe("enhanced content");
+    expect(article.querySelector('[data-rich-enhanced="true"]')).toBeNull();
+    expect(article.textContent).toContain("Body for README.md");
   });
 
   it("preserves enhanced Markdown DOM across width changes", async () => {
