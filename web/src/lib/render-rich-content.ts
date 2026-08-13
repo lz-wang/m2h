@@ -1,14 +1,4 @@
 // Rich-content enhancement for rendered Markdown HTML.
-//
-// m2h keeps its Markdown parser on stable GFM/CommonMark semantics; math and
-// diagram support is an HTML presentation layer applied after the browser
-// receives the body. This module is the single entry point so callers never
-// have to know about KaTeX or Mermaid individually.
-//
-// Mermaid runs before KaTeX so KaTeX never scans raw diagram source code.
-// Both runtimes are the shared /runtime/* assets the preview server embeds
-// (the same copy convert writes into .m2h/), loaded through the runtime loader
-// only when the document contains diagrams or math.
 
 import type { ResolvedMode } from "../model";
 import {
@@ -28,8 +18,6 @@ const COPIED_ICON =
 const COPY_FAILED_ICON =
   '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><path d="m4.5 4.5 7 7m0-7-7 7"></path></svg>';
 
-// "$$" must precede "$" so the inline delimiter does not swallow the block
-// delimiter first.
 const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
   { left: "$$", right: "$$", display: true },
   { left: "\\[", right: "\\]", display: true },
@@ -37,26 +25,6 @@ const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
   { left: "$", right: "$", display: false },
 ];
 
-/**
- * Enhance already-rendered Markdown HTML inside `root` by adding heading
- * permalinks/code controls and rendering Mermaid diagrams plus KaTeX math.
- * Safe to call repeatedly; errors from individual blocks are suppressed so a
- * broken diagram never breaks the whole document.
- *
- * Each runtime is loaded only when the document actually uses it — Mermaid
- * requires a fenced `language-mermaid` block, KaTeX a math delimiter — so a
- * plain document preview never downloads the multi-megabyte diagram runtime.
- *
- * `mode` is the resolved light/dark theme. Mermaid bakes diagram colors in at
- * render time, so it is configured with the matching official theme (`default`
- * for light, `dark` for dark) on each call; switching theme therefore requires
- * re-running this function so diagrams regenerate in the new palette.
- *
- * `isCurrent` is an optional freshness check consulted after asynchronous
- * runtime loads. Because Mermaid renders asynchronously, a slow diagram can
- * finish after the caller has swapped `root` for a different document; passing
- * `isCurrent` keeps stale work from touching the replacement body.
- */
 export async function renderRichContent(
   root: HTMLElement,
   mode: ResolvedMode,
@@ -64,6 +32,7 @@ export async function renderRichContent(
 ): Promise<void> {
   addHeadingAnchors(root);
   addCodeCopyButtons(root);
+
   if (hasMermaidBlocks(root)) {
     const mermaid = await loadMermaid();
     ensureMermaidInitialized(mode, mermaid);
@@ -72,6 +41,7 @@ export async function renderRichContent(
   if (isCurrent !== undefined && !isCurrent()) {
     return;
   }
+
   if (hasMathText(root)) {
     const renderMathInElement = await loadKatex();
     if (isCurrent !== undefined && !isCurrent()) {
@@ -86,9 +56,8 @@ export async function renderRichContent(
     return;
   }
 
-  // Restoring after Mermaid/KaTeX have finalized the body prevents a deep link
-  // from landing correctly first and then drifting when rich content changes
-  // the document height above the target.
+  // Mermaid and KaTeX can change the height above a deep-linked heading.
+  // Restore the fragment after all rich-content layout work has completed.
   restoreCurrentHash(root);
 }
 
@@ -96,9 +65,6 @@ function hasMermaidBlocks(root: HTMLElement): boolean {
   return root.querySelector("pre > code.language-mermaid") !== null;
 }
 
-// Matches the delimiters handed to KaTeX: every math span contains "$", "\("
-// or "\[" in its text content. The check is deliberately conservative — a
-// false positive only costs one runtime scan, a false negative is impossible.
 function hasMathText(root: HTMLElement): boolean {
   const text = root.textContent;
   return (
@@ -109,9 +75,13 @@ function hasMathText(root: HTMLElement): boolean {
 
 function addHeadingAnchors(root: HTMLElement): void {
   for (const heading of root.querySelectorAll<HTMLElement>(HEADING_SELECTOR)) {
-    if (heading.id === "" || heading.querySelector(".m2h-heading-anchor") !== null) {
+    if (
+      heading.id === "" ||
+      heading.querySelector(".m2h-heading-anchor") !== null
+    ) {
       continue;
     }
+
     const headingText = heading.textContent?.trim() ?? "";
     const anchor = document.createElement("a");
     anchor.className = "m2h-heading-anchor";
@@ -123,9 +93,8 @@ function addHeadingAnchors(root: HTMLElement): void {
     );
     anchor.title = "链接到此标题";
     anchor.addEventListener("click", (event) => {
-      // Keep modified clicks native so users can open the permalink in another
-      // tab/window. Stop propagation in either case so React's document-link
-      // router does not reload the current Markdown file just to change hash.
+      // Modified clicks stay native so the permalink can open in a new tab.
+      // Stop bubbling so the preview router does not reload the same document.
       event.stopPropagation();
       if (
         event.button !== 0 ||
@@ -136,6 +105,7 @@ function addHeadingAnchors(root: HTMLElement): void {
       ) {
         return;
       }
+
       event.preventDefault();
       const reduceMotion = window.matchMedia(
         "(prefers-reduced-motion: reduce)",
@@ -210,15 +180,12 @@ function addCodeCopyButtons(root: HTMLElement): void {
 }
 
 async function copyCode(value: string): Promise<boolean> {
-  // navigator.clipboard is deliberately only attempted in a secure context.
-  // m2h serves previews over HTTP by default, where execCommand remains the
-  // browser-compatible, user-gesture fallback.
   if (window.isSecureContext) {
     try {
       await navigator.clipboard.writeText(value);
       return true;
     } catch {
-      // Fall through when clipboard permission is unavailable or denied.
+      // Fall through to the browser-compatible user-gesture fallback.
     }
   }
 
@@ -254,22 +221,10 @@ function setCopyStatus(button: HTMLButtonElement, copied: boolean): void {
   }, 2_000);
 }
 
-// Mermaid's official light theme is "default" and dark theme is "dark". The
-// module tracks which one is active so `initialize` only runs when the resolved
-// theme actually changes — never on every render — while still reconfiguring
-// promptly when the user toggles between light and dark.
 type MermaidTheme = "default" | "dark";
 
 let currentMermaidTheme: MermaidTheme | null = null;
-
-// Each rendered diagram keeps its source text here rather than in a data
-// attribute: Mermaid source can be long, and the WeakMap avoids leaking it once
-// the container leaves the DOM. Retaining the source lets a later theme switch
-// regenerate the SVG without re-parsing the document body.
 const mermaidSources = new WeakMap<HTMLElement, string>();
-
-// Monotonic id handed to every mermaid.render call so each offscreen render
-// gets a unique container id (Mermaid keys its internal cache by this id).
 let mermaidRenderSequence = 0;
 
 function ensureMermaidInitialized(
@@ -288,11 +243,6 @@ function ensureMermaidInitialized(
   currentMermaidTheme = theme;
 }
 
-// Render one diagram offscreen via mermaid.render and swap the resulting SVG in
-// atomically, so the container never flashes back to source text while the new
-// palette resolves. Returns false when the render is no longer current, telling
-// the caller to abort the remaining targets; a render that throws leaves any
-// existing SVG in place so one broken diagram never breaks the document.
 async function paintMermaidTarget(
   mermaid: MermaidRuntime,
   target: HTMLElement,
@@ -310,7 +260,7 @@ async function paintMermaidTarget(
     target.innerHTML = result.svg;
     result.bindFunctions?.(target);
   } catch {
-    // Leave the existing content in place; a single bad diagram is isolated.
+    // Keep existing content when one diagram fails.
   }
   return true;
 }
@@ -348,11 +298,6 @@ async function renderMermaid(
   }
 }
 
-// Re-render only existing Mermaid diagrams in a new theme, leaving the rest of
-// the document body untouched. Used on a light/dark switch: because Mermaid
-// bakes colors into the SVG at render time, only the diagrams need regenerating,
-// while paragraphs, KaTeX, and copy controls keep both their DOM identity and
-// focus.
 export async function rerenderMermaid(
   root: HTMLElement,
   mode: ResolvedMode,
