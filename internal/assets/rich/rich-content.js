@@ -26,6 +26,23 @@
     return document.querySelector(".markdown-body");
   }
 
+  // The Go template stamps the chosen mode onto <html> as m2h-mode-light/dark/auto.
+  // Resolve it to a concrete light/dark so Mermaid picks the matching official
+  // theme; "auto" falls back to prefers-color-scheme at load time.
+  function isDarkMode() {
+    var root = document.documentElement;
+    if (root.classList.contains("m2h-mode-dark")) {
+      return true;
+    }
+    if (root.classList.contains("m2h-mode-light")) {
+      return false;
+    }
+    return (
+      typeof window.matchMedia === "function" &&
+      window.matchMedia("(prefers-color-scheme: dark)").matches
+    );
+  }
+
   function renderMath(root) {
     if (typeof renderMathInElement !== "function") {
       return;
@@ -131,10 +148,11 @@
     }
 
     if (typeof mermaid !== "undefined" && typeof mermaid.initialize === "function") {
+      var dark = isDarkMode();
       mermaid.initialize({
         startOnLoad: false,
         securityLevel: "strict",
-        theme: "neutral",
+        theme: dark ? "dark" : "default",
       });
     }
 
