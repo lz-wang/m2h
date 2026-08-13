@@ -111,6 +111,40 @@ func TestRichAssetsEmbedded(t *testing.T) {
 	}
 }
 
+// TestRichFontsAreWoff2Only guards the size optimization: m2h targets modern
+// browsers, so the woff and truetype fallback formats must not creep back in
+// with a future KaTeX upgrade.
+func TestRichFontsAreWoff2Only(t *testing.T) {
+	t.Parallel()
+
+	offenders := []string{}
+	err := fs.WalkDir(RichFS(), "fonts", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		if !strings.HasSuffix(path, ".woff2") {
+			offenders = append(offenders, path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(offenders) > 0 {
+		t.Errorf("non-woff2 font files embedded: %v", offenders)
+	}
+
+	stylesheet, err := RichAssetText("katex.min.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, unwanted := range []string{`format("woff")`, `format("truetype")`} {
+		if strings.Contains(stylesheet, unwanted) {
+			t.Errorf("katex.min.css still references %q", unwanted)
+		}
+	}
+}
+
 func TestRichContentRuntimeAddsCodeCopyButtons(t *testing.T) {
 	t.Parallel()
 
