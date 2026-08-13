@@ -21,6 +21,8 @@
     '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><path d="m3.5 8.25 2.1 2.1 4.9-4.9"></path></svg>';
   var COPY_FAILED_ICON =
     '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><path d="m4.5 4.5 7 7m0-7-7 7"></path></svg>';
+  var HEADING_ANCHOR_ICON =
+    '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg>';
 
   function documentRoot() {
     return document.querySelector(".markdown-body");
@@ -141,6 +143,101 @@
     }, 2000);
   }
 
+  function addHeadingPermalinks(root) {
+    var headings = root.querySelectorAll(
+      "h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]"
+    );
+    Array.prototype.forEach.call(headings, function (heading) {
+      var id = heading.id;
+      if (id === "" || heading.querySelector(":scope > .m2h-heading-anchor")) {
+        return;
+      }
+      var anchor = document.createElement("a");
+      anchor.className = "m2h-heading-anchor";
+      anchor.href = "#" + id;
+      // aria-hidden keeps the icon out of the accessibility tree so it never
+      // pollutes the heading's accessible name; the title still tooltips.
+      anchor.setAttribute("aria-hidden", "true");
+      anchor.title = "此标题的永久链接";
+      anchor.innerHTML = HEADING_ANCHOR_ICON;
+      heading.prepend(anchor);
+    });
+  }
+
+  function decodeFragment(hash) {
+    var encoded = hash.charAt(0) === "#" ? hash.slice(1) : hash;
+    if (encoded === "") {
+      return "";
+    }
+    try {
+      return decodeURIComponent(encoded);
+    } catch (_) {
+      return encoded;
+    }
+  }
+
+  // Jump to the URL fragment now that Mermaid/KaTeX/permalinks have settled, so
+  // the final position is not thrown off by async rendering. Returns true when a
+  // target was found and scrolled into view.
+  function restoreDeepLink() {
+    var id = decodeFragment(window.location.hash);
+    if (id === "") {
+      return false;
+    }
+    var target = document.getElementById(id);
+    if (target === null) {
+      return false;
+    }
+    target.scrollIntoView({ block: "start" });
+    return true;
+  }
+
+  // Mirror the WebUI heading spy on the window: track H1–H6, keep the URL hash
+  // in sync via replaceState (never push, so the back stack stays clean across
+  // many headings), and clear it at the very top. Attached only after the
+  // initial deep-link restore so it cannot clobber the fragment first.
+  function setupHeadingSpy(root) {
+    var headings = Array.prototype.slice.call(
+      root.querySelectorAll("h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]")
+    );
+    if (headings.length === 0) {
+      return;
+    }
+    var offset = 16;
+    var frame = 0;
+    var syncHash = function (id) {
+      var next = id === null ? "" : "#" + encodeURIComponent(id);
+      if (next === window.location.hash) {
+        return;
+      }
+      var url = window.location.pathname + window.location.search + next;
+      window.history.replaceState(null, "", url);
+    };
+    var update = function () {
+      if ((window.pageYOffset || window.scrollY || 0) <= 1) {
+        syncHash(null);
+        return;
+      }
+      var current = null;
+      for (var i = 0; i < headings.length; i++) {
+        if (headings[i].getBoundingClientRect().top <= offset) {
+          current = headings[i].id;
+        } else {
+          break;
+        }
+      }
+      syncHash(current);
+    };
+    var handleScroll = function () {
+      if (frame) {
+        cancelAnimationFrame(frame);
+      }
+      frame = requestAnimationFrame(update);
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    handleScroll();
+  }
+
   function enhance() {
     var root = documentRoot();
     if (root === null) {
@@ -156,6 +253,7 @@
       });
     }
 
+    addHeadingPermalinks(root);
     addCodeCopyButtons(root);
     var nodes = replaceMermaidBlocks(root);
     var pending =
@@ -165,12 +263,16 @@
         ? mermaid.run({ nodes: nodes, suppressErrors: true })
         : null;
 
-    if (pending && typeof pending.then === "function") {
-      pending.then(function () {
-        renderMath(root);
-      });
-    } else {
+    var afterEnhance = function () {
       renderMath(root);
+      restoreDeepLink();
+      setupHeadingSpy(root);
+    };
+
+    if (pending && typeof pending.then === "function") {
+      pending.then(afterEnhance);
+    } else {
+      afterEnhance();
     }
   }
 
