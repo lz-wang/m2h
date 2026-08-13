@@ -66,6 +66,44 @@ func TestStylesheetContractSnapshot(t *testing.T) {
 	}
 }
 
+func TestPreviewStylesheetScopesBothPalettesToOneResource(t *testing.T) {
+	t.Parallel()
+
+	stylesheet := PreviewStylesheet()
+
+	// Both palettes are present, scoped to the class the client toggles on <html>
+	// so a theme switch never needs a new stylesheet request.
+	for _, want := range []string{
+		"html:not(.dark) .markdown-body",
+		"html.dark .markdown-body",
+		"color-scheme: light",
+		"color-scheme: dark",
+	} {
+		if !strings.Contains(stylesheet, want) {
+			t.Errorf("preview stylesheet missing %q", want)
+		}
+	}
+
+	// Shared, mode-independent layers are still included and remain class-driven
+	// (layout.css keeps its own unscoped .markdown-body structural rules).
+	for _, want := range []string{
+		".m2h-mode-dark .chroma",
+		"--m2h-syntax-keyword",
+		"html.m2h-mode-dark",
+		"max-width: 980px",
+		".m2h-code-copy",
+	} {
+		if !strings.Contains(stylesheet, want) {
+			t.Errorf("preview stylesheet missing shared layer %q", want)
+		}
+	}
+
+	// The same stable bytes come back every call: there is no mode input.
+	if PreviewStylesheet() != stylesheet {
+		t.Error("PreviewStylesheet is not deterministic")
+	}
+}
+
 func TestStylesheetRejectsUnknownMode(t *testing.T) {
 	t.Parallel()
 

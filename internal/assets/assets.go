@@ -60,6 +60,28 @@ func Stylesheet(mode string) (string, error) {
 	return strings.Join([]string{markdownCSS, syntaxCSS, layoutCSS}, "\n"), nil
 }
 
+// PreviewStylesheet returns a single, mode-independent stylesheet for the Web
+// preview. Both GitHub Markdown palettes are embedded at once, each scoped to
+// the resolved theme class the preview already toggles on <html>: light rules
+// apply under html:not(.dark), dark rules under html.dark. Because the URL never
+// changes, switching theme swaps colors via the CSSOM only (no new request, no
+// full-body stylesheet reload) — convert output keeps using the mode-specific
+// Stylesheet above for standalone HTML files.
+func PreviewStylesheet() string {
+	light := scopeMarkdownCSS(githubMarkdownLight, "html:not(.dark)")
+	dark := scopeMarkdownCSS(githubMarkdownDark, "html.dark")
+	return strings.Join([]string{light, dark, syntaxCSS, layoutCSS}, "\n")
+}
+
+// scopeMarkdownCSS rewrites every ".markdown-body" selector in a GitHub
+// Markdown stylesheet to live under scope, so two palettes can coexist in one
+// stylesheet and be selected by an ancestor class. The vendored CSS only ever
+// uses ".markdown-body" as a selector prefix (never inside a value or url()),
+// so a plain replacement is safe.
+func scopeMarkdownCSS(css, scope string) string {
+	return strings.ReplaceAll(css, ".markdown-body", scope+" .markdown-body")
+}
+
 // GitHubMarkdownCSSLicense returns the embedded upstream MIT license.
 func GitHubMarkdownCSSLicense() string {
 	return githubMarkdownCSSLicense

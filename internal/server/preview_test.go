@@ -507,36 +507,33 @@ func TestDirectoryWebUIAssetsAndSharedMarkdownStyles(t *testing.T) {
 	}
 	handler := handlerState.routes(newEventHub(time.Second), nil)
 
-	for _, mode := range []markdown.Mode{markdown.ModeLight, markdown.ModeDark, markdown.ModeAuto} {
-		response := performRequest(handler, http.MethodGet, "/ui/markdown.css?mode="+string(mode))
-		if response.Code != http.StatusOK {
-			t.Fatalf("GET Markdown CSS mode %s status = %d", mode, response.Code)
-		}
-		want, err := assets.Stylesheet(string(mode))
-		if err != nil {
-			t.Fatal(err)
-		}
-		if response.Body.String() != want {
-			t.Errorf("Markdown CSS mode %s did not use shared stylesheet", mode)
-		}
-		if !strings.HasPrefix(response.Header().Get("Content-Type"), "text/css") || response.Header().Get("Cache-Control") != "no-cache" {
-			t.Errorf("Markdown CSS mode %s headers content-type=%q cache=%q", mode, response.Header().Get("Content-Type"), response.Header().Get("Cache-Control"))
-		}
+	// The Markdown stylesheet is one stable, query-independent resource: its
+	// URL never changes on a theme switch, so toggling light/dark issues no new
+	// request. Light and dark palettes coexist, selected by html.dark.
+	styles := performRequest(handler, http.MethodGet, "/ui/markdown.css")
+	if styles.Code != http.StatusOK {
+		t.Fatalf("GET Markdown CSS status = %d", styles.Code)
+	}
+	if styles.Body.String() != assets.PreviewStylesheet() {
+		t.Errorf("Markdown CSS did not serve the stable preview stylesheet")
+	}
+	if !strings.HasPrefix(styles.Header().Get("Content-Type"), "text/css") || styles.Header().Get("Cache-Control") != "no-cache" {
+		t.Errorf("Markdown CSS headers content-type=%q cache=%q", styles.Header().Get("Content-Type"), styles.Header().Get("Cache-Control"))
 	}
 
-	defaultStyles := performRequest(handler, http.MethodGet, "/ui/markdown.css")
-	wantDefault, err := assets.Stylesheet(string(markdown.ModeAuto))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if defaultStyles.Body.String() != wantDefault {
-		t.Fatal("Markdown CSS without query did not use the preview mode")
-	}
-	headStyles := performRequest(handler, http.MethodHead, "/ui/markdown.css?mode=light")
+	headStyles := performRequest(handler, http.MethodHead, "/ui/markdown.css")
 	if headStyles.Code != http.StatusOK || headStyles.Body.Len() != 0 {
 		t.Fatalf("Markdown CSS HEAD response = %d %q", headStyles.Code, headStyles.Body.String())
 	}
-	for _, target := range []string{"/ui/markdown.css?mode=invalid", "/ui/markdown.css?mode=light&extra=1", "/ui/markdown.css?mode=light&mode=dark"} {
+
+	// Any query is rejected so the resource address stays stable and cacheable.
+	for _, target := range []string{
+		"/ui/markdown.css?mode=light",
+		"/ui/markdown.css?mode=dark",
+		"/ui/markdown.css?mode=auto",
+		"/ui/markdown.css?mode=invalid",
+		"/ui/markdown.css?extra=1",
+	} {
 		if response := performRequest(handler, http.MethodGet, target); response.Code != http.StatusBadRequest {
 			t.Errorf("GET %s status = %d, want 400", target, response.Code)
 		}

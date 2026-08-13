@@ -239,21 +239,15 @@ func (handler *previewHandler) serveMarkdownStyles(response http.ResponseWriter,
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	mode := string(handler.mode)
+	// The preview stylesheet is a single mode-independent resource: light and
+	// dark palettes coexist, selected by the html.dark class the client already
+	// toggles. The URL never changes, so a theme switch triggers no new request.
+	// Reject any query to keep the resource address stable and cache-friendly.
 	if request.URL.RawQuery != "" {
-		values := request.URL.Query()
-		provided, exists := values["mode"]
-		if !exists || len(values) != 1 || len(provided) != 1 {
-			http.Error(response, "invalid mode query", http.StatusBadRequest)
-			return
-		}
-		mode = provided[0]
-	}
-	stylesheet, err := assets.Stylesheet(mode)
-	if err != nil {
-		http.Error(response, "invalid mode query", http.StatusBadRequest)
+		http.Error(response, "query parameters are not supported", http.StatusBadRequest)
 		return
 	}
+	stylesheet := assets.PreviewStylesheet()
 	response.Header().Set("Content-Type", "text/css; charset=utf-8")
 	response.Header().Set("Cache-Control", "no-cache")
 	if request.Method == http.MethodGet {

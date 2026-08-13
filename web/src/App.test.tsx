@@ -24,9 +24,16 @@ const initialFiles: FileListResponse = {
 beforeEach(() => {
   window.localStorage.clear();
   window.history.replaceState(null, "", "/");
-  document.getElementById("m2h-markdown-styles")?.remove();
   document.documentElement.className = "";
   delete document.documentElement.dataset.mode;
+  // index.html loads the Markdown stylesheet once as a stable /ui/markdown.css;
+  // mirror that here so tests can assert applyTheme never swaps its href.
+  document.getElementById("m2h-markdown-styles")?.remove();
+  const stylesheet = document.createElement("link");
+  stylesheet.id = "m2h-markdown-styles";
+  stylesheet.rel = "stylesheet";
+  stylesheet.href = "/ui/markdown.css";
+  document.head.append(stylesheet);
 });
 
 describe("App directory preview", () => {
@@ -47,7 +54,7 @@ describe("App directory preview", () => {
     expect(document.documentElement.dataset.mode).toBe("auto");
     expect(
       document.getElementById("m2h-markdown-styles")?.getAttribute("href"),
-    ).toBe("/ui/markdown.css?mode=auto");
+    ).toBe("/ui/markdown.css");
     expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
     const title = screen.getByRole("region", { name: "当前文档标题" });
     expect(title.textContent).toBe("Readme API Title");
@@ -189,7 +196,7 @@ describe("App directory preview", () => {
     expect(document.documentElement.classList.contains("dark")).toBe(true);
     expect(
       document.getElementById("m2h-markdown-styles")?.getAttribute("href"),
-    ).toBe("/ui/markdown.css?mode=dark");
+    ).toBe("/ui/markdown.css");
     expect(window.location.hash).toBe("#install");
     await waitFor(() =>
       expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
@@ -684,6 +691,11 @@ describe("App directory preview", () => {
     expect(article.querySelector("p")).toBe(paragraph);
     expect(article.textContent).toContain("Body for README.md");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
+    // The stylesheet URL is stable across a theme switch: no ?mode= change, so
+    // there is no new Markdown CSS request and no full-body style recalculation.
+    expect(
+      document.getElementById("m2h-markdown-styles")?.getAttribute("href"),
+    ).toBe("/ui/markdown.css");
   });
 
   it("keeps focus on an in-body link when the resolved theme changes", async () => {

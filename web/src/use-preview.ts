@@ -402,17 +402,10 @@ function applyTheme(mode: Mode, autoDark?: boolean): void {
   const dark = mode === "dark" || (mode === "auto" && systemDark);
   root.classList.toggle("dark", dark);
 
-  const existingStylesheet = document.getElementById("m2h-markdown-styles");
-  const stylesheet =
-    existingStylesheet instanceof HTMLLinkElement
-      ? existingStylesheet
-      : document.createElement("link");
-  if (!(existingStylesheet instanceof HTMLLinkElement)) {
-    stylesheet.id = "m2h-markdown-styles";
-    stylesheet.rel = "stylesheet";
-    document.head.append(stylesheet);
-  }
-  stylesheet.href = `/ui/markdown.css?mode=${mode}`;
+  // The Markdown stylesheet is a single stable /ui/markdown.css loaded once by
+  // index.html; both palettes coexist and are selected by the .dark class
+  // toggled above. Theme switches therefore never swap a <link> href and never
+  // trigger a full-body style/layout recalculation.
 }
 
 function documentError(reason: unknown): string {
