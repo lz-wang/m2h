@@ -2,13 +2,17 @@ import { type RefObject, useEffect, useState } from "react";
 
 import type { TocItem } from "./api";
 
-// useTocSpy tracks which heading is currently active as the reader scrolls.
+const documentHeadingSelector =
+  ".reader-document h1[id], .reader-document h2[id], .reader-document h3[id], .reader-document h4[id], .reader-document h5[id], .reader-document h6[id]";
+
+// useTocSpy serves two related but deliberately independent jobs:
+// 1. keep the optional H2-H4 TOC highlight in sync with the reader viewport;
+// 2. keep the browser fragment in sync with every H1-H6 heading while reading.
+//
 // The reader body scrolls inside a Base UI ScrollArea viewport (not the
 // window), so the scroll listener is attached to that viewport element found
-// inside the supplied container. A scroll handler throttled by
-// requestAnimationFrame picks the last heading whose top has crossed the
-// viewport's top edge, which is far more predictable than IntersectionObserver
-// thresholds for "current section" highlighting.
+// inside the supplied container. URL updates use history.replaceState so normal
+// reading never creates hundreds of Back-button entries.
 export function useTocSpy<T extends HTMLElement>(
   items: TocItem[],
   containerRef: RefObject<T | null>,
@@ -17,9 +21,6 @@ export function useTocSpy<T extends HTMLElement>(
   const [activeID, setActiveID] = useState<string | null>(items[0]?.id ?? null);
 
   useEffect(() => {
-    if (!enabled || items.length === 0) {
-      return;
-    }
     const container = containerRef.current;
     if (container === null) {
       return;
@@ -32,30 +33,53 @@ export function useTocSpy<T extends HTMLElement>(
     }
 
     let frame = 0;
-    const update = () => {
+    const update = (syncHash: boolean) => {
       // Offset slightly below the viewport top so a heading becomes active as
       // it approaches the toolbar rather than only once it passes it.
       const viewportTop = viewport.getBoundingClientRect().top + 16;
-      let current: string | null = items[0]?.id ?? null;
-      for (const item of items) {
-        const heading = document.getElementById(item.id);
-        if (heading === null) {
-          continue;
+
+      if (enabled && items.length > 0) {
+        let currentTOC: string | null = items[0]?.id ?? null;
+        for (const item of items) {
+          const heading = document.getElementById(item.id);
+          if (heading === null) {
+            continue;
+          }
+          if (heading.getBoundingClientRect().top <= viewportTop) {
+            currentTOC = item.id;
+            continue;
+          }
+          break;
         }
+        setActiveID(currentTOC);
+      }
+
+      if (!syncHash) {
+        return;
+      }
+      let currentHeading: string | null = null;
+      for (const heading of document.querySelectorAll<HTMLElement>(
+        documentHeadingSelector,
+      )) {
         if (heading.getBoundingClientRect().top <= viewportTop) {
-          current = item.id;
+          currentHeading = heading.id;
           continue;
         }
         break;
       }
-      setActiveID(current);
+      if (currentHeading !== null) {
+        replaceLocationHash(currentHeading);
+      }
     };
     const handleScroll = () => {
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(update);
+      frame = requestAnimationFrame(() => update(true));
     };
 
-    update();
+    // Never rewrite an incoming deep-link hash during setup. The document
+    // renderer first restores that fragment; the resulting/user scroll then
+    // drives normal URL synchronization.
+    update(false);
     viewport.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       cancelAnimationFrame(frame);
@@ -63,9 +87,9 @@ export function useTocSpy<T extends HTMLElement>(
     };
   }, [items, containerRef, enabled]);
 
-  // Keep the active heading in sync when the document (and therefore items)
-  // changes while the panel is hidden: the next render shows a sensible active
-  // state instead of a stale id from a previous document.
+  // Keep the active TOC heading sensible when the document changes while the
+  // panel is hidden. URL synchronization above remains active regardless of
+  // whether the TOC panel itself is visible.
   useEffect(() => {
     if (items.length === 0) {
       setActiveID(null);
@@ -79,4 +103,27 @@ export function useTocSpy<T extends HTMLElement>(
   }, [items]);
 
   return activeID;
+}
+
+function replaceLocationHash(id: string): void {
+  if (readLocationHashID() === id) {
+    return;
+  }
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `#${encodeURIComponent(id)}`,
+  );
+}
+
+function readLocationHashID(): string | null {
+  const encoded = window.location.hash.slice(1);
+  if (encoded === "") {
+    return null;
+  }
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
 }
