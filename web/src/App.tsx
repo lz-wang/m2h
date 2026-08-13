@@ -339,7 +339,11 @@ export function App({ api }: AppProps) {
               </div>
             </ScrollArea>
             {tocVisible ? (
-              <TableOfContentsPanel items={tocItems} activeID={activeTocID} />
+              <TableOfContentsPanel
+                items={tocItems}
+                activeID={activeTocID}
+                onSelectHeading={(id) => preview.replaceHash(id)}
+              />
             ) : null}
           </div>
         </SidebarInset>

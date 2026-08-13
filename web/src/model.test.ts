@@ -5,6 +5,8 @@ import {
   ancestorDirectories,
   buildTree,
   chooseDocument,
+  decodeHeadingHash,
+  encodeHeadingHash,
   readRoute,
   routeURL,
 } from "./model";
@@ -94,6 +96,24 @@ describe("route model", () => {
     );
     expect(chooseDocument(files, null, "missing.md")).toBe("z.md");
     expect(chooseDocument([], null, "")).toBeNull();
+  });
+});
+
+describe("heading hash codec", () => {
+  it("percent-encodes ids and round-trips through the address bar", () => {
+    expect(encodeHeadingHash("install")).toBe("#install");
+    expect(encodeHeadingHash("安装")).toBe(`#${encodeURIComponent("安装")}`);
+    expect(encodeHeadingHash("foo bar-1")).toBe("#foo%20bar-1");
+
+    expect(decodeHeadingHash("#install")).toBe("install");
+    expect(decodeHeadingHash(encodeHeadingHash("安装"))).toBe("安装");
+    expect(decodeHeadingHash("foo%20bar-1")).toBe("foo bar-1");
+    expect(decodeHeadingHash("")).toBe("");
+    expect(decodeHeadingHash("#")).toBe("");
+  });
+
+  it("keeps the literal fragment when it is not valid percent encoding", () => {
+    expect(decodeHeadingHash("#%")).toBe("%");
   });
 });
 

@@ -45,19 +45,21 @@ export function TOCToggle({ enabled, available, onChange }: TOCToggleProps) {
 export interface TableOfContentsPanelProps {
   items: TocItem[];
   activeID: string | null;
+  onSelectHeading?(id: string): void;
 }
 
 export function TableOfContentsPanel({
   items,
   activeID,
+  onSelectHeading,
 }: TableOfContentsPanelProps) {
   const handleSelect = (
     event: MouseEvent<HTMLAnchorElement>,
     item: TocItem,
   ) => {
     // The reader body scrolls inside a ScrollArea viewport, so native anchor
-    // navigation would not land correctly; drive the scroll ourselves, update
-    // the URL hash, and let the scroll spy update the active highlight.
+    // navigation would not land correctly; drive the scroll ourselves and hand
+    // the hash update to the caller so it goes through the single URL funnel.
     event.preventDefault();
     const heading = document.getElementById(item.id);
     if (heading !== null) {
@@ -69,9 +71,7 @@ export function TableOfContentsPanel({
         behavior: reduceMotion ? "auto" : "smooth",
       });
     }
-    const url = new URL(window.location.href);
-    url.hash = encodeURIComponent(item.id);
-    window.history.replaceState(null, "", url);
+    onSelectHeading?.(item.id);
   };
 
   return (

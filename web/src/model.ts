@@ -199,3 +199,27 @@ function normalizeHash(hash: string): string {
   }
   return hash.startsWith("#") ? hash : `#${hash}`;
 }
+
+// encodeHeadingHash wraps a heading id into the URL fragment form the reader
+// writes and restores: a leading "#" plus percent-encoding so Unicode and
+// punctuation survive a round-trip through the address bar intact. The empty
+// string means "no fragment"; callers clear the hash by passing "" rather than
+// building it here.
+export function encodeHeadingHash(id: string): string {
+  return `#${encodeURIComponent(id)}`;
+}
+
+// decodeHeadingHash is the inverse: strip the leading "#" and percent-decode,
+// keeping the literal fragment when it is not valid percent encoding. Returns
+// "" for an empty/absent fragment.
+export function decodeHeadingHash(hash: string): string {
+  const encoded = hash.startsWith("#") ? hash.slice(1) : hash;
+  if (encoded === "") {
+    return "";
+  }
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
+}

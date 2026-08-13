@@ -11,6 +11,7 @@ import {
 import {
   chooseDocument,
   type DocumentWidth,
+  encodeHeadingHash,
   type Mode,
   type ResolvedMode,
   readRoute,
@@ -43,6 +44,7 @@ export interface PreviewState {
   setMode(mode: Mode): void;
   setWidth(width: DocumentWidth): void;
   setTOC(toc: boolean): void;
+  replaceHash(id: string | null): void;
   reportAssetError(source: string): void;
   retry(): Promise<void>;
 }
@@ -347,6 +349,19 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     [writeRoute],
   );
 
+  // replaceHash is the single funnel for rewriting the URL fragment from the UI
+  // — TOC clicks, heading permalinks, native Markdown links and the scroll spy
+  // all route through here so mode/width/toc/path stay consistent. It always
+  // replaces history (never pushes): scrolling past many headings must not spam
+  // the back stack.
+  const replaceHash = useCallback(
+    (id: string | null) => {
+      const hash = id === null ? "" : encodeHeadingHash(id);
+      writeRoute(selectedPathRef.current, "replace", hash);
+    },
+    [writeRoute],
+  );
+
   const reportAssetError = useCallback((source: string) => {
     setAssetError(
       source === "" ? "有附件加载失败。" : `附件加载失败：${source}`,
@@ -372,6 +387,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     setMode,
     setWidth,
     setTOC,
+    replaceHash,
     reportAssetError,
     retry: refresh,
   };
