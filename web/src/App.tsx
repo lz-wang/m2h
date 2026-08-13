@@ -60,9 +60,9 @@ import {
   type ResolvedMode,
   readRoute,
 } from "./model";
+import { useHeadingSpy } from "./use-heading-spy";
 import { usePreview } from "./use-preview";
 import { usePreviewEvents } from "./use-preview-events";
-import { useTocSpy } from "./use-toc-spy";
 
 interface AppProps {
   api?: PreviewAPI;
@@ -122,18 +122,44 @@ export function App({ api }: AppProps) {
   }, [preview.files, searchQuery]);
   const loading =
     preview.phase === "loading-files" || preview.phase === "loading-document";
-  // The TOC lists H2-H4 only: the first H1 is already the document title shown
-  // in the toolbar, and H5/H6 are too deep for a narrow rail.
-  const tocItems = useMemo<TocItem[]>(
-    () =>
-      (preview.document?.toc ?? []).filter(
-        (item) => item.level >= 2 && item.level <= 4,
-      ),
+  // The scroll spy follows every heading (H1–H6) so the URL can reflect the
+  // reading position even with the TOC panel hidden; the right-hand TOC still
+  // lists H2–H4 only (the first H1 is the toolbar title, H5/H6 are too deep for
+  // a narrow rail) and derives its highlight from that single source.
+  const headings = useMemo<TocItem[]>(
+    () => preview.document?.toc ?? [],
     [preview.document],
+  );
+  const tocItems = useMemo<TocItem[]>(
+    () => headings.filter((item) => item.level >= 2 && item.level <= 4),
+    [headings],
   );
   const tocVisible = preview.toc && tocItems.length > 0;
   const readerMainRef = useRef<HTMLDivElement>(null);
-  const activeHeadingID = useTocSpy(tocItems, readerMainRef, tocVisible);
+  const activeHeadingID = useHeadingSpy(
+    headings,
+    readerMainRef,
+    preview.phase === "ready",
+  );
+  // The TOC highlight lags the real position when the active heading is deeper
+  // than H4 (or is the document H1): walk back through the full heading list to
+  // the nearest H2–H4 ancestor so the rail still marks the enclosing section.
+  const activeTocID = useMemo(() => {
+    if (activeHeadingID === null) {
+      return null;
+    }
+    const index = headings.findIndex((item) => item.id === activeHeadingID);
+    if (index === -1) {
+      return null;
+    }
+    for (let position = index; position >= 0; position -= 1) {
+      const candidate = headings[position];
+      if (candidate.level >= 2 && candidate.level <= 4) {
+        return candidate.id;
+      }
+    }
+    return null;
+  }, [headings, activeHeadingID]);
 
   useEffect(() => {
     try {
@@ -313,10 +339,7 @@ export function App({ api }: AppProps) {
               </div>
             </ScrollArea>
             {tocVisible ? (
-              <TableOfContentsPanel
-                items={tocItems}
-                activeID={activeHeadingID}
-              />
+              <TableOfContentsPanel items={tocItems} activeID={activeTocID} />
             ) : null}
           </div>
         </SidebarInset>

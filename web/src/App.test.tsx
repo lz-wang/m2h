@@ -780,8 +780,29 @@ describe("App directory preview", () => {
 
     expect(screen.getByRole("button", { name: "隐藏文档目录" })).toBeTruthy();
 
-    // In jsdom every heading sits at top:0, so the scroll spy activates the
-    // last entry that has scrolled past the viewport top.
+    // Pinned to the top of the document, no section is active yet so the URL
+    // stays clean and no TOC link reports the current location.
+    expect(within(nav).queryByRole("link", { current: "location" })).toBeNull();
+
+    // Scrolling partway down: every heading sits at top:0 in jsdom, so the last
+    // heading (the H5) becomes the active position and the TOC highlights its
+    // nearest H2–H4 ancestor.
+    const viewport = document.querySelector(
+      '.reader-main [data-slot="scroll-area-viewport"]',
+    );
+    if (!(viewport instanceof HTMLElement)) {
+      throw new Error("scroll viewport was not rendered");
+    }
+    Object.defineProperty(viewport, "scrollTop", {
+      configurable: true,
+      value: 100,
+    });
+    await act(async () => {
+      fireEvent.scroll(viewport);
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
     expect(
       await screen.findByRole("link", {
         name: "Homebrew",
