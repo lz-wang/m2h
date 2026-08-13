@@ -277,20 +277,6 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
 
   useEffect(() => {
     document.title = documentResponse?.title ?? "m2h";
-    if (documentResponse === null || window.location.hash === "") {
-      return;
-    }
-    const frame = window.requestAnimationFrame(() => {
-      const encodedID = window.location.hash.slice(1);
-      let targetID = encodedID;
-      try {
-        targetID = decodeURIComponent(encodedID);
-      } catch {
-        // Keep the literal fragment when it is not valid percent encoding.
-      }
-      document.getElementById(targetID)?.scrollIntoView({ block: "start" });
-    });
-    return () => window.cancelAnimationFrame(frame);
   }, [documentResponse]);
 
   const refresh = useCallback(async () => {

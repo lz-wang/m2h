@@ -22,7 +22,14 @@ import type {
   PointerEvent as ReactPointerEvent,
   SyntheticEvent,
 } from "react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type { FrontMatter, PreviewAPI, TocItem } from "./api";
 import { DocumentTree } from "./components/document-tree";
@@ -169,6 +176,50 @@ export function App({ api }: AppProps) {
     readerMainRef,
     preview.replaceHash,
   );
+  // A deep-link restore is "pending" from the moment a new document path is
+  // selected with a fragment in the URL until rich-content enhancement finishes
+  // and we have scrolled to the fragment. While pending, the scroll spy must not
+  // rewrite the URL — otherwise the body settles at the top, the spy reports the
+  // first heading, and the original #section is lost before the restore runs.
+  const restoringRef = useRef(false);
+  const documentPath = preview.document?.path ?? null;
+  // A layout effect (not passive) so the guard is set synchronously during
+  // commit — before the body's async rich-content enhancement resolves and
+  // calls restoreFragment, and before any scroll-spy URL write.
+  useLayoutEffect(() => {
+    restoringRef.current = window.location.hash !== "" && documentPath !== null;
+  }, [documentPath]);
+
+  // restoreFragment scrolls to the URL's fragment once the rendered body —
+  // including async Mermaid/KaTeX that can shift layout — has settled. It always
+  // uses instant scrolling and never rewrites the URL (the fragment is already
+  // there). Called by PreviewContent via onContentReady.
+  const restoreFragment = useCallback(() => {
+    if (!restoringRef.current) {
+      return;
+    }
+    const id = decodeHeadingHash(window.location.hash);
+    if (id !== "") {
+      navigateToHeading(id, { behavior: "auto", updateURL: false });
+    }
+    restoringRef.current = false;
+  }, [navigateToHeading]);
+
+  // Reflect the reading position into the URL as the user scrolls. replaceState
+  // (never push) keeps the back stack clean across the many headings a scroll
+  // passes. Skipped entirely while a deep-link restore is pending so it cannot
+  // clobber the fragment, and no-op when the position already matches the URL.
+  useEffect(() => {
+    if (restoringRef.current) {
+      return;
+    }
+    const currentID = decodeHeadingHash(window.location.hash);
+    const nextID = activeHeadingID ?? "";
+    if (nextID === currentID) {
+      return;
+    }
+    preview.replaceHash(activeHeadingID);
+  }, [activeHeadingID, preview.replaceHash]);
 
   useEffect(() => {
     try {
@@ -353,6 +404,7 @@ export function App({ api }: AppProps) {
                   frontmatter={preview.document?.frontmatter ?? null}
                   resolvedMode={preview.resolvedMode}
                   onRetry={() => void preview.retry()}
+                  onContentReady={restoreFragment}
                   onClick={handleMarkdownClick}
                   onKeyDown={handleMarkdownKeyDown}
                   onErrorCapture={handleAssetError}
@@ -669,6 +721,7 @@ interface PreviewContentProps {
   frontmatter: FrontMatter | null;
   resolvedMode: ResolvedMode;
   onRetry(): void;
+  onContentReady?(): void;
   onClick(event: ReactMouseEvent<HTMLElement>): void;
   onKeyDown(event: ReactKeyboardEvent<HTMLElement>): void;
   onErrorCapture(event: SyntheticEvent<HTMLElement>): void;
@@ -681,6 +734,7 @@ function PreviewContent({
   frontmatter,
   resolvedMode,
   onRetry,
+  onContentReady,
   onClick,
   onKeyDown,
   onErrorCapture,
@@ -695,6 +749,10 @@ function PreviewContent({
   const resolvedModeRef = useRef<ResolvedMode>(resolvedMode);
   const renderedModeRef = useRef<ResolvedMode | null>(null);
   resolvedModeRef.current = resolvedMode;
+  // Read through a ref so the body effect can keep depending on [html, phase]
+  // only; a new onContentReady identity must not re-render the body.
+  const onContentReadyRef = useRef(onContentReady);
+  onContentReadyRef.current = onContentReady;
 
   // React owns the <article> container; the Markdown body DOM is owned by
   // the rich-content renderer. Writing innerHTML in a layout effect runs
@@ -727,12 +785,21 @@ function PreviewContent({
     const mode = resolvedModeRef.current;
     root.innerHTML = html;
     renderedModeRef.current = mode;
+    let active = true;
     void renderRichContent(
       root,
       mode,
       () => renderGenerationRef.current === generation,
-    );
+    ).finally(() => {
+      // Mermaid/KaTeX/permalinks have settled. Only signal readiness if this is
+      // still the render on screen, so a document swapped mid-enhancement never
+      // triggers a fragment restore for stale content.
+      if (active && renderGenerationRef.current === generation) {
+        onContentReadyRef.current?.();
+      }
+    });
     return () => {
+      active = false;
       if (renderGenerationRef.current === generation) {
         renderGenerationRef.current++;
       }

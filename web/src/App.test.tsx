@@ -199,9 +199,9 @@ describe("App directory preview", () => {
     ).toBe("/ui/markdown.css");
     expect(window.location.hash).toBe("#install");
     await waitFor(() =>
-      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith({
-        block: "start",
-      }),
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+        expect.objectContaining({ block: "start" }),
+      ),
     );
   });
 
@@ -273,6 +273,7 @@ describe("App directory preview", () => {
 
     fireEvent.keyDown(link, { key: "Enter" });
     await screen.findByRole("heading", { level: 2, name: "Install" });
+    await settleScrollPosition();
     expect(
       window.location.pathname + window.location.search + window.location.hash,
     ).toBe("/doc/guides/setup.md#install");
@@ -892,6 +893,35 @@ describe("App directory preview", () => {
     );
   });
 
+  it("syncs the URL hash to the active heading while scrolling, even with the TOC hidden", async () => {
+    const user = userEvent.setup();
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="alpha">Alpha</h2><h2 id="beta">Beta</h2>',
+        frontmatter: null,
+        toc: [
+          { level: 2, id: "alpha", text: "Alpha" },
+          { level: 2, id: "beta", text: "Beta" },
+        ],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByRole("heading", { level: 2, name: "Alpha" });
+    // Pinned at the top, the URL stays clean.
+    expect(window.location.hash).toBe("");
+
+    // With the TOC panel hidden the URL must still follow the reading position.
+    await user.click(screen.getByRole("button", { name: "隐藏文档目录" }));
+
+    // Scrolled partway down: every heading sits at top:0 in jsdom, so the spy
+    // reports the last heading "beta" and the URL follows via replaceState.
+    await settleScrollPosition();
+    expect(window.location.hash).toBe("#beta");
+    expect(window.location.search).toBe("?toc=false");
+  });
+
   it("keeps toc and width query parameters independent", async () => {
     const user = userEvent.setup();
     const api = createAPI({
@@ -933,6 +963,28 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
     }),
     ...overrides,
   };
+}
+
+// jsdom does not reflect layout or scroll offsets, so a real "scrolled to a
+// heading" state never reaches the heading spy. Model it explicitly so the spy
+// reports the active section and the URL-sync logic keeps the fragment stable.
+async function settleScrollPosition(): Promise<void> {
+  const viewport = document.querySelector(
+    '.reader-main [data-slot="scroll-area-viewport"]',
+  );
+  if (!(viewport instanceof HTMLElement)) {
+    return;
+  }
+  Object.defineProperty(viewport, "scrollTop", {
+    configurable: true,
+    value: 100,
+  });
+  await act(async () => {
+    fireEvent.scroll(viewport);
+    await new Promise((resolve) => {
+      setTimeout(resolve, 0);
+    });
+  });
 }
 
 // installThemeMedia swaps window.matchMedia for a controllable prefers-color-
