@@ -132,10 +132,40 @@ html[data-width="full"] .markdown-body {
 /*
  * Extended markup styles for m2h's ==mark==, ^^insert^^, Critic and ++keys++.
  * These are document semantics shared by convert output and Web preview, so
- * they live with the Markdown stylesheet rather than the React WebUI. The
- * <mark> color is intentionally not redefined: github-markdown-css already
- * paints it yellow in light mode.
+ * they live with the Markdown stylesheet rather than the React WebUI.
+ *
+ * The mark and Critic colors are theme-aware CSS variables. The light values
+ * are tuned for the white page; in dark mode the same low-alpha washes fade on
+ * the #0d1117 background, so .m2h-mode-dark (and the auto dark media query)
+ * raise the opacity and switch to GitHub's brighter dark hues, mirroring the
+ * --m2h-page-background scoping above.
  */
+html {
+  --m2h-critic-mark-bg: #fff8c5;
+  --m2h-critic-delete-bg: rgb(248 81 73 / 16%);
+  --m2h-critic-insert-bg: rgb(46 160 67 / 16%);
+  --m2h-critic-block-highlight-bg: rgb(210 153 34 / 18%);
+  --m2h-critic-comment-opacity: 0.55;
+}
+
+html.m2h-mode-dark {
+  --m2h-critic-mark-bg: rgb(187 128 9 / 40%);
+  --m2h-critic-delete-bg: rgb(248 81 73 / 30%);
+  --m2h-critic-insert-bg: rgb(63 185 80 / 30%);
+  --m2h-critic-block-highlight-bg: rgb(187 128 9 / 32%);
+  --m2h-critic-comment-opacity: 0.72;
+}
+
+@media (prefers-color-scheme: dark) {
+  html.m2h-mode-auto {
+    --m2h-critic-mark-bg: rgb(187 128 9 / 40%);
+    --m2h-critic-delete-bg: rgb(248 81 73 / 30%);
+    --m2h-critic-insert-bg: rgb(63 185 80 / 30%);
+    --m2h-critic-block-highlight-bg: rgb(187 128 9 / 32%);
+    --m2h-critic-comment-opacity: 0.72;
+  }
+}
+
 .markdown-body ins {
   text-decoration: underline;
   text-underline-offset: 0.1em;
@@ -152,17 +182,21 @@ html[data-width="full"] .markdown-body {
   color: inherit;
 }
 
+.markdown-body mark {
+  background-color: var(--m2h-critic-mark-bg);
+}
+
 .markdown-body .m2h-critic-comment {
   color: inherit;
-  opacity: 0.55;
+  opacity: var(--m2h-critic-comment-opacity);
 }
 
 .markdown-body .m2h-critic-delete {
-  background-color: rgb(248 81 73 / 16%);
+  background-color: var(--m2h-critic-delete-bg);
 }
 
 .markdown-body .m2h-critic-insert {
-  background-color: rgb(46 160 67 / 16%);
+  background-color: var(--m2h-critic-insert-bg);
 }
 
 .markdown-body .m2h-critic-block {
@@ -171,15 +205,15 @@ html[data-width="full"] .markdown-body {
 }
 
 .markdown-body .m2h-critic-block-highlight {
-  background-color: rgb(210 153 34 / 18%);
+  background-color: var(--m2h-critic-block-highlight-bg);
 }
 
 .markdown-body .m2h-critic-block-insert {
-  background-color: rgb(46 160 67 / 16%);
+  background-color: var(--m2h-critic-insert-bg);
 }
 
 .markdown-body .m2h-critic-block-delete {
-  background-color: rgb(248 81 73 / 16%);
+  background-color: var(--m2h-critic-delete-bg);
 }
 
 .markdown-body .m2h-critic-block > :first-child {

@@ -84,6 +84,7 @@ func TestStylesheetIncludesExtendedMarkup(t *testing.T) {
 	for _, want := range []string{
 		".markdown-body ins",
 		".markdown-body .keys",
+		".markdown-body mark",
 		".markdown-body .m2h-critic-comment",
 		".markdown-body .m2h-critic-delete",
 		".markdown-body .m2h-critic-insert",
@@ -94,6 +95,31 @@ func TestStylesheetIncludesExtendedMarkup(t *testing.T) {
 	} {
 		if !strings.Contains(stylesheet, want) {
 			t.Errorf("stylesheet does not contain extended-markup rule %q", want)
+		}
+	}
+}
+
+func TestStylesheetExtendedMarkupIsThemeAware(t *testing.T) {
+	t.Parallel()
+
+	// layout.css is shared by every mode, so the Critic colors must be CSS
+	// variables with explicit dark overrides; otherwise red/green/amber washes
+	// are unreadable on the #0d1117 dark background.
+	stylesheet, err := Stylesheet("light")
+	if err != nil {
+		t.Fatalf("Stylesheet(\"light\") returned error: %v", err)
+	}
+	for _, want := range []string{
+		"--m2h-critic-mark-bg:",
+		"--m2h-critic-delete-bg:",
+		"--m2h-critic-insert-bg:",
+		"html.m2h-mode-dark",
+		"rgb(187 128 9 / 40%)",
+		"rgb(248 81 73 / 30%)",
+		"rgb(63 185 80 / 30%)",
+	} {
+		if !strings.Contains(stylesheet, want) {
+			t.Errorf("stylesheet does not contain dark-mode critic token %q", want)
 		}
 	}
 }
