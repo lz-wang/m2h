@@ -7,7 +7,8 @@
 //
 // Mermaid runs before KaTeX so KaTeX never scans raw diagram source code.
 // Both runtimes are the shared /runtime/* assets the preview server embeds
-// (the same copy convert writes into .m2h/), loaded through the runtime loader.
+// (the same copy convert writes into .m2h/), loaded through the runtime loader
+// only when the document contains diagrams or math.
 
 import {
   loadKatex,
@@ -37,6 +38,10 @@ const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
  * diagrams and KaTeX math. Safe to call repeatedly; errors from individual
  * blocks are suppressed so a broken diagram never breaks the whole document.
  *
+ * Each runtime is loaded only when the document actually uses it — Mermaid
+ * requires a fenced `language-mermaid` block, KaTeX a math delimiter — so a
+ * plain document preview never downloads the multi-megabyte diagram runtime.
+ *
  * `isCurrent` is an optional freshness check consulted after Mermaid resolves.
  * Because Mermaid renders asynchronously, a slow diagram can finish after the
  * caller has swapped `root` for a different document; passing `isCurrent`
@@ -47,17 +52,36 @@ export async function renderRichContent(
   root: HTMLElement,
   isCurrent?: () => boolean,
 ): Promise<void> {
-  const mermaid = await loadMermaid();
   addCodeCopyButtons(root);
-  await renderMermaid(mermaid, root);
+  if (hasMermaidBlocks(root)) {
+    const mermaid = await loadMermaid();
+    await renderMermaid(mermaid, root);
+  }
   if (isCurrent !== undefined && !isCurrent()) {
     return;
   }
-  const renderMathInElement = await loadKatex();
-  renderMathInElement(root, {
-    delimiters: MATH_DELIMITERS,
-    throwOnError: false,
-  });
+  if (hasMathText(root)) {
+    const renderMathInElement = await loadKatex();
+    renderMathInElement(root, {
+      delimiters: MATH_DELIMITERS,
+      throwOnError: false,
+    });
+  }
+}
+
+function hasMermaidBlocks(root: HTMLElement): boolean {
+  return root.querySelector("pre > code.language-mermaid") !== null;
+}
+
+// Matches the delimiters handed to KaTeX: every math span contains "$", "\("
+// or "\[" in its text content. The check is deliberately conservative — a
+// false positive only costs one runtime scan, a false negative is impossible.
+function hasMathText(root: HTMLElement): boolean {
+  const text = root.textContent;
+  return (
+    text !== null &&
+    (text.includes("$") || text.includes("\\(") || text.includes("\\["))
+  );
 }
 
 function addCodeCopyButtons(root: HTMLElement): void {

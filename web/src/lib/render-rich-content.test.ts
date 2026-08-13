@@ -21,11 +21,17 @@ const renderMathInElementMock = vi.hoisted(() =>
   vi.fn<(element: HTMLElement, options?: MathAutoRenderOptions) => void>(),
 );
 
+const loadMermaidMock = vi.hoisted(() =>
+  vi.fn(async (): Promise<MermaidRuntime> => mermaidMock),
+);
+
+const loadKatexMock = vi.hoisted(() =>
+  vi.fn(async (): Promise<MathAutoRenderer> => renderMathInElementMock),
+);
+
 vi.mock("./runtime-loader", () => ({
-  loadMermaid: vi.fn(async (): Promise<MermaidRuntime> => mermaidMock),
-  loadKatex: vi.fn(
-    async (): Promise<MathAutoRenderer> => renderMathInElementMock,
-  ),
+  loadMermaid: loadMermaidMock,
+  loadKatex: loadKatexMock,
 }));
 
 describe("renderRichContent", () => {
@@ -35,6 +41,8 @@ describe("renderRichContent", () => {
     mermaidMock.initialize.mockClear();
     mermaidMock.run.mockClear();
     renderMathInElementMock.mockClear();
+    loadMermaidMock.mockClear();
+    loadKatexMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
   });
 
@@ -72,6 +80,40 @@ describe("renderRichContent", () => {
     expect(
       root.querySelector<HTMLButtonElement>(".m2h-code-copy"),
     ).not.toBeNull();
+  });
+
+  it("does not load the mermaid runtime without diagram blocks", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = "<p>plain text and $math$ only</p>";
+
+    await renderRichContent(root);
+
+    expect(loadMermaidMock).not.toHaveBeenCalled();
+    expect(loadKatexMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not load the KaTeX runtime without math delimiters", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+
+    await renderRichContent(root);
+
+    expect(loadMermaidMock).toHaveBeenCalledTimes(1);
+    expect(loadKatexMock).not.toHaveBeenCalled();
+  });
+
+  it("loads no runtime for a plain document", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = "<h2>heading</h2><p>paragraph without delimiters</p>";
+
+    await renderRichContent(root);
+
+    expect(loadMermaidMock).not.toHaveBeenCalled();
+    expect(loadKatexMock).not.toHaveBeenCalled();
   });
 
   it("adds a copy control that uses execCommand on HTTP", async () => {
@@ -203,7 +245,7 @@ describe("renderRichContent", () => {
 
     const root = document.createElement("div");
     root.innerHTML =
-      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre><p>$E=mc^2$</p>';
 
     await renderRichContent(root);
 
@@ -214,7 +256,7 @@ describe("renderRichContent", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML =
-      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre><p>$E=mc^2$</p>';
 
     // Mermaid runs (the mock resolves), but the render is no longer current, so
     // KaTeX must not scan the now-stale root.
@@ -228,7 +270,7 @@ describe("renderRichContent", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML =
-      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre><p>$E=mc^2$</p>';
 
     await renderRichContent(root, () => true);
 
