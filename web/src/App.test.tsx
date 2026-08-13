@@ -866,6 +866,32 @@ describe("App directory preview", () => {
     expect(window.location.hash).toBe(`#${encodeURIComponent("安装")}`);
   });
 
+  it("does not reload the document for a same-document fragment link", async () => {
+    const user = userEvent.setup();
+    const getDocument = vi.fn().mockResolvedValue({
+      path: "README.md",
+      title: "Readme API Title",
+      html: '<h2 id="section">Section</h2><p><a href="#section">jump</a></p>',
+      frontmatter: null,
+      toc: [{ level: 2, id: "section", text: "Section" }],
+    });
+    const api = createAPI({ getDocument });
+    render(<App api={api} />);
+    await screen.findByRole("heading", { level: 2, name: "Section" });
+    expect(getDocument).toHaveBeenCalledTimes(1);
+
+    await user.click(screen.getByRole("link", { name: "jump" }));
+    // The fragment resolves inside the open document, so it scrolls in place and
+    // updates the hash without fetching the document again.
+    expect(getDocument).toHaveBeenCalledTimes(1);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+      expect.objectContaining({ block: "start" }),
+    );
+    expect(window.location.pathname + window.location.hash).toBe(
+      "/doc/README.md#section",
+    );
+  });
+
   it("keeps toc and width query parameters independent", async () => {
     const user = userEvent.setup();
     const api = createAPI({

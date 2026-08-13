@@ -45,33 +45,24 @@ export function TOCToggle({ enabled, available, onChange }: TOCToggleProps) {
 export interface TableOfContentsPanelProps {
   items: TocItem[];
   activeID: string | null;
-  onSelectHeading?(id: string): void;
+  onNavigate(id: string): void;
 }
 
 export function TableOfContentsPanel({
   items,
   activeID,
-  onSelectHeading,
+  onNavigate,
 }: TableOfContentsPanelProps) {
   const handleSelect = (
     event: MouseEvent<HTMLAnchorElement>,
     item: TocItem,
   ) => {
     // The reader body scrolls inside a ScrollArea viewport, so native anchor
-    // navigation would not land correctly; drive the scroll ourselves and hand
-    // the hash update to the caller so it goes through the single URL funnel.
+    // navigation would not land correctly; hand the whole interaction to the
+    // shared heading navigator (scoped scroll + URL funnel) and suppress the
+    // default jump.
     event.preventDefault();
-    const heading = document.getElementById(item.id);
-    if (heading !== null) {
-      const reduceMotion = window.matchMedia(
-        "(prefers-reduced-motion: reduce)",
-      ).matches;
-      heading.scrollIntoView({
-        block: "start",
-        behavior: reduceMotion ? "auto" : "smooth",
-      });
-    }
-    onSelectHeading?.(item.id);
+    onNavigate(item.id);
   };
 
   return (

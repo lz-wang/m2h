@@ -56,10 +56,12 @@ import {
 import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
 import {
   type DocumentWidth,
+  decodeHeadingHash,
   type Mode,
   type ResolvedMode,
   readRoute,
 } from "./model";
+import { useHeadingNavigation } from "./use-heading-navigation";
 import { useHeadingSpy } from "./use-heading-spy";
 import { usePreview } from "./use-preview";
 import { usePreviewEvents } from "./use-preview-events";
@@ -160,6 +162,13 @@ export function App({ api }: AppProps) {
     }
     return null;
   }, [headings, activeHeadingID]);
+  // One scroll path for the TOC, Markdown fragment links, heading permalinks and
+  // deep-link restore: resolve the id inside the Markdown body, scroll to it,
+  // and (optionally) push the hash through the single URL funnel.
+  const navigateToHeading = useHeadingNavigation(
+    readerMainRef,
+    preview.replaceHash,
+  );
 
   useEffect(() => {
     try {
@@ -181,14 +190,26 @@ export function App({ api }: AppProps) {
       return false;
     }
     const target = new URL(anchor.href, window.location.href);
-    if (
-      target.origin !== window.location.origin ||
-      !target.pathname.startsWith("/doc/")
-    ) {
+    if (target.origin !== window.location.origin) {
       return false;
     }
     const route = readRoute(target.pathname, target.search, target.hash);
+    const currentPath = preview.selectedPath;
+    // A link whose target is the already-open document — most commonly a bare
+    // "#id" fragment, or an explicit path back to the same file — must never
+    // trigger a reload: scroll to the heading in place and let the hash update
+    // flow through the URL funnel. Intercepting it (rather than returning false)
+    // also stops the browser from reloading the page on a same-URL navigation.
+    if (route.path !== null && route.path === currentPath) {
+      const id = decodeHeadingHash(route.hash);
+      if (id !== "") {
+        navigateToHeading(id, { behavior: "smooth", updateURL: true });
+      }
+      return true;
+    }
+    // Otherwise only intercept genuine cross-document links under /doc/.
     if (
+      !target.pathname.startsWith("/doc/") ||
       route.path === null ||
       !preview.files.some((file) => file.path === route.path)
     ) {
@@ -342,7 +363,9 @@ export function App({ api }: AppProps) {
               <TableOfContentsPanel
                 items={tocItems}
                 activeID={activeTocID}
-                onSelectHeading={(id) => preview.replaceHash(id)}
+                onNavigate={(id) =>
+                  navigateToHeading(id, { behavior: "smooth", updateURL: true })
+                }
               />
             ) : null}
           </div>
