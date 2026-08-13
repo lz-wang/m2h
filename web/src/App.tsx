@@ -53,7 +53,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
-import { renderRichContent } from "./lib/render-rich-content";
+import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
 import {
   type DocumentWidth,
   type Mode,
@@ -635,23 +635,34 @@ function PreviewContent({
 }: PreviewContentProps) {
   const contentRef = useRef<HTMLElement>(null);
   const renderGenerationRef = useRef(0);
+  // The resolved theme is read through a ref so the body render effect can
+  // depend on [html, phase] only and a theme switch never rebuilds the
+  // article. renderedModeRef records which theme the current body — and its
+  // Mermaid SVGs — were last painted in, so the theme effect can skip when
+  // nothing changed and otherwise regenerate only the diagrams.
+  const resolvedModeRef = useRef<ResolvedMode>(resolvedMode);
+  const renderedModeRef = useRef<ResolvedMode | null>(null);
+  resolvedModeRef.current = resolvedMode;
 
   // React owns the <article> container; the Markdown body DOM is owned by
   // the rich-content renderer. Writing innerHTML in a layout effect runs
   // before paint so there is no empty-body flash.
   //
-  // The effect keys on `phase`, `html`, and `resolvedMode`. Only the "ready"
-  // phase renders the <article>; re-entering "ready" (e.g. refreshing the
-  // current document, where `html` is the same string) remounts the node, so
-  // without `phase` the fresh <article> would render empty. `resolvedMode` is
-  // included because Mermaid bakes diagram colors in at render time: a light
-  // SVG stays light on a dark page, so a theme switch must re-run the body so
-  // diagrams regenerate in the new palette. Width and sidebar stay out of the
-  // deps so those changes never reset KaTeX/Mermaid enhancements.
+  // The body effect keys on `phase` and `html` only. Only the "ready" phase
+  // renders the <article>; re-entering "ready" (e.g. refreshing the current
+  // document, where `html` is the same string) remounts the node, so without
+  // `phase` the fresh <article> would render empty. `resolvedMode` stays out
+  // of the deps on purpose: rebuilding the article on a theme switch would
+  // discard DOM identity, in-body focus, and the KaTeX/copy-button
+  // enhancement. The resolved theme is read through `resolvedModeRef` so the
+  // body is still painted in the current theme without re-running on toggles.
+  // Width and sidebar are likewise excluded.
   //
-  // The generation guard pairs with renderRichContent's freshness check so a
-  // slow Mermaid render that outlives its document does not apply KaTeX after
-  // the body has been swapped; cleanup invalidates the in-flight render.
+  // The separate theme effect below regenerates only the Mermaid diagrams,
+  // whose colors are baked into the SVG at render time. The generation guard
+  // pairs with the renderers' freshness checks so a slow Mermaid render that
+  // outlives its document (or a later theme toggle) is not applied after the
+  // body has moved on; cleanup invalidates the in-flight render.
   useLayoutEffect(() => {
     if (phase !== "ready") {
       return;
@@ -661,8 +672,40 @@ function PreviewContent({
       return;
     }
     const generation = ++renderGenerationRef.current;
+    const mode = resolvedModeRef.current;
     root.innerHTML = html;
+    renderedModeRef.current = mode;
     void renderRichContent(
+      root,
+      mode,
+      () => renderGenerationRef.current === generation,
+    );
+    return () => {
+      if (renderGenerationRef.current === generation) {
+        renderGenerationRef.current++;
+      }
+    };
+  }, [html, phase]);
+
+  // A theme switch repaints only the Mermaid diagrams, leaving the article
+  // DOM, KaTeX, copy buttons, and any in-body focus untouched. On the initial
+  // render the body effect above has already painted the current theme, so
+  // renderedModeRef matches resolvedMode and this effect is a no-op; it only
+  // does work on a subsequent light/dark toggle.
+  useEffect(() => {
+    if (phase !== "ready") {
+      return;
+    }
+    if (renderedModeRef.current === resolvedMode) {
+      return;
+    }
+    const root = contentRef.current;
+    if (root === null) {
+      return;
+    }
+    renderedModeRef.current = resolvedMode;
+    const generation = ++renderGenerationRef.current;
+    void rerenderMermaid(
       root,
       resolvedMode,
       () => renderGenerationRef.current === generation,
@@ -672,7 +715,7 @@ function PreviewContent({
         renderGenerationRef.current++;
       }
     };
-  }, [html, phase, resolvedMode]);
+  }, [phase, resolvedMode]);
 
   if (phase === "loading-files" || phase === "loading-document") {
     return (

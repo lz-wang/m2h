@@ -656,7 +656,7 @@ describe("App directory preview", () => {
     expect(screen.queryByText("Frontmatter")).toBeNull();
   });
 
-  it("re-runs the document body when the resolved theme changes", async () => {
+  it("preserves the Markdown DOM across theme changes", async () => {
     const user = userEvent.setup();
     render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
@@ -665,12 +665,10 @@ describe("App directory preview", () => {
     if (article === null) {
       throw new Error("reader article was not rendered");
     }
-
-    // Mermaid bakes diagram colors in at render time, so a theme switch must
-    // re-key the body render and regenerate diagrams in the new palette. A
-    // stale manual enhancement is replaced when the server HTML re-runs
-    // through the rich-content pass.
-    article.innerHTML = '<div data-rich-enhanced="true">enhanced content</div>';
+    const paragraph = article.querySelector("p");
+    if (paragraph === null) {
+      throw new Error("document paragraph was not rendered");
+    }
 
     await user.click(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
@@ -679,8 +677,50 @@ describe("App directory preview", () => {
       await screen.findByRole("menuitemradio", { name: "深色" }),
     );
 
-    expect(article.querySelector('[data-rich-enhanced="true"]')).toBeNull();
+    // The article body is not rebuilt on a theme switch: the same paragraph
+    // node survives. Only Mermaid SVGs regenerate (their colors are baked in),
+    // which is covered at the renderer level — DOM identity, not innerHTML
+    // equality, is the regression signal.
+    expect(article.querySelector("p")).toBe(paragraph);
     expect(article.textContent).toContain("Body for README.md");
+    expect(document.documentElement.classList.contains("dark")).toBe(true);
+  });
+
+  it("keeps focus on an in-body link when the resolved theme changes", async () => {
+    const themeMedia = installThemeMedia(false);
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<p>read <a href="https://example.com">external link</a> here</p>',
+        frontmatter: null,
+        toc: [],
+      }),
+    });
+    render(<App api={api} />);
+
+    const link = await screen.findByRole("link", { name: "external link" });
+    const article = document.querySelector<HTMLElement>(".reader-document");
+    if (article === null) {
+      throw new Error("reader article was not rendered");
+    }
+    const paragraph = article.querySelector("p");
+    if (paragraph === null) {
+      throw new Error("document paragraph was not rendered");
+    }
+
+    link.focus();
+    expect(document.activeElement).toBe(link);
+
+    // Flip the system preference while in "auto" mode: resolvedMode changes
+    // but the article is not rebuilt, so the focused link and the paragraph
+    // node keep their identity and focus.
+    await act(async () => {
+      themeMedia.setMatches(true);
+    });
+
+    expect(document.activeElement).toBe(link);
+    expect(article.querySelector("p")).toBe(paragraph);
   });
 
   it("preserves enhanced Markdown DOM across width changes", async () => {
@@ -833,6 +873,56 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
       };
     }),
     ...overrides,
+  };
+}
+
+// installThemeMedia swaps window.matchMedia for a controllable prefers-color-
+// scheme query so a test can flip the system theme (and thus resolvedMode in
+// "auto" mode) without going through the theme menu — exercising the same
+// resolved-mode change path while leaving document focus untouched.
+function installThemeMedia(initialMatches: boolean): {
+  setMatches(matches: boolean): void;
+} {
+  const listeners = new Set<(event: { matches: boolean }) => void>();
+  const media = {
+    matches: initialMatches,
+    media: "(prefers-color-scheme: dark)",
+    onchange: null as ((event: { matches: boolean }) => void) | null,
+    addEventListener(
+      _type: string,
+      listener: (event: { matches: boolean }) => void,
+    ): void {
+      listeners.add(listener);
+    },
+    removeEventListener(
+      _type: string,
+      listener: (event: { matches: boolean }) => void,
+    ): void {
+      listeners.delete(listener);
+    },
+    addListener(listener: (event: { matches: boolean }) => void): void {
+      listeners.add(listener);
+    },
+    removeListener(listener: (event: { matches: boolean }) => void): void {
+      listeners.delete(listener);
+    },
+    dispatchEvent(): boolean {
+      return true;
+    },
+  };
+  vi.spyOn(window, "matchMedia").mockImplementation((query: string) => {
+    if (query === "(prefers-color-scheme: dark)") {
+      return media as unknown as MediaQueryList;
+    }
+    return { ...media, media: query } as unknown as MediaQueryList;
+  });
+  return {
+    setMatches(matches: boolean) {
+      media.matches = matches;
+      for (const listener of listeners) {
+        listener({ matches });
+      }
+    },
   };
 }
 
