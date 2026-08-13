@@ -60,7 +60,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
+import { findReaderViewport } from "./lib/heading";
 import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
+import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 import {
   type DocumentWidth,
   decodeHeadingHash,
@@ -176,39 +178,79 @@ export function App({ api }: AppProps) {
     readerMainRef,
     preview.replaceHash,
   );
-  // A deep-link restore is "pending" from the moment a new document path is
-  // selected with a fragment in the URL until rich-content enhancement finishes
-  // and we have scrolled to the fragment. While pending, the scroll spy must not
+  // A position restore is "pending" from the moment a document is selected
+  // until rich-content enhancement finishes and we have repositioned (to a saved
+  // pixel offset, or to the URL fragment). While pending the scroll spy must not
   // rewrite the URL — otherwise the body settles at the top, the spy reports the
-  // first heading, and the original #section is lost before the restore runs.
+  // first heading, and the original target is lost before the restore runs.
   const restoringRef = useRef(false);
   const documentPath = preview.document?.path ?? null;
   // A layout effect (not passive) so the guard is set synchronously during
   // commit — before the body's async rich-content enhancement resolves and
   // calls restoreFragment, and before any scroll-spy URL write.
   useLayoutEffect(() => {
-    restoringRef.current = window.location.hash !== "" && documentPath !== null;
+    restoringRef.current = documentPath !== null;
   }, [documentPath]);
 
-  // restoreFragment scrolls to the URL's fragment once the rendered body —
-  // including async Mermaid/KaTeX that can shift layout — has settled. It always
-  // uses instant scrolling and never rewrites the URL (the fragment is already
-  // there). Called by PreviewContent via onContentReady.
+  // restoreFragment repositions once the rendered body — including async
+  // Mermaid/KaTeX that can shift layout — has settled. A pixel-precise offset
+  // saved before a refresh takes precedence (returns to the exact spot);
+  // otherwise it falls back to the URL fragment. It never rewrites the URL: the
+  // hash is already there, and the spy resyncs it after the pixel restore.
+  // Called by PreviewContent via onContentReady.
   const restoreFragment = useCallback(() => {
     if (!restoringRef.current) {
       return;
     }
-    const id = decodeHeadingHash(window.location.hash);
-    if (id !== "") {
-      navigateToHeading(id, { behavior: "auto", updateURL: false });
+    const viewport = readerMainRef.current
+      ? findReaderViewport(readerMainRef.current)
+      : null;
+    const saved =
+      documentPath === null ? null : readScrollPosition(documentPath);
+    if (saved !== null && viewport instanceof HTMLElement) {
+      viewport.scrollTop = saved;
+      viewport.dispatchEvent(new Event("scroll"));
+    } else {
+      const id = decodeHeadingHash(window.location.hash);
+      if (id !== "") {
+        navigateToHeading(id, { behavior: "auto", updateURL: false });
+      }
     }
     restoringRef.current = false;
-  }, [navigateToHeading]);
+  }, [documentPath, navigateToHeading]);
+
+  // Persist the reader's scroll offset per document so a refresh can return to
+  // the exact pixel. rAF-throttled so a long scroll writes at most once per frame.
+  useEffect(() => {
+    if (preview.phase !== "ready" || documentPath === null) {
+      return;
+    }
+    const container = readerMainRef.current;
+    if (container === null) {
+      return;
+    }
+    const viewport = findReaderViewport(container);
+    if (!(viewport instanceof HTMLElement)) {
+      return;
+    }
+    let frame = 0;
+    const handleScroll = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        saveScrollPosition(documentPath, viewport.scrollTop);
+      });
+    };
+    viewport.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      viewport.removeEventListener("scroll", handleScroll);
+    };
+  }, [preview.phase, documentPath]);
 
   // Reflect the reading position into the URL as the user scrolls. replaceState
   // (never push) keeps the back stack clean across the many headings a scroll
-  // passes. Skipped entirely while a deep-link restore is pending so it cannot
-  // clobber the fragment, and no-op when the position already matches the URL.
+  // passes. Skipped entirely while a position restore is pending so it cannot
+  // clobber the target, and no-op when the position already matches the URL.
   useEffect(() => {
     if (restoringRef.current) {
       return;

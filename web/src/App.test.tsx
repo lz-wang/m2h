@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { APIError, type FileListResponse, type PreviewAPI } from "./api";
+import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 
 const initialFiles: FileListResponse = {
   kind: "directory",
@@ -23,6 +24,7 @@ const initialFiles: FileListResponse = {
 
 beforeEach(() => {
   window.localStorage.clear();
+  window.sessionStorage.clear();
   window.history.replaceState(null, "", "/");
   document.documentElement.className = "";
   delete document.documentElement.dataset.mode;
@@ -920,6 +922,64 @@ describe("App directory preview", () => {
     await settleScrollPosition();
     expect(window.location.hash).toBe("#beta");
     expect(window.location.search).toBe("?toc=false");
+  });
+
+  it("persists the scroll offset per document so a refresh can return to it", async () => {
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="alpha">Alpha</h2><h2 id="beta">Beta</h2>',
+        frontmatter: null,
+        toc: [
+          { level: 2, id: "alpha", text: "Alpha" },
+          { level: 2, id: "beta", text: "Beta" },
+        ],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByRole("heading", { level: 2, name: "Alpha" });
+    const viewport = document.querySelector(
+      '.reader-main [data-slot="scroll-area-viewport"]',
+    );
+    if (!(viewport instanceof HTMLElement)) {
+      throw new Error("scroll viewport was not rendered");
+    }
+    Object.defineProperty(viewport, "scrollTop", {
+      configurable: true,
+      value: 250,
+    });
+    await act(async () => {
+      fireEvent.scroll(viewport);
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
+    expect(readScrollPosition("README.md")).toBe(250);
+  });
+
+  it("restores a saved scroll offset in preference to the fragment on reload", async () => {
+    saveScrollPosition("guides/setup.md", 4287);
+    window.history.replaceState(null, "", "/doc/guides/setup.md#install");
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "guides/setup.md",
+        title: "Setup API Title",
+        html: '<h2 id="install">Install</h2>',
+        frontmatter: null,
+        toc: [{ level: 2, id: "install", text: "Install" }],
+      }),
+    });
+    // scrollIntoView is a shared mock in the test setup; reset it so the count
+    // reflects only this test's restore.
+    vi.mocked(Element.prototype.scrollIntoView).mockClear();
+    render(<App api={api} />);
+    await screen.findByRole("heading", { level: 2, name: "Install" });
+    // The saved pixel offset wins over the #install hash, so the restore takes
+    // the scroll-offset branch and the heading navigator is never invoked.
+    await waitFor(() => {
+      expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    });
   });
 
   it("keeps toc and width query parameters independent", async () => {
