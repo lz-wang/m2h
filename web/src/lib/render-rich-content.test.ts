@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   MathAutoRenderer,
   MathAutoRenderOptions,
+  MermaidRenderResult,
   MermaidRuntime,
 } from "./runtime-loader";
 
@@ -15,6 +16,9 @@ interface MermaidRunOptions {
 const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn<(config: unknown) => void>(),
   run: vi.fn<(options: MermaidRunOptions) => Promise<void>>(async () => {}),
+  render: vi.fn<(id: string, text: string) => Promise<MermaidRenderResult>>(
+    async () => ({ svg: '<svg data-mock="mermaid"></svg>' }),
+  ),
 }));
 
 const renderMathInElementMock = vi.hoisted(() =>
@@ -40,13 +44,17 @@ describe("renderRichContent", () => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
     mermaidMock.run.mockClear();
+    mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
     loadKatexMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg data-mock="mermaid"></svg>',
+    });
   });
 
-  it("replaces mermaid code blocks with diagram containers and runs mermaid", async () => {
+  it("replaces mermaid code blocks with rendered SVG via mermaid.render", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML =
@@ -56,15 +64,17 @@ describe("renderRichContent", () => {
 
     const container = root.querySelector("div.mermaid");
     expect(container).not.toBeNull();
-    expect(container?.textContent).toContain("graph TD");
+    expect(container?.innerHTML).toContain('data-mock="mermaid"');
     expect(root.querySelector("pre")).toBeNull();
     expect(root.querySelector("code.language-mermaid")).toBeNull();
 
-    expect(mermaidMock.run).toHaveBeenCalledTimes(1);
-    const options = mermaidMock.run.mock.calls[0]?.[0];
-    expect(options).toBeDefined();
-    expect(options?.nodes).toHaveLength(1);
-    expect(options?.suppressErrors).toBe(true);
+    // The legacy mermaid.run path is gone; each diagram renders offscreen via
+    // mermaid.render with the decoded source text, then swaps in atomically.
+    expect(mermaidMock.run).not.toHaveBeenCalled();
+    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
+    const [id, text] = mermaidMock.render.mock.calls[0] ?? [];
+    expect(id).toMatch(/^m2h-mermaid-\d+$/);
+    expect(text).toBe("graph TD\nA-->B");
   });
 
   it("leaves non-mermaid code blocks untouched and skips mermaid.run", async () => {
@@ -76,7 +86,8 @@ describe("renderRichContent", () => {
 
     expect(root.querySelector("pre")).not.toBeNull();
     expect(root.querySelector("div.mermaid")).toBeNull();
-    expect(mermaidMock.run).not.toHaveBeenCalled();
+    expect(loadMermaidMock).not.toHaveBeenCalled();
+    expect(mermaidMock.render).not.toHaveBeenCalled();
     expect(
       root.querySelector<HTMLButtonElement>(".m2h-code-copy"),
     ).not.toBeNull();
@@ -236,8 +247,9 @@ describe("renderRichContent", () => {
   it("runs mermaid before KaTeX so math never scans diagram source", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const order: string[] = [];
-    mermaidMock.run.mockImplementation(async () => {
+    mermaidMock.render.mockImplementation(async () => {
       order.push("mermaid");
+      return { svg: "<svg></svg>" };
     });
     renderMathInElementMock.mockImplementation(() => {
       order.push("katex");
@@ -311,7 +323,7 @@ describe("renderRichContent", () => {
     // KaTeX must not scan the now-stale root.
     await renderRichContent(root, "light", () => false);
 
-    expect(mermaidMock.run).toHaveBeenCalledTimes(1);
+    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
     expect(renderMathInElementMock).not.toHaveBeenCalled();
   });
 
@@ -324,6 +336,112 @@ describe("renderRichContent", () => {
     await renderRichContent(root, "light", () => true);
 
     expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("rerenderMermaid", () => {
+  beforeEach(() => {
+    // Each test re-imports the module so the lazy mermaid singleton and the
+    // mermaidSources WeakMap reset between cases.
+    vi.resetModules();
+    mermaidMock.initialize.mockClear();
+    mermaidMock.run.mockClear();
+    mermaidMock.render.mockClear();
+    renderMathInElementMock.mockClear();
+    loadMermaidMock.mockClear();
+    loadKatexMock.mockClear();
+    mermaidMock.run.mockResolvedValue(undefined);
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg data-mock="mermaid"></svg>',
+    });
+  });
+
+  it("regenerates only mermaid diagrams in the new theme, leaving the body intact", async () => {
+    const { renderRichContent, rerenderMermaid } = await import(
+      "./render-rich-content"
+    );
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre><p>keep me</p>';
+
+    await renderRichContent(root, "light");
+
+    const container = root.querySelector<HTMLDivElement>("div.mermaid");
+    if (container === null) {
+      throw new Error("mermaid container was not created");
+    }
+    const paragraph = root.querySelector("p");
+    if (paragraph === null) {
+      throw new Error("paragraph was not rendered");
+    }
+    mermaidMock.render.mockClear();
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg data-mock="dark"></svg>',
+    });
+
+    await rerenderMermaid(root, "dark");
+
+    expect(mermaidMock.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({ theme: "dark" }),
+    );
+    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
+    expect(container.innerHTML).toContain('data-mock="dark"');
+    // The body DOM is not rebuilt: the paragraph keeps its node identity and
+    // KaTeX / copy-button enhancement never runs again.
+    expect(root.querySelector("p")).toBe(paragraph);
+    expect(renderMathInElementMock).not.toHaveBeenCalled();
+  });
+
+  it("does not load the mermaid runtime when there are no diagrams", async () => {
+    const { rerenderMermaid } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = "<p>plain document</p>";
+
+    await rerenderMermaid(root, "dark");
+
+    expect(loadMermaidMock).not.toHaveBeenCalled();
+    expect(mermaidMock.render).not.toHaveBeenCalled();
+  });
+
+  it("keeps the previous SVG when a theme re-render throws", async () => {
+    const { renderRichContent, rerenderMermaid } = await import(
+      "./render-rich-content"
+    );
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    const container = root.querySelector<HTMLDivElement>("div.mermaid");
+    if (container === null) {
+      throw new Error("mermaid container was not created");
+    }
+    mermaidMock.render.mockClear();
+    mermaidMock.render.mockRejectedValue(new Error("boom"));
+
+    await rerenderMermaid(root, "dark");
+
+    // The light SVG stays in place rather than flashing back to source text.
+    expect(container.innerHTML).toContain('data-mock="mermaid"');
+  });
+
+  it("aborts the remaining diagrams once the render is no longer current", async () => {
+    const { renderRichContent, rerenderMermaid } = await import(
+      "./render-rich-content"
+    );
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA</code></pre><pre><code class="language-mermaid">graph TD\nB</code></pre>';
+
+    await renderRichContent(root, "light");
+    mermaidMock.render.mockClear();
+
+    await rerenderMermaid(root, "dark", () => false);
+
+    // The first diagram renders, then the freshness check aborts before the
+    // second target is painted.
+    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
   });
 });
 

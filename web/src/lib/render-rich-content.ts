@@ -63,7 +63,7 @@ export async function renderRichContent(
   if (hasMermaidBlocks(root)) {
     const mermaid = await loadMermaid();
     ensureMermaidInitialized(mode, mermaid);
-    await renderMermaid(mermaid, root);
+    await renderMermaid(mermaid, root, isCurrent);
   }
   if (isCurrent !== undefined && !isCurrent()) {
     return;
@@ -170,6 +170,16 @@ type MermaidTheme = "default" | "dark";
 
 let currentMermaidTheme: MermaidTheme | null = null;
 
+// Each rendered diagram keeps its source text here rather than in a data
+// attribute: Mermaid source can be long, and the WeakMap avoids leaking it once
+// the container leaves the DOM. Retaining the source lets a later theme switch
+// regenerate the SVG without re-parsing the document body.
+const mermaidSources = new WeakMap<HTMLElement, string>();
+
+// Monotonic id handed to every mermaid.render call so each offscreen render
+// gets a unique container id (Mermaid keys its internal cache by this id).
+let mermaidRenderSequence = 0;
+
 function ensureMermaidInitialized(
   mode: ResolvedMode,
   mermaid: MermaidRuntime,
@@ -186,9 +196,37 @@ function ensureMermaidInitialized(
   currentMermaidTheme = theme;
 }
 
+// Render one diagram offscreen via mermaid.render and swap the resulting SVG in
+// atomically, so the container never flashes back to source text while the new
+// palette resolves. Returns false when the render is no longer current, telling
+// the caller to abort the remaining targets; a render that throws leaves any
+// existing SVG in place so one broken diagram never breaks the document.
+async function paintMermaidTarget(
+  mermaid: MermaidRuntime,
+  target: HTMLElement,
+  source: string,
+  isCurrent?: () => boolean,
+): Promise<boolean> {
+  try {
+    const result = await mermaid.render(
+      `m2h-mermaid-${++mermaidRenderSequence}`,
+      source,
+    );
+    if (isCurrent !== undefined && !isCurrent()) {
+      return false;
+    }
+    target.innerHTML = result.svg;
+    result.bindFunctions?.(target);
+  } catch {
+    // Leave the existing content in place; a single bad diagram is isolated.
+  }
+  return true;
+}
+
 async function renderMermaid(
   mermaid: MermaidRuntime,
   root: HTMLElement,
+  isCurrent?: () => boolean,
 ): Promise<void> {
   const targets: HTMLElement[] = [];
   for (const code of root.querySelectorAll<HTMLElement>(
@@ -198,19 +236,54 @@ async function renderMermaid(
     if (!(pre instanceof HTMLPreElement)) {
       continue;
     }
+    const source = code.textContent ?? "";
     const container = document.createElement("div");
     container.className = "mermaid";
-    container.textContent = code.textContent ?? "";
+    container.textContent = source;
+    mermaidSources.set(container, source);
     pre.replaceWith(container);
     targets.push(container);
   }
+
+  for (const target of targets) {
+    const source = mermaidSources.get(target);
+    if (source === undefined) {
+      continue;
+    }
+    if (!(await paintMermaidTarget(mermaid, target, source, isCurrent))) {
+      return;
+    }
+  }
+}
+
+// Re-render only existing Mermaid diagrams in a new theme, leaving the rest of
+// the document body untouched. Used on a light/dark switch: because Mermaid
+// bakes colors into the SVG at render time, only the diagrams need regenerating,
+// while paragraphs, KaTeX, and copy controls keep both their DOM identity and
+// focus.
+export async function rerenderMermaid(
+  root: HTMLElement,
+  mode: ResolvedMode,
+  isCurrent?: () => boolean,
+): Promise<void> {
+  const targets = Array.from(
+    root.querySelectorAll<HTMLElement>(".mermaid"),
+  ).filter((target) => mermaidSources.has(target));
 
   if (targets.length === 0) {
     return;
   }
 
-  await mermaid.run({
-    nodes: targets,
-    suppressErrors: true,
-  });
+  const mermaid = await loadMermaid();
+  ensureMermaidInitialized(mode, mermaid);
+
+  for (const target of targets) {
+    const source = mermaidSources.get(target);
+    if (source === undefined) {
+      continue;
+    }
+    if (!(await paintMermaidTarget(mermaid, target, source, isCurrent))) {
+      return;
+    }
+  }
 }

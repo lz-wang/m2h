@@ -6,6 +6,7 @@ import type { MathAutoRenderer, MermaidRuntime } from "./runtime-loader";
 const mermaidRuntime: MermaidRuntime = {
   initialize: vi.fn(),
   run: vi.fn(async () => {}),
+  render: vi.fn(async () => ({ svg: "<svg></svg>" })),
 };
 
 const renderMathInElement: MathAutoRenderer = vi.fn();
