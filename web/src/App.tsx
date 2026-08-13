@@ -476,7 +476,8 @@ function DocumentWidthMenu({
     documentWidths.find((item) => item.value === width) ?? documentWidths[0];
   const CurrentIcon = current.icon;
   return (
-    <Menu.Root>
+    // Non-modal: toolbar dropdowns must not trap focus or lock document scroll.
+    <Menu.Root modal={false}>
       <Tooltip>
         <Menu.Trigger
           render={
@@ -557,7 +558,8 @@ function ThemeMenu({
   };
 
   return (
-    <Menu.Root>
+    // Non-modal: toolbar dropdowns must not trap focus or lock document scroll.
+    <Menu.Root modal={false}>
       <Tooltip>
         <Menu.Trigger
           render={
