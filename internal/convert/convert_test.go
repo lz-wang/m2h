@@ -3,6 +3,7 @@ package convert
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -578,6 +579,22 @@ func TestRunReportsMissingInputAndInvalidOutputParent(t *testing.T) {
 	}
 }
 
+// embeddedAssetSnippet returns the opening bytes of one embedded runtime
+// script, a fingerprint precise enough to tell which bundles a generated page
+// actually carries (the enhancer references the other runtimes by name, so
+// plain substring checks on those names are ambiguous).
+func embeddedAssetSnippet(t *testing.T, name string, length int) string {
+	t.Helper()
+	contents, err := assets.RichAssetText(name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(contents) < length {
+		length = len(contents)
+	}
+	return contents[:length]
+}
+
 func TestRunConvertPreservesRichContent(t *testing.T) {
 	t.Parallel()
 
@@ -594,22 +611,37 @@ func TestRunConvertPreservesRichContent(t *testing.T) {
 	}
 	body := string(html)
 	for _, want := range []string{
-		`href=".m2h/katex.min.css"`,
-		`src=".m2h/rich-content.js"`,
 		`class="language-mermaid"`,
 		"$E = mc^2$",
+		// Math pulls in the inline KaTeX stylesheet (fonts as data URIs);
+		// the diagram pulls in the Mermaid bundle.
+		"data:font/woff2;base64,",
+		"m2h-code-copy",
+		embeddedAssetSnippet(t, "katex.min.js", 60),
+		embeddedAssetSnippet(t, "auto-render.min.js", 60),
+		embeddedAssetSnippet(t, "mermaid.min.js", 60),
+		embeddedAssetSnippet(t, "rich-content.js", 60),
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("convert output missing %q", want)
 		}
 	}
+	for _, unwanted := range []string{
+		`.m2h/`,
+		"<script src=",
+		"url(fonts/",
+	} {
+		if strings.Contains(body, unwanted) {
+			t.Errorf("self-contained output unexpectedly contains %q", unwanted)
+		}
+	}
 }
 
-func TestRunConvertWritesRichAssetsNextToSingleFile(t *testing.T) {
+func TestRunConvertSingleFileWithoutRichContentStaysLean(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	source := writeFixture(t, root, "guide.md", "# Guide\n\n$E=mc^2$")
+	source := writeFixture(t, root, "guide.md", "# Guide\n\nPlain paragraph.\n\n```go\nfmt.Println(1)\n```\n")
 	if err := Run(context.Background(), defaultOptions(source)); err != nil {
 		t.Fatal(err)
 	}
@@ -618,21 +650,148 @@ func TestRunConvertWritesRichAssetsNextToSingleFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(html), `href=".m2h/katex.min.css"`) {
-		t.Errorf("single-file HTML missing relative rich-content link: %s", html)
+	body := string(html)
+	// Only the rich-content enhancer; no KaTeX and no Mermaid bundle.
+	if !strings.Contains(body, embeddedAssetSnippet(t, "rich-content.js", 60)) {
+		t.Errorf("plain document missing the rich-content enhancer")
 	}
-	if !strings.Contains(string(html), `src=".m2h/rich-content.js"`) {
-		t.Errorf("single-file HTML missing rich-content bootstrap: %s", html)
-	}
-	for _, rel := range []string{
-		".m2h/katex.min.css",
-		".m2h/mermaid.min.js",
-		".m2h/rich-content.js",
-		".m2h/fonts/KaTeX_AMS-Regular.woff2",
+	for _, unwanted := range []string{
+		embeddedAssetSnippet(t, "katex.min.js", 60),
+		embeddedAssetSnippet(t, "mermaid.min.js", 60),
+		"data:font/woff2",
 	} {
-		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
-			t.Errorf("single-file convert did not write %q: %v", rel, err)
+		if strings.Contains(body, unwanted) {
+			t.Errorf("plain document unexpectedly embeds %q", unwanted)
 		}
+	}
+}
+
+func TestRunConvertSingleFileWritesNoAssetDirectory(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	source := writeFixture(t, root, "guide.md", "# Guide\n\n$E=mc^2$")
+	if err := Run(context.Background(), defaultOptions(source)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(root, assets.RichAssetDir)); !os.IsNotExist(err) {
+		t.Fatalf("single-file convert wrote %s: %v", assets.RichAssetDir, err)
+	}
+}
+
+func TestRunConvertSingleFileInlinesLocalImages(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFixture(t, root, "img/diagram.png", "\x89PNG\r\n\x1a\nfake-image-bytes")
+	source := writeFixture(t, root, "guide.md", "# Guide\n\n![Diagram](img/diagram.png)\n\n![Remote](https://example.com/x.png)\n\n![Missing](img/nope.png)\n")
+	if err := Run(context.Background(), defaultOptions(source)); err != nil {
+		t.Fatal(err)
+	}
+
+	html, err := os.ReadFile(filepath.Join(root, "guide.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(html)
+	want := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\nfake-image-bytes"))
+	if !strings.Contains(body, want) {
+		t.Errorf("local image was not inlined as %q", want)
+	}
+	// Remote URLs and unreadable images keep their original references.
+	for _, keep := range []string{"https://example.com/x.png", "img/nope.png"} {
+		if !strings.Contains(body, keep) {
+			t.Errorf("output missing preserved reference %q", keep)
+		}
+	}
+}
+
+func TestRunConvertDirectoryStandaloneEmbedsRuntime(t *testing.T) {
+	t.Parallel()
+
+	source := t.TempDir()
+	output := t.TempDir()
+	writeFixture(t, source, "index.md", "# Index\n\n$E=mc^2$")
+	writeFixture(t, source, "a/deep.md", "# Deep\n\n```mermaid\nflowchart LR\n    A-->B\n```\n")
+
+	options := defaultOptions(source)
+	options.Output = output
+	options.Standalone = true
+	if err := Run(context.Background(), options); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := os.Stat(filepath.Join(output, assets.RichAssetDir)); !os.IsNotExist(err) {
+		t.Fatalf("standalone directory convert wrote %s: %v", assets.RichAssetDir, err)
+	}
+
+	index, err := os.ReadFile(filepath.Join(output, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Math only: KaTeX core and fonts, no Mermaid bundle.
+	if !strings.Contains(string(index), "data:font/woff2;base64,") {
+		t.Errorf("standalone index.html missing inlined KaTeX fonts")
+	}
+	if !strings.Contains(string(index), embeddedAssetSnippet(t, "katex.min.js", 60)) {
+		t.Errorf("standalone index.html missing the KaTeX runtime")
+	}
+	if strings.Contains(string(index), embeddedAssetSnippet(t, "mermaid.min.js", 60)) {
+		t.Errorf("standalone index.html unexpectedly embeds Mermaid")
+	}
+
+	deep, err := os.ReadFile(filepath.Join(output, "a", "deep.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Diagram only: Mermaid bundle, no KaTeX runtime.
+	if !strings.Contains(string(deep), embeddedAssetSnippet(t, "mermaid.min.js", 60)) {
+		t.Errorf("standalone deep.html missing the Mermaid runtime")
+	}
+	if strings.Contains(string(deep), "data:font/woff2") {
+		t.Errorf("standalone deep.html unexpectedly embeds KaTeX fonts")
+	}
+}
+
+func TestRunConvertRejectsStandaloneFlagForSingleFile(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	source := writeFixture(t, root, "guide.md", "# Guide")
+	options := defaultOptions(source)
+	options.Standalone = true
+	options.StandaloneSet = true
+	err := Run(context.Background(), options)
+	if err == nil || !strings.Contains(err.Error(), "--standalone can only be used when converting a directory") {
+		t.Fatalf("Run() error = %v, want standalone single-file rejection", err)
+	}
+}
+
+func TestRunConvertSingleFileSkipsSymlinkedImageEscape(t *testing.T) {
+	t.Parallel()
+
+	outside := t.TempDir()
+	secret := writeFixture(t, outside, "secret.png", "outside-root-image-bytes")
+	root := t.TempDir()
+	if err := os.Symlink(secret, filepath.Join(root, "linked.png")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	source := writeFixture(t, root, "guide.md", "# Guide\n\n![Secret](linked.png)\n")
+	if err := Run(context.Background(), defaultOptions(source)); err != nil {
+		t.Fatal(err)
+	}
+
+	html, err := os.ReadFile(filepath.Join(root, "guide.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(html)
+	if strings.Contains(body, "outside-root-image-bytes") {
+		t.Error("image escaping the input root was inlined into the HTML")
+	}
+	if strings.Contains(body, "base64") {
+		t.Errorf("symlinked image should keep its relative reference: %s", body)
 	}
 }
 

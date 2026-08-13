@@ -48,7 +48,7 @@ $ m2h web docs
 ## 转换为 HTML
 
 ```console
-# 转换单个文件，生成 README.html
+# 转换单个文件，生成完全自包含的 README.html
 $ m2h README.md
 
 # 指定输出文件
@@ -56,9 +56,12 @@ $ m2h README.md --output public/index.html
 
 # 转换目录中的 Markdown，并保留目录结构
 $ m2h docs --output public/docs --depth 3 --glob '**/plan_*.md'
+
+# 目录转换时让每个 HTML 也自包含
+$ m2h docs --standalone
 ```
 
-目录转换默认会复制非 Markdown 资源；使用 `--copy-assets=false` 可关闭。相对 Markdown 链接会改为对应的 `.html` 链接，图片和其他本地资源路径保持不变。
+单文件转换默认生成完全自包含的 HTML：页面样式、数学公式与 Mermaid 运行时、字体以及本地图片全部内嵌，输出旁不再生成 `.m2h/` 目录，文件可独立离线打开与分享；文档没有公式或图表时不会内嵌对应运行时。目录转换会在输出根部生成共享的 `.m2h/` 运行时目录，并默认复制非 Markdown 资源（`--copy-assets=false` 关闭）；使用 `--standalone` 可让目录中每个 HTML 也自包含。相对 Markdown 链接会改为对应的 `.html` 链接。
 
 转换成功后，m2h 会向标准输出打印转换数量、复制资源数量（如有）与每个生成 HTML 的绝对路径：
 
@@ -73,6 +76,7 @@ Output HTML files:
 | `--output`, `-o` | 单文件的目标 HTML，或目录转换的目标目录。 |
 | `--glob` | 按相对输入目录的路径筛选 Markdown，例如 `'**/guide_*.md'`。仅目录可用。 |
 | `--depth`, `-d` | 最大递归深度；默认 `4`。 |
+| `--standalone` | 目录模式下把运行时与本地图片内嵌进每个 HTML；单文件转换默认已自包含。仅目录可用。 |
 | `--copy-assets` | 是否复制非 Markdown 资源；默认 `true`。 |
 | `--mode` | 页面主题：`light`、`dark` 或 `auto`；默认 `auto`。 |
 | `--width` | 正文宽度：`standard`（980px）、`wide`（1280px）或 `full`；默认 `standard`。 |
@@ -121,7 +125,7 @@ GFM语法参考 [https://github.github.com/gfm/](https://github.github.com/gfm/)
 | Mermaid 图表 | 使用 ```` ```mermaid ```` 围栏，例如 `flowchart LR` 与 `A --> B`。 |
 | 原始 HTML | 直接渲染，例如 `<details>内容</details>`；`web` 会通过安全附件路由加载标签中的相对本地资源。 |
 
-数学公式和 Mermaid 图表的运行时资源已包含在输出中，生成的 HTML 可离线打开。
+单文件转换生成完全自包含的 HTML：样式、数学公式与 Mermaid 运行时、字体及本地图片全部内嵌。目录转换共享输出根部的 `.m2h/` 运行时目录（`--standalone` 可改为逐文件内嵌），生成的 HTML 均可离线打开。
 
 ## 许可证
 

@@ -176,3 +176,61 @@ func TestWriteRichAssetsReportsUnwritableTarget(t *testing.T) {
 		t.Fatal("WriteRichAssets succeeded against an unwritable target")
 	}
 }
+
+func TestInlineKatexCSSEmbedsFonts(t *testing.T) {
+	t.Parallel()
+
+	stylesheet, err := InlineKatexCSS()
+	if err != nil {
+		t.Fatalf("InlineKatexCSS() returned error: %v", err)
+	}
+	if !strings.Contains(stylesheet, "data:font/woff2;base64,") {
+		t.Fatal("inline stylesheet does not embed any WOFF2 data URI")
+	}
+	for _, unwanted := range []string{
+		"url(fonts/",
+		`format("woff")`,
+		`format("truetype")`,
+	} {
+		if strings.Contains(stylesheet, unwanted) {
+			t.Errorf("inline stylesheet still references external fallback %q", unwanted)
+		}
+	}
+
+	// Every vendored woff2 font must be reachable; a missing file is an error
+	// rather than a silently dropped font.
+	raw, err := fs.ReadFile(RichFS(), "katex.min.css")
+	if err != nil {
+		t.Fatal(err)
+	}
+	references := strings.Count(string(raw), ".woff2")
+	if references == 0 {
+		t.Fatal("vendored katex.min.css references no woff2 fonts")
+	}
+	if got := strings.Count(stylesheet, "data:font/woff2;base64,"); got != references {
+		t.Errorf("embedded %d fonts, want %d", got, references)
+	}
+
+	cached, err := InlineKatexCSS()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cached != stylesheet {
+		t.Error("InlineKatexCSS() returned a different stylesheet on the second call")
+	}
+}
+
+func TestRichAssetText(t *testing.T) {
+	t.Parallel()
+
+	contents, err := RichAssetText("rich-content.js")
+	if err != nil {
+		t.Fatalf("RichAssetText() returned error: %v", err)
+	}
+	if !strings.Contains(contents, "m2h-code-copy") {
+		t.Error("RichAssetText returned the wrong file contents")
+	}
+	if _, err := RichAssetText("missing.js"); err == nil {
+		t.Error("RichAssetText() accepted a missing asset name")
+	}
+}

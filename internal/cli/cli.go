@@ -74,6 +74,11 @@ func conversionFlags() []urfavecli.Flag {
 		modeFlag(),
 		widthFlag(),
 		&urfavecli.BoolFlag{
+			Name:  "standalone",
+			Usage: "embed runtime assets and local images into each HTML file (directory mode)",
+			Local: true,
+		},
+		&urfavecli.BoolFlag{
 			Name:        "copy-assets",
 			Value:       true,
 			DefaultText: "true",
@@ -100,9 +105,11 @@ func convertAction(ctx context.Context, command *urfavecli.Command) error {
 		Mode:          markdown.Mode(command.String("mode")),
 		Width:         markdown.Width(command.String("width")),
 		CopyAssets:    command.Bool("copy-assets"),
+		Standalone:    command.Bool("standalone"),
 		PatternSet:    command.IsSet("glob"),
 		DepthSet:      command.IsSet("depth"),
 		CopyAssetsSet: command.IsSet("copy-assets"),
+		StandaloneSet: command.IsSet("standalone"),
 		Log:           command.Root().ErrWriter,
 	})
 	if err == nil || strings.HasPrefix(err.Error(), "Error:") {

@@ -83,7 +83,7 @@ func TestHelpDocumentsContract(t *testing.T) {
 			want: []string{
 				"--output", "-o", "--glob", "--depth", "-d", "(default: 4)",
 				"--mode", "(default: \"auto\")", "--width", "(default: \"standard\")",
-				"--copy-assets", "(default: true)", "--version", "-v",
+				"--standalone", "--copy-assets", "(default: true)", "--version", "-v",
 			},
 		},
 		{
@@ -339,6 +339,7 @@ func TestConvertCommandValidatesArgumentsAndDirectoryOnlyFlags(t *testing.T) {
 		{args: []string{source, "--glob", "*.md"}, want: "Error: --glob can only be used when converting a directory"},
 		{args: []string{source, "--depth", "2"}, want: "Error: --depth can only be used when converting a directory"},
 		{args: []string{source, "--copy-assets=false"}, want: "Error: --copy-assets can only be used when converting a directory"},
+		{args: []string{source, "--standalone"}, want: "Error: --standalone can only be used when converting a directory"},
 	}
 	for _, test := range tests {
 		_, _, err := runCommand(t, test.args...)

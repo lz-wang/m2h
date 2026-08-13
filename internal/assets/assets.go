@@ -3,11 +3,14 @@ package assets
 
 import (
 	"embed"
+	"encoding/base64"
 	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
+	"sync"
 )
 
 // GitHubMarkdownCSSVersion is the vendored github-markdown-css release.
@@ -98,4 +101,52 @@ func WriteRichAssets(target string) error {
 		}
 		return nil
 	})
+}
+
+// RichAssetText returns the contents of one file directly under the embedded
+// rich-content runtime root, such as "katex.min.js".
+func RichAssetText(name string) (string, error) {
+	contents, err := richFS.ReadFile("rich/" + name)
+	if err != nil {
+		return "", fmt.Errorf("read embedded asset %q: %w", name, err)
+	}
+	return string(contents), nil
+}
+
+var (
+	// katexFontFallback matches the woff and truetype src entries every
+	// @font-face declares after its woff2 url; inline documents keep only the
+	// woff2 reference so fonts are not embedded three times over.
+	katexFontFallback = regexp.MustCompile(
+		`,url\(fonts/[^)]+\.woff\) format\("woff"\),url\(fonts/[^)]+\.ttf\) format\("truetype"\)`,
+	)
+	katexWoff2Reference = regexp.MustCompile(`url\(fonts/([^)]+\.woff2)\)`)
+)
+
+// inlineKatexCSS caches the stylesheet with every font embedded as a data URI;
+// building it base64-encodes the full font set, which is far too expensive to
+// repeat per rendered document.
+var inlineKatexCSS = sync.OnceValues(func() (string, error) {
+	raw, err := richFS.ReadFile("rich/katex.min.css")
+	if err != nil {
+		return "", fmt.Errorf("read embedded katex.min.css: %w", err)
+	}
+	stylesheet := katexFontFallback.ReplaceAllString(string(raw), "")
+	for _, match := range katexWoff2Reference.FindAllStringSubmatch(stylesheet, -1) {
+		fontName := match[1]
+		font, err := richFS.ReadFile("rich/fonts/" + fontName)
+		if err != nil {
+			return "", fmt.Errorf("read embedded font %q: %w", fontName, err)
+		}
+		dataURI := "data:font/woff2;base64," + base64.StdEncoding.EncodeToString(font)
+		stylesheet = strings.ReplaceAll(stylesheet, match[0], "url("+dataURI+")")
+	}
+	return stylesheet, nil
+})
+
+// InlineKatexCSS returns the vendored KaTeX stylesheet with its WOFF2 fonts
+// inlined as data URIs, so a self-contained HTML document needs no external
+// font files. The result is cached after the first call.
+func InlineKatexCSS() (string, error) {
+	return inlineKatexCSS()
 }

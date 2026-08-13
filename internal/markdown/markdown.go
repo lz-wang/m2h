@@ -3,6 +3,7 @@ package markdown
 
 import (
 	"bytes"
+	"fmt"
 	stdhtml "html"
 	"html/template"
 	"net/url"
@@ -48,13 +49,45 @@ const (
 	TargetPreview Target = "preview"
 )
 
+// AssetMode controls how the rich-content runtime reaches the rendered page.
+type AssetMode uint8
+
+const (
+	// AssetShared references the runtime through external files under
+	// AssetBase, next to the generated HTML.
+	AssetShared AssetMode = iota
+	// AssetInline embeds the runtime (styles, scripts, fonts, and local
+	// images) into the document itself, producing a self-contained page.
+	AssetInline
+)
+
+// String names the asset mode for option errors.
+func (mode AssetMode) String() string {
+	switch mode {
+	case AssetShared:
+		return "shared"
+	case AssetInline:
+		return "inline"
+	default:
+		return fmt.Sprintf("AssetMode(%d)", uint8(mode))
+	}
+}
+
 // RenderOptions configures a single Markdown render.
 type RenderOptions struct {
 	Mode       Mode
 	Width      Width
 	Target     Target
 	SourcePath string
-	AssetBase  string
+	// AssetBase is the URL prefix of the external runtime directory; it is
+	// only consulted when Assets is AssetShared.
+	AssetBase string
+	// Assets selects external references (shared) or full embedding (inline).
+	Assets AssetMode
+	// InlineImage resolves a root-relative image path to a data URI for
+	// AssetInline renders. A nil resolver or ok=false keeps the original
+	// relative path, so unreadable images degrade instead of failing.
+	InlineImage func(relative string) (dataURI string, ok bool)
 }
 
 // Heading is one entry of the document's table of contents, extracted from the
@@ -83,16 +116,11 @@ var pageTemplate = template.Must(template.New("document").Parse(`<!doctype html>
   <style>
 {{.Styles}}
   </style>
-{{if .AssetBase}}  <link rel="stylesheet" href="{{.AssetBase}}katex.min.css">{{end}}
-</head>
+{{.ExtraHead}}</head>
 <body class="m2h-page">
   <article class="markdown-body">
 {{.Body}}  </article>
-{{if .AssetBase}}  <script src="{{.AssetBase}}katex.min.js"></script>
-  <script src="{{.AssetBase}}auto-render.min.js"></script>
-  <script src="{{.AssetBase}}mermaid.min.js"></script>
-  <script src="{{.AssetBase}}rich-content.js"></script>{{end}}
-</body>
+{{.ExtraBody}}</body>
 </html>
 `))
 
@@ -122,6 +150,10 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 	if err != nil {
 		return Result{}, err
 	}
+	extraHead, extraBody, err := runtimeFragments(normalized, body.String())
+	if err != nil {
+		return Result{}, err
+	}
 
 	var page bytes.Buffer
 	data := struct {
@@ -131,7 +163,8 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 		Title     string
 		Styles    template.CSS
 		Body      template.HTML
-		AssetBase string
+		ExtraHead template.HTML
+		ExtraBody template.HTML
 	}{
 		Mode:      normalized.Mode,
 		Width:     normalized.Width,
@@ -139,7 +172,8 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 		Title:     title,
 		Styles:    template.CSS(stylesheet),
 		Body:      template.HTML(body.String()),
-		AssetBase: normalized.AssetBase,
+		ExtraHead: extraHead,
+		ExtraBody: extraBody,
 	}
 	if err := pageTemplate.Execute(&page, data); err != nil {
 		return Result{}, err
@@ -223,6 +257,19 @@ func normalizeOptions(options RenderOptions) (RenderOptions, error) {
 	default:
 		return RenderOptions{}, &OptionError{Name: "target", Value: string(options.Target)}
 	}
+	switch options.Assets {
+	case AssetShared, AssetInline:
+	default:
+		return RenderOptions{}, &OptionError{Name: "assets", Value: options.Assets.String()}
+	}
+	if options.Assets == AssetInline && options.AssetBase != "" {
+		return RenderOptions{}, &OptionError{
+			Name:  "asset base",
+			Value: options.AssetBase,
+			Reason: "inline assets embed the runtime and cannot reference an " +
+				"external asset base",
+		}
+	}
 
 	normalizedSource, err := normalizeSourcePath(options.SourcePath)
 	if err != nil {
@@ -268,6 +315,15 @@ func rewriteDestination(destination []byte, options RenderOptions, image bool) [
 
 	if image {
 		if options.Target == TargetConvert {
+			if options.Assets == AssetInline && options.InlineImage != nil {
+				resolved, ok := resolveWithinRoot(options.SourcePath, pathPart)
+				if !ok {
+					return destination
+				}
+				if dataURI, inlined := options.InlineImage(resolved); inlined {
+					return []byte(dataURI)
+				}
+			}
 			return destination
 		}
 		resolved, ok := resolveWithinRoot(options.SourcePath, pathPart)

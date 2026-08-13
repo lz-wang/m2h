@@ -20,16 +20,21 @@ import (
 
 // Options configures file or directory conversion.
 type Options struct {
-	Input         string
-	Output        string
-	Pattern       string
-	Depth         int
-	Mode          markdown.Mode
-	Width         markdown.Width
-	CopyAssets    bool
+	Input      string
+	Output     string
+	Pattern    string
+	Depth      int
+	Mode       markdown.Mode
+	Width      markdown.Width
+	CopyAssets bool
+	// Standalone embeds the rich-content runtime and local images into every
+	// generated HTML file instead of sharing a .m2h/ directory. Single-file
+	// conversion is always standalone.
+	Standalone    bool
 	PatternSet    bool
 	DepthSet      bool
 	CopyAssetsSet bool
+	StandaloneSet bool
 	Log           io.Writer
 }
 
@@ -151,6 +156,9 @@ func runFile(ctx context.Context, source string, options Options) (Result, error
 	if options.CopyAssetsSet {
 		return Result{}, fmt.Errorf("--copy-assets can only be used when converting a directory")
 	}
+	if options.StandaloneSet {
+		return Result{}, fmt.Errorf("--standalone can only be used when converting a directory")
+	}
 	if !files.IsMarkdown(source) {
 		return Result{}, fmt.Errorf("convert %q: expected a Markdown file", source)
 	}
@@ -181,22 +189,22 @@ func runFile(ctx context.Context, source string, options Options) (Result, error
 	if err != nil {
 		return Result{}, fmt.Errorf("read Markdown %q: %w", source, err)
 	}
+	// Single files render fully self-contained: styles, the rich-content
+	// runtime, fonts, and local images are embedded so the HTML shares and
+	// opens offline on its own, with no .m2h/ directory beside it.
 	rendered, err := markdown.Render(contents, markdown.RenderOptions{
-		Mode:       options.Mode,
-		Width:      options.Width,
-		Target:     markdown.TargetConvert,
-		SourcePath: filepath.Base(source),
-		AssetBase:  assets.RichAssetDir + "/",
+		Mode:        options.Mode,
+		Width:       options.Width,
+		Target:      markdown.TargetConvert,
+		SourcePath:  filepath.Base(source),
+		Assets:      markdown.AssetInline,
+		InlineImage: newInlineImageResolver(filepath.Dir(source)),
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("render Markdown %q: %w", source, err)
 	}
 	if err := writeAtomic(destination, []byte(rendered.HTML), 0o644); err != nil {
 		return Result{}, fmt.Errorf("write HTML %q: %w", destination, err)
-	}
-	assetDir := filepath.Join(filepath.Dir(destination), assets.RichAssetDir)
-	if err := assets.WriteRichAssets(assetDir); err != nil {
-		return Result{}, fmt.Errorf("write rich-content assets %q: %w", assetDir, err)
 	}
 	return Result{HTMLFiles: []string{destination}}, nil
 }
@@ -257,13 +265,19 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) (Resu
 		if err != nil {
 			return Result{}, fmt.Errorf("read Markdown %q: %w", plans[index].source, err)
 		}
-		rendered, err := markdown.Render(contents, markdown.RenderOptions{
+		renderOptions := markdown.RenderOptions{
 			Mode:       options.Mode,
 			Width:      options.Width,
 			Target:     markdown.TargetConvert,
 			SourcePath: plans[index].sourcePath,
 			AssetBase:  richAssetBase(plans[index].sourcePath),
-		})
+		}
+		if options.Standalone {
+			renderOptions.Assets = markdown.AssetInline
+			renderOptions.AssetBase = ""
+			renderOptions.InlineImage = newInlineImageResolver(sourceRoot)
+		}
+		rendered, err := markdown.Render(contents, renderOptions)
 		if err != nil {
 			return Result{}, fmt.Errorf("render Markdown %q: %w", plans[index].source, err)
 		}
@@ -292,7 +306,8 @@ func runDirectory(ctx context.Context, sourceRoot string, options Options) (Resu
 
 	// Only emit the shared rich-content runtime when at least one HTML file was
 	// generated, so an empty glob match leaves the output directory untouched.
-	if len(discovered.Markdown) > 0 {
+	// Standalone conversions embed the runtime in every page instead.
+	if !options.Standalone && len(discovered.Markdown) > 0 {
 		assetDir := filepath.Join(outputRoot, assets.RichAssetDir)
 		if err := assets.WriteRichAssets(assetDir); err != nil {
 			return Result{}, fmt.Errorf("write rich-content assets %q: %w", assetDir, err)
