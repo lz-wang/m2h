@@ -337,6 +337,45 @@ describe("renderRichContent", () => {
 
     expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
   });
+
+  it("prepends a permalink anchor to every heading that has an id", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<h1 id="title">Title</h1><h2 id="section">Section</h2><h3>no id</h3>';
+
+    await renderRichContent(root, "light");
+
+    const h1Anchor = root.querySelector<HTMLAnchorElement>(
+      "h1#title > .m2h-heading-anchor",
+    );
+    const h2Anchor = root.querySelector<HTMLAnchorElement>(
+      "h2#section > .m2h-heading-anchor",
+    );
+    expect(h1Anchor).not.toBeNull();
+    expect(h2Anchor).not.toBeNull();
+    expect(h1Anchor?.getAttribute("href")).toBe("#title");
+    expect(h1Anchor?.getAttribute("aria-hidden")).toBe("true");
+    expect(h1Anchor?.title).toBe("此标题的永久链接");
+    expect(h1Anchor?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    // The anchor is the first child so it sits to the left of the heading text.
+    expect(root.querySelector("h1#title")?.firstElementChild).toBe(h1Anchor);
+    // A heading without an id is left untouched.
+    expect(root.querySelector("h3 > .m2h-heading-anchor")).toBeNull();
+  });
+
+  it("does not duplicate permalinks when enhancement runs twice", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<h2 id="install">Install</h2>';
+
+    await renderRichContent(root, "light");
+    await renderRichContent(root, "light");
+
+    expect(
+      root.querySelectorAll("h2#install > .m2h-heading-anchor"),
+    ).toHaveLength(1);
+  });
 });
 
 describe("rerenderMermaid", () => {

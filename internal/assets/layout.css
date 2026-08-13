@@ -130,6 +130,65 @@ html[data-width="full"] .markdown-body {
 }
 
 /*
+ * GitHub-style heading permalinks. The anchor is prepended at runtime in both
+ * the standalone rich-content script and the WebUI, so its styles live with the
+ * shared Markdown stylesheet and apply to convert output and preview alike.
+ *
+ * The anchor is absolutely positioned in the heading's left gutter and revealed
+ * only on hover/focus, so appearing and disappearing never reflows the heading
+ * text (no horizontal layout shift). pull it fully outside the content box.
+ */
+.markdown-body h1[id],
+.markdown-body h2[id],
+.markdown-body h3[id],
+.markdown-body h4[id],
+.markdown-body h5[id],
+.markdown-body h6[id] {
+  position: relative;
+}
+
+.markdown-body .m2h-heading-anchor {
+  position: absolute;
+  top: 0;
+  left: -1.25em;
+  display: inline-flex;
+  align-items: center;
+  height: 100%;
+  padding: 0 0.125em;
+  color: var(--fgColor-muted, #59636e);
+  text-decoration: none;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.markdown-body h1[id]:hover .m2h-heading-anchor,
+.markdown-body h2[id]:hover .m2h-heading-anchor,
+.markdown-body h3[id]:hover .m2h-heading-anchor,
+.markdown-body h4[id]:hover .m2h-heading-anchor,
+.markdown-body h5[id]:hover .m2h-heading-anchor,
+.markdown-body h6[id]:hover .m2h-heading-anchor,
+.markdown-body .m2h-heading-anchor:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+.markdown-body .m2h-heading-anchor svg {
+  width: 1em;
+  height: 1em;
+  fill: currentColor;
+}
+
+@media (max-width: 767px) {
+  /*
+   * The gutter shrinks on mobile; nudge the anchor back toward the text so it
+   * stays inside the viewport instead of clipping past the left edge.
+   */
+  .markdown-body .m2h-heading-anchor {
+    left: -1em;
+  }
+}
+
+/*
  * Extended markup styles for m2h's ==mark==, ^^insert^^, Critic and ++keys++.
  * These are document semantics shared by convert output and Web preview, so
  * they live with the Markdown stylesheet rather than the React WebUI.
