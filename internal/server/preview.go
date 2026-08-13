@@ -113,6 +113,7 @@ func (handler *previewHandler) routes(events *eventHub, logger io.Writer) http.H
 	mux.Handle("/api/events", events)
 	mux.HandleFunc("/api/", jsonNotFound)
 	mux.Handle("/assets/", newAssetHandler(handler.scope.root))
+	mux.Handle("/runtime/", newRuntimeHandler())
 	mux.HandleFunc("/ui/markdown.css", handler.serveMarkdownStyles)
 	mux.Handle("/ui/", http.StripPrefix("/ui/", immutableUIAssets(http.FileServer(http.FS(handler.ui)))))
 	mux.HandleFunc("/doc/", handler.serveDirectoryIndex)

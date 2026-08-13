@@ -26,6 +26,7 @@ export default defineConfig({
         "src/App.tsx",
         "src/api.ts",
         "src/lib/render-rich-content.ts",
+        "src/lib/runtime-loader.ts",
         "src/model.ts",
         "src/use-preview.ts",
         "src/use-preview-events.ts",

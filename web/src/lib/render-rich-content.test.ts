@@ -1,14 +1,15 @@
 import { waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type {
+  MathAutoRenderer,
+  MathAutoRenderOptions,
+  MermaidRuntime,
+} from "./runtime-loader";
+
 interface MermaidRunOptions {
   nodes: HTMLElement[];
   suppressErrors: boolean;
-}
-
-interface AutoRenderOptions {
-  delimiters: Array<{ left: string; right: string; display?: boolean }>;
-  throwOnError: boolean;
 }
 
 const mermaidMock = vi.hoisted(() => ({
@@ -17,15 +18,14 @@ const mermaidMock = vi.hoisted(() => ({
 }));
 
 const renderMathInElementMock = vi.hoisted(() =>
-  vi.fn<(element: HTMLElement, options: AutoRenderOptions) => void>(),
+  vi.fn<(element: HTMLElement, options?: MathAutoRenderOptions) => void>(),
 );
 
-vi.mock("mermaid", () => ({
-  default: mermaidMock,
-}));
-
-vi.mock("katex/contrib/auto-render", () => ({
-  default: renderMathInElementMock,
+vi.mock("./runtime-loader", () => ({
+  loadMermaid: vi.fn(async (): Promise<MermaidRuntime> => mermaidMock),
+  loadKatex: vi.fn(
+    async (): Promise<MathAutoRenderer> => renderMathInElementMock,
+  ),
 }));
 
 describe("renderRichContent", () => {
@@ -36,22 +36,6 @@ describe("renderRichContent", () => {
     mermaidMock.run.mockClear();
     renderMathInElementMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
-  });
-
-  it("initializes mermaid once with strict security and neutral theme", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    await renderRichContent(root);
-    await renderRichContent(root);
-
-    expect(mermaidMock.initialize).toHaveBeenCalledTimes(1);
-    expect(mermaidMock.initialize).toHaveBeenCalledWith(
-      expect.objectContaining({
-        startOnLoad: false,
-        securityLevel: "strict",
-        theme: "neutral",
-      }),
-    );
   });
 
   it("replaces mermaid code blocks with diagram containers and runs mermaid", async () => {
@@ -194,11 +178,15 @@ describe("renderRichContent", () => {
     expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
     const [element, options] = renderMathInElementMock.mock.calls[0];
     expect(element).toBe(root);
+    if (options === undefined) {
+      throw new Error("renderMathInElement was called without options");
+    }
     expect(options.throwOnError).toBe(false);
 
-    const lefts = options.delimiters.map(
-      (delimiter: { left: string }) => delimiter.left,
-    );
+    const lefts =
+      options.delimiters?.map(
+        (delimiter: { left: string }) => delimiter.left,
+      ) ?? [];
     expect(lefts.indexOf("$$")).toBeLessThan(lefts.indexOf("$"));
     expect(lefts).toEqual(["$$", "\\[", "\\(", "$"]);
   });

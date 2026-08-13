@@ -6,12 +6,15 @@
 // have to know about KaTeX or Mermaid individually.
 //
 // Mermaid runs before KaTeX so KaTeX never scans raw diagram source code.
+// Both runtimes are the shared /runtime/* assets the preview server embeds
+// (the same copy convert writes into .m2h/), loaded through the runtime loader.
 
-import renderMathInElement from "katex/contrib/auto-render";
-// KaTeX's stylesheet is part of the runtime presentation; importing it here lets
-// Vite bundle the CSS (and the font references it depends on) with the WebUI.
-import "katex/dist/katex.min.css";
-import mermaid from "mermaid";
+import {
+  loadKatex,
+  loadMermaid,
+  type MathAutoRenderDelimiter,
+  type MermaidRuntime,
+} from "./runtime-loader";
 
 const COPY_ICON =
   '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><rect x="5.25" y="5.25" width="7.25" height="7.25" rx="1.25"></rect><path d="M10.75 5.25V3.5c0-.69-.56-1.25-1.25-1.25H3.5c-.69 0-1.25.56-1.25 1.25v6c0 .69.56 1.25 1.25 1.25h1.75"></path></svg>';
@@ -20,21 +23,14 @@ const COPIED_ICON =
 const COPY_FAILED_ICON =
   '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><path d="m4.5 4.5 7 7m0-7-7 7"></path></svg>';
 
-let mermaidInitialized = false;
-
-function ensureMermaidInitialized(): void {
-  if (mermaidInitialized) {
-    return;
-  }
-  mermaid.initialize({
-    startOnLoad: false,
-    securityLevel: "strict",
-    // "neutral" keeps diagrams legible in both light and dark without
-    // re-rendering when the theme is toggled at runtime.
-    theme: "neutral",
-  });
-  mermaidInitialized = true;
-}
+// "$$" must precede "$" so the inline delimiter does not swallow the block
+// delimiter first.
+const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
+  { left: "$$", right: "$$", display: true },
+  { left: "\\[", right: "\\]", display: true },
+  { left: "\\(", right: "\\)", display: false },
+  { left: "$", right: "$", display: false },
+];
 
 /**
  * Enhance already-rendered Markdown HTML inside `root` by rendering Mermaid
@@ -51,13 +47,17 @@ export async function renderRichContent(
   root: HTMLElement,
   isCurrent?: () => boolean,
 ): Promise<void> {
-  ensureMermaidInitialized();
+  const mermaid = await loadMermaid();
   addCodeCopyButtons(root);
-  await renderMermaid(root);
+  await renderMermaid(mermaid, root);
   if (isCurrent !== undefined && !isCurrent()) {
     return;
   }
-  renderMath(root);
+  const renderMathInElement = await loadKatex();
+  renderMathInElement(root, {
+    delimiters: MATH_DELIMITERS,
+    throwOnError: false,
+  });
 }
 
 function addCodeCopyButtons(root: HTMLElement): void {
@@ -130,21 +130,10 @@ function setCopyStatus(button: HTMLButtonElement, copied: boolean): void {
   }, 2_000);
 }
 
-function renderMath(root: HTMLElement): void {
-  renderMathInElement(root, {
-    // "$$" must precede "$" so the inline delimiter does not swallow the
-    // block delimiter first.
-    delimiters: [
-      { left: "$$", right: "$$", display: true },
-      { left: "\\[", right: "\\]", display: true },
-      { left: "\\(", right: "\\)", display: false },
-      { left: "$", right: "$", display: false },
-    ],
-    throwOnError: false,
-  });
-}
-
-async function renderMermaid(root: HTMLElement): Promise<void> {
+async function renderMermaid(
+  mermaid: MermaidRuntime,
+  root: HTMLElement,
+): Promise<void> {
   const targets: HTMLElement[] = [];
   for (const code of root.querySelectorAll<HTMLElement>(
     "pre > code.language-mermaid",
