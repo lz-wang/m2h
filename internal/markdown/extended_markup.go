@@ -128,6 +128,8 @@ func (e *extendedMarkupExtension) Extend(m goldmark.Markdown) {
 		util.Prioritized(newMarkupParser('=', markupMark), 500),
 		util.Prioritized(newMarkupParser('^', markupInsert), 500),
 		util.Prioritized(newCriticInlineParser(), 200),
+	), parser.WithBlockParsers(
+		util.Prioritized(newCriticBlockParser(), 650),
 	))
 	m.Renderer().AddOptions(renderer.WithNodeRenderers(
 		util.Prioritized(&extendedMarkupHTMLRenderer{}, 500),
@@ -142,4 +144,5 @@ type extendedMarkupHTMLRenderer struct{}
 func (r *extendedMarkupHTMLRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(KindMarkup, renderMarkup)
 	reg.Register(KindCriticInline, renderCriticInline)
+	reg.Register(KindCriticBlock, renderCriticBlock)
 }

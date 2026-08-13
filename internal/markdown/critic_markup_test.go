@@ -96,3 +96,49 @@ func TestCriticInlineDoesNotFireInCodeSpan(t *testing.T) {
 		t.Errorf("critic fired inside a code span:\n%s", body)
 	}
 }
+
+func TestCriticBlockHighlight(t *testing.T) {
+	t.Parallel()
+
+	body := renderBody(t, "{==\n\n段落内容\n\n==}")
+	containsInOrder(t, body,
+		`<div class="m2h-critic-block m2h-critic-block-highlight">`,
+		"<p>段落内容</p>",
+		"</div>")
+}
+
+func TestCriticBlockInsertKeepsList(t *testing.T) {
+	t.Parallel()
+
+	body := renderBody(t, "{++\n\n新增：\n\n- 一\n- 二\n\n++}")
+	containsInOrder(t, body,
+		`<div class="m2h-critic-block m2h-critic-block-insert">`,
+		"<ul>",
+		"<li>一</li>",
+		"<li>二</li>",
+		"</ul>",
+		"</div>")
+}
+
+func TestCriticBlockDeleteKeepsInlineMarkup(t *testing.T) {
+	t.Parallel()
+
+	body := renderBody(t, "{--\n\n**重要说明**\n\n--}")
+	containsInOrder(t, body,
+		`<div class="m2h-critic-block m2h-critic-block-delete">`,
+		"<strong>重要说明</strong>",
+		"</div>")
+}
+
+func TestCriticBlockOpenerMustBeStandalone(t *testing.T) {
+	t.Parallel()
+
+	// An opener followed by text on the same line is inline critic, not a block.
+	body := renderBody(t, "{==内联==}")
+	if strings.Contains(body, "m2h-critic-block") {
+		t.Errorf("inline critic produced a block:\n%s", body)
+	}
+	if !strings.Contains(body, `<mark class="m2h-critic">内联</mark>`) {
+		t.Errorf("standalone opener check misclassified inline critic:\n%s", body)
+	}
+}
