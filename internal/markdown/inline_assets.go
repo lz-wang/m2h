@@ -25,7 +25,7 @@ func runtimeFragments(options RenderOptions, body string) (template.HTML, templa
 		var head strings.Builder
 		fmt.Fprintf(&head, "  <link rel=\"stylesheet\" href=\"%skatex.min.css\">\n", options.AssetBase)
 		var scripts strings.Builder
-		for _, name := range []string{"katex.min.js", "auto-render.min.js", "mermaid.min.js", "rich-content.js"} {
+		for _, name := range []string{"katex.min.js", "auto-render.min.js", "mermaid.min.js", "heading-navigation.js", "rich-content.js"} {
 			fmt.Fprintf(&scripts, "  <script src=\"%s%s\"></script>\n", options.AssetBase, name)
 		}
 		return template.HTML(head.String()), template.HTML(scripts.String()), nil
@@ -36,8 +36,8 @@ func runtimeFragments(options RenderOptions, body string) (template.HTML, templa
 
 // inlineRuntimeFragments embeds only the runtime pieces the document uses:
 // KaTeX (stylesheet, core, auto-render) when math delimiters are present,
-// Mermaid when a fenced diagram exists, and always the rich-content enhancer,
-// which also provides code copy buttons for plain documents.
+// Mermaid when a fenced diagram exists, and always the heading-navigation plus
+// rich-content enhancers, which provide heading permalinks and code controls.
 func inlineRuntimeFragments(body string) (template.HTML, template.HTML, error) {
 	var head strings.Builder
 	var scripts strings.Builder
@@ -60,8 +60,10 @@ func inlineRuntimeFragments(body string) (template.HTML, template.HTML, error) {
 			return "", "", err
 		}
 	}
-	if err := writeInlineScript(&scripts, "rich-content.js"); err != nil {
-		return "", "", err
+	for _, name := range []string{"heading-navigation.js", "rich-content.js"} {
+		if err := writeInlineScript(&scripts, name); err != nil {
+			return "", "", err
+		}
 	}
 	return template.HTML(head.String()), template.HTML(scripts.String()), nil
 }
