@@ -1,4 +1,10 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import {
   APIError,
@@ -275,7 +281,10 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     };
   }, [mode]);
 
-  useEffect(() => {
+  // A layout effect (not passive) so the tab title updates synchronously during
+  // commit, before paint — readers (and tests) see the new title immediately
+  // rather than on the next passive-effect flush.
+  useLayoutEffect(() => {
     document.title = documentResponse?.title ?? "m2h";
   }, [documentResponse]);
 

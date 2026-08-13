@@ -924,6 +924,87 @@ describe("App directory preview", () => {
     expect(window.location.search).toBe("?toc=false");
   });
 
+  it("does not reload when a heading permalink is clicked", async () => {
+    const getDocument = vi.fn().mockResolvedValue({
+      path: "README.md",
+      title: "Readme API Title",
+      html: '<h2 id="section">Section</h2>',
+      frontmatter: null,
+      toc: [{ level: 2, id: "section", text: "Section" }],
+    });
+    const api = createAPI({ getDocument });
+    render(<App api={api} />);
+    await screen.findByRole("heading", { level: 2, name: "Section" });
+    const anchor = document.querySelector(".markdown-body .m2h-heading-anchor");
+    if (!(anchor instanceof HTMLAnchorElement)) {
+      throw new Error("heading permalink was not rendered");
+    }
+    expect(anchor.getAttribute("href")).toBe("#section");
+
+    vi.mocked(Element.prototype.scrollIntoView).mockClear();
+    await act(async () => {
+      fireEvent.click(anchor);
+    });
+    // A permalink is a same-document link: it scrolls and updates the hash
+    // without fetching the document again.
+    expect(getDocument).toHaveBeenCalledTimes(1);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+      expect.objectContaining({ block: "start" }),
+    );
+    expect(window.location.hash).toBe("#section");
+  });
+
+  it("locates a Unicode heading from a deep link", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      `/doc/README.md#${encodeURIComponent("安装")}`,
+    );
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="安装">安装</h2>',
+        frontmatter: null,
+        toc: [{ level: 2, id: "安装", text: "安装" }],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByRole("heading", { level: 2, name: "安装" });
+    await waitFor(() =>
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+        expect.objectContaining({ block: "start" }),
+      ),
+    );
+    await settleScrollPosition();
+    expect(window.location.hash).toBe(`#${encodeURIComponent("安装")}`);
+  });
+
+  it("locates a duplicate heading by its suffixed id", async () => {
+    window.history.replaceState(null, "", "/doc/README.md#foo-1");
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="foo">First</h2><h2 id="foo-1">Second</h2>',
+        frontmatter: null,
+        toc: [
+          { level: 2, id: "foo", text: "First" },
+          { level: 2, id: "foo-1", text: "Second" },
+        ],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByRole("heading", { level: 2, name: "Second" });
+    await waitFor(() =>
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+        expect.objectContaining({ block: "start" }),
+      ),
+    );
+    await settleScrollPosition();
+    expect(window.location.hash).toBe("#foo-1");
+  });
+
   it("persists the scroll offset per document so a refresh can return to it", async () => {
     const api = createAPI({
       getDocument: vi.fn().mockResolvedValue({
