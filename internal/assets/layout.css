@@ -72,6 +72,67 @@ html[data-width="full"] .markdown-body {
 }
 
 /*
+ * GitHub-style heading permalinks are inserted by the browser enhancement
+ * layer. Keep them outside the heading text flow so adding the control never
+ * shifts document layout or changes line wrapping. They appear on hover/focus;
+ * touch devices keep them partially visible because hover is unavailable.
+ */
+.markdown-body :is(h1, h2, h3, h4, h5, h6)[id] {
+  position: relative;
+}
+
+.markdown-body .m2h-heading-anchor {
+  position: absolute;
+  top: 50%;
+  right: 100%;
+  display: inline-flex;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-right: 0.25rem;
+  align-items: center;
+  justify-content: center;
+  color: var(--fgColor-muted, #59636e);
+  opacity: 0;
+  outline: none;
+  text-decoration: none;
+  transform: translateY(-50%);
+  transition: color 120ms ease, opacity 120ms ease;
+}
+
+.markdown-body .m2h-heading-anchor svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.75;
+}
+
+.markdown-body :is(h1, h2, h3, h4, h5, h6)[id]:hover
+  > .m2h-heading-anchor,
+.markdown-body .m2h-heading-anchor:focus-visible {
+  opacity: 1;
+}
+
+.markdown-body .m2h-heading-anchor:hover,
+.markdown-body .m2h-heading-anchor:focus-visible {
+  color: var(--fgColor-accent, #0969da);
+  text-decoration: none;
+}
+
+.markdown-body .m2h-heading-anchor:focus-visible {
+  border-radius: 0.25rem;
+  box-shadow: 0 0 0 3px var(--bgColor-accent-muted, #ddf4ff);
+}
+
+@media (hover: none) {
+  .markdown-body .m2h-heading-anchor {
+    opacity: 0.65;
+  }
+}
+
+/*
  * Code fences are enhanced at runtime in both the standalone rich-content
  * script and the WebUI. Reserve the top-right corner so the control never
  * obscures source text, including on narrow screens.
