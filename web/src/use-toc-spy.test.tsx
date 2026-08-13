@@ -16,8 +16,11 @@ function Harness({ enabled }: { enabled: boolean }) {
   return (
     <div ref={ref}>
       <div data-slot="scroll-area-viewport" data-testid="viewport">
-        <h2 id="a">A</h2>
-        <h2 id="b">B</h2>
+        <article className="reader-document">
+          <h2 id="a">A</h2>
+          <h2 id="b">B</h2>
+          <h5 id="deep">Deep</h5>
+        </article>
       </div>
       <span data-testid="active">{activeID ?? "none"}</span>
     </div>
@@ -45,27 +48,35 @@ function mockHeadingTops(tops: Record<string, number>): void {
 
 describe("useTocSpy", () => {
   it("activates the last heading scrolled past the viewport top", async () => {
-    // "a" sits at the top, "b" is far below the offset → only "a" is active.
-    mockHeadingTops({ a: 0, b: 400 });
+    mockHeadingTops({ a: 0, b: 400, deep: 800 });
     render(<Harness enabled={true} />);
     expect(screen.getByTestId("active").textContent).toBe("a");
 
-    // After scrolling, "b" crosses the offset and becomes active.
-    mockHeadingTops({ a: -200, b: 0 });
+    mockHeadingTops({ a: -200, b: 0, deep: 400 });
     await act(async () => {
       fireEvent.scroll(screen.getByTestId("viewport"));
-      await new Promise((resolve) => {
-        setTimeout(resolve, 0);
-      });
+      await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(screen.getByTestId("active").textContent).toBe("b");
   });
 
-  it("leaves the initial heading active while disabled", () => {
+  it("syncs every document heading to the URL even when TOC is hidden", async () => {
+    const replaceState = vi
+      .spyOn(window.history, "replaceState")
+      .mockImplementation(() => {});
+    mockHeadingTops({ a: -300, b: -200, deep: 0 });
     render(<Harness enabled={false} />);
+
+    await act(async () => {
+      fireEvent.scroll(screen.getByTestId("viewport"));
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
     expect(screen.getByTestId("active").textContent).toBe("a");
-    // No viewport listener is attached when disabled, so scrolling is a no-op.
-    fireEvent.scroll(screen.getByTestId("viewport"));
-    expect(screen.getByTestId("active").textContent).toBe("a");
+    expect(replaceState).toHaveBeenCalledWith(
+      window.history.state,
+      "",
+      "#deep",
+    );
   });
 });
