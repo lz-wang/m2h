@@ -18,6 +18,9 @@ import {
   type MermaidRuntime,
 } from "./runtime-loader";
 
+const HEADING_SELECTOR = "h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]";
+const HEADING_LINK_ICON =
+  '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>';
 const COPY_ICON =
   '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><rect x="5.25" y="5.25" width="7.25" height="7.25" rx="1.25"></rect><path d="M10.75 5.25V3.5c0-.69-.56-1.25-1.25-1.25H3.5c-.69 0-1.25.56-1.25 1.25v6c0 .69.56 1.25 1.25 1.25h1.75"></path></svg>';
 const COPIED_ICON =
@@ -35,9 +38,10 @@ const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
 ];
 
 /**
- * Enhance already-rendered Markdown HTML inside `root` by rendering Mermaid
- * diagrams and KaTeX math. Safe to call repeatedly; errors from individual
- * blocks are suppressed so a broken diagram never breaks the whole document.
+ * Enhance already-rendered Markdown HTML inside `root` by adding heading
+ * permalinks/code controls and rendering Mermaid diagrams plus KaTeX math.
+ * Safe to call repeatedly; errors from individual blocks are suppressed so a
+ * broken diagram never breaks the whole document.
  *
  * Each runtime is loaded only when the document actually uses it — Mermaid
  * requires a fenced `language-mermaid` block, KaTeX a math delimiter — so a
@@ -48,17 +52,17 @@ const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
  * for light, `dark` for dark) on each call; switching theme therefore requires
  * re-running this function so diagrams regenerate in the new palette.
  *
- * `isCurrent` is an optional freshness check consulted after Mermaid resolves.
- * Because Mermaid renders asynchronously, a slow diagram can finish after the
- * caller has swapped `root` for a different document; passing `isCurrent`
- * keeps such a stale render from applying KaTeX to content that no longer
- * belongs to it.
+ * `isCurrent` is an optional freshness check consulted after asynchronous
+ * runtime loads. Because Mermaid renders asynchronously, a slow diagram can
+ * finish after the caller has swapped `root` for a different document; passing
+ * `isCurrent` keeps stale work from touching the replacement body.
  */
 export async function renderRichContent(
   root: HTMLElement,
   mode: ResolvedMode,
   isCurrent?: () => boolean,
 ): Promise<void> {
+  addHeadingAnchors(root);
   addCodeCopyButtons(root);
   if (hasMermaidBlocks(root)) {
     const mermaid = await loadMermaid();
@@ -70,11 +74,22 @@ export async function renderRichContent(
   }
   if (hasMathText(root)) {
     const renderMathInElement = await loadKatex();
+    if (isCurrent !== undefined && !isCurrent()) {
+      return;
+    }
     renderMathInElement(root, {
       delimiters: MATH_DELIMITERS,
       throwOnError: false,
     });
   }
+  if (isCurrent !== undefined && !isCurrent()) {
+    return;
+  }
+
+  // Restoring after Mermaid/KaTeX have finalized the body prevents a deep link
+  // from landing correctly first and then drifting when rich content changes
+  // the document height above the target.
+  restoreCurrentHash(root);
 }
 
 function hasMermaidBlocks(root: HTMLElement): boolean {
@@ -90,6 +105,83 @@ function hasMathText(root: HTMLElement): boolean {
     text !== null &&
     (text.includes("$") || text.includes("\\(") || text.includes("\\["))
   );
+}
+
+function addHeadingAnchors(root: HTMLElement): void {
+  for (const heading of root.querySelectorAll<HTMLElement>(HEADING_SELECTOR)) {
+    if (heading.id === "" || heading.querySelector(".m2h-heading-anchor") !== null) {
+      continue;
+    }
+    const headingText = heading.textContent?.trim() ?? "";
+    const anchor = document.createElement("a");
+    anchor.className = "m2h-heading-anchor";
+    anchor.href = `#${encodeURIComponent(heading.id)}`;
+    anchor.innerHTML = HEADING_LINK_ICON;
+    anchor.setAttribute(
+      "aria-label",
+      headingText === "" ? "链接到此标题" : `链接到标题「${headingText}」`,
+    );
+    anchor.title = "链接到此标题";
+    anchor.addEventListener("click", (event) => {
+      // Keep modified clicks native so users can open the permalink in another
+      // tab/window. Stop propagation in either case so React's document-link
+      // router does not reload the current Markdown file just to change hash.
+      event.stopPropagation();
+      if (
+        event.button !== 0 ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey
+      ) {
+        return;
+      }
+      event.preventDefault();
+      const reduceMotion = window.matchMedia(
+        "(prefers-reduced-motion: reduce)",
+      ).matches;
+      heading.scrollIntoView({
+        block: "start",
+        behavior: reduceMotion ? "auto" : "smooth",
+      });
+      replaceLocationHash(heading.id);
+    });
+    heading.prepend(anchor);
+  }
+}
+
+function restoreCurrentHash(root: HTMLElement): void {
+  const id = readLocationHashID();
+  if (id === null) {
+    return;
+  }
+  const target = document.getElementById(id);
+  if (target !== null && root.contains(target)) {
+    target.scrollIntoView({ block: "start" });
+  }
+}
+
+function replaceLocationHash(id: string): void {
+  if (readLocationHashID() === id) {
+    return;
+  }
+  window.history.replaceState(
+    window.history.state,
+    "",
+    `#${encodeURIComponent(id)}`,
+  );
+}
+
+function readLocationHashID(): string | null {
+  const encoded = window.location.hash.slice(1);
+  if (encoded === "") {
+    return null;
+  }
+  try {
+    return decodeURIComponent(encoded);
+  } catch {
+    return encoded;
+  }
 }
 
 function addCodeCopyButtons(root: HTMLElement): void {
