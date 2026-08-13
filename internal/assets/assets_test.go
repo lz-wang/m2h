@@ -74,6 +74,30 @@ func TestStylesheetRejectsUnknownMode(t *testing.T) {
 	}
 }
 
+func TestStylesheetIncludesExtendedMarkup(t *testing.T) {
+	t.Parallel()
+
+	stylesheet, err := Stylesheet("light")
+	if err != nil {
+		t.Fatalf("Stylesheet(\"light\") returned error: %v", err)
+	}
+	for _, want := range []string{
+		".markdown-body ins",
+		".markdown-body .keys",
+		".markdown-body .m2h-critic-comment",
+		".markdown-body .m2h-critic-delete",
+		".markdown-body .m2h-critic-insert",
+		".markdown-body .m2h-critic-block",
+		".markdown-body .m2h-critic-block-highlight",
+		".markdown-body .m2h-critic-block-insert",
+		".markdown-body .m2h-critic-block-delete",
+	} {
+		if !strings.Contains(stylesheet, want) {
+			t.Errorf("stylesheet does not contain extended-markup rule %q", want)
+		}
+	}
+}
+
 func TestVendoredMetadata(t *testing.T) {
 	t.Parallel()
 
