@@ -35,7 +35,7 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 
 	command := &urfavecli.Command{
 		Name:        "m2h",
-		Usage:       "convert GitHub-flavored Markdown to HTML",
+		Usage:       "convert Markdown to HTML",
 		UsageText:   "m2h [options] <file|directory>\n   m2h web [options] <file|directory>",
 		HideVersion: true,
 		Writer:      stdout,

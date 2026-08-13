@@ -361,7 +361,7 @@ jobs:
 
           cat > homebrew-tap/Formula/m2h.rb <<RUBY
           class M2h < Formula
-            desc "Convert and preview GitHub-flavored Markdown"
+            desc "Convert and preview Markdown"
             homepage "https://github.com/lz-wang/m2h"
             license "MIT"
 
