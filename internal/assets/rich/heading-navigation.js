@@ -50,6 +50,9 @@
         return;
       }
       var text = (heading.textContent || "").trim();
+      if (text && !heading.hasAttribute("aria-label")) {
+        heading.setAttribute("aria-label", text);
+      }
       var anchor = document.createElement("a");
       anchor.className = "m2h-heading-anchor";
       anchor.href = "#" + encodeURIComponent(heading.id);
