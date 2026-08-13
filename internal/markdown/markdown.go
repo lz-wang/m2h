@@ -228,6 +228,7 @@ func newEngine() goldmark.Markdown {
 		extension.Footnote,
 		emoji.New(emoji.WithRenderingMethod(emoji.Unicode)),
 		AlertExtension,
+		ExtendedMarkupExtension,
 		highlighting.NewHighlighting(
 			highlighting.WithStyle("github"),
 			highlighting.WithFormatOptions(html.WithClasses(true)),
