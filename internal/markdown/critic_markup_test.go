@@ -142,3 +142,26 @@ func TestCriticBlockOpenerMustBeStandalone(t *testing.T) {
 		t.Errorf("standalone opener check misclassified inline critic:\n%s", body)
 	}
 }
+
+func TestCriticBlockInterruptsParagraph(t *testing.T) {
+	t.Parallel()
+
+	// A standalone opener on its own line interrupts the preceding paragraph,
+	// so the block must not be folded into the paragraph text.
+	body := renderBody(t, "段落\n\n{==\n\n块内\n\n==}")
+	if !strings.Contains(body, "<p>段落</p>") {
+		t.Errorf("preceding paragraph lost:\n%s", body)
+	}
+	containsInOrder(t, body, `<div class="m2h-critic-block m2h-critic-block-highlight">`, "<p>块内</p>", "</div>")
+}
+
+func TestCriticSubstitutionWithoutSeparatorDegradesToDelete(t *testing.T) {
+	t.Parallel()
+
+	// A substitution missing '~>' is malformed; degrade to a single delete
+	// rather than dropping the content.
+	body := renderBody(t, "{~~无分隔符~~}")
+	if !strings.Contains(body, `<del class="m2h-critic m2h-critic-delete">无分隔符</del>`) {
+		t.Errorf("malformed substitution did not degrade to delete:\n%s", body)
+	}
+}

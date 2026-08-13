@@ -175,3 +175,20 @@ func TestKeysDoesNotFireInCodeSpan(t *testing.T) {
 		t.Errorf("code span produced kbd:\n%s", body)
 	}
 }
+
+func TestValidKeysContent(t *testing.T) {
+	t.Parallel()
+
+	valid := []string{"ctrl", "ctrl+alt+del", "f1", "a-b"}
+	invalid := []string{"", "a b", "a\tb", "+ctrl", "ctrl+", "+", "a\nb"}
+	for _, in := range valid {
+		if !validKeysContent([]byte(in)) {
+			t.Errorf("validKeysContent(%q) = false, want true", in)
+		}
+	}
+	for _, in := range invalid {
+		if validKeysContent([]byte(in)) {
+			t.Errorf("validKeysContent(%q) = true, want false", in)
+		}
+	}
+}
