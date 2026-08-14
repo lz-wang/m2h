@@ -45,7 +45,7 @@ if [[ "${actual_version}" != "${expected_version}" ]]; then
 fi
 echo "[smoke] version ${actual_version}"
 
-"${binary}" smoke.md --output smoke.html --mode dark
+"${binary}" smoke.md --output smoke.html --mode dark --yes
 grep -F '<title>Smoke</title>' smoke.html >/dev/null
 grep -F 'href="next.html"' smoke.html >/dev/null
 echo "[smoke] convert"
