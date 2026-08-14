@@ -130,6 +130,68 @@ html[data-width="full"] .markdown-body {
 }
 
 /*
+ * Sortable table headers, enhanced at runtime in both the standalone
+ * rich-content script and the WebUI. Tablesort stamps role=columnheader on
+ * header cells it wires up and writes the active direction to aria-sort, so
+ * the arrows key off those attributes; headers opted out through
+ * data-sort-method="none" (interactive cells) keep their native semantics.
+ *
+ * The active column always shows its direction; an unsorted column only
+ * hints its affordance on hover/focus, so headers read clean at rest. The
+ * reserved right padding keeps the arrow from overlapping header text.
+ */
+.markdown-body th[role="columnheader"]:not([data-sort-method="none"]) {
+  position: relative;
+  padding-right: 2rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.markdown-body th[role="columnheader"]:not([data-sort-method="none"])::after {
+  position: absolute;
+  top: 50%;
+  right: 0.75rem;
+
+  color: var(--fgColor-muted, #59636e);
+
+  font-size: 0.75rem;
+  line-height: 1;
+
+  content: "↕";
+  opacity: 0;
+
+  transform: translateY(-50%);
+  transition:
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.markdown-body th[role="columnheader"][aria-sort="none"]:hover::after,
+.markdown-body th[role="columnheader"][aria-sort="none"]:focus-visible::after {
+  opacity: 0.65;
+}
+
+.markdown-body th[aria-sort="ascending"]::after {
+  content: "↑";
+  opacity: 1;
+}
+
+.markdown-body th[aria-sort="descending"]::after {
+  content: "↓";
+  opacity: 1;
+}
+
+.markdown-body th[role="columnheader"]:not([data-sort-method="none"]):hover,
+.markdown-body th[role="columnheader"]:not([data-sort-method="none"]):focus-visible {
+  background-color: var(--bgColor-muted, #f6f8fa);
+}
+
+.markdown-body th[role="columnheader"]:focus-visible {
+  outline: 2px solid var(--focus-outlineColor, #0969da);
+  outline-offset: -2px;
+}
+
+/*
  * GitHub-style heading permalinks. The anchor is prepended at runtime in both
  * the standalone rich-content script and the WebUI, so its styles live with the
  * shared Markdown stylesheet and apply to convert output and preview alike.

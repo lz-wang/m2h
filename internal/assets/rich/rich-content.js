@@ -166,12 +166,76 @@
           return;
         }
         table.dataset.m2hSortable = "true";
+        prepareSortableTable(table);
         try {
           new Tablesort(table);
         } catch (_) {
           delete table.dataset.m2hSortable;
+          return;
         }
+        finalizeSortableTable(table);
       });
+  }
+
+  // Headers whose cells embed interactive nodes are opted out of sorting
+  // before construction: Tablesort natively ignores data-sort-method="none",
+  // so clicks on a link or button header keep their native meaning.
+  function prepareSortableTable(table) {
+    table.querySelectorAll("thead th").forEach(function (th) {
+      if (
+        th.querySelector(
+          "a, button, input, select, textarea, [contenteditable=true]"
+        ) !== null
+      ) {
+        th.dataset.sortMethod = "none";
+      }
+    });
+  }
+
+  // Tablesort writes direction to aria-sort itself but only assigns a
+  // lowercase (inert) `tabindex` property, so keyboard access, the sort hint
+  // title, and the explicit aria-sort="none" baseline are layered on here.
+  function finalizeSortableTable(table) {
+    table.addEventListener("afterSort", function () {
+      syncTableSortState(table);
+    });
+    sortableHeaders(table).forEach(function (th) {
+      th.tabIndex = 0;
+      th.setAttribute("aria-sort", "none");
+      th.title = "点击升序排序";
+      th.addEventListener("keydown", function (event) {
+        if (event.key !== "Enter" && event.key !== " ") {
+          return;
+        }
+        event.preventDefault();
+        th.click();
+      });
+    });
+    syncTableSortState(table);
+  }
+
+  // Keep titles in step with the aria-sort attribute after every sort. When
+  // another column takes over, Tablesort strips the previous column's
+  // aria-sort; restoring the explicit "none" baseline keeps the header state
+  // machine predictable for CSS and assistive technology alike.
+  function syncTableSortState(table) {
+    sortableHeaders(table).forEach(function (th) {
+      var order = th.getAttribute("aria-sort");
+      if (order === "ascending") {
+        th.title = "当前升序，点击切换为降序";
+      } else if (order === "descending") {
+        th.title = "当前降序，点击切换为升序";
+      } else {
+        th.setAttribute("aria-sort", "none");
+        th.title = "点击升序排序";
+      }
+    });
+  }
+
+  function sortableHeaders(table) {
+    return table.querySelectorAll(
+      'thead th[role="columnheader"]:not([data-sort-method="none"])'
+    );
   }
 
   function addHeadingPermalinks(root) {

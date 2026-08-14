@@ -46,6 +46,17 @@ const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
 const SORTABLE_TABLE_SELECTOR =
   'table:not([class]):not([data-m2h-sortable="true"])';
 
+// Interactive nodes inside a header cell. A click on such a header must keep
+// its native behavior (navigate, focus the control) instead of also sorting.
+const INTERACTIVE_HEADER_SELECTOR =
+  "a, button, input, select, textarea, [contenteditable=true]";
+
+// Headers Tablesort made sortable: it stamps role=columnheader on every
+// header cell and skips data-sort-method="none" ones, so sortable cells are
+// the role-bearing cells that were not opted out.
+const SORTABLE_HEADER_SELECTOR =
+  'thead th[role="columnheader"]:not([data-sort-method="none"])';
+
 /**
  * Enhance already-rendered Markdown HTML inside `root` by rendering Mermaid
  * diagrams and KaTeX math and making plain GFM tables sortable. Safe to call
@@ -114,10 +125,11 @@ function hasSortableTables(root: HTMLElement): boolean {
 }
 
 // Instantiate the client-side sorter on every plain GFM table with a header
-// and more than one body row; Tablesort keeps its sort direction on the
-// aria-sort attribute itself. The data-m2h-sortable marker is set before
-// construction and removed again if construction throws, so a failed
-// enhancement can be retried instead of leaving the table marked done.
+// and more than one body row. Tablesort keeps its sort direction on the
+// aria-sort attribute itself; keyboard access, titles, and the explicit
+// "none" baseline come from finalize/sync below. The data-m2h-sortable marker
+// is set before construction and removed again if construction throws, so a
+// failed enhancement can be retried instead of leaving the table marked done.
 function enhanceSortableTables(
   root: HTMLElement,
   Tablesort: TablesortConstructor,
@@ -133,10 +145,68 @@ function enhanceSortableTables(
       continue;
     }
     table.dataset.m2hSortable = "true";
+    prepareSortableTable(table);
     try {
       new Tablesort(table);
     } catch {
       delete table.dataset.m2hSortable;
+      continue;
+    }
+    finalizeSortableTable(table);
+  }
+}
+
+// Headers whose cells embed interactive nodes are opted out of sorting before
+// construction: Tablesort natively ignores data-sort-method="none", so clicks
+// on a link or button header keep their native meaning.
+function prepareSortableTable(table: HTMLTableElement): void {
+  for (const th of table.querySelectorAll<HTMLTableCellElement>("thead th")) {
+    if (th.querySelector(INTERACTIVE_HEADER_SELECTOR) !== null) {
+      th.dataset.sortMethod = "none";
+    }
+  }
+}
+
+// Tablesort writes direction to aria-sort itself but only assigns a lowercase
+// (inert) `tabindex` property, so keyboard access, the sort hint title, and
+// the explicit aria-sort="none" baseline are layered on here.
+function finalizeSortableTable(table: HTMLTableElement): void {
+  table.addEventListener("afterSort", () => {
+    syncTableSortState(table);
+  });
+  for (const th of table.querySelectorAll<HTMLTableCellElement>(
+    SORTABLE_HEADER_SELECTOR,
+  )) {
+    th.tabIndex = 0;
+    th.setAttribute("aria-sort", "none");
+    th.title = "点击升序排序";
+    th.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      th.click();
+    });
+  }
+  syncTableSortState(table);
+}
+
+// Keep titles in step with the aria-sort attribute after every sort. When
+// another column takes over, Tablesort strips the previous column's
+// aria-sort; restoring the explicit "none" baseline keeps the header state
+// machine predictable for CSS and assistive technology alike.
+function syncTableSortState(table: HTMLTableElement): void {
+  for (const th of table.querySelectorAll<HTMLTableCellElement>(
+    SORTABLE_HEADER_SELECTOR,
+  )) {
+    const order = th.getAttribute("aria-sort");
+    if (order === "ascending") {
+      th.title = "当前升序，点击切换为降序";
+    } else if (order === "descending") {
+      th.title = "当前降序，点击切换为升序";
+    } else {
+      th.setAttribute("aria-sort", "none");
+      th.title = "点击升序排序";
     }
   }
 }
