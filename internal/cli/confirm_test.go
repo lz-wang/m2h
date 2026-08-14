@@ -51,6 +51,15 @@ func TestInteractiveStdinRejectsNonFileReaders(t *testing.T) {
 	if interactiveStdin(strings.NewReader("y\n")) {
 		t.Fatal("interactiveStdin(strings.Reader) = true, want false for non-file readers")
 	}
+
+	file, err := os.CreateTemp(t.TempDir(), "stdin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = file.Close() })
+	if interactiveStdin(file) {
+		t.Fatal("interactiveStdin(regular *os.File) = true, want false for non-terminal files")
+	}
 }
 
 func TestConvertPromptDescribesWriteTarget(t *testing.T) {
