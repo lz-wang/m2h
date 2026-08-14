@@ -31,3 +31,4 @@ dist/
 *.log
 logs/
 __debug_bin
+.playwright-cli
