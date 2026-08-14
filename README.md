@@ -149,7 +149,7 @@ m2h 在 Markdown 渲染基础上提供以下增强能力。
 
 数学公式和 Mermaid 图表的运行时资源已包含在输出中，生成的 HTML 可离线打开。
 
-扩展行内标记借鉴 [PyMdown Extensions](https://facelessuser.github.io/pymdown-extensions/) 的语义：`==文本==` 渲染为 `<mark>`，`^^文本^^` 渲染为 `<ins>`，`++ctrl+alt+del++` 渲染为带样式的键盘按键。Critic 协作标记用 `{ ... }` 包裹，支持高亮、删除、新增、备注与替换（`{~~旧~>新~~}` 渲染为 `<del>` 加 `<ins>`）；把 `{==`、`{++` 或 `{--` 单独写在一行，再用 `==}`、`++}` 或 `--}` 结束，即可标注整段内容，段内仍按正常 Markdown 解析。
+扩展行内标记借鉴 [PyMdown Extensions](https://facelessuser.github.io/pymdown-extensions/) 的语义：`==文本==` 渲染为 `<mark>`，`^^文本^^` 渲染为 `<ins>`，`++ctrl+alt+del++` 渲染为带样式的键盘按键。按键数据库与 PyMdown 的 English US 键盘一致（字母、数字、标点、导航、编辑、数字小键盘、修饰键、F1–F24、媒体、浏览器与鼠标按键），别名（如 `ctrl`、`cmd`、`pg-up`、`pipe`）统一归一化为标准键名并输出同一 CSS class，修饰键与导航键在键帽上显示对应符号，未知按键保留原文。Critic 协作标记用 `{ ... }` 包裹，支持高亮、删除、新增、备注与替换（`{~~旧~>新~~}` 渲染为 `<del>` 加 `<ins>`）；把 `{==`、`{++` 或 `{--` 单独写在一行，再用 `==}`、`++}` 或 `--}` 结束，即可标注整段内容，段内仍按正常 Markdown 解析。
 
 ## 许可证
 

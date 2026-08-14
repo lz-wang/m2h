@@ -1,10 +1,6 @@
 package markdown
 
 import (
-	"bytes"
-	stdhtml "html"
-	"strings"
-
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
@@ -117,114 +113,6 @@ func renderMarkup(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast
 	case markupInsert:
 		_, _ = w.WriteString("<ins>")
 	}
-	return ast.WalkContinue, nil
-}
-
-// KindKeys is the AST node kind for ++key+key++ sequences.
-var KindKeys = ast.NewNodeKind("Keys")
-
-// keysNode holds the raw ++...++ content (without the surrounding plus pairs).
-// The renderer splits it on '+' and emits one <kbd> per segment.
-type keysNode struct {
-	ast.BaseInline
-	content []byte
-}
-
-// Dump implements ast.Node.Dump.
-func (n *keysNode) Dump(source []byte, level int) {
-	ast.DumpHelper(n, source, level, nil, nil)
-}
-
-// Kind implements ast.Node.Kind.
-func (n *keysNode) Kind() ast.NodeKind { return KindKeys }
-
-// keyAliases maps a lower-case key name to its canonical label. Unknown keys
-// keep their original text and receive no key-* class.
-var keyAliases = map[string]string{
-	"ctrl":    "Ctrl",
-	"control": "Ctrl",
-	"alt":     "Alt",
-	"option":  "Alt",
-	"del":     "Del",
-	"delete":  "Del",
-	"esc":     "Esc",
-	"escape":  "Esc",
-	"enter":   "Enter",
-	"return":  "Enter",
-	"shift":   "Shift",
-	"tab":     "Tab",
-	"cmd":     "Cmd",
-	"command": "Cmd",
-	"space":   "Space",
-}
-
-// keysParser recognizes ++ctrl+alt+del++ on a single line. It only fires on a
-// real pair: the opener must be exactly two pluses, the closer must exist on the
-// same line, and the content must be non-empty with no whitespace. Those guards
-// keep C++, "a + b" and other prose plus signs literal.
-type keysParser struct{}
-
-// newKeysParser returns the Keys inline parser.
-func newKeysParser() parser.InlineParser { return &keysParser{} }
-
-func (*keysParser) Trigger() []byte { return []byte{'+'} }
-
-func (*keysParser) Parse(_ ast.Node, block text.Reader, _ parser.Context) ast.Node {
-	line, _ := block.PeekLine()
-	if len(line) < 3 || line[0] != '+' || line[1] != '+' || line[2] == '+' {
-		return nil
-	}
-	rest := line[2:]
-	closeIdx := bytes.Index(rest, []byte("++"))
-	if closeIdx < 0 {
-		return nil
-	}
-	content := rest[:closeIdx]
-	if !validKeysContent(content) {
-		return nil
-	}
-	block.Advance(2 + closeIdx + 2)
-	return &keysNode{content: append([]byte(nil), content...)}
-}
-
-func (*keysParser) CloseBlock(ast.Node, parser.Context) {}
-
-// validKeysContent rejects empty content, whitespace (so prose like "C++ C++"
-// cannot match) and a leading or trailing '+' that would split into empty keys.
-func validKeysContent(content []byte) bool {
-	if len(content) == 0 {
-		return false
-	}
-	for _, b := range content {
-		switch b {
-		case ' ', '\t', '\n', '\r':
-			return false
-		}
-	}
-	return !bytes.HasPrefix(content, []byte("+")) && !bytes.HasSuffix(content, []byte("+"))
-}
-
-// renderKeys emits <span class="keys">…</span> with one <kbd> per segment joined
-// by <span>+</span>. Known aliases get a key-* class and canonical label;
-// unknown segments keep their escaped text.
-func renderKeys(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
-	if !entering {
-		return ast.WalkContinue, nil
-	}
-	n := node.(*keysNode)
-	_, _ = w.WriteString(`<span class="keys">`)
-	for i, segment := range bytes.Split(n.content, []byte("+")) {
-		if i > 0 {
-			_, _ = w.WriteString("<span>+</span>")
-		}
-		label := strings.ToLower(string(segment))
-		if display, ok := keyAliases[label]; ok {
-			_, _ = w.WriteString(`<kbd class="key-` + label + `">` + display + "</kbd>")
-			continue
-		}
-		_, _ = w.WriteString("<kbd>" + stdhtml.EscapeString(string(segment)) + "</kbd>")
-	}
-	_, _ = w.WriteString("</span>")
 	return ast.WalkContinue, nil
 }
 

@@ -345,11 +345,64 @@ m2h 在 GFM 之外额外支持一套行内与块级扩展标记，语义借鉴 [
 
 ### 键盘按键
 
-`++键+键++` 渲染为一组按键，用 `+` 连接多个键；已知按键会归一化显示（如 `ctrl` → Ctrl），未知按键保留原文。
+`++键+键++` 渲染为一组按键，用 `+` 连接多个键。按键数据库与 [PyMdown Extensions](https://facelessuser.github.io/pymdown-extensions/extensions/keys/) 的 English US 键盘一致，覆盖字母、数字、标点、导航、编辑、数字小键盘、修饰键、F1–F24、媒体、浏览器与鼠标按键；别名（如 `ctrl`、`cmd`、`pg-up`）统一归一化为标准键名，未知按键保留原文。
 
 实时示例：复制用 ++ctrl+c++，切换窗口用 ++alt+tab++，刷新页面按 ++f5++，三键组合 ++ctrl+shift+esc++ 打开任务管理器。
 
 > 注意：`C++`、`a + b` 等普通文本里的 `+` 不会被识别为按键。
+
+#### 常用组合
+
+- 复制：++ctrl+c++
+- 粘贴：++ctrl+v++
+- 命令面板：++cmd+shift+p++
+- 删除：++ctrl+alt+del++
+
+#### 导航与功能键
+
+++arrow-left++ ++arrow-right++ ++arrow-up++ ++arrow-down++
+
+++home++ ++end++ ++page-up++ ++page-down++
+
+++f1++ ++f2++ ++f3++ ++f4++ ++f5++ ++f6++ ++f7++ ++f8++ ++f9++ ++f10++ ++f11++ ++f12++
+
+#### 标点按键
+
+| 名称             | 显示              |
+| ---------------- | ----------------- |
+| `backslash`      | ++backslash++     |
+| `bar`            | ++bar++           |
+| `brace-left`     | ++brace-left++    |
+| `brace-right`    | ++brace-right++   |
+| `bracket-left`   | ++bracket-left++  |
+| `bracket-right`  | ++bracket-right++ |
+| `colon`          | ++colon++         |
+| `comma`          | ++comma++         |
+| `double-quote`   | ++double-quote++  |
+| `equal`          | ++equal++         |
+| `exclam`         | ++exclam++        |
+| `grave`          | ++grave++         |
+| `greater`        | ++greater++       |
+| `less`           | ++less++          |
+| `minus`          | ++minus++         |
+| `period`         | ++period++        |
+| `plus`           | ++plus++          |
+| `question`       | ++question++      |
+| `semicolon`      | ++semicolon++     |
+| `single-quote`   | ++single-quote++  |
+| `slash`          | ++slash++         |
+| `tilde`          | ++tilde++         |
+| `underscore`     | ++underscore++    |
+
+#### 数字小键盘
+
+++num0++ ++num1++ ++num-plus++ ++num-minus++ ++num-enter++
+
+#### 别名归一化
+
+以下别名与标准键名渲染结果完全相同（`++ctrl++` ≡ `++control++`，`++pg-up++` ≡ `++page-up++`）：
+
+++ctrl++ ++cmd++ ++del++ ++esc++ ++pg-up++ ++pipe++
 
 ### Critic 协作标记（行内）
 

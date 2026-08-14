@@ -137,12 +137,52 @@ func TestStylesheetIncludesExtendedMarkup(t *testing.T) {
 	}
 }
 
+// TestStylesheetIncludesKeycapStyles guards the Material-style keycap: the
+// theme variables, the keycap plate and the canonical-class glyph rules must
+// all stay in the shared stylesheet so a CSS cleanup cannot silently strip
+// them from convert output and Web preview at once.
+func TestStylesheetIncludesKeycapStyles(t *testing.T) {
+	t.Parallel()
+
+	for _, mode := range []string{"light", "dark", "auto"} {
+		stylesheet, err := Stylesheet(mode)
+		if err != nil {
+			t.Fatalf("Stylesheet(%q) returned error: %v", mode, err)
+		}
+		for _, want := range []string{
+			".markdown-body .keys > kbd",
+
+			"--m2h-kbd-fg:",
+			"--m2h-kbd-bg:",
+			"--m2h-kbd-border:",
+			"--m2h-kbd-highlight:",
+			"--m2h-kbd-separator:",
+
+			".key-control::before",
+			".key-command::before",
+			".key-shift::before",
+			".key-alt::before",
+			".key-option::before",
+			".key-arrow-left::before",
+			".key-page-up::before",
+			".key-enter::after",
+			".key-tab::after",
+			".key-num-enter::after",
+		} {
+			if !strings.Contains(stylesheet, want) {
+				t.Errorf("Stylesheet(%q) does not contain keycap rule %q", mode, want)
+			}
+		}
+	}
+}
+
 func TestStylesheetExtendedMarkupIsThemeAware(t *testing.T) {
 	t.Parallel()
 
-	// layout.css is shared by every mode, so the Critic colors must be CSS
-	// variables with explicit dark overrides; otherwise red/green/amber washes
-	// are unreadable on the #0d1117 dark background.
+	// layout.css is shared by every mode, so the Critic colors and keycap
+	// colors must be CSS variables with explicit dark overrides; otherwise
+	// red/green/amber washes are unreadable on the #0d1117 dark background
+	// and the raised keycaps keep light-mode plates.
 	stylesheet, err := Stylesheet("light")
 	if err != nil {
 		t.Fatalf("Stylesheet(\"light\") returned error: %v", err)
@@ -151,10 +191,16 @@ func TestStylesheetExtendedMarkupIsThemeAware(t *testing.T) {
 		"--m2h-critic-mark-bg:",
 		"--m2h-critic-delete-bg:",
 		"--m2h-critic-insert-bg:",
+		"--m2h-kbd-fg:",
+		"--m2h-kbd-bg:",
+		"--m2h-kbd-border:",
+		"--m2h-kbd-highlight:",
+		"--m2h-kbd-separator:",
 		"html.m2h-mode-dark",
 		"rgb(187 128 9 / 40%)",
 		"rgb(248 81 73 / 30%)",
 		"rgb(63 185 80 / 30%)",
+		"rgb(255 255 255 / 10%)",
 	} {
 		if !strings.Contains(stylesheet, want) {
 			t.Errorf("stylesheet does not contain dark-mode critic token %q", want)
