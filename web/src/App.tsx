@@ -63,6 +63,7 @@ import {
 import { findReaderViewport } from "./lib/heading";
 import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
+import { restoreScrollTopWhenStable } from "./lib/scroll-restoration";
 import {
   type DocumentWidth,
   decodeHeadingHash,
@@ -189,11 +190,19 @@ export function App({ api }: AppProps) {
   // the transient scroll offsets produced while the viewport later settles can
   // never overwrite the saved value before the restore reads it back.
   const pendingScrollTopRef = useRef<number | null>(null);
+  // Stops the in-flight layout-stability restore, if any. The restore loop
+  // settles over several frames and can outlive its document, so switching
+  // documents (or starting the next restore) must cancel it first — otherwise
+  // a stale loop keeps writing the previous document's offset every frame and
+  // fights the new restore over the viewport.
+  const cancelRestoreRef = useRef<(() => void) | null>(null);
   const documentPath = preview.document?.path ?? null;
   // A layout effect (not passive) so the guard is set synchronously during
   // commit — before the body's async rich-content enhancement resolves and
   // calls restoreFragment, and before any scroll-spy URL write.
   useLayoutEffect(() => {
+    cancelRestoreRef.current?.();
+    cancelRestoreRef.current = null;
     if (documentPath === null) {
       restoringRef.current = false;
       pendingScrollTopRef.current = null;
@@ -201,6 +210,10 @@ export function App({ api }: AppProps) {
     }
     restoringRef.current = true;
     pendingScrollTopRef.current = readScrollPosition(documentPath);
+    return () => {
+      cancelRestoreRef.current?.();
+      cancelRestoreRef.current = null;
+    };
   }, [documentPath]);
 
   // restoreFragment repositions once the rendered body — including async
@@ -223,22 +236,25 @@ export function App({ api }: AppProps) {
     }
     const saved = pendingScrollTopRef.current;
     if (saved !== null) {
-      // Restore once, then again across two more frames. Rich-content
-      // enhancement resolves before the browser finishes the final layout and
-      // paint, so the offset is re-applied as the viewport measurement settles.
-      // The guard stays held throughout so scroll persistence and the heading
-      // spy cannot act on an intermediate position; only after the last
-      // correction does the dispatched scroll resync them at the final spot.
-      viewport.scrollTop = saved;
-      requestAnimationFrame(() => {
-        viewport.scrollTop = saved;
-        requestAnimationFrame(() => {
-          viewport.scrollTop = saved;
+      // A resolved rich-content promise does not mean the browser has finished
+      // the final layout, so the offset is re-applied every frame until the
+      // reader height has been stable for several consecutive frames (see
+      // scroll-restoration.ts). The guard stays held throughout so scroll
+      // persistence and the heading spy cannot act on an intermediate
+      // position; only once the final offset is written does the dispatched
+      // scroll resync them at the settled spot. Any earlier in-flight restore
+      // is cancelled first so two loops can never fight over the viewport.
+      cancelRestoreRef.current?.();
+      cancelRestoreRef.current = restoreScrollTopWhenStable(
+        viewport,
+        saved,
+        () => {
+          cancelRestoreRef.current = null;
           restoringRef.current = false;
           pendingScrollTopRef.current = null;
           viewport.dispatchEvent(new Event("scroll"));
-        });
-      });
+        },
+      );
       return;
     }
     const id = decodeHeadingHash(window.location.hash);
@@ -258,7 +274,9 @@ export function App({ api }: AppProps) {
   }, [navigateToHeading]);
 
   // Persist the reader's scroll offset per document so a refresh can return to
-  // the exact pixel. rAF-throttled so a long scroll writes at most once per frame.
+  // the exact pixel. rAF-throttled so a long scroll writes at most once per
+  // frame, and flushed synchronously on pagehide — a scroll immediately
+  // followed by a reload leaves the last rAF unexecuted otherwise.
   useEffect(() => {
     if (preview.phase !== "ready" || documentPath === null) {
       return;
@@ -272,6 +290,14 @@ export function App({ api }: AppProps) {
       return;
     }
     let frame = 0;
+    const persist = () => {
+      // A position restore is in flight: never persist, so the offsets
+      // produced while the viewport settles cannot overwrite the target.
+      if (restoringRef.current) {
+        return;
+      }
+      saveScrollPosition(documentPath, viewport.scrollTop);
+    };
     const handleScroll = () => {
       // A position restore is in flight: ignore scroll entirely so the
       // intermediate offsets produced while the viewport settles never overwrite
@@ -282,17 +308,20 @@ export function App({ api }: AppProps) {
         return;
       }
       cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(() => {
-        if (restoringRef.current) {
-          return;
-        }
-        saveScrollPosition(documentPath, viewport.scrollTop);
-      });
+      frame = requestAnimationFrame(persist);
+    };
+    // pagehide (not beforeunload) fires for reloads and navigations without
+    // opting out of the back/forward cache.
+    const handlePageHide = () => {
+      cancelAnimationFrame(frame);
+      persist();
     };
     viewport.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("pagehide", handlePageHide);
     return () => {
       cancelAnimationFrame(frame);
       viewport.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("pagehide", handlePageHide);
     };
   }, [preview.phase, documentPath]);
 

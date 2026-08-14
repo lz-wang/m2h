@@ -1082,6 +1082,45 @@ describe("App directory preview", () => {
     expect(readScrollPosition("README.md")).toBe(250);
   });
 
+  it("flushes the pending scroll offset on pagehide so a reload keeps it", async () => {
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="alpha">Alpha</h2><h2 id="beta">Beta</h2>',
+        frontmatter: null,
+        toc: [
+          { level: 2, id: "alpha", text: "Alpha" },
+          { level: 2, id: "beta", text: "Beta" },
+        ],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByRole("heading", { level: 2, name: "Alpha" });
+    const viewport = document.querySelector(
+      '.reader-main [data-slot="scroll-area-viewport"]',
+    );
+    if (!(viewport instanceof HTMLElement)) {
+      throw new Error("scroll viewport was not rendered");
+    }
+    await settleRestore();
+    // Scroll and reload before the throttled rAF saver ever runs: the pagehide
+    // flush must cancel the pending frame and persist the offset synchronously,
+    // otherwise the canceled save leaves nothing to restore.
+    Object.defineProperty(viewport, "scrollTop", {
+      configurable: true,
+      value: 310,
+    });
+    await act(async () => {
+      fireEvent.scroll(viewport);
+      window.dispatchEvent(new Event("pagehide"));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
+    expect(readScrollPosition("README.md")).toBe(310);
+  });
+
   it("restores a saved scroll offset in preference to the fragment on reload", async () => {
     saveScrollPosition("guides/setup.md", 4287);
     window.history.replaceState(null, "", "/doc/guides/setup.md#install");
@@ -1152,11 +1191,13 @@ describe("App directory preview", () => {
     await settleRestore();
     vi.mocked(saveScrollPosition).mockClear();
     // The viewport reports an intermediate offset (120) while the restore is in
-    // flight. The guard must make the saver ignore it, so saveScrollPosition is
-    // never invoked and the saved 4287 is untouched.
+    // flight. The guard must make the saver ignore it — even a synchronous
+    // pagehide flush must not persist — so saveScrollPosition is never invoked
+    // and the saved 4287 is untouched.
     viewport.scrollTop = 120;
     await act(async () => {
       fireEvent.scroll(viewport);
+      window.dispatchEvent(new Event("pagehide"));
       await new Promise((resolve) => {
         setTimeout(resolve, 0);
       });
@@ -1217,13 +1258,14 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
 // jsdom does not reflect layout or scroll offsets, so a real "scrolled to a
 // heading" state never reaches the heading spy. Model it explicitly so the spy
 // reports the active section and the URL-sync logic keeps the fragment stable.
-// restoreFragment re-applies the offset across two animation frames after rich
-// content settles, holding its guard the whole while. Under jsdom each rAF
-// resolves within one macrotask, so a few setTimeout(0) turns (wrapped in act so
-// React flushes) clear the guard before a test drives its own scroll — otherwise
-// the persistence saver and the URL-sync effect still see "restore in flight".
+// restoreFragment re-applies the offset every animation frame until the layout
+// is stable (under jsdom's constant scrollHeight: one observation frame plus
+// three stable frames), holding its guard the whole while. Each rAF resolves
+// within one macrotask, so a few setTimeout(0) turns (wrapped in act so React
+// flushes) clear the guard before a test drives its own scroll — otherwise the
+// persistence saver and the URL-sync effect still see "restore in flight".
 async function settleRestore(): Promise<void> {
-  for (let i = 0; i < 4; i += 1) {
+  for (let i = 0; i < 8; i += 1) {
     await act(async () => {
       await new Promise((resolve) => {
         setTimeout(resolve, 0);
