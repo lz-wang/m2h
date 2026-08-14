@@ -208,6 +208,48 @@ func TestStylesheetExtendedMarkupIsThemeAware(t *testing.T) {
 	}
 }
 
+// TestStylesheetSortableHeadersAreThemeAware guards the sortable-header
+// palette: the arrow, hover wash, and focus ring are --m2h-sort-* variables
+// with explicit dark overrides. github-markdown-css defines no
+// --bgColor-muted/--fgColor-muted/--focus-outlineColor variables, so a bare
+// var() with a light fallback would render light-only in dark mode.
+func TestStylesheetSortableHeadersAreThemeAware(t *testing.T) {
+	t.Parallel()
+
+	dark, err := Stylesheet("dark")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"--m2h-sort-fg:",
+		"--m2h-sort-hover-bg:",
+		"--m2h-sort-focus:",
+		"html.m2h-mode-dark",
+		"var(--m2h-sort-fg)",
+		"var(--m2h-sort-hover-bg)",
+		"var(--m2h-sort-focus)",
+		// The dark palette must be present, not just the light defaults.
+		"--m2h-sort-hover-bg: #21262d",
+		"--m2h-sort-fg: #8c959f",
+		"--m2h-sort-focus: #4493f8",
+	} {
+		if !strings.Contains(dark, want) {
+			t.Errorf("stylesheet does not contain sortable-header token %q", want)
+		}
+	}
+
+	// auto must resolve the dark palette through the media query, not by
+	// switching the base values.
+	auto, err := Stylesheet("auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(auto, "html.m2h-mode-auto") ||
+		!strings.Contains(auto, "--m2h-sort-hover-bg: #21262d") {
+		t.Error("auto stylesheet missing the dark media-query overrides for sortable headers")
+	}
+}
+
 func TestVendoredMetadata(t *testing.T) {
 	t.Parallel()
 

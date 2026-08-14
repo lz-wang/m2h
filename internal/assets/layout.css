@@ -139,7 +139,33 @@ html[data-width="full"] .markdown-body {
  * The active column always shows its direction; an unsorted column only
  * hints its affordance on hover/focus, so headers read clean at rest. The
  * reserved right padding keeps the arrow from overlapping header text.
+ *
+ * The arrow, hover wash, and focus ring colors are m2h variables because
+ * github-markdown-css defines no theme variables under these names — a bare
+ * var(--bgColor-muted, …) would silently fall back to the light value on the
+ * #0d1117 dark page. Dark mode (and the auto dark media query) therefore
+ * swap the palette explicitly, mirroring the keycap tokens below.
  */
+html {
+  --m2h-sort-fg: #59636e;
+  --m2h-sort-hover-bg: #f6f8fa;
+  --m2h-sort-focus: #0969da;
+}
+
+html.m2h-mode-dark {
+  --m2h-sort-fg: #8c959f;
+  --m2h-sort-hover-bg: #21262d;
+  --m2h-sort-focus: #4493f8;
+}
+
+@media (prefers-color-scheme: dark) {
+  html.m2h-mode-auto {
+    --m2h-sort-fg: #8c959f;
+    --m2h-sort-hover-bg: #21262d;
+    --m2h-sort-focus: #4493f8;
+  }
+}
+
 .markdown-body th[role="columnheader"]:not([data-sort-method="none"]) {
   position: relative;
   padding-right: 2rem;
@@ -152,7 +178,7 @@ html[data-width="full"] .markdown-body {
   top: 50%;
   right: 0.75rem;
 
-  color: var(--fgColor-muted, #59636e);
+  color: var(--m2h-sort-fg);
 
   font-size: 0.75rem;
   line-height: 1;
@@ -183,11 +209,11 @@ html[data-width="full"] .markdown-body {
 
 .markdown-body th[role="columnheader"]:not([data-sort-method="none"]):hover,
 .markdown-body th[role="columnheader"]:not([data-sort-method="none"]):focus-visible {
-  background-color: var(--bgColor-muted, #f6f8fa);
+  background-color: var(--m2h-sort-hover-bg);
 }
 
 .markdown-body th[role="columnheader"]:focus-visible {
-  outline: 2px solid var(--focus-outlineColor, #0969da);
+  outline: 2px solid var(--m2h-sort-focus);
   outline-offset: -2px;
 }
 
