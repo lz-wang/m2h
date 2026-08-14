@@ -250,6 +250,50 @@ func TestStylesheetSortableHeadersAreThemeAware(t *testing.T) {
 	}
 }
 
+// TestStylesheetCodeCopyButtonIsThemeAware guards the copy-control palette:
+// github-markdown-css defines no --bgColor-default/--fgColor-muted family of
+// variables, so the button must carry its own --m2h-copy-* tokens with an
+// explicit dark palette instead of light fallbacks.
+func TestStylesheetCodeCopyButtonIsThemeAware(t *testing.T) {
+	t.Parallel()
+
+	dark, err := Stylesheet("dark")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		"var(--m2h-copy-fg)",
+		"var(--m2h-copy-bg)",
+		"var(--m2h-copy-border)",
+		"var(--m2h-copy-accent)",
+		"var(--m2h-copy-hover-bg)",
+		"var(--m2h-copy-focus-glow)",
+		// The dark palette must be present, not just the light defaults.
+		"--m2h-copy-bg: #21262d",
+		"--m2h-copy-border: #3d444d",
+		"--m2h-copy-accent: #4493f8",
+		"--m2h-copy-hover-bg: #30363d",
+	} {
+		if !strings.Contains(dark, want) {
+			t.Errorf("stylesheet does not contain copy-control token %q", want)
+		}
+	}
+	// No bare light-valued fallbacks may remain on the button rules.
+	if strings.Contains(dark, "var(--bgColor-default") ||
+		strings.Contains(dark, "var(--borderColor-default") {
+		t.Error("copy control still references bare github-markdown-css variables")
+	}
+
+	auto, err := Stylesheet("auto")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(auto, "html.m2h-mode-auto") ||
+		!strings.Contains(auto, "--m2h-copy-bg: #21262d") {
+		t.Error("auto stylesheet missing the dark media-query overrides for the copy control")
+	}
+}
+
 func TestVendoredMetadata(t *testing.T) {
 	t.Parallel()
 

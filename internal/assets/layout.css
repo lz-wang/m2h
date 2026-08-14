@@ -75,7 +75,49 @@ html[data-width="full"] .markdown-body {
  * Code fences are enhanced at runtime in both the standalone rich-content
  * script and the WebUI. Reserve the top-right corner so the control never
  * obscures source text, including on narrow screens.
+ *
+ * The copy control's palette is m2h variables for the same reason as the
+ * sortable-header tokens: github-markdown-css defines no theme variables
+ * under the bare names a var() fallback would need, so the dark page would
+ * otherwise render the button in its light colors — a white plate floating
+ * on the dark code fence. Dark mode (and the auto dark media query) swap
+ * the palette explicitly, mirroring the keycap and sortable-header tokens.
  */
+html {
+  --m2h-copy-fg: #59636e;
+  --m2h-copy-bg: #ffffff;
+  --m2h-copy-border: #d1d9e0;
+  --m2h-copy-accent: #0969da;
+  --m2h-copy-hover-bg: #f6f8fa;
+  --m2h-copy-focus-glow: #ddf4ff;
+  --m2h-copy-success: #1a7f37;
+  --m2h-copy-danger: #cf222e;
+}
+
+html.m2h-mode-dark {
+  --m2h-copy-fg: #8c959f;
+  --m2h-copy-bg: #21262d;
+  --m2h-copy-border: #3d444d;
+  --m2h-copy-accent: #4493f8;
+  --m2h-copy-hover-bg: #30363d;
+  --m2h-copy-focus-glow: rgb(68 147 248 / 30%);
+  --m2h-copy-success: #3fb950;
+  --m2h-copy-danger: #f85149;
+}
+
+@media (prefers-color-scheme: dark) {
+  html.m2h-mode-auto {
+    --m2h-copy-fg: #8c959f;
+    --m2h-copy-bg: #21262d;
+    --m2h-copy-border: #3d444d;
+    --m2h-copy-accent: #4493f8;
+    --m2h-copy-hover-bg: #30363d;
+    --m2h-copy-focus-glow: rgb(68 147 248 / 30%);
+    --m2h-copy-success: #3fb950;
+    --m2h-copy-danger: #f85149;
+  }
+}
+
 .markdown-body pre {
   position: relative;
   padding-right: 3.25rem;
@@ -91,9 +133,9 @@ html[data-width="full"] .markdown-body {
   height: 1.75rem;
   padding: 0;
   place-items: center;
-  color: var(--fgColor-muted, #59636e);
-  background: var(--bgColor-default, #ffffff);
-  border: 1px solid var(--borderColor-default, #d1d9e0);
+  color: var(--m2h-copy-fg);
+  background: var(--m2h-copy-bg);
+  border: 1px solid var(--m2h-copy-border);
   border-radius: 0.375rem;
   cursor: pointer;
   transition: color 120ms ease, background-color 120ms ease, border-color 120ms ease;
@@ -111,22 +153,22 @@ html[data-width="full"] .markdown-body {
 
 .markdown-body .m2h-code-copy:hover,
 .markdown-body .m2h-code-copy:focus-visible {
-  color: var(--fgColor-accent, #0969da);
-  background: var(--bgColor-muted, #f6f8fa);
-  border-color: var(--borderColor-accent-emphasis, #0969da);
+  color: var(--m2h-copy-accent);
+  background: var(--m2h-copy-hover-bg);
+  border-color: var(--m2h-copy-accent);
   outline: none;
 }
 
 .markdown-body .m2h-code-copy:focus-visible {
-  box-shadow: 0 0 0 3px var(--bgColor-accent-muted, #ddf4ff);
+  box-shadow: 0 0 0 3px var(--m2h-copy-focus-glow);
 }
 
 .markdown-body .m2h-code-copy[data-copy-state="success"] {
-  color: var(--fgColor-success, #1a7f37);
+  color: var(--m2h-copy-success);
 }
 
 .markdown-body .m2h-code-copy[data-copy-state="error"] {
-  color: var(--fgColor-danger, #cf222e);
+  color: var(--m2h-copy-danger);
 }
 
 /*
