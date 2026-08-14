@@ -2,10 +2,13 @@
 //
 // Mirrors web/src/lib/render-rich-content.ts: after the browser receives the
 // rendered Markdown body, replace ```mermaid fenced blocks with diagram
-// containers and let KaTeX scan the remaining text for math. Mermaid runs first
-// so KaTeX never sees raw diagram source. Loaded as a plain <script> after
-// katex.min.js, auto-render.min.js and mermaid.min.js, which attach the
-// `renderMathInElement` and `mermaid` globals.
+// containers, let KaTeX scan the remaining text for math, and make plain GFM
+// tables sortable. Mermaid runs first so KaTeX never sees raw diagram source,
+// and tables sort before the deep-link restore so header padding cannot shift
+// the final scroll position. Loaded as a plain <script> after katex.min.js,
+// auto-render.min.js, mermaid.min.js and — when the document has tables — the
+// tablesort runtime, which attach the `renderMathInElement`, `mermaid` and
+// `Tablesort` globals.
 (function () {
   "use strict";
 
@@ -143,6 +146,34 @@
     }, 2000);
   }
 
+  // Instantiate the client-side sorter on every plain GFM table with a header
+  // and more than one body row; tables carrying a class attribute are
+  // user-authored HTML and stay untouched. The data-m2h-sortable marker is
+  // set before construction and removed again if construction throws, so a
+  // failed enhancement can be retried on a later pass.
+  function addSortableTables(root) {
+    if (typeof Tablesort !== "function") {
+      return;
+    }
+    root
+      .querySelectorAll('table:not([class]):not([data-m2h-sortable="true"])')
+      .forEach(function (table) {
+        if (
+          !table.tHead ||
+          table.tBodies.length === 0 ||
+          table.tBodies[0].rows.length <= 1
+        ) {
+          return;
+        }
+        table.dataset.m2hSortable = "true";
+        try {
+          new Tablesort(table);
+        } catch (_) {
+          delete table.dataset.m2hSortable;
+        }
+      });
+  }
+
   function addHeadingPermalinks(root) {
     var headings = root.querySelectorAll(
       "h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]"
@@ -265,6 +296,7 @@
 
     var afterEnhance = function () {
       renderMath(root);
+      addSortableTables(root);
       restoreDeepLink();
       setupHeadingSpy(root);
     };

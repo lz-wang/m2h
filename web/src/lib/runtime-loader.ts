@@ -39,10 +39,25 @@ export type MathAutoRenderer = (
   options?: MathAutoRenderOptions,
 ) => void;
 
+export interface TablesortInstance {
+  refresh(): void;
+}
+
+export interface TablesortConstructor {
+  new (
+    table: HTMLTableElement,
+    options?: {
+      descending?: boolean;
+      sortAttribute?: string;
+    },
+  ): TablesortInstance;
+}
+
 declare global {
   interface Window {
     mermaid?: MermaidRuntime;
     renderMathInElement?: MathAutoRenderer;
+    Tablesort?: TablesortConstructor;
   }
 }
 
@@ -128,4 +143,29 @@ export async function loadKatex(): Promise<MathAutoRenderer> {
     throw new Error("KaTeX runtime did not attach renderMathInElement");
   }
   return renderMath;
+}
+
+/**
+ * Load the shared Tablesort runtime — the core first (it defines
+ * `window.Tablesort`), then every vendored comparator extension. The
+ * extensions only call `Tablesort.extend` to register comparators and never
+ * depend on each other, so they load concurrently. Rejects when the scripts
+ * cannot be fetched or the core does not attach `window.Tablesort`.
+ */
+export async function loadTablesort(): Promise<TablesortConstructor> {
+  await injectScript(`${RUNTIME_BASE}tablesort.min.js`);
+
+  await Promise.all([
+    injectScript(`${RUNTIME_BASE}tablesort.date.js`),
+    injectScript(`${RUNTIME_BASE}tablesort.dotsep.js`),
+    injectScript(`${RUNTIME_BASE}tablesort.filesize.js`),
+    injectScript(`${RUNTIME_BASE}tablesort.monthname.js`),
+    injectScript(`${RUNTIME_BASE}tablesort.number.js`),
+  ]);
+
+  const runtime = window.Tablesort;
+  if (runtime === undefined) {
+    throw new Error("Tablesort runtime did not attach window.Tablesort");
+  }
+  return runtime;
 }

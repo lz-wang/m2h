@@ -1,21 +1,25 @@
 // Rich-content enhancement for rendered Markdown HTML.
 //
-// m2h keeps its Markdown parser on stable GFM/CommonMark semantics; math and
-// diagram support is an HTML presentation layer applied after the browser
-// receives the body. This module is the single entry point so callers never
-// have to know about KaTeX or Mermaid individually.
+// m2h keeps its Markdown parser on stable GFM/CommonMark semantics; math,
+// diagram, and sortable-table support is an HTML presentation layer applied
+// after the browser receives the body. This module is the single entry point
+// so callers never have to know about KaTeX, Mermaid, or Tablesort
+// individually.
 //
 // Mermaid runs before KaTeX so KaTeX never scans raw diagram source code.
-// Both runtimes are the shared /runtime/* assets the preview server embeds
-// (the same copy convert writes into .m2h/), loaded through the runtime loader
-// only when the document contains diagrams or math.
+// Tables sort last so their headers' padding is in place before the caller
+// restores any scroll position. All runtimes are the shared /runtime/* assets
+// the preview server embeds (the same copy convert writes into .m2h/), loaded
+// through the runtime loader only when the document actually uses them.
 
 import type { ResolvedMode } from "../model";
 import {
   loadKatex,
   loadMermaid,
+  loadTablesort,
   type MathAutoRenderDelimiter,
   type MermaidRuntime,
+  type TablesortConstructor,
 } from "./runtime-loader";
 
 const COPY_ICON =
@@ -36,14 +40,22 @@ const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
   { left: "$", right: "$", display: false },
 ];
 
+// Plain GFM tables Goldmark renders as bare <table>; a class attribute marks
+// user-authored HTML tables the client-side sorter must leave untouched, and
+// data-m2h-sortable marks tables a previous enhancement pass already owns.
+const SORTABLE_TABLE_SELECTOR =
+  'table:not([class]):not([data-m2h-sortable="true"])';
+
 /**
  * Enhance already-rendered Markdown HTML inside `root` by rendering Mermaid
- * diagrams and KaTeX math. Safe to call repeatedly; errors from individual
- * blocks are suppressed so a broken diagram never breaks the whole document.
+ * diagrams and KaTeX math and making plain GFM tables sortable. Safe to call
+ * repeatedly; errors from individual blocks are suppressed so a broken
+ * diagram never breaks the whole document.
  *
  * Each runtime is loaded only when the document actually uses it — Mermaid
- * requires a fenced `language-mermaid` block, KaTeX a math delimiter — so a
- * plain document preview never downloads the multi-megabyte diagram runtime.
+ * requires a fenced `language-mermaid` block, KaTeX a math delimiter, and
+ * Tablesort a plain `<table>` — so a plain document preview never downloads
+ * the multi-megabyte diagram runtime.
  *
  * `mode` is the resolved light/dark theme. Mermaid bakes diagram colors in at
  * render time, so it is configured with the matching official theme (`default`
@@ -63,6 +75,12 @@ export async function renderRichContent(
 ): Promise<void> {
   addHeadingPermalinks(root);
   addCodeCopyButtons(root);
+  // Kick the Tablesort download off before awaiting Mermaid/KaTeX so all
+  // needed runtimes load in parallel; the tables themselves are enhanced only
+  // after those settle — still before the caller's onContentReady, because the
+  // sortable headers add padding that would otherwise shift a just-restored
+  // scroll position.
+  const tablesortLoad = hasSortableTables(root) ? loadTablesort() : null;
   if (hasMermaidBlocks(root)) {
     const mermaid = await loadMermaid();
     ensureMermaidInitialized(mode, mermaid);
@@ -78,10 +96,49 @@ export async function renderRichContent(
       throwOnError: false,
     });
   }
+  if (tablesortLoad !== null) {
+    const Tablesort = await tablesortLoad;
+    if (isCurrent !== undefined && !isCurrent()) {
+      return;
+    }
+    enhanceSortableTables(root, Tablesort);
+  }
 }
 
 function hasMermaidBlocks(root: HTMLElement): boolean {
   return root.querySelector("pre > code.language-mermaid") !== null;
+}
+
+function hasSortableTables(root: HTMLElement): boolean {
+  return root.querySelector(SORTABLE_TABLE_SELECTOR) !== null;
+}
+
+// Instantiate the client-side sorter on every plain GFM table with a header
+// and more than one body row; Tablesort keeps its sort direction on the
+// aria-sort attribute itself. The data-m2h-sortable marker is set before
+// construction and removed again if construction throws, so a failed
+// enhancement can be retried instead of leaving the table marked done.
+function enhanceSortableTables(
+  root: HTMLElement,
+  Tablesort: TablesortConstructor,
+): void {
+  for (const table of root.querySelectorAll<HTMLTableElement>(
+    SORTABLE_TABLE_SELECTOR,
+  )) {
+    if (
+      table.tHead === null ||
+      table.tBodies.length === 0 ||
+      table.tBodies[0].rows.length <= 1
+    ) {
+      continue;
+    }
+    table.dataset.m2hSortable = "true";
+    try {
+      new Tablesort(table);
+    } catch {
+      delete table.dataset.m2hSortable;
+    }
+  }
 }
 
 // Matches the delimiters handed to KaTeX: every math span contains "$", "\("

@@ -25,9 +25,15 @@ func runtimeFragments(options RenderOptions, body string) (template.HTML, templa
 		var head strings.Builder
 		fmt.Fprintf(&head, "  <link rel=\"stylesheet\" href=\"%skatex.min.css\">\n", options.AssetBase)
 		var scripts strings.Builder
-		for _, name := range []string{"katex.min.js", "auto-render.min.js", "mermaid.min.js", "rich-content.js"} {
+		for _, name := range []string{"katex.min.js", "auto-render.min.js", "mermaid.min.js"} {
 			fmt.Fprintf(&scripts, "  <script src=\"%s%s\"></script>\n", options.AssetBase, name)
 		}
+		if containsSortableTable(body) {
+			for _, name := range tablesortScripts {
+				fmt.Fprintf(&scripts, "  <script src=\"%s%s\"></script>\n", options.AssetBase, name)
+			}
+		}
+		fmt.Fprintf(&scripts, "  <script src=\"%srich-content.js\"></script>\n", options.AssetBase)
 		return template.HTML(head.String()), template.HTML(scripts.String()), nil
 	default:
 		return "", "", &OptionError{Name: "assets", Value: options.Assets.String()}
@@ -60,10 +66,38 @@ func inlineRuntimeFragments(body string) (template.HTML, template.HTML, error) {
 			return "", "", err
 		}
 	}
+	if containsSortableTable(body) {
+		for _, name := range tablesortScripts {
+			if err := writeInlineScript(&scripts, name); err != nil {
+				return "", "", err
+			}
+		}
+	}
 	if err := writeInlineScript(&scripts, "rich-content.js"); err != nil {
 		return "", "", err
 	}
 	return template.HTML(head.String()), template.HTML(scripts.String()), nil
+}
+
+// tablesortScripts lists the client-side table sorter and its comparator
+// extensions in load order: the core defines window.Tablesort, the extensions
+// only register comparators through Tablesort.extend, and the rich-content
+// enhancer that instantiates tables must run after all of them.
+var tablesortScripts = []string{
+	"tablesort.min.js",
+	"tablesort.date.js",
+	"tablesort.dotsep.js",
+	"tablesort.filesize.js",
+	"tablesort.monthname.js",
+	"tablesort.number.js",
+}
+
+// containsSortableTable reports whether the rendered body contains a plain GFM
+// table. Goldmark emits a bare "<table>" for Markdown tables, while user-authored
+// raw HTML tables carry attributes such as "<table class=...>" and are
+// deliberately left out of the client-side sorting enhancement.
+func containsSortableTable(body string) bool {
+	return strings.Contains(body, "<table>")
 }
 
 func writeInlineScript(scripts *strings.Builder, name string) error {
