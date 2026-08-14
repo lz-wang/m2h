@@ -1026,6 +1026,9 @@ describe("App directory preview", () => {
     if (!(viewport instanceof HTMLElement)) {
       throw new Error("scroll viewport was not rendered");
     }
+    // Wait for the initial position restore to release its guard before driving
+    // a user scroll, otherwise the saver still sees "restore in flight".
+    await settleRestore();
     Object.defineProperty(viewport, "scrollTop", {
       configurable: true,
       value: 250,
@@ -1109,6 +1112,21 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
 // jsdom does not reflect layout or scroll offsets, so a real "scrolled to a
 // heading" state never reaches the heading spy. Model it explicitly so the spy
 // reports the active section and the URL-sync logic keeps the fragment stable.
+// restoreFragment re-applies the offset across two animation frames after rich
+// content settles, holding its guard the whole while. Under jsdom each rAF
+// resolves within one macrotask, so a few setTimeout(0) turns (wrapped in act so
+// React flushes) clear the guard before a test drives its own scroll — otherwise
+// the persistence saver and the URL-sync effect still see "restore in flight".
+async function settleRestore(): Promise<void> {
+  for (let i = 0; i < 4; i += 1) {
+    await act(async () => {
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
+  }
+}
+
 async function settleScrollPosition(): Promise<void> {
   const viewport = document.querySelector(
     '.reader-main [data-slot="scroll-area-viewport"]',
@@ -1116,6 +1134,7 @@ async function settleScrollPosition(): Promise<void> {
   if (!(viewport instanceof HTMLElement)) {
     return;
   }
+  await settleRestore();
   Object.defineProperty(viewport, "scrollTop", {
     configurable: true,
     value: 100,

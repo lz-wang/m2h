@@ -184,12 +184,23 @@ export function App({ api }: AppProps) {
   // rewrite the URL — otherwise the body settles at the top, the spy reports the
   // first heading, and the original target is lost before the restore runs.
   const restoringRef = useRef(false);
+  // The restore target is frozen the instant a document is committed: a single
+  // read of sessionStorage becomes the source of truth for the whole restore, so
+  // the transient scroll offsets produced while the viewport later settles can
+  // never overwrite the saved value before the restore reads it back.
+  const pendingScrollTopRef = useRef<number | null>(null);
   const documentPath = preview.document?.path ?? null;
   // A layout effect (not passive) so the guard is set synchronously during
   // commit — before the body's async rich-content enhancement resolves and
   // calls restoreFragment, and before any scroll-spy URL write.
   useLayoutEffect(() => {
-    restoringRef.current = documentPath !== null;
+    if (documentPath === null) {
+      restoringRef.current = false;
+      pendingScrollTopRef.current = null;
+      return;
+    }
+    restoringRef.current = true;
+    pendingScrollTopRef.current = readScrollPosition(documentPath);
   }, [documentPath]);
 
   // restoreFragment repositions once the rendered body — including async
@@ -205,19 +216,46 @@ export function App({ api }: AppProps) {
     const viewport = readerMainRef.current
       ? findReaderViewport(readerMainRef.current)
       : null;
-    const saved =
-      documentPath === null ? null : readScrollPosition(documentPath);
-    if (saved !== null && viewport instanceof HTMLElement) {
-      viewport.scrollTop = saved;
-      viewport.dispatchEvent(new Event("scroll"));
-    } else {
-      const id = decodeHeadingHash(window.location.hash);
-      if (id !== "") {
-        navigateToHeading(id, { behavior: "auto", updateURL: false });
-      }
+    if (!(viewport instanceof HTMLElement)) {
+      restoringRef.current = false;
+      pendingScrollTopRef.current = null;
+      return;
     }
-    restoringRef.current = false;
-  }, [documentPath, navigateToHeading]);
+    const saved = pendingScrollTopRef.current;
+    if (saved !== null) {
+      // Restore once, then again across two more frames. Rich-content
+      // enhancement resolves before the browser finishes the final layout and
+      // paint, so the offset is re-applied as the viewport measurement settles.
+      // The guard stays held throughout so scroll persistence and the heading
+      // spy cannot act on an intermediate position; only after the last
+      // correction does the dispatched scroll resync them at the final spot.
+      viewport.scrollTop = saved;
+      requestAnimationFrame(() => {
+        viewport.scrollTop = saved;
+        requestAnimationFrame(() => {
+          viewport.scrollTop = saved;
+          restoringRef.current = false;
+          pendingScrollTopRef.current = null;
+          viewport.dispatchEvent(new Event("scroll"));
+        });
+      });
+      return;
+    }
+    const id = decodeHeadingHash(window.location.hash);
+    if (id !== "") {
+      navigateToHeading(id, { behavior: "auto", updateURL: false });
+    }
+    // No pixel offset and no fragment: still hold the guard across two frames so
+    // the initial scroll-spy pass cannot pin the URL to the first heading before
+    // the body settles.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        restoringRef.current = false;
+        pendingScrollTopRef.current = null;
+        viewport.dispatchEvent(new Event("scroll"));
+      });
+    });
+  }, [navigateToHeading]);
 
   // Persist the reader's scroll offset per document so a refresh can return to
   // the exact pixel. rAF-throttled so a long scroll writes at most once per frame.
@@ -235,8 +273,19 @@ export function App({ api }: AppProps) {
     }
     let frame = 0;
     const handleScroll = () => {
+      // A position restore is in flight: ignore scroll entirely so the
+      // intermediate offsets produced while the viewport settles never overwrite
+      // the saved position. Both checks matter — the first avoids queuing a rAF,
+      // the second guards against a restore starting between this handler and
+      // its rAF callback.
+      if (restoringRef.current) {
+        return;
+      }
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        if (restoringRef.current) {
+          return;
+        }
         saveScrollPosition(documentPath, viewport.scrollTop);
       });
     };
