@@ -20,6 +20,8 @@ func TestRuntimeHandlerServesEmbeddedAssets(t *testing.T) {
 		{path: "/runtime/mermaid.min.js", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/katex.min.js", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/auto-render.min.js", contentType: "text/javascript; charset=utf-8"},
+		{path: "/runtime/tablesort.min.js", contentType: "text/javascript; charset=utf-8"},
+		{path: "/runtime/tablesort.number.js", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/rich-content.js", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/katex.min.css", contentType: "text/css; charset=utf-8"},
 		{path: "/runtime/fonts/KaTeX_Main-Regular.woff2", contentType: "font/woff2"},

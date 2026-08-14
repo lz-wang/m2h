@@ -230,9 +230,16 @@ func TestRichAssetsEmbedded(t *testing.T) {
 		"auto-render.min.js",
 		"mermaid.min.js",
 		"rich-content.js",
+		"tablesort.min.js",
+		"tablesort.number.js",
+		"tablesort.date.js",
+		"tablesort.filesize.js",
+		"tablesort.dotsep.js",
+		"tablesort.monthname.js",
 		"fonts/KaTeX_AMS-Regular.woff2",
 		"LICENSE.katex",
 		"LICENSE.mermaid",
+		"LICENSE.tablesort",
 	} {
 		info, err := fs.Stat(rich, name)
 		if err != nil {
@@ -311,6 +318,13 @@ func TestWriteRichAssets(t *testing.T) {
 		"auto-render.min.js",
 		"mermaid.min.js",
 		"rich-content.js",
+		"tablesort.min.js",
+		"tablesort.number.js",
+		"tablesort.date.js",
+		"tablesort.filesize.js",
+		"tablesort.dotsep.js",
+		"tablesort.monthname.js",
+		"LICENSE.tablesort",
 		"fonts/KaTeX_AMS-Regular.woff2",
 	} {
 		info, err := os.Stat(filepath.Join(target, filepath.FromSlash(rel)))
