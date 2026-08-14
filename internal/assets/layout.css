@@ -272,7 +272,7 @@ html.m2h-mode-dark {
 .markdown-body .keys > span {
   padding: 0 0.25rem;
   color: var(--m2h-kbd-separator);
-  font-size: 0.875em;
+  font-size: 0.75em;
 }
 
 html .markdown-body .keys > kbd {
@@ -281,9 +281,9 @@ html .markdown-body .keys > kbd {
   align-items: center;
   justify-content: center;
 
-  min-width: 1.75rem;
-  min-height: 1.75rem;
-  padding: 0.125rem 0.5rem;
+  min-width: 1.25rem;
+  min-height: 1.25rem;
+  padding: 0 0.375rem;
 
   font-family:
     ui-monospace,
@@ -293,21 +293,21 @@ html .markdown-body .keys > kbd {
     Consolas,
     "Liberation Mono",
     monospace;
-  font-size: 0.8125rem;
-  font-weight: 400;
-  line-height: 1.25rem;
+  font-size: 0.75em;
+  font-weight: 500;
+  line-height: 1;
 
   color: var(--m2h-kbd-fg);
   vertical-align: middle;
   background-color: var(--m2h-kbd-bg);
 
   border: 0;
-  border-radius: 0.375rem;
+  border-radius: 0.25rem;
 
   box-shadow:
-    0 0.125rem 0 0.0625rem var(--m2h-kbd-border),
-    0 0.125rem 0 var(--m2h-kbd-border),
-    inset 0 -0.125rem 0.25rem var(--m2h-kbd-highlight);
+    0 0.0625rem 0 0.0625rem var(--m2h-kbd-border),
+    0 0.0625rem 0 var(--m2h-kbd-border),
+    inset 0 -0.0625rem 0.1875rem var(--m2h-kbd-highlight);
 }
 
 .markdown-body .keys > kbd::before,
@@ -320,140 +320,140 @@ html .markdown-body .keys > kbd {
 .markdown-body .keys .key-alt::before,
 .markdown-body .keys .key-left-alt::before,
 .markdown-body .keys .key-right-alt::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2387";
 }
 
 .markdown-body .keys .key-command::before,
 .markdown-body .keys .key-left-command::before,
 .markdown-body .keys .key-right-command::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2318";
 }
 
 .markdown-body .keys .key-control::before,
 .markdown-body .keys .key-left-control::before,
 .markdown-body .keys .key-right-control::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2303";
 }
 
 .markdown-body .keys .key-option::before,
 .markdown-body .keys .key-left-option::before,
 .markdown-body .keys .key-right-option::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2325";
 }
 
 .markdown-body .keys .key-shift::before,
 .markdown-body .keys .key-left-shift::before,
 .markdown-body .keys .key-right-shift::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\21E7";
 }
 
 .markdown-body .keys .key-arrow-down::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2193";
 }
 
 .markdown-body .keys .key-arrow-left::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2190";
 }
 
 .markdown-body .keys .key-arrow-right::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2192";
 }
 
 .markdown-body .keys .key-arrow-up::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2191";
 }
 
 .markdown-body .keys .key-backspace::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\232B";
 }
 
 .markdown-body .keys .key-backtab::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\21E4";
 }
 
 .markdown-body .keys .key-caps-lock::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\21EA";
 }
 
 .markdown-body .keys .key-clear::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2327";
 }
 
 .markdown-body .keys .key-context-menu::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2630";
 }
 
 .markdown-body .keys .key-delete::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2326";
 }
 
 .markdown-body .keys .key-eject::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\23CF";
 }
 
 .markdown-body .keys .key-end::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2913";
 }
 
 .markdown-body .keys .key-escape::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\238B";
 }
 
 .markdown-body .keys .key-home::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2912";
 }
 
 .markdown-body .keys .key-insert::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2380";
 }
 
 .markdown-body .keys .key-page-down::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\21DF";
 }
 
 .markdown-body .keys .key-page-up::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\21DE";
 }
 
 .markdown-body .keys .key-print-screen::before {
-  padding-right: 0.4rem;
+  padding-right: 0.25rem;
   content: "\2399";
 }
 
 .markdown-body .keys .key-tab::after {
-  padding-left: 0.4rem;
+  padding-left: 0.25rem;
   content: "\21E5";
 }
 
 .markdown-body .keys .key-num-enter::after {
-  padding-left: 0.4rem;
+  padding-left: 0.25rem;
   content: "\2324";
 }
 
 .markdown-body .keys .key-enter::after {
-  padding-left: 0.4rem;
+  padding-left: 0.25rem;
   content: "\23CE";
 }
 
