@@ -12,6 +12,46 @@ import { App } from "./App";
 import { APIError, type FileListResponse, type PreviewAPI } from "./api";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 
+// Wrap saveScrollPosition in a spy that still delegates to the real storage so
+// tests can both set up a saved offset and assert the App never persists during
+// a position restore. readScrollPosition stays the real implementation.
+vi.mock("./lib/scroll-position", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./lib/scroll-position")>();
+  return {
+    ...actual,
+    saveScrollPosition: vi.fn(actual.saveScrollPosition),
+  };
+});
+
+// A controllable Mermaid loader: loadMermaid() returns a promise the test
+// resolves later, so a document with a diagram holds renderRichContent — and
+// therefore the post-content position restore — open. That gives a stable
+// window where the persistence saver is already attached but the restore guard
+// is still held, which a plain document (whose restore resolves in one
+// microtask) does not expose under jsdom.
+const mermaidControl = vi.hoisted(() => ({
+  resolve: null as null | ((runtime: unknown) => void),
+}));
+
+vi.mock("./lib/runtime-loader", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./lib/runtime-loader")>();
+  return {
+    ...actual,
+    loadMermaid: () =>
+      new Promise((resolve) => {
+        mermaidControl.resolve = resolve;
+      }),
+  };
+});
+
+const fakeMermaidRuntime = {
+  initialize() {},
+  async render() {
+    return { svg: "" };
+  },
+  async run() {},
+};
+
 const initialFiles: FileListResponse = {
   kind: "directory",
   version: "0.9.1",
@@ -1059,11 +1099,76 @@ describe("App directory preview", () => {
     vi.mocked(Element.prototype.scrollIntoView).mockClear();
     render(<App api={api} />);
     await screen.findByRole("heading", { level: 2, name: "Install" });
-    // The saved pixel offset wins over the #install hash, so the restore takes
-    // the scroll-offset branch and the heading navigator is never invoked.
-    await waitFor(() => {
-      expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    const viewport = document.querySelector(
+      '.reader-main [data-slot="scroll-area-viewport"]',
+    );
+    if (!(viewport instanceof HTMLElement)) {
+      throw new Error("scroll viewport was not rendered");
+    }
+    // jsdom does not lay out, so scrollTop is otherwise a no-op: stub it with a
+    // getter/setter so the restore can be observed at the exact pixel it writes.
+    let restoredScrollTop = 0;
+    Object.defineProperty(viewport, "scrollTop", {
+      configurable: true,
+      get: () => restoredScrollTop,
+      set: (value: number) => {
+        restoredScrollTop = value;
+      },
     });
+    // The saved pixel offset wins over the #install hash: the viewport is moved
+    // to exactly 4287 (re-applied across the restore's animation frames) and the
+    // heading navigator is never invoked.
+    await waitFor(() => {
+      expect(restoredScrollTop).toBe(4287);
+    });
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it("does not overwrite a saved offset with a transient scroll during restore", async () => {
+    saveScrollPosition("guides/setup.md", 4287);
+    window.history.replaceState(null, "", "/doc/guides/setup.md#install");
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "guides/setup.md",
+        title: "Setup API Title",
+        // A Mermaid block makes renderRichContent await the controllable loader,
+        // holding the position restore open: the persistence saver attaches and
+        // the restore guard stays held, but restoreFragment has not run yet.
+        html: '<h2 id="install">Install</h2><pre><code class="language-mermaid">graph TD; A-->B</code></pre>',
+        frontmatter: null,
+        toc: [{ level: 2, id: "install", text: "Install" }],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByRole("heading", { level: 2, name: "Install" });
+    const viewport = document.querySelector(
+      '.reader-main [data-slot="scroll-area-viewport"]',
+    );
+    if (!(viewport instanceof HTMLElement)) {
+      throw new Error("scroll viewport was not rendered");
+    }
+    // Let passive effects flush so the saver is attached; the restore is still
+    // pending (Mermaid has not resolved), so the guard remains held.
+    await settleRestore();
+    vi.mocked(saveScrollPosition).mockClear();
+    // The viewport reports an intermediate offset (120) while the restore is in
+    // flight. The guard must make the saver ignore it, so saveScrollPosition is
+    // never invoked and the saved 4287 is untouched.
+    viewport.scrollTop = 120;
+    await act(async () => {
+      fireEvent.scroll(viewport);
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
+    expect(saveScrollPosition).not.toHaveBeenCalled();
+    expect(readScrollPosition("guides/setup.md")).toBe(4287);
+    // Releasing the restore lands on the frozen offset, not the transient 120.
+    await act(async () => {
+      mermaidControl.resolve?.(fakeMermaidRuntime);
+      await settleRestore();
+    });
+    expect(readScrollPosition("guides/setup.md")).toBe(4287);
   });
 
   it("keeps toc and width query parameters independent", async () => {
