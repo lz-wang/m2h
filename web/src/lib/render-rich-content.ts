@@ -7,10 +7,12 @@
 // individually.
 //
 // Mermaid runs before KaTeX so KaTeX never scans raw diagram source code.
-// Tables sort last so their headers' padding is in place before the caller
-// restores any scroll position. All runtimes are the shared /runtime/* assets
-// the preview server embeds (the same copy convert writes into .m2h/), loaded
-// through the runtime loader only when the document actually uses them.
+// Tables sort last so the caller's scroll restore lands on the fully enhanced
+// DOM; the sortable-header geometry itself is reserved statically in the
+// stylesheet, so the enhancement never shifts layout. All runtimes are the
+// shared /runtime/* assets the preview server embeds (the same copy convert
+// writes into .m2h/), loaded through the runtime loader only when the
+// document actually uses them.
 
 import type { ResolvedMode } from "../model";
 import {
@@ -88,9 +90,9 @@ export async function renderRichContent(
   addCodeCopyButtons(root);
   // Kick the Tablesort download off before awaiting Mermaid/KaTeX so all
   // needed runtimes load in parallel; the tables themselves are enhanced only
-  // after those settle — still before the caller's onContentReady, because the
-  // sortable headers add padding that would otherwise shift a just-restored
-  // scroll position.
+  // after those settle — still before the caller's onContentReady, so any
+  // scroll restore lands on the final DOM. The reserved indicator space is
+  // static CSS, so the enhancement itself never changes table geometry.
   const tablesortLoad = hasSortableTables(root) ? loadTablesort() : null;
   if (hasMermaidBlocks(root)) {
     const mermaid = await loadMermaid();

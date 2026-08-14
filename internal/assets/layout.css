@@ -182,6 +182,13 @@ html.m2h-mode-dark {
  * hints its affordance on hover/focus, so headers read clean at rest. The
  * reserved right padding keeps the arrow from overlapping header text.
  *
+ * Geometry is reserved statically: every plain GFM header cell (the same
+ * classless <table> the sorter targets) carries the indicator space from the
+ * first layout pass, so Tablesort attaching its attributes never changes
+ * column widths or table height and cannot shift a just-restored scroll
+ * position. Only interaction properties are keyed on the runtime attributes,
+ * because those do not affect layout.
+ *
  * The arrow, hover wash, and focus ring colors are m2h variables because
  * github-markdown-css defines no theme variables under these names — a bare
  * var(--bgColor-muted, …) would silently fall back to the light value on the
@@ -208,9 +215,12 @@ html.m2h-mode-dark {
   }
 }
 
-.markdown-body th[role="columnheader"]:not([data-sort-method="none"]) {
+.markdown-body table:not([class]) thead th {
   position: relative;
   padding-right: 2rem;
+}
+
+.markdown-body th[role="columnheader"]:not([data-sort-method="none"]) {
   cursor: pointer;
   user-select: none;
 }
