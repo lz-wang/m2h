@@ -193,9 +193,51 @@ jobs:
           if [[ "${RUNNER_OS}" == "Windows" ]]; then binary="./m2h.exe"; fi
           bash scripts/smoke.sh "${binary}" '${{ needs.readiness.outputs.version }}'
 
+  e2e:
+    name: Browser regression
+    needs: [readiness, test]
+    if: needs.readiness.outputs.ready == 'true' && needs.test.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26.x"
+          check-latest: true
+
+      - name: Install Web dependencies
+        run: npm ci --prefix web
+
+      - name: Install Playwright Chromium
+        working-directory: web
+        run: npx playwright install --with-deps chromium
+
+      - name: Run Playwright regression tests
+        working-directory: web
+        run: npm run test:e2e
+
+      - name: Upload regression artifacts
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: playwright-traces
+          path: |
+            web/test-results/
+            web/playwright-report/
+          if-no-files-found: ignore
+
   notify:
     name: Pushover notification
-    needs: [readiness, test, build, smoke]
+    needs: [readiness, test, build, smoke, e2e]
     if: always() && needs.readiness.outputs.ready == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -214,7 +256,8 @@ jobs:
           TEST_RESULT="${{ needs.test.result }}"
           BUILD_RESULT="${{ needs.build.result }}"
           SMOKE_RESULT="${{ needs.smoke.result }}"
-          if [[ "${TEST_RESULT}" == "success" && "${BUILD_RESULT}" == "success" && "${SMOKE_RESULT}" == "success" ]]; then
+          E2E_RESULT="${{ needs.e2e.result }}"
+          if [[ "${TEST_RESULT}" == "success" && "${BUILD_RESULT}" == "success" && "${SMOKE_RESULT}" == "success" && "${E2E_RESULT}" == "success" ]]; then
             PRIORITY="0"
             TITLE="m2h 构建成功"
           else
@@ -227,6 +270,7 @@ jobs:
           <u>测试结果</u>: ${TEST_RESULT}
           <u>构建结果</u>: ${BUILD_RESULT}
           <u>三平台 Smoke</u>: ${SMOKE_RESULT}
+          <u>浏览器回归</u>: ${E2E_RESULT}
           <u>版本</u>: <font color="#0000ff">${{ needs.readiness.outputs.version }}</font>
           <u>分支</u>: <i>${{ github.ref_name }}</i>
           <u>触发人</u>: <i>${{ github.actor }}</i>

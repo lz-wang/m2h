@@ -7,7 +7,7 @@
 .PHONY: \
 	build build-all build-os dist \
 	test coverage check format setup upgrade clean version help ci \
-	web-install web-ci-install web-lint web-build web-test web-format \
+	web-install web-ci-install web-lint web-build web-test web-e2e web-format \
 	_build-platform _install-go-tools _check-go-format _check-go-mod
 
 BINARY_NAME := m2h
@@ -224,6 +224,10 @@ web-build:
 web-test:
 	@cd "$(WEB_DIR)" && $(NPM) run test
 
+## Run WebUI browser regression tests with Playwright.
+web-e2e:
+	@cd "$(WEB_DIR)" && $(NPM) run test:e2e
+
 ## Format Web sources with Biome.
 web-format:
 	@cd "$(WEB_DIR)" && $(NPM) run format
@@ -265,3 +269,4 @@ help:
 	@echo "  make web-lint       Check Web sources"
 	@echo "  make web-build      Build WebUI"
 	@echo "  make web-test       Run Web tests"
+	@echo "  make web-e2e        Run WebUI browser regression tests"

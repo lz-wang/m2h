@@ -14,6 +14,9 @@ export default defineConfig({
   },
   test: {
     environment: "jsdom",
+    // The e2e/*.spec.ts files are Playwright suites, not Vitest: they need a
+    // real browser and the preview server (see playwright.config.ts).
+    exclude: ["**/node_modules/**", "**/dist/**", "e2e/**"],
     environmentOptions: {
       jsdom: {
         url: "http://localhost/",
