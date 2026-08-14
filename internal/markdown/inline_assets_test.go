@@ -51,6 +51,14 @@ func TestRenderInlineAssetsEmbedOnlyWhatTheDocumentUses(t *testing.T) {
 			source:          "# Title\n\n```go\nfmt.Println(1)\n```\n",
 			wantScripts:     []string{"rich-content.js"},
 			wantStyles:      nil,
+			unwantedScripts: []string{"katex.min.js", "mermaid.min.js", "tablesort.min.js"},
+			unwantedStrings: []string{"data:font/woff2"},
+		},
+		{
+			name:            "table document embeds the tablesort runtime",
+			source:          "# Title\n\n| Name | Size |\n| --- | --- |\n| alpha | 12 MB |\n| beta | 850 KB |\n",
+			wantScripts:     []string{"tablesort.min.js", "rich-content.js"},
+			wantStyles:      nil,
 			unwantedScripts: []string{"katex.min.js", "mermaid.min.js"},
 			unwantedStrings: []string{"data:font/woff2"},
 		},
@@ -91,6 +99,108 @@ func TestRenderInlineAssetsEmbedOnlyWhatTheDocumentUses(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// TestRenderInlineAssetsTablesortScriptOrder pins the load order of the
+// tablesort runtime: the core defines window.Tablesort, the comparator
+// extensions register through Tablesort.extend, and the rich-content enhancer
+// that instantiates tables runs last. A reorder here breaks standalone HTML
+// with "Tablesort is not defined", so every extension must sit strictly
+// between the core and the enhancer.
+func TestRenderInlineAssetsTablesortScriptOrder(t *testing.T) {
+	t.Parallel()
+
+	result, err := Render([]byte("| Name | Size |\n| --- | --- |\n| alpha | 12 MB |\n| beta | 850 KB |\n"), RenderOptions{
+		Mode:       ModeAuto,
+		Target:     TargetConvert,
+		SourcePath: "guide.md",
+		Assets:     AssetInline,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The six tablesort bundles share one copyright banner, so the leading
+	// snippet cannot tell them apart; fingerprint by full (escaped) contents.
+	contents := func(name string) string {
+		script, err := inlineScript(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return script
+	}
+	core := strings.Index(result.HTML, contents("tablesort.min.js"))
+	rich := strings.Index(result.HTML, contents("rich-content.js"))
+	if core == -1 {
+		t.Fatal("inline HTML missing the tablesort core")
+	}
+	if rich == -1 {
+		t.Fatal("inline HTML missing the rich-content enhancer")
+	}
+	for _, name := range []string{
+		"tablesort.date.js",
+		"tablesort.dotsep.js",
+		"tablesort.filesize.js",
+		"tablesort.monthname.js",
+		"tablesort.number.js",
+	} {
+		extension := strings.Index(result.HTML, contents(name))
+		if extension == -1 {
+			t.Errorf("inline HTML missing tablesort extension %q", name)
+			continue
+		}
+		if !(core < extension && extension < rich) {
+			t.Errorf("tablesort extension %q at %d not between core (%d) and rich-content (%d)",
+				name, extension, core, rich)
+		}
+	}
+}
+
+// TestRuntimeFragmentsSharedTablesortConditional guards the shared-assets
+// variant: the tablesort scripts only appear when the body carries a plain
+// GFM table, and always load before rich-content.js.
+func TestRuntimeFragmentsSharedTablesortConditional(t *testing.T) {
+	t.Parallel()
+
+	options := RenderOptions{Assets: AssetShared, AssetBase: ".m2h/"}
+
+	withHead, withBody, err := runtimeFragments(options, "<table><tbody><tr><td>a</td></tr><tr><td>b</td></tr></tbody></table>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(withHead) == 0 {
+		t.Fatal("shared fragments missing the stylesheet head")
+	}
+	scripts := string(withBody)
+	core := strings.Index(scripts, `src=".m2h/tablesort.min.js"`)
+	rich := strings.Index(scripts, `src=".m2h/rich-content.js"`)
+	if core == -1 || rich == -1 {
+		t.Fatalf("shared scripts missing tablesort or enhancer: %s", scripts)
+	}
+	for _, name := range []string{
+		"tablesort.date.js",
+		"tablesort.dotsep.js",
+		"tablesort.filesize.js",
+		"tablesort.monthname.js",
+		"tablesort.number.js",
+	} {
+		extension := strings.Index(scripts, `src=".m2h/`+name+`"`)
+		if extension == -1 {
+			t.Errorf("shared scripts missing tablesort extension %q", name)
+			continue
+		}
+		if !(core < extension && extension < rich) {
+			t.Errorf("shared tablesort extension %q out of order", name)
+		}
+	}
+
+	_, withoutBody, err := runtimeFragments(options, "<p>plain paragraph</p>")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(withoutBody), "tablesort") {
+		t.Errorf("shared scripts embed tablesort without a table: %s", withoutBody)
 	}
 }
 

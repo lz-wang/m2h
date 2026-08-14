@@ -1,7 +1,11 @@
 import { waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { MathAutoRenderer, MermaidRuntime } from "./runtime-loader";
+import type {
+  MathAutoRenderer,
+  MermaidRuntime,
+  TablesortConstructor,
+} from "./runtime-loader";
 
 const mermaidRuntime: MermaidRuntime = {
   initialize: vi.fn(),
@@ -10,6 +14,17 @@ const mermaidRuntime: MermaidRuntime = {
 };
 
 const renderMathInElement: MathAutoRenderer = vi.fn();
+
+const tablesortCtor = vi.fn() as unknown as TablesortConstructor;
+
+const TABLESORT_SCRIPTS = [
+  "/runtime/tablesort.min.js",
+  "/runtime/tablesort.date.js",
+  "/runtime/tablesort.dotsep.js",
+  "/runtime/tablesort.filesize.js",
+  "/runtime/tablesort.monthname.js",
+  "/runtime/tablesort.number.js",
+];
 
 function headElement<T extends HTMLElement>(selector: string): T {
   const element = document.head.querySelector<T>(selector);
@@ -39,6 +54,7 @@ describe("runtime loader", () => {
     document.head.innerHTML = "";
     delete window.mermaid;
     delete window.renderMathInElement;
+    delete window.Tablesort;
     vi.mocked(mermaidRuntime.initialize).mockClear();
   });
 
@@ -170,5 +186,106 @@ describe("runtime loader", () => {
     expect(
       document.head.querySelector('link[href="/runtime/katex.min.css"]'),
     ).toBeNull();
+  });
+
+  it("loads the tablesort core before its comparator extensions", async () => {
+    const loader = await import("./runtime-loader");
+    const pending = loader.loadTablesort();
+    const core = await waitForHeadElement<HTMLScriptElement>(
+      'script[src="/runtime/tablesort.min.js"]',
+    );
+
+    // Extensions only appear after the core script resolves.
+    expect(
+      document.head.querySelector('script[src="/runtime/tablesort.number.js"]'),
+    ).toBeNull();
+
+    window.Tablesort = tablesortCtor;
+    fire(core, "load");
+
+    for (const src of TABLESORT_SCRIPTS.slice(1)) {
+      const extension = await waitForHeadElement<HTMLScriptElement>(
+        `script[src="${src}"]`,
+      );
+      fire(extension, "load");
+    }
+
+    await expect(pending).resolves.toBe(tablesortCtor);
+  });
+
+  it("deduplicates concurrent tablesort loads to a single script set", async () => {
+    const loader = await import("./runtime-loader");
+    window.Tablesort = tablesortCtor;
+    const first = loader.loadTablesort();
+    const second = loader.loadTablesort();
+    const core = await waitForHeadElement<HTMLScriptElement>(
+      'script[src="/runtime/tablesort.min.js"]',
+    );
+    fire(core, "load");
+    for (const src of TABLESORT_SCRIPTS.slice(1)) {
+      const extension = await waitForHeadElement<HTMLScriptElement>(
+        `script[src="${src}"]`,
+      );
+      fire(extension, "load");
+    }
+
+    await Promise.all([first, second]);
+    for (const src of TABLESORT_SCRIPTS) {
+      expect(
+        document.head.querySelectorAll(`script[src="${src}"]`),
+      ).toHaveLength(1);
+    }
+  });
+
+  it("rejects when the core does not attach window.Tablesort", async () => {
+    const loader = await import("./runtime-loader");
+    const pending = loader.loadTablesort();
+    const core = await waitForHeadElement<HTMLScriptElement>(
+      'script[src="/runtime/tablesort.min.js"]',
+    );
+
+    // Every script reports a successful load, yet the global never appears.
+    fire(core, "load");
+    for (const src of TABLESORT_SCRIPTS.slice(1)) {
+      const extension = await waitForHeadElement<HTMLScriptElement>(
+        `script[src="${src}"]`,
+      );
+      fire(extension, "load");
+    }
+
+    await expect(pending).rejects.toThrow(
+      "Tablesort runtime did not attach window.Tablesort",
+    );
+  });
+
+  it("rejects a failed tablesort load and allows a retry", async () => {
+    const loader = await import("./runtime-loader");
+    const first = loader.loadTablesort();
+    const core = await waitForHeadElement<HTMLScriptElement>(
+      'script[src="/runtime/tablesort.min.js"]',
+    );
+
+    fire(core, "error");
+    await expect(first).rejects.toThrow(
+      "load runtime script /runtime/tablesort.min.js",
+    );
+    expect(
+      document.head.querySelector('script[src="/runtime/tablesort.min.js"]'),
+    ).toBeNull();
+
+    const retry = loader.loadTablesort();
+    const retriedCore = await waitForHeadElement<HTMLScriptElement>(
+      'script[src="/runtime/tablesort.min.js"]',
+    );
+    window.Tablesort = tablesortCtor;
+    fire(retriedCore, "load");
+    for (const src of TABLESORT_SCRIPTS.slice(1)) {
+      const extension = await waitForHeadElement<HTMLScriptElement>(
+        `script[src="${src}"]`,
+      );
+      fire(extension, "load");
+    }
+
+    await expect(retry).resolves.toBe(tablesortCtor);
   });
 });

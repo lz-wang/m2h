@@ -1,5 +1,9 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { runInThisContext } from "node:vm";
 import { waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   MathAutoRenderer,
@@ -33,10 +37,42 @@ const loadKatexMock = vi.hoisted(() =>
   vi.fn(async (): Promise<MathAutoRenderer> => renderMathInElementMock),
 );
 
+const loadTablesortMock = vi.hoisted(() => vi.fn());
+
 vi.mock("./runtime-loader", () => ({
   loadMermaid: loadMermaidMock,
   loadKatex: loadKatexMock,
+  loadTablesort: loadTablesortMock,
 }));
+
+// The vendored tablesort bundles, concatenated in the same order the runtime
+// loader injects them so comparator registration priority matches production.
+const TABLESORT_BUNDLE = [
+  "tablesort.min.js",
+  "tablesort.date.js",
+  "tablesort.dotsep.js",
+  "tablesort.filesize.js",
+  "tablesort.monthname.js",
+  "tablesort.number.js",
+]
+  .map((name) =>
+    readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        "../../../internal/assets/rich",
+        name,
+      ),
+      "utf8",
+    ),
+  )
+  .join("\n");
+
+// Evaluating the bundles in the shared global context attaches
+// window.Tablesort exactly as a <script> tag would, so the sorting assertions
+// below run against the same code the preview serves and convert embeds.
+function installTablesortRuntime(): void {
+  runInThisContext(TABLESORT_BUNDLE, { filename: "tablesort-bundle.js" });
+}
 
 describe("renderRichContent", () => {
   beforeEach(() => {
@@ -48,6 +84,7 @@ describe("renderRichContent", () => {
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
     loadKatexMock.mockClear();
+    loadTablesortMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({
       svg: '<svg data-mock="mermaid"></svg>',
@@ -389,6 +426,7 @@ describe("rerenderMermaid", () => {
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
     loadKatexMock.mockClear();
+    loadTablesortMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({
       svg: '<svg data-mock="mermaid"></svg>',
@@ -483,6 +521,296 @@ describe("rerenderMermaid", () => {
     expect(mermaidMock.render).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("sortable tables", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mermaidMock.initialize.mockClear();
+    mermaidMock.run.mockClear();
+    mermaidMock.render.mockClear();
+    renderMathInElementMock.mockClear();
+    loadMermaidMock.mockClear();
+    loadKatexMock.mockClear();
+    mermaidMock.run.mockResolvedValue(undefined);
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg data-mock="mermaid"></svg>',
+    });
+    installTablesortRuntime();
+    loadTablesortMock.mockReset();
+    loadTablesortMock.mockImplementation(async () => {
+      const Tablesort = window.Tablesort;
+      if (Tablesort === undefined) {
+        throw new Error("tablesort runtime is not installed");
+      }
+      return Tablesort;
+    });
+  });
+
+  afterEach(() => {
+    delete window.Tablesort;
+  });
+
+  it("makes plain GFM tables sortable and skips classed HTML tables", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `${DEMO_TABLE}
+      <table class="custom"><thead><tr><th>x</th></tr></thead>
+        <tbody><tr><td>1</td></tr><tr><td>2</td></tr></tbody></table>`;
+
+    await renderRichContent(root, "light");
+
+    const plain = root.querySelectorAll<HTMLTableElement>("table")[0];
+    const classed = root.querySelectorAll<HTMLTableElement>("table")[1];
+    expect(plain?.dataset.m2hSortable).toBe("true");
+    const header = plain?.querySelector<HTMLTableCellElement>("thead th");
+    expect(header?.getAttribute("role")).toBe("columnheader");
+    expect(header?.getAttribute("aria-sort")).toBe("none");
+    expect(header?.tabIndex).toBe(0);
+    expect(header?.title).toBe("点击升序排序");
+
+    // A class attribute marks user-authored HTML: no marker, no sortable role.
+    expect(classed?.hasAttribute("data-m2h-sortable")).toBe(false);
+    expect(classed?.querySelector("thead th")?.getAttribute("role")).toBeNull();
+    expect(loadTablesortMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("skips tables with a single body row", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      "<table><thead><tr><th>only</th></tr></thead><tbody><tr><td>row</td></tr></tbody></table>";
+
+    await renderRichContent(root, "light");
+
+    // The runtime still loads (the selector cannot see row counts), but a
+    // one-row table is never wired up: no marker and no sortable header.
+    expect(root.querySelector("table")?.hasAttribute("data-m2h-sortable")).toBe(
+      false,
+    );
+    expect(
+      root.querySelector("thead th")?.getAttribute("aria-sort"),
+    ).toBeNull();
+  });
+
+  it("does not load the tablesort runtime without tables", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = "<h2>heading</h2><p>paragraph</p>";
+
+    await renderRichContent(root, "light");
+
+    expect(loadTablesortMock).not.toHaveBeenCalled();
+  });
+
+  it("starts the tablesort download before awaiting mermaid", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `${DEMO_TABLE}<pre><code class="language-mermaid">graph TD</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    // Both runtimes are needed, and the loader calls must interleave with the
+    // tablesort load kicked off first rather than serialized after mermaid.
+    expect(loadTablesortMock).toHaveBeenCalledTimes(1);
+    expect(loadMermaidMock).toHaveBeenCalledTimes(1);
+    expect(loadTablesortMock.mock.invocationCallOrder[0]).toBeLessThan(
+      loadMermaidMock.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("sorts text columns ascending then descending", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = DEMO_TABLE;
+    await renderRichContent(root, "light");
+
+    const header = headerAt(root, 0);
+    header.click();
+    expect(columnValues(root, 0)).toEqual(["Alpha", "Beta", "Gamma"]);
+    header.click();
+    expect(columnValues(root, 0)).toEqual(["Gamma", "Beta", "Alpha"]);
+  });
+
+  it("sorts numbers numerically rather than lexicographically", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = DEMO_TABLE;
+    await renderRichContent(root, "light");
+
+    headerAt(root, 4).click();
+
+    // String order would be 120, 42, 8; numeric order is 8, 42, 120.
+    expect(columnValues(root, 4)).toEqual(["8", "42", "120"]);
+  });
+
+  it("sorts file sizes by magnitude", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = DEMO_TABLE;
+    await renderRichContent(root, "light");
+
+    headerAt(root, 2).click();
+
+    // String order would be "1.5 GB", "12 MB", "850 KB".
+    expect(columnValues(root, 2)).toEqual(["850 KB", "12 MB", "1.5 GB"]);
+  });
+
+  it("sorts ISO dates within a year", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = DEMO_TABLE;
+    await renderRichContent(root, "light");
+
+    headerAt(root, 3).click();
+
+    expect(columnValues(root, 3)).toEqual([
+      "2026-07-01",
+      "2026-08-01",
+      "2026-08-14",
+    ]);
+  });
+
+  it("sorts dot-separated versions numerically per segment", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = DEMO_TABLE;
+    await renderRichContent(root, "light");
+
+    headerAt(root, 1).click();
+
+    // 1.10.0 must outrank 1.2.0 instead of comparing "10" < "2" as text.
+    expect(columnValues(root, 1)).toEqual(["1.2.0", "1.10.0", "2.0.0"]);
+  });
+
+  it("sorts with Enter and Space key presses", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = DEMO_TABLE;
+    await renderRichContent(root, "light");
+
+    const header = headerAt(root, 0);
+    header.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
+    expect(columnValues(root, 0)).toEqual(["Alpha", "Beta", "Gamma"]);
+
+    header.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
+    expect(columnValues(root, 0)).toEqual(["Gamma", "Beta", "Alpha"]);
+
+    // Other keys leave the table alone.
+    header.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
+    expect(columnValues(root, 0)).toEqual(["Gamma", "Beta", "Alpha"]);
+  });
+
+  it("keeps aria-sort and titles in step through the sort cycle", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = DEMO_TABLE;
+    await renderRichContent(root, "light");
+
+    const project = headerAt(root, 0);
+    expect(project.getAttribute("aria-sort")).toBe("none");
+    expect(project.title).toBe("点击升序排序");
+
+    project.click();
+    expect(project.getAttribute("aria-sort")).toBe("ascending");
+    expect(project.title).toBe("当前升序，点击切换为降序");
+
+    project.click();
+    expect(project.getAttribute("aria-sort")).toBe("descending");
+    expect(project.title).toBe("当前降序，点击切换为升序");
+
+    // Sorting another column restores the explicit "none" baseline — and the
+    // default title — on the column that is no longer driving the sort.
+    headerAt(root, 1).click();
+    expect(project.getAttribute("aria-sort")).toBe("none");
+    expect(project.title).toBe("点击升序排序");
+    expect(headerAt(root, 1).getAttribute("aria-sort")).toBe("ascending");
+  });
+
+  it("excludes headers with interactive content from sorting", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<table><thead><tr><th><a href="#docs">Docs</a></th><th>Version</th></tr></thead>
+      <tbody>
+        <tr><td>guide</td><td>2.0.0</td></tr>
+        <tr><td>api</td><td>1.0.0</td></tr>
+      </tbody></table>`;
+    await renderRichContent(root, "light");
+
+    const linkHeader = headerAt(root, 0);
+    expect(linkHeader.getAttribute("data-sort-method")).toBe("none");
+    // No sort affordances: the link keeps its native click meaning.
+    expect(linkHeader.getAttribute("aria-sort")).toBeNull();
+    expect(linkHeader.title).toBe("");
+    expect(linkHeader.tabIndex).toBe(-1);
+
+    linkHeader.click();
+    expect(columnValues(root, 1)).toEqual(["2.0.0", "1.0.0"]);
+
+    // The plain column right next to it still sorts.
+    headerAt(root, 1).click();
+    expect(columnValues(root, 1)).toEqual(["1.0.0", "2.0.0"]);
+  });
+
+  it("does not stack a second Tablesort instance on repeated enhancement", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = DEMO_TABLE;
+    await renderRichContent(root, "light");
+    await renderRichContent(root, "light");
+
+    // One click must apply exactly one ascending sort. If the second pass had
+    // registered another click handler, this click would toggle the column
+    // straight back to its original order.
+    headerAt(root, 1).click();
+    expect(columnValues(root, 1)).toEqual(["1.2.0", "1.10.0", "2.0.0"]);
+    expect(headerAt(root, 1).getAttribute("aria-sort")).toBe("ascending");
+    // The marker also keeps the second pass from re-fetching the runtime.
+    expect(loadTablesortMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the sort state when only the theme changes", async () => {
+    const { renderRichContent, rerenderMermaid } = await import(
+      "./render-rich-content"
+    );
+    const root = document.createElement("div");
+    root.innerHTML = `${DEMO_TABLE}<pre><code class="language-mermaid">graph TD</code></pre>`;
+    await renderRichContent(root, "light");
+
+    headerAt(root, 1).click();
+    const before = columnValues(root, 1);
+
+    // A theme switch regenerates diagrams only; the table DOM — and its
+    // Tablesort instance — must survive untouched.
+    await rerenderMermaid(root, "dark");
+
+    expect(columnValues(root, 1)).toEqual(before);
+    expect(headerAt(root, 1).getAttribute("aria-sort")).toBe("ascending");
+    expect(loadTablesortMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+const DEMO_TABLE = `<table><thead><tr><th>Project</th><th>Version</th><th>Size</th><th>Updated</th><th>Downloads</th></tr></thead>
+  <tbody>
+    <tr><td>Alpha</td><td>1.10.0</td><td>12 MB</td><td>2026-08-14</td><td>120</td></tr>
+    <tr><td>Beta</td><td>1.2.0</td><td>850 KB</td><td>2026-07-01</td><td>8</td></tr>
+    <tr><td>Gamma</td><td>2.0.0</td><td>1.5 GB</td><td>2026-08-01</td><td>42</td></tr>
+  </tbody></table>`;
+
+function headerAt(root: HTMLElement, column: number): HTMLTableCellElement {
+  const header = root.querySelectorAll<HTMLTableCellElement>(
+    "table:not(.custom) thead th",
+  )[column];
+  if (header === undefined) {
+    throw new Error(`no header at column ${column}`);
+  }
+  return header;
+}
+
+function columnValues(root: HTMLElement, column: number): string[] {
+  return Array.from(
+    root.querySelectorAll<HTMLTableRowElement>("table:not(.custom) tbody tr"),
+  ).map((row) => row.cells[column]?.textContent?.trim() ?? "");
+}
 
 function replaceProperty(
   target: object,
