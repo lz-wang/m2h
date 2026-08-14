@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -16,10 +17,15 @@ import (
 
 func runCommand(t *testing.T, args ...string) (string, string, error) {
 	t.Helper()
+	return runCommandInput(t, strings.NewReader(""), args...)
+}
+
+func runCommandInput(t *testing.T, stdin io.Reader, args ...string) (string, string, error) {
+	t.Helper()
 
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
-	command, err := New("dev-20260809-fe65804", testUI(), &stdout, &stderr)
+	command, err := New("dev-20260809-fe65804", testUI(), stdin, &stdout, &stderr)
 	if err != nil {
 		t.Fatalf("New() returned error: %v", err)
 	}
@@ -83,7 +89,7 @@ func TestHelpDocumentsContract(t *testing.T) {
 			want: []string{
 				"--output", "-o", "--glob", "--depth", "-d", "(default: 4)",
 				"--mode", "(default: \"auto\")", "--width", "(default: \"standard\")",
-				"--standalone", "--copy-assets", "(default: true)", "--version", "-v",
+				"--standalone", "--copy-assets", "(default: true)", "--yes", "-y", "--version", "-v",
 			},
 		},
 		{
@@ -149,6 +155,7 @@ func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
 		{"README.md", "--host", "0.0.0.0"},
 		{"README.md", "--toc"},
 		{"README.md", "--open"},
+		{"web", "README.md", "--yes"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -278,7 +285,7 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 	}
 	output := filepath.Join(root, "public", "index.html")
 
-	stdout, stderr, err := runCommand(t, source, "--output", output, "--mode", "dark", "--width", "wide")
+	stdout, stderr, err := runCommand(t, source, "--yes", "--output", output, "--mode", "dark", "--width", "wide")
 	if err != nil {
 		t.Fatalf("convert returned error: %v", err)
 	}
@@ -310,7 +317,7 @@ func TestConvertCommandWritesDirectoryResult(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, err := runCommand(t, source, "--output", output)
+	stdout, stderr, err := runCommand(t, source, "--yes", "--output", output)
 	if err != nil {
 		t.Fatalf("convert returned error: %v", err)
 	}
@@ -336,10 +343,10 @@ func TestConvertCommandValidatesArgumentsAndDirectoryOnlyFlags(t *testing.T) {
 		want string
 	}{
 		{args: []string{source, source}, want: "Error: requires exactly one file or directory"},
-		{args: []string{source, "--glob", "*.md"}, want: "Error: --glob can only be used when converting a directory"},
-		{args: []string{source, "--depth", "2"}, want: "Error: --depth can only be used when converting a directory"},
-		{args: []string{source, "--copy-assets=false"}, want: "Error: --copy-assets can only be used when converting a directory"},
-		{args: []string{source, "--standalone"}, want: "Error: --standalone can only be used when converting a directory"},
+		{args: []string{source, "--yes", "--glob", "*.md"}, want: "Error: --glob can only be used when converting a directory"},
+		{args: []string{source, "--yes", "--depth", "2"}, want: "Error: --depth can only be used when converting a directory"},
+		{args: []string{source, "--yes", "--copy-assets=false"}, want: "Error: --copy-assets can only be used when converting a directory"},
+		{args: []string{source, "--yes", "--standalone"}, want: "Error: --standalone can only be used when converting a directory"},
 	}
 	for _, test := range tests {
 		_, _, err := runCommand(t, test.args...)
@@ -406,7 +413,104 @@ func TestInvalidFlagValueGetsStablePrefix(t *testing.T) {
 func TestInvalidVersionFailsConstruction(t *testing.T) {
 	t.Parallel()
 
-	if _, err := New("invalid", nil, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
+	if _, err := New("invalid", nil, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
 		t.Fatal("New() succeeded with an invalid version")
+	}
+}
+
+func TestConvertRequiresYesWithoutInteractiveStdin(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	source := filepath.Join(root, "guide.md")
+	if err := os.WriteFile(source, []byte("# Guide"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCommand(t, source)
+	if err == nil || err.Error() != "Error: conversion requires confirmation; rerun with --yes" {
+		t.Fatalf("convert error = %v, want confirmation requirement error", err)
+	}
+	if stdout != "" || stderr != "" {
+		t.Fatalf("convert wrote stdout=%q stderr=%q, want none", stdout, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(root, "guide.html")); !os.IsNotExist(err) {
+		t.Fatal("conversion wrote HTML without confirmation")
+	}
+}
+
+func TestConvertYesRunsConversionDirectly(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	source := filepath.Join(root, "guide.md")
+	if err := os.WriteFile(source, []byte("# Guide"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCommand(t, source, "--yes")
+	if err != nil {
+		t.Fatalf("convert --yes returned error: %v", err)
+	}
+	if stderr != "" || !strings.Contains(stdout, "Converted 1 Markdown file.") {
+		t.Fatalf("convert --yes stdout=%q stderr=%q", stdout, stderr)
+	}
+	if _, err := os.Stat(filepath.Join(root, "guide.html")); err != nil {
+		t.Fatalf("guide.html missing after --yes conversion: %v", err)
+	}
+}
+
+func TestConvertInteractiveAnswerControlsExecution(t *testing.T) {
+	previous := interactiveStdin
+	interactiveStdin = func(io.Reader) bool { return true }
+	t.Cleanup(func() { interactiveStdin = previous })
+
+	// 注意：本用例及其子用例不能 t.Parallel()——它覆写了包级变量 interactiveStdin。
+	newSource := func(t *testing.T) string {
+		t.Helper()
+		source := filepath.Join(t.TempDir(), "guide.md")
+		if err := os.WriteFile(source, []byte("# Guide"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return source
+	}
+
+	tests := []struct {
+		name       string
+		answer     string
+		wantRun    bool
+		wantStderr string
+	}{
+		{name: "y proceeds", answer: "y\n", wantRun: true},
+		{name: "Y proceeds", answer: "Y\n", wantRun: true},
+		{name: "yes proceeds", answer: "yes\n", wantRun: true},
+		{name: "padded y proceeds", answer: " y \n", wantRun: true},
+		{name: "n aborts", answer: "n\n", wantStderr: "Aborted.\n"},
+		{name: "enter aborts", answer: "\n", wantStderr: "Aborted.\n"},
+		{name: "eof aborts", answer: "", wantStderr: "Aborted.\n"},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			source := newSource(t)
+			target := strings.TrimSuffix(source, filepath.Ext(source)) + ".html"
+			stdout, stderr, err := runCommandInput(t, strings.NewReader(test.answer), source)
+			if err != nil {
+				t.Fatalf("convert returned error: %v", err)
+			}
+			if want := "Convert " + source + " to " + target + "? [y/N] " + test.wantStderr; stderr != want {
+				t.Fatalf("stderr = %q, want %q", stderr, want)
+			}
+			_, statErr := os.Stat(target)
+			if test.wantRun && statErr != nil {
+				t.Fatalf("HTML missing after confirmed conversion: %v", statErr)
+			}
+			if !test.wantRun && statErr == nil {
+				t.Fatal("conversion ran after a declined answer")
+			}
+			if !test.wantRun && stdout != "" {
+				t.Fatalf("declined conversion wrote stdout %q", stdout)
+			}
+		})
 	}
 }

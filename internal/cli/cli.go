@@ -27,7 +27,7 @@ const (
 )
 
 // New constructs the root command after validating the injected build version.
-func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Command, error) {
+func New(buildVersion string, ui fs.FS, stdin io.Reader, stdout, stderr io.Writer) (*urfavecli.Command, error) {
 	info, err := version.Parse(buildVersion)
 	if err != nil {
 		return nil, fmt.Errorf("configure CLI: %w", err)
@@ -58,7 +58,7 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 		if current.Bool("version") {
 			return info.Write(current.Writer)
 		}
-		return convertAction(ctx, current)
+		return convertAction(ctx, current, stdin)
 	}
 
 	return command, nil
@@ -85,17 +85,30 @@ func conversionFlags() []urfavecli.Flag {
 			Usage:       "copy non-Markdown assets in directory mode",
 			Local:       true,
 		},
+		&urfavecli.BoolFlag{
+			Name:    "yes",
+			Aliases: []string{"y"},
+			Usage:   "skip the conversion confirmation prompt",
+			Local:   true,
+		},
 	}
 }
 
 var runConvert = convert.RunWithResult
 
-func convertAction(ctx context.Context, command *urfavecli.Command) error {
+func convertAction(ctx context.Context, command *urfavecli.Command, stdin io.Reader) error {
 	if command.Args().Len() == 0 {
 		return urfavecli.ShowRootCommandHelp(command)
 	}
 	if command.Args().Len() != 1 {
 		return fmt.Errorf("Error: requires exactly one file or directory")
+	}
+	proceed, err := confirmConversion(command, stdin)
+	if err != nil {
+		return err
+	}
+	if !proceed {
+		return nil
 	}
 	result, err := runConvert(ctx, convert.Options{
 		Input:         command.Args().First(),
@@ -122,6 +135,27 @@ func convertAction(ctx context.Context, command *urfavecli.Command) error {
 		return nil
 	}
 	return fmt.Errorf("Error: %w", err)
+}
+
+// confirmConversion asks the user to confirm the conversion unless --yes was
+// given. Non-interactive stdin without --yes is an error; a declined answer
+// prints "Aborted." and stops the command without failing it.
+func confirmConversion(command *urfavecli.Command, stdin io.Reader) (bool, error) {
+	if command.Bool("yes") {
+		return true, nil
+	}
+	prompt := convertPrompt(command.Args().First(), command.String("output"))
+	if prompt == "" {
+		return true, nil
+	}
+	if !interactiveStdin(stdin) {
+		return false, fmt.Errorf("Error: conversion requires confirmation; rerun with --yes")
+	}
+	if !confirm(stdin, command.Root().ErrWriter, prompt) {
+		_, _ = fmt.Fprintln(command.Root().ErrWriter, "Aborted.")
+		return false, nil
+	}
+	return true, nil
 }
 
 func webCommand(ui fs.FS, buildVersion string) *urfavecli.Command {
