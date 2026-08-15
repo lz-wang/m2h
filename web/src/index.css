@@ -147,17 +147,21 @@
   }
 }
 
-html,
+/*
+ * The reader scrolls the document viewport (window), not a nested container:
+ * the browser's native scroll restoration — including its retry while late
+ * content arrives — only covers the window, so nothing here may clip or cap
+ * the document height. #root keeps a viewport-minimum height so empty and
+ * short states still center on the first screen.
+ */
 body,
 #root {
-  height: 100%;
+  min-height: 100svh;
   margin: 0;
-  overflow: hidden;
 }
 
 .app-shell {
-  height: 100%;
-  min-height: 100%;
+  min-height: 100svh;
 }
 
 .tree-scroll {
@@ -196,14 +200,13 @@ body,
 }
 
 .reader-inset {
-  height: 100%;
   min-width: 0;
-  overflow: hidden;
   background: var(--m2h-page-background, var(--background));
 }
 
 .reader-toolbar {
-  position: relative;
+  position: sticky;
+  top: 0;
   z-index: 10;
   display: flex;
   height: 3rem;
@@ -377,18 +380,13 @@ body,
 
 .reader-main {
   display: flex;
-  min-height: 0;
-  flex: 1;
-}
-
-.reader-scroll {
-  min-width: 0;
-  min-height: 0;
   flex: 1;
 }
 
 .reader-canvas {
-  min-height: 100%;
+  flex: 1;
+  min-width: 0;
+  min-height: calc(100svh - 3rem);
   padding-bottom: 4rem;
 }
 
@@ -459,11 +457,11 @@ body,
 }
 
 /*
- * Anchored headings sit just below the fixed toolbar; give them scroll margin
+ * Anchored headings sit just below the sticky toolbar; give them scroll margin
  * so in-page navigation (TOC clicks, fragment links) lands fully visible.
  */
 .markdown-body :is(h1, h2, h3, h4, h5, h6) {
-  scroll-margin-top: 1rem;
+  scroll-margin-top: 4rem;
 }
 
 .reader-toc-toggle[aria-pressed="true"]:not(:disabled) {
@@ -471,10 +469,17 @@ body,
   color: var(--accent-foreground);
 }
 
+/* The TOC rail stays pinned beside the document as the window scrolls: it
+ * sticks below the toolbar and spans the remaining viewport height, with its
+ * own inner scroll for long outlines. */
 .reader-toc {
+  position: sticky;
+  top: 3rem;
   display: flex;
   width: 15rem;
   flex: 0 0 15rem;
+  align-self: flex-start;
+  height: calc(100svh - 3rem);
   flex-direction: column;
   border-left: 1px solid var(--border);
   background: var(--background);

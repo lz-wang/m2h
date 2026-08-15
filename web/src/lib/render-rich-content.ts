@@ -90,9 +90,8 @@ export async function renderRichContent(
   addCodeCopyButtons(root);
   // Kick the Tablesort download off before awaiting Mermaid/KaTeX so all
   // needed runtimes load in parallel; the tables themselves are enhanced only
-  // after those settle — still before the caller's onContentReady, so any
-  // scroll restore lands on the final DOM. The reserved indicator space is
-  // static CSS, so the enhancement itself never changes table geometry.
+  // after those settle. The reserved indicator space is static CSS, so the
+  // enhancement itself never changes table geometry.
   const tablesortLoad = hasSortableTables(root) ? loadTablesort() : null;
   if (hasMermaidBlocks(root)) {
     const mermaid = await loadMermaid();

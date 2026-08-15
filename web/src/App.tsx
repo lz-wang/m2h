@@ -22,14 +22,7 @@ import type {
   PointerEvent as ReactPointerEvent,
   SyntheticEvent,
 } from "react";
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
 import type { FrontMatter, PreviewAPI, TocItem } from "./api";
 import { DocumentTree } from "./components/document-tree";
@@ -60,10 +53,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
-import { findReaderViewport } from "./lib/heading";
 import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
-import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
-import { restoreScrollTopWhenStable } from "./lib/scroll-restoration";
 import {
   type DocumentWidth,
   decodeHeadingHash,
@@ -89,6 +79,23 @@ const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
 const layoutStorageKey = "m2h.preview.layout";
 const repositoryURL = "https://github.com/lz-wang/m2h";
 const releaseVersionPattern = /^\d+\.\d+\.\d+$/;
+
+// True when the browser restores the initial scroll position by itself (a
+// reload or a history traversal brought the page up): in those cases the URL
+// fragment must NOT be jumped to, because the native restoration re-lands the
+// exact previous offset — including the reader's scrollable viewport — and a
+// fragment jump on top of it would throw the reader back to a section start.
+// Fresh navigations (new tab/window on a #hash link, address-bar entry) return
+// false; the deep-link effect in App owns their fragment landing.
+function initialNavigationRestoresScroll(): boolean {
+  const entry = performance.getEntriesByType("navigation")[0];
+  // Duck-typed on purpose: the entry is a PerformanceNavigationTiming in every
+  // browser, but jsdom (and tests) supply plain objects.
+  if (entry === undefined || !("type" in entry)) {
+    return false;
+  }
+  return (entry as PerformanceNavigationTiming).type !== "navigate";
+}
 
 interface StoredLayout {
   sidebarOpen: boolean;
@@ -179,160 +186,43 @@ export function App({ api }: AppProps) {
     readerMainRef,
     preview.replaceHash,
   );
-  // A position restore is "pending" from the moment a document is selected
-  // until rich-content enhancement finishes and we have repositioned (to a saved
-  // pixel offset, or to the URL fragment). While pending the scroll spy must not
-  // rewrite the URL — otherwise the body settles at the top, the spy reports the
-  // first heading, and the original target is lost before the restore runs.
-  const restoringRef = useRef(false);
-  // The restore target is frozen the instant a document is committed: a single
-  // read of sessionStorage becomes the source of truth for the whole restore, so
-  // the transient scroll offsets produced while the viewport later settles can
-  // never overwrite the saved value before the restore reads it back.
-  const pendingScrollTopRef = useRef<number | null>(null);
-  // Stops the in-flight layout-stability restore, if any. The restore loop
-  // settles over several frames and can outlive its document, so switching
-  // documents (or starting the next restore) must cancel it first — otherwise
-  // a stale loop keeps writing the previous document's offset every frame and
-  // fights the new restore over the viewport.
-  const cancelRestoreRef = useRef<(() => void) | null>(null);
+  // Deep-link landing: position the reader on the heading named by the URL
+  // fragment. This covers fresh navigations — a shared #hash link opened in a
+  // new tab or window, which carry no restorable scroll state — and in-app
+  // document switches. Two cases are deliberately excluded: the initial load
+  // after a reload or history traversal, where the browser's native scroll
+  // restoration re-lands the exact saved offset (window and scrollable regions
+  // alike) and a fragment jump would clobber it; and a body hot-swap of the
+  // same document, where the never-unmounted ScrollArea keeps the offset and
+  // CSS scroll anchoring absorbs the reflow.
+  const nativeInitialRestoreRef = useRef<boolean | null>(null);
+  if (nativeInitialRestoreRef.current === null) {
+    nativeInitialRestoreRef.current = initialNavigationRestoresScroll();
+  }
   const documentPath = preview.document?.path ?? null;
-  // A layout effect (not passive) so the guard is set synchronously during
-  // commit — before the body's async rich-content enhancement resolves and
-  // calls restoreFragment, and before any scroll-spy URL write.
-  useLayoutEffect(() => {
-    cancelRestoreRef.current?.();
-    cancelRestoreRef.current = null;
-    if (documentPath === null) {
-      restoringRef.current = false;
-      pendingScrollTopRef.current = null;
+  const fragmentLandedPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (preview.phase !== "ready" || documentPath === null) {
       return;
     }
-    restoringRef.current = true;
-    pendingScrollTopRef.current = readScrollPosition(documentPath);
-    return () => {
-      cancelRestoreRef.current?.();
-      cancelRestoreRef.current = null;
-    };
-  }, [documentPath]);
-
-  // restoreFragment repositions once the rendered body — including async
-  // Mermaid/KaTeX that can shift layout — has settled. A pixel-precise offset
-  // saved before a refresh takes precedence (returns to the exact spot);
-  // otherwise it falls back to the URL fragment. It never rewrites the URL: the
-  // hash is already there, and the spy resyncs it after the pixel restore.
-  // Called by PreviewContent via onContentReady.
-  const restoreFragment = useCallback(() => {
-    if (!restoringRef.current) {
-      return;
-    }
-    const viewport = readerMainRef.current
-      ? findReaderViewport(readerMainRef.current)
-      : null;
-    if (!(viewport instanceof HTMLElement)) {
-      restoringRef.current = false;
-      pendingScrollTopRef.current = null;
-      return;
-    }
-    const saved = pendingScrollTopRef.current;
-    if (saved !== null) {
-      // A resolved rich-content promise does not mean the browser has finished
-      // the final layout, so the offset is re-applied every frame until the
-      // reader height has been stable for several consecutive frames (see
-      // scroll-restoration.ts). The guard stays held throughout so scroll
-      // persistence and the heading spy cannot act on an intermediate
-      // position; only once the final offset is written does the dispatched
-      // scroll resync them at the settled spot. Any earlier in-flight restore
-      // is cancelled first so two loops can never fight over the viewport.
-      cancelRestoreRef.current?.();
-      cancelRestoreRef.current = restoreScrollTopWhenStable(
-        viewport,
-        saved,
-        () => {
-          cancelRestoreRef.current = null;
-          restoringRef.current = false;
-          pendingScrollTopRef.current = null;
-          viewport.dispatchEvent(new Event("scroll"));
-        },
-      );
+    const isFirstLoad = fragmentLandedPathRef.current === null;
+    const documentSwitched = fragmentLandedPathRef.current !== documentPath;
+    fragmentLandedPathRef.current = documentPath;
+    if (!documentSwitched || (isFirstLoad && nativeInitialRestoreRef.current)) {
       return;
     }
     const id = decodeHeadingHash(window.location.hash);
     if (id !== "") {
       navigateToHeading(id, { behavior: "auto", updateURL: false });
     }
-    // No pixel offset and no fragment: still hold the guard across two frames so
-    // the initial scroll-spy pass cannot pin the URL to the first heading before
-    // the body settles.
-    requestAnimationFrame(() => {
-      requestAnimationFrame(() => {
-        restoringRef.current = false;
-        pendingScrollTopRef.current = null;
-        viewport.dispatchEvent(new Event("scroll"));
-      });
-    });
-  }, [navigateToHeading]);
-
-  // Persist the reader's scroll offset per document so a refresh can return to
-  // the exact pixel. rAF-throttled so a long scroll writes at most once per
-  // frame, and flushed synchronously on pagehide — a scroll immediately
-  // followed by a reload leaves the last rAF unexecuted otherwise.
-  useEffect(() => {
-    if (preview.phase !== "ready" || documentPath === null) {
-      return;
-    }
-    const container = readerMainRef.current;
-    if (container === null) {
-      return;
-    }
-    const viewport = findReaderViewport(container);
-    if (!(viewport instanceof HTMLElement)) {
-      return;
-    }
-    let frame = 0;
-    const persist = () => {
-      // A position restore is in flight: never persist, so the offsets
-      // produced while the viewport settles cannot overwrite the target.
-      if (restoringRef.current) {
-        return;
-      }
-      saveScrollPosition(documentPath, viewport.scrollTop);
-    };
-    const handleScroll = () => {
-      // A position restore is in flight: ignore scroll entirely so the
-      // intermediate offsets produced while the viewport settles never overwrite
-      // the saved position. Both checks matter — the first avoids queuing a rAF,
-      // the second guards against a restore starting between this handler and
-      // its rAF callback.
-      if (restoringRef.current) {
-        return;
-      }
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(persist);
-    };
-    // pagehide (not beforeunload) fires for reloads and navigations without
-    // opting out of the back/forward cache.
-    const handlePageHide = () => {
-      cancelAnimationFrame(frame);
-      persist();
-    };
-    viewport.addEventListener("scroll", handleScroll, { passive: true });
-    window.addEventListener("pagehide", handlePageHide);
-    return () => {
-      cancelAnimationFrame(frame);
-      viewport.removeEventListener("scroll", handleScroll);
-      window.removeEventListener("pagehide", handlePageHide);
-    };
-  }, [preview.phase, documentPath]);
+  }, [documentPath, preview.phase, navigateToHeading]);
 
   // Reflect the reading position into the URL as the user scrolls. replaceState
   // (never push) keeps the back stack clean across the many headings a scroll
-  // passes. Skipped entirely while a position restore is pending so it cannot
-  // clobber the target, and no-op when the position already matches the URL.
+  // passes, and no-op when the position already matches the URL. The spy only
+  // reacts to real scroll events, so the native restore settles first and the
+  // hash then reflects wherever the viewport landed.
   useEffect(() => {
-    if (restoringRef.current) {
-      return;
-    }
     const currentID = decodeHeadingHash(window.location.hash);
     const nextID = activeHeadingID ?? "";
     if (nextID === currentID) {
@@ -509,28 +399,25 @@ export function App({ api }: AppProps) {
           </header>
 
           <div className="reader-main" ref={readerMainRef}>
-            <ScrollArea className="reader-scroll">
-              <div className={`reader-canvas reader-canvas-${preview.width}`}>
-                {preview.assetError !== null ? (
-                  <div className="asset-warning" role="status">
-                    <ImageOff aria-hidden="true" />
-                    <span>{preview.assetError}</span>
-                  </div>
-                ) : null}
-                <PreviewContent
-                  phase={preview.phase}
-                  error={preview.error}
-                  html={preview.document?.html ?? null}
-                  frontmatter={preview.document?.frontmatter ?? null}
-                  resolvedMode={preview.resolvedMode}
-                  onRetry={() => void preview.retry()}
-                  onContentReady={restoreFragment}
-                  onClick={handleMarkdownClick}
-                  onKeyDown={handleMarkdownKeyDown}
-                  onErrorCapture={handleAssetError}
-                />
-              </div>
-            </ScrollArea>
+            <div className={`reader-canvas reader-canvas-${preview.width}`}>
+              {preview.assetError !== null ? (
+                <div className="asset-warning" role="status">
+                  <ImageOff aria-hidden="true" />
+                  <span>{preview.assetError}</span>
+                </div>
+              ) : null}
+              <PreviewContent
+                phase={preview.phase}
+                error={preview.error}
+                html={preview.document?.html ?? null}
+                frontmatter={preview.document?.frontmatter ?? null}
+                resolvedMode={preview.resolvedMode}
+                onRetry={() => void preview.retry()}
+                onClick={handleMarkdownClick}
+                onKeyDown={handleMarkdownKeyDown}
+                onErrorCapture={handleAssetError}
+              />
+            </div>
             {tocVisible ? (
               <TableOfContentsPanel
                 items={tocItems}
@@ -841,7 +728,6 @@ interface PreviewContentProps {
   frontmatter: FrontMatter | null;
   resolvedMode: ResolvedMode;
   onRetry(): void;
-  onContentReady?(): void;
   onClick(event: ReactMouseEvent<HTMLElement>): void;
   onKeyDown(event: ReactKeyboardEvent<HTMLElement>): void;
   onErrorCapture(event: SyntheticEvent<HTMLElement>): void;
@@ -854,7 +740,6 @@ function PreviewContent({
   frontmatter,
   resolvedMode,
   onRetry,
-  onContentReady,
   onClick,
   onKeyDown,
   onErrorCapture,
@@ -869,10 +754,6 @@ function PreviewContent({
   const resolvedModeRef = useRef<ResolvedMode>(resolvedMode);
   const renderedModeRef = useRef<ResolvedMode | null>(null);
   resolvedModeRef.current = resolvedMode;
-  // Read through a ref so the body effect can keep depending on [html, phase]
-  // only; a new onContentReady identity must not re-render the body.
-  const onContentReadyRef = useRef(onContentReady);
-  onContentReadyRef.current = onContentReady;
 
   // React owns the <article> container; the Markdown body DOM is owned by
   // the rich-content renderer. Writing innerHTML in a layout effect runs
@@ -905,21 +786,12 @@ function PreviewContent({
     const mode = resolvedModeRef.current;
     root.innerHTML = html;
     renderedModeRef.current = mode;
-    let active = true;
     void renderRichContent(
       root,
       mode,
       () => renderGenerationRef.current === generation,
-    ).finally(() => {
-      // Mermaid/KaTeX/permalinks have settled. Only signal readiness if this is
-      // still the render on screen, so a document swapped mid-enhancement never
-      // triggers a fragment restore for stale content.
-      if (active && renderGenerationRef.current === generation) {
-        onContentReadyRef.current?.();
-      }
-    });
+    );
     return () => {
-      active = false;
       if (renderGenerationRef.current === generation) {
         renderGenerationRef.current++;
       }

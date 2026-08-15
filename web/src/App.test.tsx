@@ -10,47 +10,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { APIError, type FileListResponse, type PreviewAPI } from "./api";
-import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
-
-// Wrap saveScrollPosition in a spy that still delegates to the real storage so
-// tests can both set up a saved offset and assert the App never persists during
-// a position restore. readScrollPosition stays the real implementation.
-vi.mock("./lib/scroll-position", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./lib/scroll-position")>();
-  return {
-    ...actual,
-    saveScrollPosition: vi.fn(actual.saveScrollPosition),
-  };
-});
-
-// A controllable Mermaid loader: loadMermaid() returns a promise the test
-// resolves later, so a document with a diagram holds renderRichContent — and
-// therefore the post-content position restore — open. That gives a stable
-// window where the persistence saver is already attached but the restore guard
-// is still held, which a plain document (whose restore resolves in one
-// microtask) does not expose under jsdom.
-const mermaidControl = vi.hoisted(() => ({
-  resolve: null as null | ((runtime: unknown) => void),
-}));
-
-vi.mock("./lib/runtime-loader", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("./lib/runtime-loader")>();
-  return {
-    ...actual,
-    loadMermaid: () =>
-      new Promise((resolve) => {
-        mermaidControl.resolve = resolve;
-      }),
-  };
-});
-
-const fakeMermaidRuntime = {
-  initialize() {},
-  async render() {
-    return { svg: "" };
-  },
-  async run() {},
-};
 
 const initialFiles: FileListResponse = {
   kind: "directory",
@@ -830,22 +789,7 @@ describe("App directory preview", () => {
     // Scrolling partway down: every heading sits at top:0 in jsdom, so the last
     // heading (the H5) becomes the active position and the TOC highlights its
     // nearest H2–H4 ancestor.
-    const viewport = document.querySelector(
-      '.reader-main [data-slot="scroll-area-viewport"]',
-    );
-    if (!(viewport instanceof HTMLElement)) {
-      throw new Error("scroll viewport was not rendered");
-    }
-    Object.defineProperty(viewport, "scrollTop", {
-      configurable: true,
-      value: 100,
-    });
-    await act(async () => {
-      fireEvent.scroll(viewport);
-      await new Promise((resolve) => {
-        setTimeout(resolve, 0);
-      });
-    });
+    await driveWindowScroll(100);
     expect(
       await screen.findByRole("link", {
         name: "Homebrew",
@@ -1045,85 +989,19 @@ describe("App directory preview", () => {
     expect(window.location.hash).toBe("#foo-1");
   });
 
-  it("persists the scroll offset per document so a refresh can return to it", async () => {
-    const api = createAPI({
-      getDocument: vi.fn().mockResolvedValue({
-        path: "README.md",
-        title: "Readme API Title",
-        html: '<h2 id="alpha">Alpha</h2><h2 id="beta">Beta</h2>',
-        frontmatter: null,
-        toc: [
-          { level: 2, id: "alpha", text: "Alpha" },
-          { level: 2, id: "beta", text: "Beta" },
-        ],
-      }),
-    });
-    render(<App api={api} />);
-    await screen.findByRole("heading", { level: 2, name: "Alpha" });
-    const viewport = document.querySelector(
-      '.reader-main [data-slot="scroll-area-viewport"]',
-    );
-    if (!(viewport instanceof HTMLElement)) {
-      throw new Error("scroll viewport was not rendered");
-    }
-    // Wait for the initial position restore to release its guard before driving
-    // a user scroll, otherwise the saver still sees "restore in flight".
-    await settleRestore();
-    Object.defineProperty(viewport, "scrollTop", {
-      configurable: true,
-      value: 250,
-    });
-    await act(async () => {
-      fireEvent.scroll(viewport);
-      await new Promise((resolve) => {
-        setTimeout(resolve, 0);
-      });
-    });
-    expect(readScrollPosition("README.md")).toBe(250);
-  });
-
-  it("flushes the pending scroll offset on pagehide so a reload keeps it", async () => {
-    const api = createAPI({
-      getDocument: vi.fn().mockResolvedValue({
-        path: "README.md",
-        title: "Readme API Title",
-        html: '<h2 id="alpha">Alpha</h2><h2 id="beta">Beta</h2>',
-        frontmatter: null,
-        toc: [
-          { level: 2, id: "alpha", text: "Alpha" },
-          { level: 2, id: "beta", text: "Beta" },
-        ],
-      }),
-    });
-    render(<App api={api} />);
-    await screen.findByRole("heading", { level: 2, name: "Alpha" });
-    const viewport = document.querySelector(
-      '.reader-main [data-slot="scroll-area-viewport"]',
-    );
-    if (!(viewport instanceof HTMLElement)) {
-      throw new Error("scroll viewport was not rendered");
-    }
-    await settleRestore();
-    // Scroll and reload before the throttled rAF saver ever runs: the pagehide
-    // flush must cancel the pending frame and persist the offset synchronously,
-    // otherwise the canceled save leaves nothing to restore.
-    Object.defineProperty(viewport, "scrollTop", {
-      configurable: true,
-      value: 310,
-    });
-    await act(async () => {
-      fireEvent.scroll(viewport);
-      window.dispatchEvent(new Event("pagehide"));
-      await new Promise((resolve) => {
-        setTimeout(resolve, 0);
-      });
-    });
-    expect(readScrollPosition("README.md")).toBe(310);
-  });
-
-  it("restores a saved scroll offset in preference to the fragment on reload", async () => {
-    saveScrollPosition("guides/setup.md", 4287);
+  it("skips the fragment landing after a reload so the native restore keeps the exact offset", async () => {
+    // A reload means the browser itself restores the scroll position — the
+    // window and the reader's scrollable viewport alike. Jumping to the URL
+    // fragment on top of that would throw the reader back to the section
+    // start, so the deep-link landing must stay out of the way. Model the
+    // NavigationTiming entry a reload produces before rendering.
+    vi.spyOn(performance, "getEntriesByType").mockReturnValue([
+      { type: "reload" } as unknown as PerformanceEntry,
+    ]);
     window.history.replaceState(null, "", "/doc/guides/setup.md#install");
+    // scrollIntoView is a shared mock in the test setup; reset it so the count
+    // reflects only this test's landing decision.
+    vi.mocked(Element.prototype.scrollIntoView).mockClear();
     const api = createAPI({
       getDocument: vi.fn().mockResolvedValue({
         path: "guides/setup.md",
@@ -1133,83 +1011,50 @@ describe("App directory preview", () => {
         toc: [{ level: 2, id: "install", text: "Install" }],
       }),
     });
-    // scrollIntoView is a shared mock in the test setup; reset it so the count
-    // reflects only this test's restore.
-    vi.mocked(Element.prototype.scrollIntoView).mockClear();
     render(<App api={api} />);
     await screen.findByRole("heading", { level: 2, name: "Install" });
-    const viewport = document.querySelector(
-      '.reader-main [data-slot="scroll-area-viewport"]',
-    );
-    if (!(viewport instanceof HTMLElement)) {
-      throw new Error("scroll viewport was not rendered");
-    }
-    // jsdom does not lay out, so scrollTop is otherwise a no-op: stub it with a
-    // getter/setter so the restore can be observed at the exact pixel it writes.
-    let restoredScrollTop = 0;
-    Object.defineProperty(viewport, "scrollTop", {
-      configurable: true,
-      get: () => restoredScrollTop,
-      set: (value: number) => {
-        restoredScrollTop = value;
-      },
-    });
-    // The saved pixel offset wins over the #install hash: the viewport is moved
-    // to exactly 4287 (re-applied across the restore's animation frames) and the
-    // heading navigator is never invoked.
-    await waitFor(() => {
-      expect(restoredScrollTop).toBe(4287);
-    });
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+    // The URL keeps its fragment: the scroll spy resyncs it only from real
+    // scroll events once the native restoration has settled.
+    expect(window.location.hash).toBe("#install");
   });
 
-  it("does not overwrite a saved offset with a transient scroll during restore", async () => {
-    saveScrollPosition("guides/setup.md", 4287);
-    window.history.replaceState(null, "", "/doc/guides/setup.md#install");
-    const api = createAPI({
-      getDocument: vi.fn().mockResolvedValue({
-        path: "guides/setup.md",
-        title: "Setup API Title",
-        // A Mermaid block makes renderRichContent await the controllable loader,
-        // holding the position restore open: the persistence saver attaches and
-        // the restore guard stays held, but restoreFragment has not run yet.
-        html: '<h2 id="install">Install</h2><pre><code class="language-mermaid">graph TD; A-->B</code></pre>',
+  it("does not re-jump to the fragment when the same document is hot-swapped", async () => {
+    // After the initial fragment landing, the URL hash follows the reading
+    // position. A server-sent body hot-swap of the same document must not
+    // treat that hash as a fresh deep link: the never-unmounted ScrollArea
+    // keeps the offset and scroll anchoring absorbs the reflow.
+    const getDocument = vi
+      .fn<PreviewAPI["getDocument"]>()
+      .mockResolvedValueOnce({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="install">Install</h2><p>Original body</p>',
         frontmatter: null,
         toc: [{ level: 2, id: "install", text: "Install" }],
-      }),
-    });
-    render(<App api={api} />);
-    await screen.findByRole("heading", { level: 2, name: "Install" });
-    const viewport = document.querySelector(
-      '.reader-main [data-slot="scroll-area-viewport"]',
-    );
-    if (!(viewport instanceof HTMLElement)) {
-      throw new Error("scroll viewport was not rendered");
-    }
-    // Let passive effects flush so the saver is attached; the restore is still
-    // pending (Mermaid has not resolved), so the guard remains held.
-    await settleRestore();
-    vi.mocked(saveScrollPosition).mockClear();
-    // The viewport reports an intermediate offset (120) while the restore is in
-    // flight. The guard must make the saver ignore it — even a synchronous
-    // pagehide flush must not persist — so saveScrollPosition is never invoked
-    // and the saved 4287 is untouched.
-    viewport.scrollTop = 120;
-    await act(async () => {
-      fireEvent.scroll(viewport);
-      window.dispatchEvent(new Event("pagehide"));
-      await new Promise((resolve) => {
-        setTimeout(resolve, 0);
+      })
+      .mockResolvedValueOnce({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="install">Install</h2><p>Updated body</p>',
+        frontmatter: null,
+        toc: [{ level: 2, id: "install", text: "Install" }],
       });
-    });
-    expect(saveScrollPosition).not.toHaveBeenCalled();
-    expect(readScrollPosition("guides/setup.md")).toBe(4287);
-    // Releasing the restore lands on the frozen offset, not the transient 120.
+    const api = createAPI({ getDocument });
+    const events = stubEventSource();
+    render(<App api={api} />);
+
+    await screen.findByText("Original body");
+    // The reader scrolled: the spy wrote the section into the URL.
+    window.history.replaceState(null, "", "/doc/README.md#install");
+    vi.mocked(Element.prototype.scrollIntoView).mockClear();
+
     await act(async () => {
-      mermaidControl.resolve?.(fakeMermaidRuntime);
-      await settleRestore();
+      events.dispatch("document-changed");
     });
-    expect(readScrollPosition("guides/setup.md")).toBe(4287);
+    await screen.findByText("Updated body");
+    expect(getDocument).toHaveBeenCalledTimes(2);
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 
   it("keeps toc and width query parameters independent", async () => {
@@ -1256,42 +1101,25 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
 }
 
 // jsdom does not reflect layout or scroll offsets, so a real "scrolled to a
-// heading" state never reaches the heading spy. Model it explicitly so the spy
-// reports the active section and the URL-sync logic keeps the fragment stable.
-// restoreFragment re-applies the offset every animation frame until the layout
-// is stable (under jsdom's constant scrollHeight: one observation frame plus
-// three stable frames), holding its guard the whole while. Each rAF resolves
-// within one macrotask, so a few setTimeout(0) turns (wrapped in act so React
-// flushes) clear the guard before a test drives its own scroll — otherwise the
-// persistence saver and the URL-sync effect still see "restore in flight".
-async function settleRestore(): Promise<void> {
-  for (let i = 0; i < 8; i += 1) {
-    await act(async () => {
-      await new Promise((resolve) => {
-        setTimeout(resolve, 0);
-      });
-    });
-  }
-}
-
-async function settleScrollPosition(): Promise<void> {
-  const viewport = document.querySelector(
-    '.reader-main [data-slot="scroll-area-viewport"]',
-  );
-  if (!(viewport instanceof HTMLElement)) {
-    return;
-  }
-  await settleRestore();
-  Object.defineProperty(viewport, "scrollTop", {
+// heading" state never reaches the heading spy. Model it explicitly (a
+// mid-document offset plus a scroll event on the window, which is the scroller)
+// so the spy reports the active section and the URL-sync logic settles before
+// assertions read the hash.
+async function driveWindowScroll(offset: number): Promise<void> {
+  Object.defineProperty(window, "scrollY", {
     configurable: true,
-    value: 100,
+    value: offset,
   });
   await act(async () => {
-    fireEvent.scroll(viewport);
+    fireEvent.scroll(window);
     await new Promise((resolve) => {
       setTimeout(resolve, 0);
     });
   });
+}
+
+async function settleScrollPosition(): Promise<void> {
+  await driveWindowScroll(100);
 }
 
 // installThemeMedia swaps window.matchMedia for a controllable prefers-color-

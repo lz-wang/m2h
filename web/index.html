@@ -3,6 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Set the scroll restoration mode before anything renders: an early
+         release stored "manual" on this session history entry, and the reader
+         now relies on the browser's native restoration (window plus the
+         ScrollArea viewport) to bring back the exact reading offset on
+         reload. The HTML standard recommends picking the mode as early as
+         possible. -->
+    <script>
+      if ("scrollRestoration" in history) {
+        history.scrollRestoration = "auto";
+      }
+    </script>
     <link rel="icon" type="image/svg+xml" href="/ui/favicon.svg" />
     <link id="m2h-markdown-styles" rel="stylesheet" href="/ui/markdown.css" />
     <title>m2h</title>

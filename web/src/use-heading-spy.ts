@@ -11,14 +11,21 @@ import { findHeadingElement } from "./lib/heading";
 // to derive the narrower "TOC active" highlight from this single source (see
 // App.tsx), so only one scroll listener ever runs.
 //
-// The reader body scrolls inside a Base UI ScrollArea viewport (not the
-// window), so the scroll listener attaches to that viewport found inside the
-// supplied container. A scroll handler throttled by requestAnimationFrame picks
-// the last heading whose top has crossed the viewport edge, which is far more
-// predictable than IntersectionObserver thresholds for "current section".
+// The document scrolls in the window itself (that is what makes the browser's
+// native scroll restoration reliable), so the listener attaches to window and
+// reads window.scrollY. A scroll handler throttled by requestAnimationFrame
+// picks the last heading whose top has crossed the activation line — the bottom
+// edge of the sticky toolbar, plus a little lead so a heading becomes active as
+// it approaches the bar rather than only once it passes under it.
 //
-// At the very top of the document (scrollTop ≈ 0) no heading is active so the
-// URL stays clean instead of snapping to the first heading the moment the page
+// The spy only reacts to real scroll events — it never computes an initial
+// position on mount. The browser's own scroll restoration finishes by moving
+// the viewport (which fires scroll), and only then does the hash resync; an
+// eager first pass would pin the URL to a wrong heading while the restore is
+// still settling.
+//
+// At the very top of the document (scrollY ≈ 0) no heading is active so the URL
+// stays clean instead of snapping to the first heading the moment the page
 // opens.
 export function useHeadingSpy<T extends HTMLElement>(
   items: TocItem[],
@@ -35,24 +42,22 @@ export function useHeadingSpy<T extends HTMLElement>(
     if (container === null) {
       return;
     }
-    const viewport = container.querySelector<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
-    );
-    if (viewport === null) {
-      return;
-    }
+    // The toolbar is a sibling of the reader container, so reach it through
+    // the shared inset. Missing in reduced harnesses (tests): fall back to the
+    // viewport top.
+    const toolbar = container
+      .closest(".reader-inset")
+      ?.querySelector<HTMLElement>(".reader-toolbar");
 
     let frame = 0;
     const update = () => {
       // While pinned to the top of the document there is no "current section":
       // keep the active id (and therefore the URL hash) clear.
-      if (viewport.scrollTop <= 1) {
+      if (window.scrollY <= 1) {
         setActiveID(null);
         return;
       }
-      // Offset slightly below the viewport top so a heading becomes active as
-      // it approaches the toolbar rather than only once it passes it.
-      const viewportTop = viewport.getBoundingClientRect().top + 16;
+      const viewportTop = (toolbar?.getBoundingClientRect().bottom ?? 0) + 16;
       let current: string | null = null;
       for (const item of items) {
         const heading = findHeadingElement(container, item.id);
@@ -72,11 +77,10 @@ export function useHeadingSpy<T extends HTMLElement>(
       frame = requestAnimationFrame(update);
     };
 
-    update();
-    viewport.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       cancelAnimationFrame(frame);
-      viewport.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("scroll", handleScroll);
     };
   }, [items, containerRef, enabled]);
 

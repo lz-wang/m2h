@@ -13,12 +13,3 @@ export function findHeadingElement(
     container.querySelector<HTMLElement>(".markdown-body") ?? container;
   return scope.querySelector<HTMLElement>(`[id="${CSS.escape(id)}"]`);
 }
-
-// The reader body scrolls inside a Base UI ScrollArea viewport rather than the
-// window. This locates that viewport inside the reader container so the scroll
-// spy, the scroll-position saver and the deep-link restore all agree on it.
-export function findReaderViewport(container: HTMLElement): HTMLElement | null {
-  return container.querySelector<HTMLElement>(
-    '[data-slot="scroll-area-viewport"]',
-  );
-}
