@@ -54,6 +54,7 @@ import {
   TooltipTrigger,
 } from "./components/ui/tooltip";
 import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
+import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 import {
   type DocumentWidth,
   decodeHeadingHash,
@@ -80,14 +81,13 @@ const layoutStorageKey = "m2h.preview.layout";
 const repositoryURL = "https://github.com/lz-wang/m2h";
 const releaseVersionPattern = /^\d+\.\d+\.\d+$/;
 
-// True when the browser restores the initial scroll position by itself (a
-// reload or a history traversal brought the page up): in those cases the URL
-// fragment must NOT be jumped to, because the native restoration re-lands the
-// exact previous offset — including the reader's scrollable viewport — and a
-// fragment jump on top of it would throw the reader back to a section start.
-// Fresh navigations (new tab/window on a #hash link, address-bar entry) return
-// false; the deep-link effect in App owns their fragment landing.
-function initialNavigationRestoresScroll(): boolean {
+// True when this page load came from a reload or a history traversal: the
+// reader should return to the exact pixel offset saved for the document (see
+// scroll-position.ts — the browser's own restoration was measured NOT to fire
+// for this client-rendered shape, so the tab remembers it). Fresh navigations
+// (new tab/window on a #hash link, address-bar entry) return false; they land
+// on the URL fragment instead.
+function cameFromReloadLikeNavigation(): boolean {
   const entry = performance.getEntriesByType("navigation")[0];
   // Duck-typed on purpose: the entry is a PerformanceNavigationTiming in every
   // browser, but jsdom (and tests) supply plain objects.
@@ -186,36 +186,88 @@ export function App({ api }: AppProps) {
     readerMainRef,
     preview.replaceHash,
   );
-  // Deep-link landing: position the reader on the heading named by the URL
-  // fragment. This covers fresh navigations — a shared #hash link opened in a
-  // new tab or window, which carry no restorable scroll state — and in-app
-  // document switches. Two cases are deliberately excluded: the initial load
-  // after a reload or history traversal, where the browser's native scroll
-  // restoration re-lands the exact saved offset (window and scrollable regions
-  // alike) and a fragment jump would clobber it; and a body hot-swap of the
-  // same document, where the never-unmounted ScrollArea keeps the offset and
-  // CSS scroll anchoring absorbs the reflow.
-  const nativeInitialRestoreRef = useRef<boolean | null>(null);
-  if (nativeInitialRestoreRef.current === null) {
-    nativeInitialRestoreRef.current = initialNavigationRestoresScroll();
+  // Landing: position the reader once a document commits.
+  // - Initial load after a reload/traversal: restore the pixel offset saved
+  //   for this document (the browser's native restoration does not fire for a
+  //   client-rendered body — measured, see scroll-position.ts), falling back
+  //   to the URL fragment when nothing was saved.
+  // - Fresh navigation (a #hash link opened in a new tab/window): the fragment
+  //   wins. sessionStorage is deliberately ignored there — a tab opened from a
+  //   link inherits a copy of it in Chromium and would jump to wherever the
+  //   opener was instead of the shared section.
+  // - In-app document switch: a carried fragment wins, else the offset saved
+  //   earlier in this tab, else the viewport stays put.
+  // - A body hot-swap of the same document never repositions: the window keeps
+  //   its offset and CSS scroll anchoring absorbs the reflow.
+  const reloadLikeNavigationRef = useRef<boolean | null>(null);
+  if (reloadLikeNavigationRef.current === null) {
+    reloadLikeNavigationRef.current = cameFromReloadLikeNavigation();
   }
   const documentPath = preview.document?.path ?? null;
-  const fragmentLandedPathRef = useRef<string | null>(null);
+  const landedPathRef = useRef<string | null>(null);
   useEffect(() => {
     if (preview.phase !== "ready" || documentPath === null) {
       return;
     }
-    const isFirstLoad = fragmentLandedPathRef.current === null;
-    const documentSwitched = fragmentLandedPathRef.current !== documentPath;
-    fragmentLandedPathRef.current = documentPath;
-    if (!documentSwitched || (isFirstLoad && nativeInitialRestoreRef.current)) {
+    const isFirstLoad = landedPathRef.current === null;
+    const documentSwitched = landedPathRef.current !== documentPath;
+    landedPathRef.current = documentPath;
+    if (!documentSwitched) {
       return;
     }
-    const id = decodeHeadingHash(window.location.hash);
-    if (id !== "") {
-      navigateToHeading(id, { behavior: "auto", updateURL: false });
+    const fragment = decodeHeadingHash(window.location.hash);
+    if (isFirstLoad && !reloadLikeNavigationRef.current && fragment !== "") {
+      navigateToHeading(fragment, { behavior: "auto", updateURL: false });
+      return;
+    }
+    const saved = readScrollPosition(documentPath);
+    if (saved !== null) {
+      window.scrollTo(0, saved);
+      return;
+    }
+    if (fragment !== "") {
+      navigateToHeading(fragment, { behavior: "auto", updateURL: false });
     }
   }, [documentPath, preview.phase, navigateToHeading]);
+
+  // Persist the window's scroll offset per document — rAF-throttled so a long
+  // scroll writes at most once per frame, and flushed synchronously on
+  // pagehide so a scroll immediately followed by a reload keeps the last
+  // offset. This is what the landing effect above restores after a reload;
+  // the browser's own restoration never fires for this shape.
+  useEffect(() => {
+    if (preview.phase !== "ready" || documentPath === null) {
+      return;
+    }
+    let frame = 0;
+    const persist = () => {
+      frame = 0;
+      saveScrollPosition(documentPath, window.scrollY);
+    };
+    const handleScroll = () => {
+      if (frame !== 0) {
+        return;
+      }
+      frame = requestAnimationFrame(persist);
+    };
+    // pagehide (not beforeunload) fires for reloads and navigations without
+    // opting out of the back/forward cache.
+    const handlePageHide = () => {
+      if (frame !== 0) {
+        cancelAnimationFrame(frame);
+        persist();
+      }
+    };
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    window.addEventListener("pagehide", handlePageHide);
+    return () => {
+      if (frame !== 0) {
+        cancelAnimationFrame(frame);
+      }
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("pagehide", handlePageHide);
+    };
+  }, [preview.phase, documentPath]);
 
   // Reflect the reading position into the URL as the user scrolls. replaceState
   // (never push) keeps the back stack clean across the many headings a scroll

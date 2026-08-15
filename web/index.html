@@ -3,12 +3,13 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Set the scroll restoration mode before anything renders: an early
-         release stored "manual" on this session history entry, and the reader
-         now relies on the browser's native restoration (window plus the
-         ScrollArea viewport) to bring back the exact reading offset on
-         reload. The HTML standard recommends picking the mode as early as
-         possible. -->
+    <!-- Keep the browser's scroll restoration enabled: an early release had
+         stored "manual" on this session history entry. The reader itself
+         remembers the exact offset per document (see lib/scroll-position.ts —
+         the native restoration does not fire for this client-rendered shape),
+         and staying out of the browser's way means it can still help wherever
+         it does work. The HTML standard recommends picking the mode as early
+         as possible. -->
     <script>
       if ("scrollRestoration" in history) {
         history.scrollRestoration = "auto";

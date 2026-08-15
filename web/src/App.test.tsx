@@ -10,6 +10,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { APIError, type FileListResponse, type PreviewAPI } from "./api";
+import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 
 const initialFiles: FileListResponse = {
   kind: "directory",
@@ -989,15 +990,14 @@ describe("App directory preview", () => {
     expect(window.location.hash).toBe("#foo-1");
   });
 
-  it("skips the fragment landing after a reload so the native restore keeps the exact offset", async () => {
-    // A reload means the browser itself restores the scroll position — the
-    // window and the reader's scrollable viewport alike. Jumping to the URL
-    // fragment on top of that would throw the reader back to the section
-    // start, so the deep-link landing must stay out of the way. Model the
-    // NavigationTiming entry a reload produces before rendering.
+  it("restores the saved pixel offset after a reload, ignoring the fragment", async () => {
+    // A reload must return to the exact pixel the tab saved for the document —
+    // the URL fragment only names the enclosing section. Model the
+    // NavigationTiming entry a reload produces, plus the saved offset.
     vi.spyOn(performance, "getEntriesByType").mockReturnValue([
       { type: "reload" } as unknown as PerformanceEntry,
     ]);
+    saveScrollPosition("guides/setup.md", 4287);
     window.history.replaceState(null, "", "/doc/guides/setup.md#install");
     // scrollIntoView is a shared mock in the test setup; reset it so the count
     // reflects only this test's landing decision.
@@ -1011,12 +1011,73 @@ describe("App directory preview", () => {
         toc: [{ level: 2, id: "install", text: "Install" }],
       }),
     });
+    const scrollTo = vi.fn();
+    Object.defineProperty(window, "scrollTo", {
+      configurable: true,
+      writable: true,
+      value: scrollTo,
+    });
     render(<App api={api} />);
     await screen.findByRole("heading", { level: 2, name: "Install" });
+    expect(scrollTo).toHaveBeenCalledWith(0, 4287);
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
     // The URL keeps its fragment: the scroll spy resyncs it only from real
-    // scroll events once the native restoration has settled.
+    // scroll events once the restore lands.
     expect(window.location.hash).toBe("#install");
+  });
+
+  it("falls back to the fragment after a reload with nothing saved", async () => {
+    vi.spyOn(performance, "getEntriesByType").mockReturnValue([
+      { type: "reload" } as unknown as PerformanceEntry,
+    ]);
+    window.history.replaceState(null, "", "/doc/guides/setup.md#install");
+    vi.mocked(Element.prototype.scrollIntoView).mockClear();
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "guides/setup.md",
+        title: "Setup API Title",
+        html: '<h2 id="install">Install</h2>',
+        frontmatter: null,
+        toc: [{ level: 2, id: "install", text: "Install" }],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByRole("heading", { level: 2, name: "Install" });
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+      expect.objectContaining({ block: "start" }),
+    );
+  });
+
+  it("persists the window scroll offset per document and flushes it on pagehide", async () => {
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="install">Install</h2>',
+        frontmatter: null,
+        toc: [{ level: 2, id: "install", text: "Install" }],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByRole("heading", { level: 2, name: "Install" });
+    // A scroll drives the rAF-throttled saver (rAF is setTimeout(0) in the test
+    // setup, so one macrotask turn is enough).
+    await driveWindowScroll(250);
+    expect(readScrollPosition("README.md")).toBe(250);
+    // A scroll followed immediately by pagehide never runs its rAF: the flush
+    // must persist the offset synchronously.
+    await act(async () => {
+      Object.defineProperty(window, "scrollY", {
+        configurable: true,
+        value: 310,
+      });
+      fireEvent.scroll(window);
+      window.dispatchEvent(new Event("pagehide"));
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
+    expect(readScrollPosition("README.md")).toBe(310);
   });
 
   it("does not re-jump to the fragment when the same document is hot-swapped", async () => {
