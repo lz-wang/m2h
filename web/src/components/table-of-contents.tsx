@@ -1,8 +1,9 @@
 import { TableOfContents } from "lucide-react";
-import type { MouseEvent } from "react";
+import { useState } from "react";
 
 import type { TocItem } from "../api";
 import { Button } from "./ui/button";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 // TOCToggle is the toolbar button that switches the table of contents on and
@@ -48,46 +49,107 @@ export interface TableOfContentsPanelProps {
   onNavigate(id: string): void;
 }
 
+interface TOCLinksProps {
+  items: TocItem[];
+  activeID: string | null;
+  onNavigate(id: string): void;
+}
+
+// The link list shared by the desktop rail and the narrow-screen sheet. A
+// native anchor jump would bypass the shared heading navigator (toolbar-aware
+// scroll + URL funnel), so every link hands the interaction to onNavigate and
+// suppresses the default jump.
+function TOCLinks({ items, activeID, onNavigate }: TOCLinksProps) {
+  return (
+    <>
+      {items.map((item) => {
+        const active = item.id === activeID;
+        return (
+          <a
+            key={item.id}
+            href={`#${encodeURIComponent(item.id)}`}
+            className="reader-toc-link"
+            data-level={item.level}
+            data-active={active ? "true" : "false"}
+            aria-current={active ? "location" : undefined}
+            onClick={(event) => {
+              event.preventDefault();
+              onNavigate(item.id);
+            }}
+          >
+            {item.text}
+          </a>
+        );
+      })}
+    </>
+  );
+}
+
 export function TableOfContentsPanel({
   items,
   activeID,
   onNavigate,
 }: TableOfContentsPanelProps) {
-  const handleSelect = (
-    event: MouseEvent<HTMLAnchorElement>,
-    item: TocItem,
-  ) => {
-    // The reader body scrolls inside a ScrollArea viewport, so native anchor
-    // navigation would not land correctly; hand the whole interaction to the
-    // shared heading navigator (scoped scroll + URL funnel) and suppress the
-    // default jump.
-    event.preventDefault();
-    onNavigate(item.id);
-  };
-
   return (
     <nav className="reader-toc" aria-label="文档目录">
       <div className="reader-toc-scroll">
         <div className="reader-toc-content">
           <p className="reader-toc-title">本页目录</p>
-          {items.map((item) => {
-            const active = item.id === activeID;
-            return (
-              <a
-                key={item.id}
-                href={`#${encodeURIComponent(item.id)}`}
-                className="reader-toc-link"
-                data-level={item.level}
-                data-active={active ? "true" : "false"}
-                aria-current={active ? "location" : undefined}
-                onClick={(event) => handleSelect(event, item)}
-              >
-                {item.text}
-              </a>
-            );
-          })}
+          <TOCLinks items={items} activeID={activeID} onNavigate={onNavigate} />
         </div>
       </div>
     </nav>
+  );
+}
+
+// Narrow screens (< 1200px) replace the desktop rail with this toolbar-triggered
+// sheet. It is a transient navigation UI and deliberately never touches
+// preview.toc, so reloading a default toc=true URL never pops the sheet open.
+export function TableOfContentsSheet({
+  items,
+  activeID,
+  onNavigate,
+}: TableOfContentsPanelProps) {
+  const [open, setOpen] = useState(false);
+
+  const navigate = (id: string) => {
+    setOpen(false);
+    // Close the dialog first and hand the body scroll to the next frame, so
+    // the dialog's scroll lock and the window scroll never collide.
+    requestAnimationFrame(() => {
+      onNavigate(id);
+    });
+  };
+
+  return (
+    <>
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              className="reader-toc-sheet-trigger"
+              aria-label="打开文档目录"
+              onClick={() => setOpen(true)}
+            >
+              <TableOfContents />
+            </Button>
+          }
+        />
+        <TooltipContent side="bottom">打开文档目录</TooltipContent>
+      </Tooltip>
+
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent side="right" className="reader-toc-sheet">
+          <SheetHeader>
+            <SheetTitle>本页目录</SheetTitle>
+          </SheetHeader>
+          <nav className="reader-toc-sheet-scroll" aria-label="文档目录">
+            <TOCLinks items={items} activeID={activeID} onNavigate={navigate} />
+          </nav>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

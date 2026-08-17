@@ -532,6 +532,22 @@ body,
   padding-left: 1.5rem;
 }
 
+/* Narrow-screen outline: the sheet trigger only appears wherever the desktop
+ * rail is hidden (see the 1199px breakpoint below). */
+.reader-toc-sheet-trigger {
+  display: none;
+}
+
+.reader-toc-sheet {
+  width: min(22rem, 85vw);
+}
+
+.reader-toc-sheet-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 1rem 2rem;
+}
+
 .frontmatter-panel {
   overflow: hidden;
   border: 1px solid var(--border);
@@ -691,12 +707,21 @@ body,
 
 /*
  * The fixed TOC rail is only useful with enough horizontal room for the file
- * sidebar plus the document plus the rail; below 1200px hide it so the document
- * is not crowded. A popover fallback for narrow screens is deferred.
+ * sidebar plus the document plus the rail; below 1200px the rail and its
+ * persistent toggle make way for the toolbar sheet trigger
+ * (TableOfContentsSheet), which opens the outline on demand.
  */
 @media (max-width: 1199px) {
   .reader-toc {
     display: none;
+  }
+
+  .reader-toc-toggle {
+    display: none;
+  }
+
+  .reader-toc-sheet-trigger {
+    display: inline-flex;
   }
 }
 

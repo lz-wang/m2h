@@ -832,6 +832,36 @@ describe("App directory preview", () => {
     const toggle = screen.getByRole("button", { name: "当前文档没有目录" });
     expect((toggle as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole("navigation", { name: "文档目录" })).toBeNull();
+    // The narrow-screen sheet trigger follows the same availability rule.
+    expect(screen.queryByRole("button", { name: "打开文档目录" })).toBeNull();
+  });
+
+  it("opens the narrow-screen TOC sheet, navigates, and leaves the rail state alone", async () => {
+    const user = userEvent.setup();
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h2 id="install">Install</h2>',
+        frontmatter: null,
+        toc: [{ level: 2, id: "install", text: "Install" }],
+      }),
+    });
+    render(<App api={api} />);
+
+    await user.click(
+      await screen.findByRole("button", { name: "打开文档目录" }),
+    );
+    const dialog = await screen.findByRole("dialog");
+    await user.click(within(dialog).getByRole("link", { name: "Install" }));
+
+    // The sheet hands the scroll to the next frame after closing; the shared
+    // heading navigator then records the fragment through the URL funnel.
+    await expect.poll(() => window.location.hash).toBe("#install");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    // The sheet is a transient UI: the persistent rail state stays untouched.
+    expect(window.location.search).toBe("");
+    expect(screen.getByRole("button", { name: "隐藏文档目录" })).toBeTruthy();
   });
 
   it("scrolls to a Unicode heading and records the hash when a TOC entry is clicked", async () => {

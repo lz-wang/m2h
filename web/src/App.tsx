@@ -29,6 +29,7 @@ import { DocumentTree } from "./components/document-tree";
 import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
 import {
   TableOfContentsPanel,
+  TableOfContentsSheet,
   TOCToggle,
 } from "./components/table-of-contents";
 import { Button } from "./components/ui/button";
@@ -447,6 +448,20 @@ export function App({ api }: AppProps) {
                 available={tocItems.length > 0}
                 onChange={preview.setTOC}
               />
+              {/* Narrow screens hide the rail and its toggle above; the sheet
+               * trigger takes over as the transient outline UI there. */}
+              {tocItems.length > 0 ? (
+                <TableOfContentsSheet
+                  items={tocItems}
+                  activeID={activeTocID}
+                  onNavigate={(id) =>
+                    navigateToHeading(id, {
+                      behavior: "smooth",
+                      updateURL: true,
+                    })
+                  }
+                />
+              ) : null}
             </div>
           </header>
 
