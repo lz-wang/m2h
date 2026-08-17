@@ -391,6 +391,7 @@ export function App({ api }: AppProps) {
                         files={filteredFiles}
                         searching={searchQuery.trim() !== ""}
                         selectedPath={preview.selectedPath}
+                        visible={sidebarOpen}
                         onSelect={(path) => void preview.select(path)}
                       />
                     ) : (

@@ -1,5 +1,5 @@
 import { ChevronRight, FileText, Folder, FolderOpen } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FileSummary } from "@/api";
 import {
   SidebarMenu,
@@ -18,6 +18,9 @@ interface DocumentTreeProps {
   files: FileSummary[];
   selectedPath: string | null;
   searching?: boolean;
+  // False while the sidebar is collapsed offcanvas: geometry measured there is
+  // meaningless, so the reveal waits until the tree becomes visible again.
+  visible?: boolean;
   onSelect(path: string): void;
 }
 
@@ -25,14 +28,17 @@ export function DocumentTree({
   files,
   selectedPath,
   searching = false,
+  visible = true,
   onSelect,
 }: DocumentTreeProps) {
   const tree = useMemo(() => buildTree(files), [files]);
   const [expanded, setExpanded] = useState<Set<string>>(
     () => new Set(ancestorDirectories(selectedPath)),
   );
+  const treeRef = useRef<HTMLUListElement>(null);
+  const revealedPathRef = useRef<string | null>(null);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const ancestors = ancestorDirectories(selectedPath);
     setExpanded((current) => {
       const next = new Set(current);
@@ -42,6 +48,52 @@ export function DocumentTree({
       return next;
     });
   }, [selectedPath]);
+
+  // Reveal the active file inside the sidebar's scroll viewport. Deliberately
+  // only the viewport's own scrollTop is adjusted — scrollIntoView() could
+  // scroll every scrollable ancestor up to the window and disturb the reader's
+  // refresh position restore. The math mirrors block: "nearest": already
+  // visible stays put, otherwise scroll just far enough to bring the item into
+  // view, which is what file browsers do and avoids centering jumps.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: expanded/tree/searching are deliberate re-run triggers — they reshape the rendered tree the DOM measurement below walks, even though the body never reads them.
+  useLayoutEffect(() => {
+    if (
+      !visible ||
+      selectedPath === null ||
+      revealedPathRef.current === selectedPath
+    ) {
+      return;
+    }
+
+    const root = treeRef.current;
+    if (root === null) {
+      return;
+    }
+
+    const active = root.querySelector<HTMLElement>('[aria-current="page"]');
+    const viewport = root.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+
+    if (active === null || viewport === null) {
+      return;
+    }
+
+    const viewportRect = viewport.getBoundingClientRect();
+    const activeRect = active.getBoundingClientRect();
+    const padding = 8;
+
+    const visibleTop = viewportRect.top + padding;
+    const visibleBottom = viewportRect.bottom - padding;
+
+    if (activeRect.top < visibleTop) {
+      viewport.scrollTop -= visibleTop - activeRect.top;
+    } else if (activeRect.bottom > visibleBottom) {
+      viewport.scrollTop += activeRect.bottom - visibleBottom;
+    }
+
+    revealedPathRef.current = selectedPath;
+  }, [visible, selectedPath, expanded, tree, searching]);
 
   const toggle = (path: string) => {
     setExpanded((current) => {
@@ -56,7 +108,7 @@ export function DocumentTree({
   };
 
   return (
-    <SidebarMenu aria-label="Markdown 文件树">
+    <SidebarMenu ref={treeRef} aria-label="Markdown 文件树">
       {tree.map((node) => (
         <TreeItem
           key={`${node.type}:${node.path}`}
