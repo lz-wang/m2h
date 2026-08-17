@@ -397,14 +397,18 @@ body,
     margin 160ms ease;
 }
 
+/* Capped widths center inside the canvas: without margin-inline the block
+ * sticks to the left edge whenever the canvas is wider than the cap. */
 .reader-canvas-standard .reader-document,
 .reader-canvas-standard .asset-warning {
   max-width: 980px;
+  margin-inline: auto;
 }
 
 .reader-canvas-wide .reader-document,
 .reader-canvas-wide .asset-warning {
   max-width: 1280px;
+  margin-inline: auto;
 }
 
 .reader-canvas-full .reader-document,
