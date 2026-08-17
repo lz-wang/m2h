@@ -398,15 +398,18 @@ body,
 }
 
 /* Capped widths center inside the canvas: without margin-inline the block
- * sticks to the left edge whenever the canvas is wider than the cap. */
-.reader-canvas-standard .reader-document,
-.reader-canvas-standard .asset-warning {
+ * sticks to the left edge whenever the canvas is wider than the cap. The
+ * extra .reader-canvas outspecifies github-markdown-css's theme blocks
+ * (html:not(.dark) .markdown-body { margin: 0 } — 0,2,1), which would
+ * otherwise pin the article to the left edge. */
+.reader-canvas.reader-canvas-standard .reader-document,
+.reader-canvas.reader-canvas-standard .asset-warning {
   max-width: 980px;
   margin-inline: auto;
 }
 
-.reader-canvas-wide .reader-document,
-.reader-canvas-wide .asset-warning {
+.reader-canvas.reader-canvas-wide .reader-document,
+.reader-canvas.reader-canvas-wide .asset-warning {
   max-width: 1280px;
   margin-inline: auto;
 }
