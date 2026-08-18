@@ -487,7 +487,9 @@ body,
 
 /* A short fade hints at the fold without a large overlay: it never intercepts
  * selection or clicks (pointer-events: none) and stops at the code canvas
- * color, right above the toggle row. */
+ * color. Its bottom offset must equal the space the toggle reserves below the
+ * pre (see .m2h-code-toggle: 0.25rem gap + 1.75rem chip = 2rem), so the fade
+ * always ends exactly at the pre's bottom edge. */
 .markdown-body .m2h-code-block[data-collapsed="true"]::after {
   position: absolute;
   right: 0;
@@ -500,16 +502,18 @@ body,
   content: "";
 }
 
-/* A quiet full-width footer row, deliberately not a loud button. */
+/* A quiet text-sized affordance, not a bar: the button shrinks to its label
+ * and centers under the block, so hover/focus highlight exactly the words
+ * "展开代码 · N 行" and nothing else. The 2rem it occupies below the pre
+ * (0.25rem margin + 1.75rem height) is what the fade above keys on. */
 .markdown-body .m2h-code-toggle {
   display: flex;
-  width: 100%;
-  height: 2rem;
-  margin: 0;
-  padding: 0;
+  width: fit-content;
+  height: 1.75rem;
+  margin: 0.25rem auto 0;
+  padding: 0 0.75rem;
   border: 0;
-  border-top: 1px solid var(--border);
-  border-radius: 0 0 6px 6px;
+  border-radius: 999px;
   background: transparent;
   color: var(--muted-foreground);
   font-size: 0.75rem;
