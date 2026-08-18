@@ -78,6 +78,9 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   --sidebar-border: oklch(0.922 0 0);
   --sidebar-ring: oklch(0.708 0 0);
+  /* GitHub Markdown's light code canvas — the color collapsed code fades
+   * into (github-markdown-css ships no variable for it). */
+  --m2h-code-block-bg: #f6f8fa;
 }
 
 .dark {
@@ -112,6 +115,7 @@
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
   --sidebar-ring: oklch(0.556 0 0);
+  --m2h-code-block-bg: #151b23;
 }
 
 @layer base {
@@ -440,6 +444,66 @@ body,
   overflow-x: auto;
   overflow-y: hidden;
   padding: 0.25rem 0;
+}
+
+/*
+ * Overlong code blocks, collapsed by render-rich-content.ts. The threshold
+ * rides on the wrapper as --m2h-code-collapse-lines so tuning it stays a
+ * TypeScript-only change; the lh unit keeps the fold in step with the code's
+ * real line height, and overflow-x keeps working (the Markdown theme's
+ * overflow: auto stays; only overflow-y is overridden while collapsed).
+ */
+.markdown-body .m2h-code-block {
+  position: relative;
+  margin: 1rem 0;
+}
+
+.markdown-body .m2h-code-block > pre {
+  margin: 0;
+}
+
+.markdown-body .m2h-code-block[data-collapsed="true"] > pre {
+  max-height: calc(var(--m2h-code-collapse-lines, 50) * 1lh + 2rem);
+  overflow-y: hidden;
+}
+
+/* A short fade hints at the fold without a large overlay: it never intercepts
+ * selection or clicks (pointer-events: none) and stops at the code canvas
+ * color, right above the toggle row. */
+.markdown-body .m2h-code-block[data-collapsed="true"]::after {
+  position: absolute;
+  right: 0;
+  bottom: 2rem;
+  left: 0;
+  height: 2.25rem;
+  pointer-events: none;
+  background: linear-gradient(transparent, var(--m2h-code-block-bg));
+  border-radius: 0 0 6px 6px;
+  content: "";
+}
+
+/* A quiet full-width footer row, deliberately not a loud button. */
+.markdown-body .m2h-code-toggle {
+  display: flex;
+  width: 100%;
+  height: 2rem;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 6px 6px;
+  background: transparent;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  align-items: center;
+  justify-content: center;
+}
+
+.markdown-body .m2h-code-toggle:hover,
+.markdown-body .m2h-code-toggle:focus-visible {
+  background: var(--accent);
+  color: var(--accent-foreground);
+  outline: none;
 }
 
 .reader-frontmatter {
