@@ -159,3 +159,74 @@ test("reveals the active file in the tree after a reload without moving the read
   // … and it never touched the reader's restored position.
   expect(await page.evaluate(() => window.scrollY)).toBe(targetScrollY);
 });
+
+test("pins ancestor directories above the revealed active file", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  // The fixture nests a/b/ with 24 notes and c.md last, so revealing c.md
+  // scrolls the tree well past both ancestor directories.
+  await waitForBody(page, "/doc/a/b/c.md");
+
+  const targetScrollY = await page.evaluate(() => {
+    window.scrollTo(0, 220);
+    return window.scrollY;
+  });
+  await page.waitForFunction(
+    ([key, value]) => window.sessionStorage.getItem(key) === value,
+    ["m2h.scroll.a/b/c.md", String(targetScrollY)],
+  );
+
+  await page.reload();
+  await page.waitForFunction(
+    () => document.querySelector('[aria-current="page"]') !== null,
+  );
+  // The reveal runs before first paint; wait until it has actually scrolled.
+  await page.waitForFunction(() => {
+    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
+    const viewport = tree?.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    return viewport !== null && viewport.scrollTop > 0;
+  });
+
+  const geometry = await page.evaluate(() => {
+    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
+    const viewport = tree?.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    const dirA = document.querySelector<HTMLElement>('[data-tree-path="a"]');
+    const dirB = document.querySelector<HTMLElement>('[data-tree-path="a/b"]');
+    const active = document.querySelector<HTMLElement>('[aria-current="page"]');
+    if (
+      viewport === undefined ||
+      viewport === null ||
+      dirA === null ||
+      dirB === null ||
+      active === null
+    ) {
+      throw new Error("tree viewport or sticky rows were not rendered");
+    }
+    const viewportTop = viewport.getBoundingClientRect().top;
+    const a = dirA.getBoundingClientRect();
+    const b = dirB.getBoundingClientRect();
+    const c = active.getBoundingClientRect();
+    return {
+      aTop: a.top - viewportTop,
+      aBottom: a.bottom - viewportTop,
+      bTop: b.top - viewportTop,
+      bBottom: b.bottom - viewportTop,
+      cTop: c.top - viewportTop,
+    };
+  });
+
+  // Both ancestors stick to the viewport top, stacking exactly one row apart …
+  expect(Math.abs(geometry.aTop)).toBeLessThanOrEqual(1);
+  expect(Math.abs(geometry.bTop - geometry.aBottom)).toBeLessThanOrEqual(1);
+  // … and the revealed file sits clear of the sticky stack, not under it.
+  expect(geometry.cTop).toBeGreaterThanOrEqual(geometry.bBottom - 1);
+
+  // The sticky reveal is a tree-viewport-only scroll: the reader keeps the
+  // offset restored from sessionStorage.
+  expect(await page.evaluate(() => window.scrollY)).toBe(targetScrollY);
+});
