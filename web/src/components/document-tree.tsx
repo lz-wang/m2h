@@ -1,4 +1,5 @@
 import { ChevronRight, FileText, Folder, FolderOpen } from "lucide-react";
+import type { CSSProperties } from "react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FileSummary } from "@/api";
 import {
@@ -118,6 +119,7 @@ export function DocumentTree({
           onSelect={onSelect}
           onToggle={toggle}
           searching={searching}
+          depth={0}
         />
       ))}
     </SidebarMenu>
@@ -131,6 +133,7 @@ interface TreeItemProps {
   onSelect(path: string): void;
   onToggle(path: string): void;
   searching: boolean;
+  depth: number;
 }
 
 function TreeItem({
@@ -140,6 +143,7 @@ function TreeItem({
   onSelect,
   onToggle,
   searching,
+  depth,
 }: TreeItemProps) {
   if (node.type === "directory") {
     return (
@@ -150,6 +154,7 @@ function TreeItem({
         onSelect={onSelect}
         onToggle={onToggle}
         searching={searching}
+        depth={depth}
       />
     );
   }
@@ -189,6 +194,7 @@ function DirectoryItem({
   onSelect,
   onToggle,
   searching,
+  depth,
 }: TreeItemProps & { node: DirectoryNode }) {
   const open = searching || expanded.has(node.path);
   return (
@@ -197,7 +203,11 @@ function DirectoryItem({
         aria-expanded={open}
         aria-label={node.name}
         title={node.name}
-        className="h-8 text-sm font-medium"
+        data-tree-directory="true"
+        data-tree-path={node.path}
+        data-tree-depth={depth}
+        style={{ "--tree-sticky-top": `${depth * 2}rem` } as CSSProperties}
+        className="document-tree-directory h-8 text-sm font-medium"
         onClick={() => onToggle(node.path)}
       >
         <ChevronRight
@@ -224,6 +234,7 @@ function DirectoryItem({
               onSelect={onSelect}
               onToggle={onToggle}
               searching={searching}
+              depth={depth + 1}
             />
           ))}
         </SidebarMenuSub>

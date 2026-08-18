@@ -299,6 +299,24 @@ body,
   font-weight: 600;
 }
 
+/*
+ * VS Code Explorer-style sticky directory rows. The tree is nested DOM (each
+ * directory <li> contains its whole subtree), so plain CSS sticky gets parent
+ * containment for free: a row sticks while its subtree is on screen and is
+ * naturally pushed out when scrolling past it — no scroll listener, no
+ * ancestor bookkeeping. Each depth's offset is one row (h-8 = 2rem) below the
+ * previous one, set inline by document-tree.tsx, so the stack piles up
+ * correctly; the opaque sidebar background and the soft shadow keep scrolling
+ * children from bleeding through the stuck rows.
+ */
+.document-tree-directory {
+  position: sticky;
+  top: var(--tree-sticky-top, 0rem);
+  z-index: 2;
+  background: var(--sidebar);
+  box-shadow: 0 2px 6px oklch(0 0 0 / 8%);
+}
+
 .tree-tooltip {
   display: flex;
   max-width: 22rem;
