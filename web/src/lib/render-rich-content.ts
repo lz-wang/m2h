@@ -59,11 +59,21 @@ const INTERACTIVE_HEADER_SELECTOR =
 const SORTABLE_HEADER_SELECTOR =
   'thead th[role="columnheader"]:not([data-sort-method="none"])';
 
+// Source lines beyond which a fenced code block collapses behind an expand
+// toggle. Counting logical source lines (not browser-wrapped visual lines)
+// keeps the threshold stable regardless of reader width.
+const CODE_COLLAPSE_LINE_THRESHOLD = 50;
+
+// Monotonic id handed to every collapsed code block so the toggle's
+// aria-controls always points at the <pre> it manages.
+let codeBlockSequence = 0;
+
 /**
  * Enhance already-rendered Markdown HTML inside `root` by rendering Mermaid
- * diagrams and KaTeX math and making plain GFM tables sortable. Safe to call
- * repeatedly; errors from individual blocks are suppressed so a broken
- * diagram never breaks the whole document.
+ * diagrams and KaTeX math, making plain GFM tables sortable, and collapsing
+ * overlong code blocks behind an expand toggle. Safe to call repeatedly;
+ * errors from individual blocks are suppressed so a broken diagram never
+ * breaks the whole document.
  *
  * Each runtime is loaded only when the document actually uses it — Mermaid
  * requires a fenced `language-mermaid` block, KaTeX a math delimiter, and
@@ -88,6 +98,7 @@ export async function renderRichContent(
 ): Promise<void> {
   addHeadingPermalinks(root);
   addCodeCopyButtons(root);
+  addCollapsibleCodeBlocks(root);
   // Kick the Tablesort download off before awaiting Mermaid/KaTeX so all
   // needed runtimes load in parallel; the tables themselves are enhanced only
   // after those settle. The reserved indicator space is static CSS, so the
@@ -320,6 +331,82 @@ function setCopyStatus(button: HTMLButtonElement, copied: boolean): void {
     button.setAttribute("aria-label", "复制代码");
     button.title = "复制代码";
   }, 2_000);
+}
+
+// Wrap code blocks longer than CODE_COLLAPSE_LINE_THRESHOLD source lines in a
+// collapsible wrapper. Mermaid blocks are skipped: the Mermaid pass later
+// replaces their <pre> with a rendered container, and a diagram must never be
+// folded behind a toggle. The wrapper keeps the toggle outside the <pre> so it
+// never scrolls away horizontally, never fights the absolutely-positioned copy
+// control, and never gets clipped by the pre's own overflow. Idempotent: a
+// <pre> already living in a wrapper is left alone, so re-running the
+// enhancement on the same body (e.g. a same-HTML hot swap) stacks nothing.
+function addCollapsibleCodeBlocks(root: HTMLElement): void {
+  for (const pre of root.querySelectorAll<HTMLPreElement>("pre")) {
+    const code = pre.firstElementChild;
+    if (!(code instanceof HTMLElement) || code.tagName !== "CODE") {
+      continue;
+    }
+    if (code.classList.contains("language-mermaid")) {
+      continue;
+    }
+    if (pre.closest(".m2h-code-block") !== null) {
+      continue;
+    }
+
+    const lineCount = countCodeLines(code);
+    if (lineCount <= CODE_COLLAPSE_LINE_THRESHOLD) {
+      continue;
+    }
+
+    enhanceCodeBlock(pre, lineCount);
+  }
+}
+
+// Count logical source lines, immune to the trailing "\n" fenced code
+// characteristically carries (a naive split would report one line too many).
+function countCodeLines(code: HTMLElement): number {
+  const source = (code.textContent ?? "").replace(/\r\n?/g, "\n");
+  if (source === "") {
+    return 0;
+  }
+  return source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
+}
+
+// Build the wrapper + toggle around one overlong <pre>. Collapsing is purely
+// presentational — the code's text content stays complete so the copy control
+// keeps copying the whole block — and only data attributes flip on toggle, so
+// the CSS owns the geometry and nothing here re-parses or rewrites the code.
+function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
+  const wrapper = document.createElement("div");
+  wrapper.className = "m2h-code-block";
+  wrapper.dataset.collapsible = "true";
+  wrapper.dataset.collapsed = "true";
+  wrapper.dataset.lineCount = String(lineCount);
+  wrapper.style.setProperty(
+    "--m2h-code-collapse-lines",
+    String(CODE_COLLAPSE_LINE_THRESHOLD),
+  );
+
+  const preID = `m2h-code-block-${++codeBlockSequence}`;
+  pre.id = preID;
+  pre.replaceWith(wrapper);
+  wrapper.append(pre);
+
+  const collapsedLabel = `展开代码 · ${lineCount} 行`;
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "m2h-code-toggle";
+  toggle.setAttribute("aria-expanded", "false");
+  toggle.setAttribute("aria-controls", preID);
+  toggle.textContent = collapsedLabel;
+  toggle.addEventListener("click", () => {
+    const wasCollapsed = wrapper.dataset.collapsed !== "false";
+    wrapper.dataset.collapsed = wasCollapsed ? "false" : "true";
+    toggle.setAttribute("aria-expanded", wasCollapsed ? "true" : "false");
+    toggle.textContent = wasCollapsed ? "折叠代码" : collapsedLabel;
+  });
+  wrapper.append(toggle);
 }
 
 // Mermaid's official light theme is "default" and dark theme is "dark". The

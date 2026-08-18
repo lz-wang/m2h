@@ -415,6 +415,180 @@ describe("renderRichContent", () => {
   });
 });
 
+describe("collapsible code blocks", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mermaidMock.initialize.mockClear();
+    mermaidMock.run.mockClear();
+    mermaidMock.render.mockClear();
+    renderMathInElementMock.mockClear();
+    loadMermaidMock.mockClear();
+    loadKatexMock.mockClear();
+    loadTablesortMock.mockClear();
+    mermaidMock.run.mockResolvedValue(undefined);
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg data-mock="mermaid"></svg>',
+    });
+  });
+
+  it("leaves blocks at or below the threshold unwrapped", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    // The last block carries the trailing "\n" fenced code typically ends
+    // with: 50 content lines must still count as 50, not 51.
+    root.innerHTML =
+      `<pre><code class="language-go">${codeLines(49)}</code></pre>` +
+      `<pre><code class="language-go">${codeLines(50)}</code></pre>` +
+      `<pre><code class="language-go">${codeLines(50)}\n</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    expect(root.querySelectorAll(".m2h-code-block")).toHaveLength(0);
+    expect(root.querySelectorAll(".m2h-code-toggle")).toHaveLength(0);
+    expect(root.querySelectorAll("pre > .m2h-code-copy")).toHaveLength(3);
+  });
+
+  it("collapses blocks above the threshold by default", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-go">${codeLines(51)}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    const wrapper = root.querySelector<HTMLElement>(".m2h-code-block");
+    expect(wrapper).not.toBeNull();
+    expect(wrapper?.dataset.collapsible).toBe("true");
+    expect(wrapper?.dataset.collapsed).toBe("true");
+    expect(wrapper?.dataset.lineCount).toBe("51");
+
+    // The toggle sits beside the pre (never inside it), points its
+    // aria-controls at that pre, and starts collapsed.
+    const pre = wrapper?.querySelector("pre");
+    const toggle = root.querySelector<HTMLButtonElement>(".m2h-code-toggle");
+    expect(pre).not.toBeNull();
+    expect(toggle).not.toBeNull();
+    expect(toggle?.parentElement).toBe(wrapper);
+    expect(pre?.parentElement).toBe(wrapper);
+    expect(toggle?.getAttribute("aria-controls")).toBe(pre?.id);
+    expect(toggle?.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle?.textContent).toBe("展开代码 · 51 行");
+  });
+
+  it("expands and re-collapses through the toggle", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-go">${codeLines(51)}</code></pre>`;
+
+    await renderRichContent(root, "light");
+    const wrapper = root.querySelector<HTMLElement>(".m2h-code-block");
+    const toggle = root.querySelector<HTMLButtonElement>(".m2h-code-toggle");
+    if (wrapper === null || toggle === null) {
+      throw new Error("collapsible code block was not added");
+    }
+
+    toggle.click();
+    expect(wrapper.dataset.collapsed).toBe("false");
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    expect(toggle.textContent).toBe("折叠代码");
+
+    toggle.click();
+    expect(wrapper.dataset.collapsed).toBe("true");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    expect(toggle.textContent).toBe("展开代码 · 51 行");
+  });
+
+  it("labels the toggle with the full line count", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-go">${codeLines(127)}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    expect(
+      root.querySelector<HTMLElement>(".m2h-code-block")?.dataset.lineCount,
+    ).toBe("127");
+    expect(
+      root.querySelector<HTMLButtonElement>(".m2h-code-toggle")?.textContent,
+    ).toBe("展开代码 · 127 行");
+  });
+
+  it("never folds mermaid source", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-mermaid">${codeLines(60)}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    // The diagram renders and no collapse affordance is created for it.
+    expect(root.querySelector("div.mermaid")).not.toBeNull();
+    expect(root.querySelector(".m2h-code-block")).toBeNull();
+    expect(root.querySelector(".m2h-code-toggle")).toBeNull();
+  });
+
+  it("does not stack a second wrapper on repeated enhancement", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-go">${codeLines(60)}</code></pre>`;
+
+    await renderRichContent(root, "light");
+    await renderRichContent(root, "light");
+
+    expect(root.querySelectorAll(".m2h-code-block")).toHaveLength(1);
+    expect(root.querySelectorAll(".m2h-code-toggle")).toHaveLength(1);
+  });
+
+  it("keeps the copy control copying the complete source", async () => {
+    let copiedValue = "";
+    const restoreExecCommand = replaceProperty(
+      document,
+      "execCommand",
+      vi.fn(() => {
+        copiedValue =
+          document.querySelector<HTMLTextAreaElement>(
+            "textarea[aria-hidden='true']",
+          )?.value ?? "";
+        return true;
+      }),
+    );
+    try {
+      const { renderRichContent } = await import("./render-rich-content");
+      const root = document.createElement("div");
+      root.innerHTML = `<pre><code class="language-go">${codeLines(127)}</code></pre>`;
+
+      await renderRichContent(root, "light");
+
+      // Collapsing is presentation only: the DOM keeps the whole source …
+      const code = root.querySelector("code");
+      expect(countLines(code?.textContent ?? "")).toBe(127);
+      // … and the copy control inside the wrapped pre copies all of it.
+      const copy = root.querySelector<HTMLButtonElement>(".m2h-code-copy");
+      if (copy === null) {
+        throw new Error("code copy button was not added");
+      }
+      copy.click();
+      await waitFor(() =>
+        expect(copy.getAttribute("aria-label")).toBe("代码已复制"),
+      );
+      expect(countLines(copiedValue)).toBe(127);
+    } finally {
+      restoreExecCommand();
+    }
+  });
+});
+
+function codeLines(count: number): string {
+  return Array.from({ length: count }, (_, index) => `line ${index + 1}`).join(
+    "\n",
+  );
+}
+
+function countLines(source: string): number {
+  if (source === "") {
+    return 0;
+  }
+  return source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
+}
+
 describe("rerenderMermaid", () => {
   beforeEach(() => {
     // Each test re-imports the module so the lazy mermaid singleton and the
