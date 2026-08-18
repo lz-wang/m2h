@@ -62,7 +62,7 @@ const SORTABLE_HEADER_SELECTOR =
 // Source lines beyond which a fenced code block collapses behind an expand
 // toggle. Counting logical source lines (not browser-wrapped visual lines)
 // keeps the threshold stable regardless of reader width.
-const CODE_COLLAPSE_LINE_THRESHOLD = 50;
+const CODE_COLLAPSE_LINE_THRESHOLD = 25;
 
 // Monotonic id handed to every collapsed code block so the toggle's
 // aria-controls always points at the <pre> it manages.

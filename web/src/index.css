@@ -481,7 +481,7 @@ body,
 }
 
 .markdown-body .m2h-code-block[data-collapsed="true"] > pre {
-  max-height: calc(var(--m2h-code-collapse-lines, 50) * 1lh + 2rem);
+  max-height: calc(var(--m2h-code-collapse-lines, 25) * 1lh + 2rem);
   overflow-y: hidden;
 }
 

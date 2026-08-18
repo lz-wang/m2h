@@ -435,11 +435,11 @@ describe("collapsible code blocks", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     // The last block carries the trailing "\n" fenced code typically ends
-    // with: 50 content lines must still count as 50, not 51.
+    // with: 25 content lines must still count as 25, not 26.
     root.innerHTML =
-      `<pre><code class="language-go">${codeLines(49)}</code></pre>` +
-      `<pre><code class="language-go">${codeLines(50)}</code></pre>` +
-      `<pre><code class="language-go">${codeLines(50)}\n</code></pre>`;
+      `<pre><code class="language-go">${codeLines(24)}</code></pre>` +
+      `<pre><code class="language-go">${codeLines(25)}</code></pre>` +
+      `<pre><code class="language-go">${codeLines(25)}\n</code></pre>`;
 
     await renderRichContent(root, "light");
 
@@ -451,7 +451,7 @@ describe("collapsible code blocks", () => {
   it("collapses blocks above the threshold by default", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-go">${codeLines(51)}</code></pre>`;
+    root.innerHTML = `<pre><code class="language-go">${codeLines(26)}</code></pre>`;
 
     await renderRichContent(root, "light");
 
@@ -459,7 +459,7 @@ describe("collapsible code blocks", () => {
     expect(wrapper).not.toBeNull();
     expect(wrapper?.dataset.collapsible).toBe("true");
     expect(wrapper?.dataset.collapsed).toBe("true");
-    expect(wrapper?.dataset.lineCount).toBe("51");
+    expect(wrapper?.dataset.lineCount).toBe("26");
 
     // The toggle sits beside the pre (never inside it), points its
     // aria-controls at that pre, and starts collapsed.
@@ -471,13 +471,13 @@ describe("collapsible code blocks", () => {
     expect(pre?.parentElement).toBe(wrapper);
     expect(toggle?.getAttribute("aria-controls")).toBe(pre?.id);
     expect(toggle?.getAttribute("aria-expanded")).toBe("false");
-    expect(toggle?.textContent).toBe("展开代码 · 51 行");
+    expect(toggle?.textContent).toBe("展开代码 · 26 行");
   });
 
   it("expands and re-collapses through the toggle", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-go">${codeLines(51)}</code></pre>`;
+    root.innerHTML = `<pre><code class="language-go">${codeLines(26)}</code></pre>`;
 
     await renderRichContent(root, "light");
     const wrapper = root.querySelector<HTMLElement>(".m2h-code-block");
@@ -494,7 +494,7 @@ describe("collapsible code blocks", () => {
     toggle.click();
     expect(wrapper.dataset.collapsed).toBe("true");
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(toggle.textContent).toBe("展开代码 · 51 行");
+    expect(toggle.textContent).toBe("展开代码 · 26 行");
   });
 
   it("labels the toggle with the full line count", async () => {

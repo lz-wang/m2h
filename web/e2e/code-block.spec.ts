@@ -23,12 +23,12 @@ test("collapses overlong code blocks behind an expand toggle", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  // The fixture holds four blocks: 3 lines, exactly 50, exactly 51, and 120
+  // The fixture holds four blocks: 3 lines, exactly 25, exactly 26, and 120
   // lines (with one very long line for the horizontal-scroll assertion).
   await waitForBody(page, "/doc/long-code.md");
 
-  // Only the >50-line blocks get a wrapper, both collapsed by default; the
-  // short and exactly-50-line blocks stay bare <pre>.
+  // Only the >25-line blocks get a wrapper, both collapsed by default; the
+  // short and exactly-25-line blocks stay bare <pre>.
   const blocks = await page.evaluate(() =>
     Array.from(document.querySelectorAll<HTMLElement>(".m2h-code-block")).map(
       (wrapper) => ({
@@ -38,7 +38,7 @@ test("collapses overlong code blocks behind an expand toggle", async ({
     ),
   );
   expect(blocks).toEqual([
-    { lineCount: "51", collapsed: "true" },
+    { lineCount: "26", collapsed: "true" },
     { lineCount: "120", collapsed: "true" },
   ]);
   const barePres = await page.evaluate(() => {
