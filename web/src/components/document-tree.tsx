@@ -55,7 +55,10 @@ export function DocumentTree({
   // scroll every scrollable ancestor up to the window and disturb the reader's
   // refresh position restore. The math mirrors block: "nearest": already
   // visible stays put, otherwise scroll just far enough to bring the item into
-  // view, which is what file browsers do and avoids centering jumps.
+  // view, which is what file browsers do and avoids centering jumps. The
+  // visible top starts below the active file's sticky ancestor rows: once the
+  // reveal scrolls, those directories stick to the viewport top and would
+  // otherwise cover the very item this just brought into view.
   // biome-ignore lint/correctness/useExhaustiveDependencies: expanded/tree/searching are deliberate re-run triggers — they reshape the rendered tree the DOM measurement below walks, even though the body never reads them.
   useLayoutEffect(() => {
     if (
@@ -82,9 +85,20 @@ export function DocumentTree({
 
     const viewportRect = viewport.getBoundingClientRect();
     const activeRect = active.getBoundingClientRect();
+    // Measured from the DOM rather than derived from row-height constants so
+    // density/font/accessibility scaling never desynchronizes the reservation.
+    const ancestorPaths = new Set(ancestorDirectories(selectedPath));
+    const stickyHeight = Array.from(
+      root.querySelectorAll<HTMLElement>('[data-tree-directory="true"]'),
+    )
+      .filter((element) => ancestorPaths.has(element.dataset.treePath ?? ""))
+      .reduce(
+        (height, element) => height + element.getBoundingClientRect().height,
+        0,
+      );
     const padding = 8;
 
-    const visibleTop = viewportRect.top + padding;
+    const visibleTop = viewportRect.top + stickyHeight + padding;
     const visibleBottom = viewportRect.bottom - padding;
 
     if (activeRect.top < visibleTop) {
