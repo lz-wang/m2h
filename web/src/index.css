@@ -168,8 +168,33 @@ body,
   min-height: 100svh;
 }
 
+/*
+ * The sidebar scrolls exactly one container: the Base UI ScrollArea viewport.
+ * .tree-scroll only stretches the ScrollArea root to fill SidebarContent
+ * (itself overflow-hidden, see App.tsx); the viewport rules below are the
+ * tree's own scroll contract and deliberately NOT on the shared ScrollArea
+ * component:
+ * - overflow-x: a file tree never scrolls sideways; !important is required
+ *   because Base UI sets `overflow: scroll` as an inline style on the
+ *   viewport, which out-ranks any plain selector.
+ * - overscroll-behavior-y: wheels over the sidebar stop at its bounds
+ *   instead of scroll-chaining into the document window.
+ * - overflow-anchor: the tree actively manages viewport.scrollTop (active
+ *   file reveal, collapse normalization); browser scroll anchoring would be
+ *   a second scroll-position controller fighting it. The reader window keeps
+ *   the browser default.
+ */
 .tree-scroll {
   height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.tree-scroll [data-slot="scroll-area-viewport"] {
+  /* biome-ignore lint/complexity/noImportantStyles: Base UI sets `overflow: scroll` as an inline style on the viewport; only an important author declaration can forbid the x axis while keeping the tree's boundary in CSS (see the block comment above). */
+  overflow-x: hidden !important;
+  overscroll-behavior-y: contain;
+  overflow-anchor: none;
 }
 
 .sidebar-search {

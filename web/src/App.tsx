@@ -373,7 +373,11 @@ export function App({ api }: AppProps) {
                 />
               </div>
             </SidebarHeader>
-            <SidebarContent>
+            {/* overflow-hidden keeps SidebarContent from becoming a second
+             * scroll owner: the ScrollArea viewport below is the sidebar's
+             * only scroll container, so sticky rows, the active-file reveal
+             * and wheel input all act on one geometry. */}
+            <SidebarContent className="overflow-hidden">
               <ScrollArea className="tree-scroll">
                 <SidebarGroup>
                   <SidebarGroupLabel className="justify-between">
