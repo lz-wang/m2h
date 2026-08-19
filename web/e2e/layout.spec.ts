@@ -18,6 +18,96 @@ async function waitForBody(
   );
 }
 
+// Two animation frames: any scroll a wheel dispatch could have produced is
+// applied before the next frame paints, so positions read afterwards reflect
+// the settled state — without an arbitrary timeout.
+async function waitForScrollSettle(page: import("@playwright/test").Page) {
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+}
+
+// One geometry snapshot of the sidebar's single scroll container (the Base UI
+// ScrollArea viewport), so isolation and normalization assertions all read
+// the same source of truth.
+async function readSidebarGeometry(page: import("@playwright/test").Page) {
+  return page.evaluate(() => {
+    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
+    const viewport = tree?.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (!(viewport instanceof HTMLElement)) {
+      throw new Error("tree viewport was not rendered");
+    }
+    const rect = viewport.getBoundingClientRect();
+    return {
+      scrollTop: viewport.scrollTop,
+      scrollLeft: viewport.scrollLeft,
+      scrollHeight: viewport.scrollHeight,
+      clientHeight: viewport.clientHeight,
+      scrollWidth: viewport.scrollWidth,
+      clientWidth: viewport.clientWidth,
+      windowScrollY: window.scrollY,
+      x: rect.x,
+      y: rect.y,
+      width: rect.width,
+      height: rect.height,
+    };
+  });
+}
+
+async function setSidebarScrollTop(
+  page: import("@playwright/test").Page,
+  where: "top" | "max",
+) {
+  await page.evaluate((target) => {
+    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
+    const viewport = tree?.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (viewport instanceof HTMLElement) {
+      viewport.scrollTop =
+        target === "top" ? 0 : viewport.scrollHeight - viewport.clientHeight;
+    }
+  }, where);
+}
+
+// Land on the nested fixture with the tree viewport already scrolled deep
+// past both sticky ancestors — the reload + reveal flow from the tests below,
+// factored out for the collapse regressions.
+async function openRevealedNestedFile(page: import("@playwright/test").Page) {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await waitForBody(page, "/doc/a/b/c.md");
+
+  const targetScrollY = await page.evaluate(() => {
+    window.scrollTo(0, 220);
+    return window.scrollY;
+  });
+  await page.waitForFunction(
+    ([key, value]) => window.sessionStorage.getItem(key) === value,
+    ["m2h.scroll.a/b/c.md", String(targetScrollY)],
+  );
+
+  await page.reload();
+  await page.waitForFunction(
+    () => document.querySelector('[aria-current="page"]') !== null,
+  );
+  // The reveal runs before first paint; wait until it has actually scrolled.
+  await page.waitForFunction(() => {
+    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
+    const viewport = tree?.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    return (
+      viewport !== null && viewport !== undefined && viewport.scrollTop > 0
+    );
+  });
+  return targetScrollY;
+}
+
 test("centers the capped document inside a wide canvas", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await waitForBody(page, "/doc/scroll.md");
@@ -163,32 +253,9 @@ test("reveals the active file in the tree after a reload without moving the read
 test("pins ancestor directories above the revealed active file", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 720 });
   // The fixture nests a/b/ with 24 notes and c.md last, so revealing c.md
   // scrolls the tree well past both ancestor directories.
-  await waitForBody(page, "/doc/a/b/c.md");
-
-  const targetScrollY = await page.evaluate(() => {
-    window.scrollTo(0, 220);
-    return window.scrollY;
-  });
-  await page.waitForFunction(
-    ([key, value]) => window.sessionStorage.getItem(key) === value,
-    ["m2h.scroll.a/b/c.md", String(targetScrollY)],
-  );
-
-  await page.reload();
-  await page.waitForFunction(
-    () => document.querySelector('[aria-current="page"]') !== null,
-  );
-  // The reveal runs before first paint; wait until it has actually scrolled.
-  await page.waitForFunction(() => {
-    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
-    const viewport = tree?.closest<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
-    );
-    return viewport !== null && viewport.scrollTop > 0;
-  });
+  const targetScrollY = await openRevealedNestedFile(page);
 
   const geometry = await page.evaluate(() => {
     const tree = document.querySelector('[aria-label="Markdown 文件树"]');
@@ -229,4 +296,107 @@ test("pins ancestor directories above the revealed active file", async ({
   // The sticky reveal is a tree-viewport-only scroll: the reader keeps the
   // offset restored from sessionStorage.
   expect(await page.evaluate(() => window.scrollY)).toBe(targetScrollY);
+});
+
+test("keeps sidebar wheel scrolling isolated from the reader window", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await waitForBody(page, "/doc/tree/note-24.md");
+
+  const readerY = await page.evaluate(() => {
+    window.scrollTo(0, 200);
+    return window.scrollY;
+  });
+
+  // Start from the top of the tree so a downward wheel has room to scroll.
+  await setSidebarScrollTop(page, "top");
+  const viewport = await readSidebarGeometry(page);
+  await page.mouse.move(
+    viewport.x + viewport.width / 2,
+    viewport.y + viewport.height / 2,
+  );
+
+  // A wheel over the tree scrolls the tree viewport …
+  await page.mouse.wheel(0, 500);
+  await expect
+    .poll(async () => (await readSidebarGeometry(page)).scrollTop)
+    .toBeGreaterThan(0);
+  // … and never the reader window behind it.
+  expect(await page.evaluate(() => window.scrollY)).toBe(readerY);
+
+  // Pinned at the bottom edge, further wheels must not scroll-chain into the
+  // document — this is what overscroll-behavior-y: contain is for.
+  await setSidebarScrollTop(page, "max");
+  await page.mouse.wheel(0, 1000);
+  await waitForScrollSettle(page);
+  expect(await page.evaluate(() => window.scrollY)).toBe(readerY);
+
+  // The same holds at the top edge, wheeling up and out of the tree.
+  await setSidebarScrollTop(page, "top");
+  await page.mouse.wheel(0, -1000);
+  await waitForScrollSettle(page);
+  expect(await page.evaluate(() => window.scrollY)).toBe(readerY);
+});
+
+test("normalizes the tree viewport after collapsing a sticky ancestor", async ({
+  page,
+}) => {
+  const targetScrollY = await openRevealedNestedFile(page);
+
+  // Collapsing the outermost sticky directory unmounts its whole subtree —
+  // including the active file — in a single commit while the viewport is
+  // scrolled deep into it.
+  await page.locator('[data-tree-path="a"]').click();
+  await expect(page.locator('[data-tree-path="a/b"]')).toBeHidden();
+
+  const geometry = await readSidebarGeometry(page);
+  // The viewport is re-clamped to the shrunken tree before paint …
+  expect(geometry.scrollTop).toBeLessThanOrEqual(
+    geometry.scrollHeight - geometry.clientHeight + 1,
+  );
+  // … keeps no lateral drift and never overflows horizontally at all.
+  expect(geometry.scrollLeft).toBe(0);
+  expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth + 1);
+
+  // The reader keeps the offset restored from sessionStorage.
+  expect(await page.evaluate(() => window.scrollY)).toBe(targetScrollY);
+});
+
+test("reveals the active file again after re-expanding its collapsed ancestor", async ({
+  page,
+}) => {
+  await openRevealedNestedFile(page);
+
+  await page.locator('[data-tree-path="a"]').click();
+  await expect(page.locator('[data-tree-path="a/b"]')).toBeHidden();
+
+  // Re-expanding remounts the subtree with c.md as its last row, far below
+  // the fold. The collapse reset the reveal's record, so it must run again
+  // and bring the active file back inside the viewport.
+  await page.locator('[data-tree-path="a"]').click();
+  await expect(page.locator('[aria-current="page"]')).toBeVisible();
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const tree = document.querySelector('[aria-label="Markdown 文件树"]');
+        const viewport = tree?.closest<HTMLElement>(
+          '[data-slot="scroll-area-viewport"]',
+        );
+        const active = document.querySelector<HTMLElement>(
+          '[aria-current="page"]',
+        );
+        if (viewport === null || viewport === undefined || active === null) {
+          return null;
+        }
+        const viewportRect = viewport.getBoundingClientRect();
+        const activeRect = active.getBoundingClientRect();
+        return (
+          activeRect.top >= viewportRect.top - 1 &&
+          activeRect.bottom <= viewportRect.bottom + 1
+        );
+      }),
+    )
+    .toBe(true);
 });
