@@ -110,14 +110,63 @@ export function DocumentTree({
     revealedPathRef.current = selectedPath;
   }, [visible, selectedPath, expanded, tree, searching]);
 
+  // Collapsing a directory unmounts its whole subtree in one commit while the
+  // viewport may be scrolled deep into it: scrollHeight/scrollWidth and the
+  // sticky rows all mutate at once. This ref hands that mutation to the
+  // normalization layout effect below, which re-clamps the viewport geometry
+  // before the browser paints instead of trusting it to settle on its own.
+  const collapsedPathRef = useRef<string | null>(null);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: expanded is the deliberate re-run trigger — the collapse has already removed the subtree by the time this commit runs, even though the body never reads it.
+  useLayoutEffect(() => {
+    if (collapsedPathRef.current === null) {
+      return;
+    }
+    collapsedPathRef.current = null;
+
+    const root = treeRef.current;
+    const viewport = root?.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+
+    if (viewport === null || viewport === undefined) {
+      return;
+    }
+
+    const maxScrollTop = Math.max(
+      0,
+      viewport.scrollHeight - viewport.clientHeight,
+    );
+
+    viewport.scrollTop = Math.min(viewport.scrollTop, maxScrollTop);
+    viewport.scrollLeft = 0;
+  }, [expanded]);
+
   const toggle = (path: string) => {
+    const collapsing = expanded.has(path);
+
+    if (collapsing) {
+      collapsedPathRef.current = path;
+
+      // Collapsing an ancestor of the selected file unmounts the active row,
+      // so the reveal above bails without recording it. Clearing the recorded
+      // path also covers the subtler case where the reveal already ran: on
+      // re-expand, the active file is scrolled back into view instead of
+      // staying wherever the collapse happened to leave the viewport.
+      if (selectedPath?.startsWith(`${path}/`)) {
+        revealedPathRef.current = null;
+      }
+    }
+
     setExpanded((current) => {
       const next = new Set(current);
+
       if (next.has(path)) {
         next.delete(path);
       } else {
         next.add(path);
       }
+
       return next;
     });
   };
