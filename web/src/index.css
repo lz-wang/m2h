@@ -331,15 +331,15 @@ body,
  * naturally pushed out when scrolling past it — no scroll listener, no
  * ancestor bookkeeping. Each depth's offset is one row (h-8 = 2rem) below the
  * previous one, set inline by document-tree.tsx, so the stack piles up
- * correctly; the opaque sidebar background and the soft shadow keep scrolling
- * children from bleeding through the stuck rows.
+ * correctly; the opaque sidebar background alone keeps scrolling children
+ * from bleeding through the stuck rows — no shadow, so a stuck directory
+ * looks exactly like a resting one (no floating-card effect).
  */
 .document-tree-directory {
   position: sticky;
   top: var(--tree-sticky-top, 0rem);
   z-index: 2;
   background: var(--sidebar);
-  box-shadow: 0 2px 6px oklch(0 0 0 / 8%);
 }
 
 .tree-tooltip {
