@@ -373,11 +373,13 @@ export function App({ api }: AppProps) {
                 />
               </div>
             </SidebarHeader>
-            {/* overflow-hidden keeps SidebarContent from becoming a second
-             * scroll owner: the ScrollArea viewport below is the sidebar's
-             * only scroll container, so sticky rows, the active-file reveal
-             * and wheel input all act on one geometry. */}
-            <SidebarContent className="overflow-hidden">
+            {/* overflow-clip keeps SidebarContent from becoming a second
+             * scroll owner: unlike overflow-hidden it hard-clips without
+             * establishing a scroll container at all, so the ScrollArea
+             * viewport below stays the sidebar's only scroll geometry —
+             * sticky rows, the active-file reveal and wheel input all act
+             * on it, and paint is cut at one deterministic boundary. */}
+            <SidebarContent className="min-w-0 overflow-clip">
               <ScrollArea
                 className="tree-scroll"
                 contentProps={{
