@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
 )
 
@@ -36,7 +37,7 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- run(ctx, Options{
-			Input:   source,
+			Inputs:  []string{source},
 			Mode:    markdown.ModeAuto,
 			Log:     &logOutput,
 			UI:      directoryTestUI(),
@@ -128,9 +129,9 @@ func TestRunStopsWithActiveEventStream(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- run(ctx, Options{
-			Input: root,
-			Mode:  markdown.ModeAuto,
-			UI:    directoryTestUI(),
+			Inputs: []string{root},
+			Mode:   markdown.ModeAuto,
+			UI:     directoryTestUI(),
 			OnListening: func(address string) {
 				listening <- address
 			},
@@ -182,7 +183,7 @@ func TestRunUsesCustomBindAndLogsBrowserFailure(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- run(ctx, Options{
-			Input:   source,
+			Inputs:  []string{source},
 			Host:    "0.0.0.0",
 			Port:    9142,
 			Mode:    markdown.ModeLight,
@@ -210,7 +211,7 @@ func TestRunReturnsListenWatcherAndServeErrors(t *testing.T) {
 
 	source := filepath.Join(t.TempDir(), "guide.md")
 	writeTestFile(t, source, "# Errors")
-	base := Options{Input: source, Host: DefaultHost, Port: 9000, Mode: markdown.ModeAuto}
+	base := Options{Inputs: []string{source}, Host: DefaultHost, Port: 9000, Mode: markdown.ModeAuto}
 
 	listenFailure := testDependencies()
 	listenFailure.listen = func(string, string) (net.Listener, error) {
@@ -255,7 +256,7 @@ func TestRunRejectsOccupiedPort(t *testing.T) {
 	}
 	defer occupied.Close()
 	port := occupied.Addr().(*net.TCPAddr).Port
-	err = Run(context.Background(), Options{Input: source, Host: DefaultHost, Port: port, Mode: markdown.ModeAuto})
+	err = Run(context.Background(), Options{Inputs: []string{source}, Host: DefaultHost, Port: port, Mode: markdown.ModeAuto})
 	if err == nil || !strings.Contains(err.Error(), "listen on") {
 		t.Fatalf("occupied-port error = %v", err)
 	}
@@ -271,12 +272,12 @@ func TestRunValidatesBeforeFilesystemAndNetwork(t *testing.T) {
 		want    string
 	}{
 		{name: "empty input", options: Options{Mode: markdown.ModeAuto}, want: "input path is required"},
-		{name: "port", options: Options{Input: missing, Port: 70000, Mode: markdown.ModeAuto}, want: "invalid port"},
-		{name: "mode", options: Options{Input: missing, Mode: "sepia"}, want: "invalid mode"},
-		{name: "width", options: Options{Input: missing, Mode: markdown.ModeAuto, Width: "narrow"}, want: "invalid width"},
-		{name: "version", options: Options{Input: missing, Mode: markdown.ModeAuto, Version: "latest"}, want: "invalid preview version"},
-		{name: "depth", options: Options{Input: missing, Mode: markdown.ModeAuto, Depth: -1}, want: "invalid depth"},
-		{name: "glob", options: Options{Input: missing, Mode: markdown.ModeAuto, Pattern: "["}, want: "invalid glob"},
+		{name: "port", options: Options{Inputs: []string{missing}, Port: 70000, Mode: markdown.ModeAuto}, want: "invalid port"},
+		{name: "mode", options: Options{Inputs: []string{missing}, Mode: "sepia"}, want: "invalid mode"},
+		{name: "width", options: Options{Inputs: []string{missing}, Mode: markdown.ModeAuto, Width: "narrow"}, want: "invalid width"},
+		{name: "version", options: Options{Inputs: []string{missing}, Mode: markdown.ModeAuto, Version: "latest"}, want: "invalid preview version"},
+		{name: "depth", options: Options{Inputs: []string{missing}, Mode: markdown.ModeAuto, Depth: -1}, want: "invalid depth"},
+		{name: "glob", options: Options{Inputs: []string{missing}, Mode: markdown.ModeAuto, Pattern: "["}, want: "invalid glob"},
 	}
 	for _, test := range tests {
 		called := false
@@ -296,7 +297,7 @@ func TestRunValidatesBeforeFilesystemAndNetwork(t *testing.T) {
 
 	canceled, cancel := context.WithCancel(context.Background())
 	cancel()
-	err := run(canceled, Options{Input: missing, Mode: markdown.ModeAuto}, testDependencies())
+	err := run(canceled, Options{Inputs: []string{missing}, Mode: markdown.ModeAuto}, testDependencies())
 	if err == nil || !errors.Is(err, context.Canceled) || strings.Contains(err.Error(), "missing") {
 		t.Fatalf("canceled error = %v", err)
 	}
@@ -314,15 +315,125 @@ func TestRunValidatesInputKindsAndDirectoryFlags(t *testing.T) {
 		options Options
 		want    string
 	}{
-		{options: Options{Input: textFile, Mode: markdown.ModeAuto}, want: "expected a Markdown file"},
-		{options: Options{Input: markdownFile, Mode: markdown.ModeAuto, PatternSet: true}, want: "--glob can only be used"},
-		{options: Options{Input: markdownFile, Mode: markdown.ModeAuto, DepthSet: true}, want: "--depth can only be used"},
+		{options: Options{Inputs: []string{textFile}, Mode: markdown.ModeAuto}, want: "expected a Markdown file"},
+		{options: Options{Inputs: []string{markdownFile}, Mode: markdown.ModeAuto, PatternSet: true}, want: "--glob can only be used"},
+		{options: Options{Inputs: []string{markdownFile}, Mode: markdown.ModeAuto, DepthSet: true}, want: "--depth can only be used"},
 	}
 	for _, test := range tests {
 		err := run(context.Background(), test.options, testDependencies())
 		if err == nil || !strings.Contains(err.Error(), test.want) {
 			t.Errorf("run(%+v) error = %v, want %q", test.options, err, test.want)
 		}
+	}
+}
+
+func TestRunAcceptsMultipleInputsAndWatchesEachSingleFile(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	first := filepath.Join(base, "one.md")
+	second := filepath.Join(base, "two.md")
+	writeTestFile(t, first, "# One")
+	writeTestFile(t, second, "# Two")
+	watched := make(chan string, 2)
+	deps := testDependencies()
+	deps.listen = func(string, string) (net.Listener, error) {
+		return net.Listen("tcp", "127.0.0.1:0")
+	}
+	deps.watch = func(ctx context.Context, target string, _ time.Duration, _ func(), _ io.Writer) error {
+		watched <- target
+		<-ctx.Done()
+		return nil
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- run(ctx, Options{
+			Inputs: []string{first, second},
+			Mode:   markdown.ModeAuto,
+		}, deps)
+	}()
+
+	seen := map[string]bool{}
+	for range 2 {
+		select {
+		case target := <-watched:
+			seen[target] = true
+		case <-time.After(2 * time.Second):
+			t.Fatal("a single-file root did not get its own watcher")
+		}
+	}
+	// files.Resolve canonicalizes inputs (macOS /var aliases to /private/var),
+	// so the watcher targets are compared through the same normalization.
+	firstCanonical, err := files.CanonicalPath(first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondCanonical, err := files.CanonicalPath(second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !seen[firstCanonical] || !seen[secondCanonical] {
+		t.Fatalf("watched targets = %v, want both %q and %q", seen, firstCanonical, secondCanonical)
+	}
+
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("multi-input run error = %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("multi-input run did not shut down after cancellation")
+	}
+}
+
+func TestRunAllowsDepthAndGlobWithMixedFileAndDirectoryRoots(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	document := filepath.Join(base, "note.md")
+	writeTestFile(t, document, "# Note")
+	docs := filepath.Join(base, "docs")
+	if err := os.Mkdir(docs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(docs, "README.md"), "# Docs")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	deps := testDependencies()
+	deps.listen = func(string, string) (net.Listener, error) {
+		return net.Listen("tcp", "127.0.0.1:0")
+	}
+	err := run(ctx, Options{
+		Inputs:     []string{document, docs},
+		Mode:       markdown.ModeAuto,
+		Depth:      2,
+		DepthSet:   true,
+		Pattern:    "**/*.md",
+		PatternSet: true,
+		OnListening: func(string) {
+			cancel()
+		},
+	}, deps)
+	if err != nil {
+		t.Fatalf("mixed roots with directory flags error = %v", err)
+	}
+}
+
+func TestRunRejectsDuplicateInputs(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "README.md"), "# Duplicate")
+	err := run(context.Background(), Options{
+		Inputs: []string{root, root},
+		Mode:   markdown.ModeAuto,
+	}, testDependencies())
+	if err == nil || !strings.Contains(err.Error(), "duplicate preview root") {
+		t.Fatalf("duplicate input error = %v", err)
 	}
 }
 
@@ -343,8 +454,8 @@ func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
 		return errors.New("directory watcher must not run")
 	}
 	err := run(ctx, Options{
-		Input: root + string(os.PathSeparator),
-		Mode:  markdown.ModeDark,
+		Inputs: []string{root + string(os.PathSeparator)},
+		Mode:   markdown.ModeDark,
 		OnListening: func(address string) {
 			listeningAddress = address
 			cancel()
@@ -376,7 +487,7 @@ func TestRunDirectoryPreviewURLRespectsTOCFlag(t *testing.T) {
 		return errors.New("directory watcher must not run")
 	}
 	err := run(ctx, Options{
-		Input:  root + string(os.PathSeparator),
+		Inputs: []string{root + string(os.PathSeparator)},
 		Mode:   markdown.ModeDark,
 		TOC:    false,
 		TOCSet: true,

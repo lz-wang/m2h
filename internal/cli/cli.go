@@ -205,7 +205,7 @@ func webAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buildV
 		return fmt.Errorf("Error: web requires exactly one file or directory")
 	}
 	err := runPreview(ctx, server.Options{
-		Input:      command.Args().First(),
+		Inputs:     []string{command.Args().First()},
 		Host:       command.String("host"),
 		Port:       command.Int("port"),
 		Mode:       markdown.Mode(command.String("mode")),

@@ -31,7 +31,9 @@ const (
 
 // Options configures a preview service.
 type Options struct {
-	Input      string
+	// Inputs lists one or more files or directories to preview. Each entry
+	// keeps its own access boundary; they are never merged into one root.
+	Inputs     []string
 	Host       string
 	Port       int
 	Mode       markdown.Mode
@@ -78,18 +80,33 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		return fmt.Errorf("preview: %w", err)
 	}
 
-	input, err := files.Resolve(normalized.Input)
-	if err != nil {
-		return err
+	inputs := make([]files.Input, 0, len(normalized.Inputs))
+	for _, raw := range normalized.Inputs {
+		input, err := files.Resolve(raw)
+		if err != nil {
+			return err
+		}
+		if input.Kind == files.KindFile && !files.IsMarkdown(input.Path) {
+			return fmt.Errorf("preview %q: expected a Markdown file", input.Path)
+		}
+		inputs = append(inputs, input)
 	}
-	if input.Kind == files.KindFile && normalized.PatternSet {
+	// --glob and --depth are directory discovery rules. They apply to every
+	// directory root in the workspace and are ignored by single-file roots —
+	// a workspace mixing both must not be rejected outright — but with no
+	// directory root at all there is nothing for them to mean.
+	hasDirectoryRoot := false
+	for _, input := range inputs {
+		if input.Kind == files.KindDirectory {
+			hasDirectoryRoot = true
+			break
+		}
+	}
+	if normalized.PatternSet && !hasDirectoryRoot {
 		return fmt.Errorf("--glob can only be used when previewing a directory")
 	}
-	if input.Kind == files.KindFile && normalized.DepthSet {
+	if normalized.DepthSet && !hasDirectoryRoot {
 		return fmt.Errorf("--depth can only be used when previewing a directory")
-	}
-	if input.Kind == files.KindFile && !files.IsMarkdown(input.Path) {
-		return fmt.Errorf("preview %q: expected a Markdown file", input.Path)
 	}
 
 	logger := normalized.Log
@@ -99,12 +116,15 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	runContext, cancel := context.WithCancel(ctx)
 	defer cancel()
 	hub := newEventHub(deps.keepAlive)
-	scope := newPreviewScope(input, files.DiscoverOptions{
+	workspace, err := newPreviewWorkspace(inputs, files.DiscoverOptions{
 		Depth:   normalized.Depth,
 		Pattern: normalized.Pattern,
 		Log:     logger,
 	})
-	handler := newPreviewHandlerWithVersion(scope, normalized.Mode, normalized.Width, hub, logger, options.UI, normalized.Version)
+	if err != nil {
+		return err
+	}
+	handler := newPreviewHandlerWithVersion(workspace.primary().scope, normalized.Mode, normalized.Width, hub, logger, options.UI, normalized.Version)
 	httpServer := &http.Server{
 		Handler: handler,
 		BaseContext: func(net.Listener) context.Context {
@@ -123,18 +143,22 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	go func() {
 		serveDone <- httpServer.Serve(listener)
 	}()
-	if input.Kind == files.KindFile {
-		watchResults := make(chan error, 1)
+	// One watcher per single-file root; a change in any of them refreshes the
+	// shared event stream. Directory roots are not watched.
+	if watchTargets := workspace.singleFilePaths(); len(watchTargets) > 0 {
+		watchResults := make(chan error, len(watchTargets))
 		watchDone = watchResults
-		go func() {
-			watchResults <- deps.watch(runContext, input.Path, deps.debounce, func() {
-				hub.publish(documentChanged)
-			}, logger)
-		}()
+		for _, target := range watchTargets {
+			go func(target string) {
+				watchResults <- deps.watch(runContext, target, deps.debounce, func() {
+					hub.publish(documentChanged)
+				}, logger)
+			}(target)
+		}
 	}
 
 	address := previewOptionsURL(previewURL(normalized.Host, listener.Addr()), normalized.Mode, normalized.Width, normalized.TOC)
-	_, _ = fmt.Fprintf(logger, "m2h: previewing %s at %s\n", input.Path, address)
+	_, _ = fmt.Fprintf(logger, "m2h: previewing %s at %s\n", strings.Join(workspace.inputPaths(), ", "), address)
 	if normalized.OnListening != nil {
 		normalized.OnListening(address)
 	}
@@ -167,8 +191,13 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 }
 
 func normalizeOptions(options Options) (Options, error) {
-	if strings.TrimSpace(options.Input) == "" {
+	if len(options.Inputs) == 0 {
 		return Options{}, fmt.Errorf("input path is required")
+	}
+	for _, input := range options.Inputs {
+		if strings.TrimSpace(input) == "" {
+			return Options{}, fmt.Errorf("input path is required")
+		}
 	}
 	if options.Version == "" {
 		options.Version = appversion.Development
