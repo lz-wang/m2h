@@ -378,7 +378,15 @@ export function App({ api }: AppProps) {
              * only scroll container, so sticky rows, the active-file reveal
              * and wheel input all act on one geometry. */}
             <SidebarContent className="overflow-hidden">
-              <ScrollArea className="tree-scroll">
+              <ScrollArea
+                className="tree-scroll"
+                contentProps={{
+                  // The tree is vertical-only: shrink Base UI Content's default
+                  // minWidth: fit-content back to the viewport width so a long
+                  // filename can never grow scrollWidth past clientWidth.
+                  style: { minWidth: 0, width: "100%" },
+                }}
+              >
                 <SidebarGroup>
                   <SidebarGroupLabel className="justify-between">
                     <span>Files</span>

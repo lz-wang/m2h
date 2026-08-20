@@ -2,11 +2,22 @@ import { ScrollArea as ScrollAreaPrimitive } from "@base-ui/react/scroll-area";
 
 import { cn } from "@/lib/utils";
 
+// Content is part of Base UI's expected ScrollArea anatomy: it observes its
+// own box with a ResizeObserver and re-runs computeThumbPosition() when the
+// content resizes without the viewport box changing (e.g. a tree collapsing
+// inside it). Skipping it leaves those content-driven resizes unmeasured.
+// contentProps lets callers override its default `minWidth: fit-content` —
+// which a vertical-only scroll area must do to keep the x axis from growing.
+interface ScrollAreaProps extends ScrollAreaPrimitive.Root.Props {
+  contentProps?: ScrollAreaPrimitive.Content.Props;
+}
+
 function ScrollArea({
   className,
   children,
+  contentProps,
   ...props
-}: ScrollAreaPrimitive.Root.Props) {
+}: ScrollAreaProps) {
   return (
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
@@ -17,7 +28,12 @@ function ScrollArea({
         data-slot="scroll-area-viewport"
         className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
       >
-        {children}
+        <ScrollAreaPrimitive.Content
+          data-slot="scroll-area-content"
+          {...contentProps}
+        >
+          {children}
+        </ScrollAreaPrimitive.Content>
       </ScrollAreaPrimitive.Viewport>
       <ScrollBar />
       <ScrollAreaPrimitive.Corner />
