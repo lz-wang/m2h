@@ -1,5 +1,5 @@
 import { ChevronRight, FileText, Folder, FolderOpen } from "lucide-react";
-import type { CSSProperties } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FileSummary } from "@/api";
 import {
@@ -16,8 +16,19 @@ import {
 } from "@/model";
 
 interface DocumentTreeProps {
+  // Files of ONE root, root-relative: a multi-root workspace renders one tree
+  // per root and keeps display paths free of the root-id prefix.
   files: FileSummary[];
+  // The virtual document key of the selection (root-prefixed in a multi-root
+  // workspace); it is translated to this tree's root-relative space below.
   selectedPath: string | null;
+  // Root identity: "" for a single-root preview (paths stay unprefixed) or
+  // the root id whose virtual prefix this tree owns.
+  rootBase?: string;
+  // Present only in a multi-root workspace: renders the labeled root row the
+  // tree nests under. Roots start expanded; collapsing uses the same
+  // directory mechanics as inner directories.
+  rootLabel?: string;
   searching?: boolean;
   // False while the sidebar is collapsed offcanvas: geometry measured there is
   // meaningless, so the reveal waits until the tree becomes visible again.
@@ -28,27 +39,47 @@ interface DocumentTreeProps {
 export function DocumentTree({
   files,
   selectedPath,
+  rootBase = "",
+  rootLabel,
   searching = false,
   visible = true,
   onSelect,
 }: DocumentTreeProps) {
+  const hasRootRow = rootLabel !== undefined;
   const tree = useMemo(() => buildTree(files), [files]);
-  const [expanded, setExpanded] = useState<Set<string>>(
-    () => new Set(ancestorDirectories(selectedPath)),
-  );
+  // Translate the virtual selection key into this root's path space: only the
+  // tree owning the selected root reports a selection, every other root's
+  // tree sees null.
+  const selectedRelative =
+    selectedPath !== null &&
+    (rootBase === "" || selectedPath.startsWith(`${rootBase}/`))
+      ? rootBase === ""
+        ? selectedPath
+        : selectedPath.slice(rootBase.length + 1)
+      : null;
+  const [expanded, setExpanded] = useState<Set<string>>(() => {
+    const initial = new Set(ancestorDirectories(selectedRelative));
+    if (hasRootRow) {
+      initial.add(rootBase);
+    }
+    return initial;
+  });
   const treeRef = useRef<HTMLUListElement>(null);
   const revealedPathRef = useRef<string | null>(null);
 
   useLayoutEffect(() => {
-    const ancestors = ancestorDirectories(selectedPath);
+    const next = new Set(ancestorDirectories(selectedRelative));
+    if (hasRootRow) {
+      next.add(rootBase);
+    }
     setExpanded((current) => {
-      const next = new Set(current);
-      for (const ancestor of ancestors) {
-        next.add(ancestor);
+      const merged = new Set(current);
+      for (const ancestor of next) {
+        merged.add(ancestor);
       }
-      return next;
+      return merged;
     });
-  }, [selectedPath]);
+  }, [selectedRelative, hasRootRow, rootBase]);
 
   // Reveal the active file inside the sidebar's scroll viewport. Deliberately
   // only the viewport's own scrollTop is adjusted — scrollIntoView() could
@@ -63,8 +94,8 @@ export function DocumentTree({
   useLayoutEffect(() => {
     if (
       !visible ||
-      selectedPath === null ||
-      revealedPathRef.current === selectedPath
+      selectedRelative === null ||
+      revealedPathRef.current === selectedRelative
     ) {
       return;
     }
@@ -87,7 +118,10 @@ export function DocumentTree({
     const activeRect = active.getBoundingClientRect();
     // Measured from the DOM rather than derived from row-height constants so
     // density/font/accessibility scaling never desynchronizes the reservation.
-    const ancestorPaths = new Set(ancestorDirectories(selectedPath));
+    const ancestorPaths = new Set(ancestorDirectories(selectedRelative));
+    if (hasRootRow) {
+      ancestorPaths.add(rootBase);
+    }
     const stickyHeight = Array.from(
       root.querySelectorAll<HTMLElement>('[data-tree-directory="true"]'),
     )
@@ -107,8 +141,8 @@ export function DocumentTree({
       viewport.scrollTop += activeRect.bottom - visibleBottom;
     }
 
-    revealedPathRef.current = selectedPath;
-  }, [visible, selectedPath, expanded, tree, searching]);
+    revealedPathRef.current = selectedRelative;
+  }, [visible, selectedRelative, expanded, tree, searching]);
 
   // Collapsing a directory unmounts its whole subtree in one commit while the
   // viewport may be scrolled deep into it: scrollHeight/scrollWidth and the
@@ -156,7 +190,7 @@ export function DocumentTree({
       // path also covers the subtler case where the reveal already ran: on
       // re-expand, the active file is scrolled back into view instead of
       // staying wherever the collapse happened to leave the viewport.
-      if (selectedPath?.startsWith(`${path}/`)) {
+      if (selectedRelative?.startsWith(`${path}/`)) {
         revealedPathRef.current = null;
       }
     }
@@ -174,26 +208,114 @@ export function DocumentTree({
     });
   };
 
-  return (
-    <SidebarMenu ref={treeRef} aria-label="Markdown 文件树">
+  // Selection identity crosses the tree boundary as the virtual key: inner
+  // rows speak root-relative paths, the app addresses documents by
+  // "<rootId>/<path>" in a multi-root workspace.
+  const selectFromTree = (path: string) => {
+    onSelect(rootBase === "" ? path : `${rootBase}/${path}`);
+  };
+
+  const items = (
+    <>
       {tree.map((node) => (
         <TreeItem
           key={`${node.type}:${node.path}`}
           node={node}
+          base={rootBase}
           expanded={expanded}
-          selectedPath={selectedPath}
-          onSelect={onSelect}
+          selectedPath={selectedRelative}
+          onSelect={selectFromTree}
           onToggle={toggle}
           searching={searching}
-          depth={0}
+          depth={hasRootRow ? 1 : 0}
         />
       ))}
+    </>
+  );
+
+  return (
+    <SidebarMenu
+      ref={treeRef}
+      aria-label={
+        rootLabel === undefined
+          ? "Markdown 文件树"
+          : `Markdown 文件树：${rootLabel}`
+      }
+    >
+      {hasRootRow ? (
+        <RootItem
+          label={rootLabel}
+          path={rootBase}
+          expanded={searching || expanded.has(rootBase)}
+          onToggle={toggle}
+        >
+          {items}
+        </RootItem>
+      ) : (
+        items
+      )}
     </SidebarMenu>
+  );
+}
+
+// The labeled top-level row of one preview root in a multi-root workspace.
+// It behaves exactly like a directory row — sticky, collapsible, chevron
+// included — so the workspace reads as one tree of parallel roots.
+function RootItem({
+  label,
+  path,
+  expanded,
+  onToggle,
+  children,
+}: {
+  label: string;
+  path: string;
+  expanded: boolean;
+  onToggle(path: string): void;
+  children: ReactNode;
+}) {
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        aria-expanded={expanded}
+        aria-label={label}
+        title={label}
+        data-tree-directory="true"
+        data-tree-path={path}
+        data-tree-depth={0}
+        style={{ "--tree-sticky-top": "0rem" } as CSSProperties}
+        className="document-tree-directory h-8 text-sm font-medium"
+        onClick={() => onToggle(path)}
+      >
+        <ChevronRight
+          aria-hidden="true"
+          className={
+            expanded ? "rotate-90 transition-transform" : "transition-transform"
+          }
+        />
+        {expanded ? (
+          <FolderOpen aria-hidden="true" />
+        ) : (
+          <Folder aria-hidden="true" />
+        )}
+        <span className="truncate">{label}</span>
+      </SidebarMenuButton>
+      {expanded ? (
+        <SidebarMenuSub className="document-tree-sub">
+          {children}
+        </SidebarMenuSub>
+      ) : null}
+    </SidebarMenuItem>
   );
 }
 
 interface TreeItemProps {
   node: TreeNode;
+  // Root identity for accessible names: file rows announce their virtual
+  // document key ("<rootId>/<path>") so same-named documents in two roots
+  // stay distinguishable to assistive technology while the visible label
+  // keeps the plain root-relative name.
+  base: string;
   expanded: Set<string>;
   selectedPath: string | null;
   onSelect(path: string): void;
@@ -204,6 +326,7 @@ interface TreeItemProps {
 
 function TreeItem({
   node,
+  base,
   expanded,
   selectedPath,
   onSelect,
@@ -215,6 +338,7 @@ function TreeItem({
     return (
       <DirectoryItem
         node={node}
+        base={base}
         expanded={expanded}
         selectedPath={selectedPath}
         onSelect={onSelect}
@@ -225,12 +349,13 @@ function TreeItem({
     );
   }
   const active = node.path === selectedPath;
+  const identity = base === "" ? node.path : `${base}/${node.path}`;
   return (
     <SidebarMenuItem>
       <SidebarMenuButton
         isActive={active}
         aria-current={active ? "page" : undefined}
-        aria-label={`${node.file.title}，${node.path}`}
+        aria-label={`${node.file.title}，${identity}`}
         className="document-tree-file h-8 text-sm"
         tooltip={{
           hidden: false,
@@ -255,6 +380,7 @@ function TreeItem({
 
 function DirectoryItem({
   node,
+  base,
   expanded,
   selectedPath,
   onSelect,
@@ -267,7 +393,7 @@ function DirectoryItem({
     <SidebarMenuItem>
       <SidebarMenuButton
         aria-expanded={open}
-        aria-label={node.name}
+        aria-label={base === "" ? node.name : `${base}/${node.name}`}
         title={node.name}
         data-tree-directory="true"
         data-tree-path={node.path}
@@ -295,6 +421,7 @@ function DirectoryItem({
             <TreeItem
               key={`${child.type}:${child.path}`}
               node={child}
+              base={base}
               expanded={expanded}
               selectedPath={selectedPath}
               onSelect={onSelect}

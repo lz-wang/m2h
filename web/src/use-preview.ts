@@ -13,6 +13,7 @@ import {
   type FileSummary,
   type PreviewAPI,
   type PreviewKind,
+  type RootSummary,
 } from "./api";
 import {
   chooseDocument,
@@ -36,6 +37,7 @@ export type PreviewPhase =
 export interface PreviewState {
   kind: PreviewKind;
   version: string;
+  roots: RootSummary[];
   files: FileSummary[];
   selectedPath: string | null;
   document: DocumentResponse | null;
@@ -68,6 +70,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     ),
   );
   const [files, setFiles] = useState<FileSummary[]>([]);
+  const [roots, setRoots] = useState<RootSummary[]>([]);
   const [kind, setKind] = useState<PreviewKind>("directory");
   const [version, setVersion] = useState("");
   const [selectedPath, setSelectedPath] = useState<string | null>(null);
@@ -177,6 +180,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         filesRef.current = flattened;
         defaultPathRef.current = defaultPath;
         setFiles(flattened);
+        setRoots(loaded.roots);
         setKind(loaded.kind);
         setVersion(loaded.version);
         const target = chooseDocument(flattened, requested, defaultPath);
@@ -370,6 +374,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   return {
     kind,
     version,
+    roots,
     files,
     selectedPath,
     document: documentResponse,

@@ -132,17 +132,36 @@ export function App({ api }: AppProps) {
   const [sidebarOpen, setSidebarOpen] = useState(initialLayout.sidebarOpen);
   const [sidebarResizing, setSidebarResizing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const filteredFiles = useMemo(() => {
+  // Search stays global across the whole workspace: results keep their root
+  // grouping (two roots may both hold a README.md), and matching a root's
+  // name surfaces every document under it.
+  const filteredRoots = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
     if (query === "") {
-      return preview.files;
+      return preview.roots;
     }
-    return preview.files.filter(
-      (file) =>
-        file.name.toLocaleLowerCase().includes(query) ||
-        file.title.toLocaleLowerCase().includes(query),
-    );
-  }, [preview.files, searchQuery]);
+    return preview.roots
+      .map((root) => {
+        if (root.name.toLocaleLowerCase().includes(query)) {
+          return root;
+        }
+        return {
+          ...root,
+          files: root.files.filter(
+            (file) =>
+              file.name.toLocaleLowerCase().includes(query) ||
+              file.title.toLocaleLowerCase().includes(query) ||
+              file.path.toLocaleLowerCase().includes(query),
+          ),
+        };
+      })
+      .filter((root) => root.files.length > 0);
+  }, [preview.roots, searchQuery]);
+  const filteredCount = useMemo(
+    () => filteredRoots.reduce((total, root) => total + root.files.length, 0),
+    [filteredRoots],
+  );
+  const multiRoot = preview.roots.length > 1;
   const loading =
     preview.phase === "loading-files" || preview.phase === "loading-document";
   // The scroll spy follows every heading (H1–H6) so the URL can reflect the
@@ -396,21 +415,36 @@ export function App({ api }: AppProps) {
                   <SidebarGroupLabel className="justify-between">
                     <span>Files</span>
                     <span className="text-xs tabular-nums text-sidebar-foreground/60">
-                      <span aria-hidden="true">{filteredFiles.length}</span>
+                      <span aria-hidden="true">{filteredCount}</span>
                       <span className="sr-only">
-                        {filteredFiles.length} 个 Markdown 文件
+                        {filteredCount} 个 Markdown 文件
                       </span>
                     </span>
                   </SidebarGroupLabel>
                   <SidebarGroupContent>
-                    {filteredFiles.length > 0 ? (
-                      <DocumentTree
-                        files={filteredFiles}
-                        searching={searchQuery.trim() !== ""}
-                        selectedPath={preview.selectedPath}
-                        visible={sidebarOpen}
-                        onSelect={(path) => void preview.select(path)}
-                      />
+                    {filteredCount > 0 ? (
+                      multiRoot ? (
+                        filteredRoots.map((root) => (
+                          <DocumentTree
+                            key={root.id}
+                            files={root.files}
+                            rootBase={root.id}
+                            rootLabel={root.name}
+                            searching={searchQuery.trim() !== ""}
+                            selectedPath={preview.selectedPath}
+                            visible={sidebarOpen}
+                            onSelect={(path) => void preview.select(path)}
+                          />
+                        ))
+                      ) : (
+                        <DocumentTree
+                          files={filteredRoots[0]?.files ?? []}
+                          searching={searchQuery.trim() !== ""}
+                          selectedPath={preview.selectedPath}
+                          visible={sidebarOpen}
+                          onSelect={(path) => void preview.select(path)}
+                        />
+                      )
                     ) : (
                       <p className="tree-placeholder">
                         {loading

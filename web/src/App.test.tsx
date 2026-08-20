@@ -181,7 +181,7 @@ describe("App directory preview", () => {
     ).toBeTruthy();
   });
 
-  it("flattens a multi-root workspace into virtual document keys", async () => {
+  it("groups a multi-root workspace into labeled, expanded root trees", async () => {
     const getDocument = vi.fn().mockImplementation(async (path: string) => ({
       path,
       title: path.includes("r1/") ? "Beta Readme" : "Alpha Readme",
@@ -206,6 +206,11 @@ describe("App directory preview", () => {
             name: "beta",
             files: [
               { path: "README.md", name: "README.md", title: "Beta Readme" },
+              {
+                path: "guide/intro.md",
+                name: "intro.md",
+                title: "Intro",
+              },
             ],
           },
         ],
@@ -224,13 +229,20 @@ describe("App directory preview", () => {
     );
     expect(window.location.pathname).toBe("/doc/r0/README.md");
 
+    // Both roots render as labeled top-level rows, expanded by default so the
+    // workspace is immediately browsable.
+    for (const label of ["alpha", "beta"]) {
+      const row = screen.getByRole("button", { name: label });
+      expect(row.getAttribute("aria-expanded")).toBe("true");
+    }
+    expect(screen.getByText("3 个 Markdown 文件")).toBeTruthy();
+
     // Same-named documents in two roots stay distinct; the second root's copy
-    // is selectable through its own virtual key (the flattened tree nests it
-    // under its root-id directory until the multi-root sidebar lands).
+    // is selectable through its own virtual key while showing its plain
+    // root-relative name.
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "r1" }));
     await user.click(
-      await screen.findByRole("button", { name: "Beta Readme，r1/README.md" }),
+      screen.getByRole("button", { name: "Beta Readme，r1/README.md" }),
     );
     await screen.findByRole("heading", { level: 1, name: "Beta" });
     expect(getDocument).toHaveBeenLastCalledWith(
@@ -238,6 +250,27 @@ describe("App directory preview", () => {
       expect.any(AbortSignal),
     );
     expect(window.location.pathname).toBe("/doc/r1/README.md");
+
+    // Search stays global across roots but keeps the root grouping: matching
+    // a root's name surfaces every document under it.
+    const search = screen.getByRole("searchbox", { name: "搜索文档" });
+    await user.clear(search);
+    await user.type(search, "beta");
+    expect(
+      screen.getByRole("button", { name: "Beta Readme，r1/README.md" }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Intro，r1/guide/intro.md" }),
+    ).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Alpha Readme，r0/README.md" }),
+    ).toBeNull();
+    expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
+
+    // A query matching neither root nor document leaves the empty state.
+    await user.clear(search);
+    await user.type(search, "missing");
+    expect(screen.getByText("没有匹配的文档")).toBeTruthy();
   });
 
   it("restores a dark deep link and expands the selected directory", async () => {
