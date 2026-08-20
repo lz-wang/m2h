@@ -138,7 +138,10 @@ export function DocumentTree({
       viewport.scrollHeight - viewport.clientHeight,
     );
 
-    viewport.scrollTop = Math.min(viewport.scrollTop, maxScrollTop);
+    viewport.scrollTop = Math.max(
+      0,
+      Math.min(viewport.scrollTop, maxScrollTop),
+    );
     viewport.scrollLeft = 0;
   }, [expanded]);
 
