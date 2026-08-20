@@ -1379,10 +1379,9 @@ describe("App directory preview", () => {
     const getDocument = vi.fn().mockImplementation(async (path: string) => ({
       path,
       title: path.startsWith("r1/") ? "Beta Readme" : "Alpha Readme",
-      html:
-        path.startsWith("r1/")
-          ? '<h2 id="section">Section</h2>'
-          : "<p>Alpha body</p>",
+      html: path.startsWith("r1/")
+        ? '<h2 id="section">Section</h2>'
+        : "<p>Alpha body</p>",
       frontmatter: null,
       toc: path.startsWith("r1/")
         ? [{ level: 2, id: "section", text: "Section" }]
@@ -1426,9 +1425,9 @@ describe("App directory preview", () => {
         expect.objectContaining({ block: "start" }),
       ),
     );
-    expect(
-      window.location.pathname + window.location.hash,
-    ).toBe("/doc/r1/README.md#section");
+    expect(window.location.pathname + window.location.hash).toBe(
+      "/doc/r1/README.md#section",
+    );
 
     // Switching to the first root's copy pushes its own virtual path.
     const user = userEvent.setup();
