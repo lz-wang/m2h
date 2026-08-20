@@ -27,6 +27,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { FrontMatter, PreviewAPI, TocItem } from "./api";
 import { DocumentTree } from "./components/document-tree";
 import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
+import { ReaderNavigation } from "./components/reader-navigation";
 import {
   TableOfContentsPanel,
   TableOfContentsSheet,
@@ -510,6 +511,9 @@ export function App({ api }: AppProps) {
               />
             ) : null}
           </div>
+          {/* Floating edge jumps for the window-scrolled reader; one instance
+           * for both single-file and directory previews. */}
+          <ReaderNavigation />
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>

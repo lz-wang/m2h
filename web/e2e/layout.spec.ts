@@ -400,3 +400,50 @@ test("reveals the active file again after re-expanding its collapsed ancestor", 
     )
     .toBe(true);
 });
+
+test("jumps between document edges with the floating navigation", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await waitForBody(page, "/doc/scroll.md");
+
+  const up = page.getByRole("button", { name: "回到顶部" });
+  const down = page.getByRole("button", { name: "前往底部" });
+
+  // At the very top the upward jump reports "already there" by disabling —
+  // the affordance stays visible instead of hiding on a timer.
+  await expect(up).toBeDisabled();
+  await expect(down).toBeEnabled();
+
+  // The downward jump smooth-scrolls the window to the document's bottom edge.
+  await down.click();
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const max = document.documentElement.scrollHeight - window.innerHeight;
+        return Math.abs(window.scrollY - max);
+      }),
+    )
+    .toBeLessThanOrEqual(2);
+  await expect(down).toBeDisabled();
+  await expect(up).toBeEnabled();
+
+  // … and the upward jump returns to the top, where the states swap back.
+  await up.click();
+  await expect
+    .poll(() => page.evaluate(() => window.scrollY))
+    .toBeLessThanOrEqual(1);
+  await expect(up).toBeDisabled();
+  await expect(down).toBeEnabled();
+
+  // The jump pair floats fully inside the viewport, clear of its bottom edge.
+  const geometry = await page.evaluate(() => {
+    const nav = document.querySelector(".reader-navigation");
+    if (nav === null) {
+      throw new Error("reader navigation was not rendered");
+    }
+    const rect = nav.getBoundingClientRect();
+    return { bottom: rect.bottom, innerHeight: window.innerHeight };
+  });
+  expect(geometry.bottom).toBeLessThanOrEqual(geometry.innerHeight);
+});

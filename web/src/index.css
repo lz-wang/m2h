@@ -449,6 +449,33 @@ body,
   flex: 1;
 }
 
+/*
+ * Floating reader navigation (reader-navigation.tsx): a stacked jump pair in
+ * the reader's bottom-right corner. The plate rides above normal content but
+ * below the overlay layers (the toolbar sits at 10, Sheet/Menu/Tooltip
+ * portals higher), and env(safe-area-inset-bottom) keeps it clear of the
+ * home indicator on notched devices. The stacked controls share one border
+ * with a hairline separator, so the pair reads as a single segmented group
+ * rather than two floating buttons.
+ */
+.reader-navigation {
+  position: fixed;
+  right: 1.5rem;
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.2);
+  background: var(--background);
+  box-shadow: 0 4px 14px oklch(0 0 0 / 14%);
+}
+
+.reader-navigation > [data-slot="button"] + [data-slot="button"] {
+  border-top: 1px solid var(--border);
+}
+
 .reader-canvas {
   flex: 1;
   min-width: 0;

@@ -1148,6 +1148,124 @@ describe("App directory preview", () => {
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 
+  it("shows floating jump buttons that reflect the scroll boundaries", async () => {
+    // Model a tall document: jsdom reports no layout, so the scrollable height
+    // is stubbed directly on the scrolling element. Earlier tests leave the
+    // window mid-scroll, so pin the viewport to the top before mounting.
+    Object.defineProperty(document.documentElement, "scrollHeight", {
+      configurable: true,
+      value: 4000,
+    });
+    await driveWindowScroll(0);
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    const top = screen.getByRole("button", { name: "回到顶部" });
+    const bottom = screen.getByRole("button", { name: "前往底部" });
+    // Pinned at the very top, jumping up is a no-op.
+    expect((top as HTMLButtonElement).disabled).toBe(true);
+    expect((bottom as HTMLButtonElement).disabled).toBe(false);
+
+    // Mid-document: both edges are reachable.
+    await driveWindowScroll(2000);
+    expect((top as HTMLButtonElement).disabled).toBe(false);
+    expect((bottom as HTMLButtonElement).disabled).toBe(false);
+
+    // At the bottom edge the downward jump disables instead.
+    await driveWindowScroll(4000);
+    expect((top as HTMLButtonElement).disabled).toBe(false);
+    expect((bottom as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("jumps to the top and bottom with smooth window scrolling", async () => {
+    const user = userEvent.setup();
+    Object.defineProperty(document.documentElement, "scrollHeight", {
+      configurable: true,
+      value: 4000,
+    });
+    const scrollTo = vi.fn();
+    Object.defineProperty(window, "scrollTo", {
+      configurable: true,
+      writable: true,
+      value: scrollTo,
+    });
+    await driveWindowScroll(0);
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+    // Start mid-document so both jumps are enabled.
+    await driveWindowScroll(2000);
+
+    await user.click(screen.getByRole("button", { name: "前往底部" }));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 4000, behavior: "smooth" });
+
+    await user.click(screen.getByRole("button", { name: "回到顶部" }));
+    expect(scrollTo).toHaveBeenCalledWith({ top: 0, behavior: "smooth" });
+  });
+
+  it("disables both jump buttons when the document fits the viewport", async () => {
+    // No scrollable overflow (jsdom's own geometry) and a fresh viewport:
+    // both edges are already reached.
+    Object.defineProperty(document.documentElement, "scrollHeight", {
+      configurable: true,
+      value: 0,
+    });
+    await driveWindowScroll(0);
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    // jsdom's document has no scrollable overflow: both edges are already
+    // reached, so neither jump is offered.
+    expect(
+      (screen.getByRole("button", { name: "回到顶部" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(
+      (screen.getByRole("button", { name: "前往底部" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+  });
+
+  it("refreshes the jump states when late content grows the document", async () => {
+    // Capture ResizeObserver callbacks so the test can deliver the resize a
+    // client-rendered body growth fires — no scroll or resize event at all.
+    const callbacks: ResizeObserverCallback[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        constructor(callback: ResizeObserverCallback) {
+          callbacks.push(callback);
+        }
+        observe(): void {}
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    const bottom = screen.getByRole("button", {
+      name: "前往底部",
+    }) as HTMLButtonElement;
+    // Mount-time geometry: the (empty) document fits the viewport.
+    expect(bottom.disabled).toBe(true);
+
+    // The body renders after mount and grows far past the viewport; the
+    // document resize must flip the bottom jump back on.
+    Object.defineProperty(document.documentElement, "scrollHeight", {
+      configurable: true,
+      value: 4000,
+    });
+    await act(async () => {
+      for (const callback of callbacks) {
+        callback([], {} as ResizeObserver);
+      }
+      await new Promise((resolve) => {
+        setTimeout(resolve, 0);
+      });
+    });
+    expect(bottom.disabled).toBe(false);
+  });
+
   it("keeps toc and width query parameters independent", async () => {
     const user = userEvent.setup();
     const api = createAPI({

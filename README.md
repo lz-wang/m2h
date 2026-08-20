@@ -90,7 +90,7 @@ Output HTML files:
 # 预览单个文件；保存后局部刷新正文，不显示文件侧边栏
 $ m2h web README.md
 
-# 预览目录；提供文件树、搜索、主题、正文宽度与文档目录
+# 预览目录；提供文件树、搜索、主题、正文宽度、文档目录与右下角回到顶部/前往底部按钮
 $ m2h web docs --mode dark --width wide
 ```
 
