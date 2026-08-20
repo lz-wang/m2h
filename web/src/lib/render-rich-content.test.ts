@@ -576,6 +576,143 @@ describe("collapsible code blocks", () => {
   });
 });
 
+describe("code line numbers", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mermaidMock.initialize.mockClear();
+    mermaidMock.run.mockClear();
+    mermaidMock.render.mockClear();
+    renderMathInElementMock.mockClear();
+    loadMermaidMock.mockClear();
+    loadKatexMock.mockClear();
+    loadTablesortMock.mockClear();
+    mermaidMock.run.mockResolvedValue(undefined);
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg data-mock="mermaid"></svg>',
+    });
+  });
+
+  it("numbers every source line in a gutter beside the code", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    // Trailing "\n" is what fenced code characteristically carries: 3 source
+    // lines must number as 1–3, not 1–4.
+    root.innerHTML = `<pre><code class="language-go">a\nb\nc\n</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    const gutter = root.querySelector<HTMLElement>(
+      "pre > .m2h-code-line-numbers",
+    );
+    expect(gutter).not.toBeNull();
+    expect(
+      root.querySelector("pre")?.classList.contains("m2h-code-with-lines"),
+    ).toBe(true);
+    expect(gutter?.getAttribute("aria-hidden")).toBe("true");
+    expect(gutter?.textContent).toBe("123");
+    // The gutter sits before the code and never inside it, so the source —
+    // and therefore the copy control — stays untouched by the numbers.
+    expect(gutter?.nextElementSibling?.tagName).toBe("CODE");
+    expect(root.querySelector("code")?.textContent).toBe("a\nb\nc\n");
+  });
+
+  it("keeps line numbers out of the copied source", async () => {
+    let copiedValue = "";
+    const restoreExecCommand = replaceProperty(
+      document,
+      "execCommand",
+      vi.fn(() => {
+        copiedValue =
+          document.querySelector<HTMLTextAreaElement>(
+            "textarea[aria-hidden='true']",
+          )?.value ?? "";
+        return true;
+      }),
+    );
+    try {
+      const { renderRichContent } = await import("./render-rich-content");
+      const root = document.createElement("div");
+      root.innerHTML = `<pre><code class="language-go">a\nb\n</code></pre>`;
+
+      await renderRichContent(root, "light");
+      const copy = root.querySelector<HTMLButtonElement>(".m2h-code-copy");
+      if (copy === null) {
+        throw new Error("code copy button was not added");
+      }
+
+      copy.click();
+      await waitFor(() =>
+        expect(copy.getAttribute("aria-label")).toBe("代码已复制"),
+      );
+      expect(copiedValue).toBe("a\nb\n");
+    } finally {
+      restoreExecCommand();
+    }
+  });
+
+  it("numbers an empty code block as a single line", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = "<pre><code></code></pre><pre><code>\n</code></pre>";
+
+    await renderRichContent(root, "light");
+
+    const gutters = root.querySelectorAll<HTMLElement>(
+      "pre > .m2h-code-line-numbers",
+    );
+    expect(gutters).toHaveLength(2);
+    expect(gutters[0]?.textContent).toBe("1");
+    expect(gutters[1]?.textContent).toBe("1");
+  });
+
+  it("never numbers mermaid source", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>' +
+      `<pre><code class="language-go">x\n</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    expect(root.querySelector("div.mermaid")).not.toBeNull();
+    expect(root.querySelectorAll("pre > .m2h-code-line-numbers")).toHaveLength(
+      1,
+    );
+  });
+
+  it("does not stack a second gutter on repeated enhancement", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-go">a\nb\nc\n</code></pre>`;
+
+    await renderRichContent(root, "light");
+    await renderRichContent(root, "light");
+
+    expect(
+      root.querySelectorAll("pre > .m2h-code-line-numbers > span"),
+    ).toHaveLength(3);
+  });
+
+  it("numbers a collapsible block with the same count the toggle announces", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-go">${codeLines(30)}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    // The gutter and the fold share one line-count algorithm: they can never
+    // disagree about how many lines a block has.
+    expect(
+      root.querySelectorAll(
+        ".m2h-code-block pre > .m2h-code-line-numbers > span",
+      ),
+    ).toHaveLength(30);
+    expect(
+      root.querySelector<HTMLButtonElement>(".m2h-code-toggle")?.textContent,
+    ).toBe("展开代码 · 30 行");
+  });
+});
+
 function codeLines(count: number): string {
   return Array.from({ length: count }, (_, index) => `line ${index + 1}`).join(
     "\n",

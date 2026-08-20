@@ -98,6 +98,7 @@ export async function renderRichContent(
 ): Promise<void> {
   addHeadingPermalinks(root);
   addCodeCopyButtons(root);
+  addCodeLineNumbers(root);
   addCollapsibleCodeBlocks(root);
   // Kick the Tablesort download off before awaiting Mermaid/KaTeX so all
   // needed runtimes load in parallel; the tables themselves are enhanced only
@@ -263,10 +264,18 @@ function addHeadingPermalinks(root: HTMLElement): void {
   }
 }
 
+// The direct <code> child of a fenced <pre>. The line-number gutter and the
+// copy control also live directly under the pre, so firstElementChild cannot
+// be trusted once a gutter has been prepended.
+function directCodeChild(pre: HTMLPreElement): HTMLElement | null {
+  const code = pre.querySelector(":scope > code");
+  return code instanceof HTMLElement ? code : null;
+}
+
 function addCodeCopyButtons(root: HTMLElement): void {
   for (const pre of root.querySelectorAll<HTMLPreElement>("pre")) {
-    const code = pre.firstElementChild;
-    if (!(code instanceof HTMLElement) || code.tagName !== "CODE") {
+    const code = directCodeChild(pre);
+    if (code === null) {
       continue;
     }
     if (pre.querySelector(".m2h-code-copy") !== null) {
@@ -343,8 +352,8 @@ function setCopyStatus(button: HTMLButtonElement, copied: boolean): void {
 // enhancement on the same body (e.g. a same-HTML hot swap) stacks nothing.
 function addCollapsibleCodeBlocks(root: HTMLElement): void {
   for (const pre of root.querySelectorAll<HTMLPreElement>("pre")) {
-    const code = pre.firstElementChild;
-    if (!(code instanceof HTMLElement) || code.tagName !== "CODE") {
+    const code = directCodeChild(pre);
+    if (code === null) {
       continue;
     }
     if (code.classList.contains("language-mermaid")) {
@@ -354,7 +363,7 @@ function addCollapsibleCodeBlocks(root: HTMLElement): void {
       continue;
     }
 
-    const lineCount = countCodeLines(code);
+    const lineCount = codeSourceLineCount(code);
     if (lineCount <= CODE_COLLAPSE_LINE_THRESHOLD) {
       continue;
     }
@@ -363,9 +372,44 @@ function addCollapsibleCodeBlocks(root: HTMLElement): void {
   }
 }
 
+// Prepend a gutter of line numbers to every fenced code block. The numbers
+// live in their own span beside the <code> element, so the source text — and
+// with it the copy control — never contains them, Chroma's token spans stay
+// untouched, and the collapse fold keeps treating the whole <pre> as one
+// visual unit. Mermaid blocks are skipped: their <pre> is replaced by a
+// rendered diagram, so a gutter would only flash before disappearing.
+// Idempotent, like the copy control: re-running the enhancement on the same
+// body (e.g. a same-HTML hot swap) stacks nothing.
+function addCodeLineNumbers(root: HTMLElement): void {
+  for (const pre of root.querySelectorAll<HTMLPreElement>("pre")) {
+    const code = directCodeChild(pre);
+    if (code === null || code.classList.contains("language-mermaid")) {
+      continue;
+    }
+    if (pre.querySelector(":scope > .m2h-code-line-numbers") !== null) {
+      continue;
+    }
+
+    const gutter = document.createElement("span");
+    gutter.className = "m2h-code-line-numbers";
+    gutter.setAttribute("aria-hidden", "true");
+    const lineCount = Math.max(codeSourceLineCount(code), 1);
+    for (let line = 1; line <= lineCount; line += 1) {
+      const number = document.createElement("span");
+      number.textContent = String(line);
+      gutter.append(number);
+    }
+
+    pre.classList.add("m2h-code-with-lines");
+    code.before(gutter);
+  }
+}
+
 // Count logical source lines, immune to the trailing "\n" fenced code
 // characteristically carries (a naive split would report one line too many).
-function countCodeLines(code: HTMLElement): number {
+// The collapse fold and the line-number gutter share this single algorithm so
+// they can never disagree about a block's line count.
+function codeSourceLineCount(code: HTMLElement): number {
   const source = (code.textContent ?? "").replace(/\r\n?/g, "\n");
   if (source === "") {
     return 0;

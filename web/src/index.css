@@ -572,6 +572,49 @@ body,
   outline: none;
 }
 
+/*
+ * Line-number gutter, prepended by render-rich-content.ts. WebUI-only: the
+ * convert output keeps its compact fences, so these rules live in the app
+ * stylesheet rather than the shared Markdown stylesheet.
+ *
+ * The pre becomes a flex row whose gutter sticks to the scrollport's left
+ * edge, so scrolling a long line sideways keeps the numbers in view while the
+ * code slides beneath the gutter's opaque plate. Every number inherits the
+ * pre's exact font-size and line-height (never a size of its own) so the
+ * column stays in lock-step with the code lines however deep the block runs;
+ * pointer-events:none keeps the gutter out of text selection entirely.
+ */
+.markdown-body pre.m2h-code-with-lines {
+  display: flex;
+  align-items: flex-start;
+}
+
+.markdown-body pre.m2h-code-with-lines > code {
+  flex: none;
+}
+
+.markdown-body .m2h-code-line-numbers {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 2rem;
+  padding-right: 0.75rem;
+  text-align: right;
+  color: var(--fgColor-muted, var(--muted-foreground));
+  background: var(--m2h-code-block-bg);
+  border-right: 1px solid var(--borderColor-muted, var(--border));
+  user-select: none;
+  pointer-events: none;
+}
+
+.markdown-body .m2h-code-line-numbers > span {
+  display: block;
+  line-height: inherit;
+}
+
 .reader-frontmatter {
   box-sizing: border-box;
   width: 100%;

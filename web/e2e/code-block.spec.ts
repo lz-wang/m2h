@@ -7,7 +7,9 @@ import { expect, test } from "@playwright/test";
 // only be locked down with a genuine layout engine.
 
 // Wait until the document body has painted, so geometry assertions never race
-// the client-rendered article (same helper contract as layout.spec.ts).
+// the client-rendered article (same helper contract as layout.spec.ts). The
+// fixture holds a Mermaid diagram, so also wait for its source block to be
+// replaced: pre-counting assertions must not observe the transient <pre>.
 async function waitForBody(
   page: import("@playwright/test").Page,
   path: string,
@@ -15,7 +17,8 @@ async function waitForBody(
   await page.goto(path);
   await page.waitForFunction(
     () =>
-      document.querySelector(".markdown-body p, .markdown-body h2") !== null,
+      document.querySelector(".markdown-body p, .markdown-body h2") !== null &&
+      document.querySelector("pre > code.language-mermaid") === null,
   );
 }
 
@@ -91,6 +94,95 @@ test("collapses overlong code blocks behind an expand toggle", async ({
   const refolded = await measureBlock(page, 1);
   expect(refolded.datasetCollapsed).toBe("true");
   expect(refolded.clientHeight).toBe(collapsed.clientHeight);
+});
+
+test("numbers code lines in a gutter that stays pinned while scrolling", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await waitForBody(page, "/doc/long-code.md");
+
+  // Every fenced source block carries a gutter with exactly one number per
+  // source line; the trailing newline never materializes as an extra number.
+  const blocks = await page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>("pre")).map((pre) => ({
+      numbers: pre.querySelectorAll(":scope > .m2h-code-line-numbers > span")
+        .length,
+      withLines: pre.classList.contains("m2h-code-with-lines"),
+    })),
+  );
+  expect(blocks).toEqual([
+    { numbers: 3, withLines: true },
+    { numbers: 25, withLines: true },
+    { numbers: 26, withLines: true },
+    { numbers: 120, withLines: true },
+  ]);
+
+  // The rendered diagram is never numbered.
+  expect(
+    await page.evaluate(
+      () => document.querySelectorAll(".mermaid .m2h-code-line-numbers").length,
+    ),
+  ).toBe(0);
+
+  // Pixel lock-step: the gutter inherits the pre's font metrics, so across
+  // 120 lines the number column and the code column end the same height and
+  // the first number is level with the first source line. A divergent
+  // font-size or line-height accumulates tens of pixels of drift instead.
+  const alignment = await page.evaluate(() => {
+    const pre = document.querySelectorAll<HTMLElement>("pre")[3];
+    if (pre === undefined) {
+      throw new Error("120-line block was not rendered");
+    }
+    const gutter = pre.querySelector<HTMLElement>(
+      ":scope > .m2h-code-line-numbers",
+    );
+    const code = pre.querySelector<HTMLElement>(":scope > code");
+    if (gutter === null || code === null) {
+      throw new Error("gutter or code element was not rendered");
+    }
+    return {
+      gutterHeight: gutter.getBoundingClientRect().height,
+      codeHeight: code.getBoundingClientRect().height,
+      firstNumberTop:
+        gutter.firstElementChild?.getBoundingClientRect().top ?? -1,
+      codeTop: code.getBoundingClientRect().top,
+    };
+  });
+  expect(Math.abs(alignment.gutterHeight - alignment.codeHeight)).toBeLessThan(
+    2,
+  );
+  expect(Math.abs(alignment.firstNumberTop - alignment.codeTop)).toBeLessThan(
+    2,
+  );
+
+  // Scrolling the long line sideways keeps the numbers pinned at the block's
+  // left edge instead of scrolling away with the content.
+  const sticky = await page.evaluate(() => {
+    const pre = document.querySelectorAll<HTMLElement>("pre")[3];
+    if (pre === undefined) {
+      throw new Error("120-line block was not rendered");
+    }
+    pre.scrollLeft = 300;
+    const gutter = pre.querySelector<HTMLElement>(
+      ":scope > .m2h-code-line-numbers",
+    );
+    if (gutter === null) {
+      throw new Error("gutter was not rendered");
+    }
+    const preRect = pre.getBoundingClientRect();
+    const gutterRect = gutter.getBoundingClientRect();
+    return {
+      scrollLeft: pre.scrollLeft,
+      pinnedAtLeftEdge:
+        gutterRect.left >= preRect.left - 1 &&
+        gutterRect.left <= preRect.left + 17,
+      visible: gutterRect.right > preRect.left,
+    };
+  });
+  expect(sticky.scrollLeft).toBeGreaterThan(0);
+  expect(sticky.pinnedAtLeftEdge).toBe(true);
+  expect(sticky.visible).toBe(true);
 });
 
 interface BlockGeometry {
