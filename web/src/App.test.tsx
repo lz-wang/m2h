@@ -1374,6 +1374,133 @@ describe("App directory preview", () => {
     expect(bottom.disabled).toBe(false);
   });
 
+  it("lands a deep link into the second root and switches roots in place", async () => {
+    window.history.replaceState(null, "", "/doc/r1/README.md#section");
+    const getDocument = vi.fn().mockImplementation(async (path: string) => ({
+      path,
+      title: path.startsWith("r1/") ? "Beta Readme" : "Alpha Readme",
+      html:
+        path.startsWith("r1/")
+          ? '<h2 id="section">Section</h2>'
+          : "<p>Alpha body</p>",
+      frontmatter: null,
+      toc: path.startsWith("r1/")
+        ? [{ level: 2, id: "section", text: "Section" }]
+        : [],
+    }));
+    const api = createAPI({
+      listFiles: vi.fn().mockResolvedValue({
+        kind: "workspace",
+        version: "0.9.1",
+        roots: [
+          {
+            id: "r0",
+            name: "alpha",
+            files: [
+              { path: "README.md", name: "README.md", title: "Alpha Readme" },
+            ],
+          },
+          {
+            id: "r1",
+            name: "beta",
+            files: [
+              { path: "README.md", name: "README.md", title: "Beta Readme" },
+            ],
+          },
+        ],
+        defaultDocument: { root: "r0", path: "README.md" },
+      }),
+      getDocument,
+    });
+    render(<App api={api} />);
+
+    // A fresh #hash link into the second root opens that root's same-named
+    // document (not the primary's) and scrolls to the section.
+    await screen.findByRole("heading", { level: 2, name: "Section" });
+    expect(getDocument).toHaveBeenCalledWith(
+      "r1/README.md",
+      expect.any(AbortSignal),
+    );
+    await waitFor(() =>
+      expect(Element.prototype.scrollIntoView).toHaveBeenCalledWith(
+        expect.objectContaining({ block: "start" }),
+      ),
+    );
+    expect(
+      window.location.pathname + window.location.hash,
+    ).toBe("/doc/r1/README.md#section");
+
+    // Switching to the first root's copy pushes its own virtual path.
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "Alpha Readme，r0/README.md" }),
+    );
+    await screen.findByText("Alpha body");
+    expect(window.location.pathname).toBe("/doc/r0/README.md");
+  });
+
+  it("restores per-root scroll positions independently after a reload", async () => {
+    // The two roots hold same-named documents; their saved offsets must never
+    // leak across the virtual key boundary.
+    vi.spyOn(performance, "getEntriesByType").mockReturnValue([
+      { type: "reload" } as unknown as PerformanceEntry,
+    ]);
+    saveScrollPosition("r0/README.md", 111);
+    saveScrollPosition("r1/README.md", 222);
+    window.history.replaceState(null, "", "/doc/r1/README.md");
+    const getDocument = vi.fn().mockImplementation(async (path: string) => ({
+      path,
+      title: path.startsWith("r1/") ? "Beta Readme" : "Alpha Readme",
+      html: `<p>Body for ${path}</p>`,
+      frontmatter: null,
+      toc: [],
+    }));
+    const api = createAPI({
+      listFiles: vi.fn().mockResolvedValue({
+        kind: "workspace",
+        version: "0.9.1",
+        roots: [
+          {
+            id: "r0",
+            name: "alpha",
+            files: [
+              { path: "README.md", name: "README.md", title: "Alpha Readme" },
+            ],
+          },
+          {
+            id: "r1",
+            name: "beta",
+            files: [
+              { path: "README.md", name: "README.md", title: "Beta Readme" },
+            ],
+          },
+        ],
+        defaultDocument: { root: "r0", path: "README.md" },
+      }),
+      getDocument,
+    });
+    const scrollTo = vi.fn();
+    Object.defineProperty(window, "scrollTo", {
+      configurable: true,
+      writable: true,
+      value: scrollTo,
+    });
+    render(<App api={api} />);
+
+    // The reloaded tab returns to the second root's own pixel offset.
+    await screen.findByText("Body for r1/README.md");
+    expect(scrollTo).toHaveBeenCalledWith(0, 222);
+
+    // Switching documents restores the first root's own offset.
+    const user = userEvent.setup();
+    await user.click(
+      screen.getByRole("button", { name: "Alpha Readme，r0/README.md" }),
+    );
+    await screen.findByText("Body for r0/README.md");
+    expect(scrollTo).toHaveBeenCalledWith(0, 111);
+    expect(readScrollPosition("r1/README.md")).toBe(222);
+  });
+
   it("keeps toc and width query parameters independent", async () => {
     const user = userEvent.setup();
     const api = createAPI({
