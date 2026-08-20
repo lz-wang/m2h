@@ -325,6 +325,21 @@ body,
 }
 
 /*
+ * The tree's sub-lists drop SidebarMenuSub's shadcn-wide translate-x-px. Every
+ * nesting level would otherwise wrap its whole subtree in a 1px transform, and
+ * the sticky directory rows live inside those translated subtrees — a
+ * scroll container + nested transforms + sticky + z-index stack that Chromium
+ * handles with per-frame paint/compositor invalidation and is a known trigger
+ * for stale-raster artifacts after a subtree unmounts. The 1px nudge buys no
+ * alignment here (indent already comes from ml/pl/border), so the transform
+ * goes: unlayered rules here outrank the layered Tailwind utility.
+ */
+.document-tree-sub {
+  translate: none;
+  transform: none;
+}
+
+/*
  * VS Code Explorer-style sticky directory rows. The tree is nested DOM (each
  * directory <li> contains its whole subtree), so plain CSS sticky gets parent
  * containment for free: a row sticks while its subtree is on screen and is

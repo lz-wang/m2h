@@ -287,7 +287,7 @@ function DirectoryItem({
         <span className="truncate">{node.name}</span>
       </SidebarMenuButton>
       {open ? (
-        <SidebarMenuSub>
+        <SidebarMenuSub className="document-tree-sub">
           {node.children.map((child) => (
             <TreeItem
               key={`${child.type}:${child.path}`}
