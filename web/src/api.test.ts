@@ -17,8 +17,16 @@ describe("browser API", () => {
           JSON.stringify({
             kind: "directory",
             version: "0.9.1",
-            files: [{ path: "README.md", name: "README.md", title: "Readme" }],
-            defaultPath: "README.md",
+            roots: [
+              {
+                id: "r0",
+                name: "docs",
+                files: [
+                  { path: "README.md", name: "README.md", title: "Readme" },
+                ],
+              },
+            ],
+            defaultDocument: { root: "r0", path: "README.md" },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -49,8 +57,14 @@ describe("browser API", () => {
     await expect(browserAPI.listFiles()).resolves.toEqual({
       kind: "directory",
       version: "0.9.1",
-      files: [{ path: "README.md", name: "README.md", title: "Readme" }],
-      defaultPath: "README.md",
+      roots: [
+        {
+          id: "r0",
+          name: "docs",
+          files: [{ path: "README.md", name: "README.md", title: "Readme" }],
+        },
+      ],
+      defaultDocument: { root: "r0", path: "README.md" },
     });
     await expect(browserAPI.getDocument("space name.md")).resolves.toEqual({
       path: "space name.md",
@@ -77,8 +91,16 @@ describe("browser API", () => {
         JSON.stringify({
           kind: "single",
           version: "dev-20260812-abcdef0",
-          files: [{ path: "README.md", name: "README.md", title: "Readme" }],
-          defaultPath: "README.md",
+          roots: [
+            {
+              id: "r0",
+              name: "README.md",
+              files: [
+                { path: "README.md", name: "README.md", title: "Readme" },
+              ],
+            },
+          ],
+          defaultDocument: { root: "r0", path: "README.md" },
         }),
         { status: 200 },
       ),
@@ -87,20 +109,54 @@ describe("browser API", () => {
       kind: "single",
     });
 
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          kind: "workspace",
+          version: "dev-20260812-abcdef0",
+          roots: [
+            {
+              id: "r0",
+              name: "a",
+              files: [
+                { path: "README.md", name: "README.md", title: "Readme" },
+              ],
+            },
+            { id: "r1", name: "b", files: [] },
+          ],
+          defaultDocument: { root: "r0", path: "README.md" },
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.listFiles()).resolves.toMatchObject({
+      kind: "workspace",
+      roots: [{ id: "r0" }, { id: "r1" }],
+    });
+
     // A missing or unrecognized kind falls back to directory so the WebUI keeps
     // the richer navigation UI when the server contract is uncertain.
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           version: "dev-20260812-abcdef0",
-          files: [{ path: "README.md", name: "README.md", title: "Readme" }],
-          defaultPath: "README.md",
+          roots: [
+            {
+              id: "r0",
+              name: "docs",
+              files: [
+                { path: "README.md", name: "README.md", title: "Readme" },
+              ],
+            },
+          ],
+          defaultDocument: null,
         }),
         { status: 200 },
       ),
     );
     await expect(browserAPI.listFiles()).resolves.toMatchObject({
       kind: "directory",
+      defaultDocument: null,
     });
   });
 
@@ -121,9 +177,38 @@ describe("browser API", () => {
 
   it("rejects malformed successful responses", async () => {
     fetchMock.mockResolvedValueOnce(
-      new Response(JSON.stringify({ files: "invalid", defaultPath: "" }), {
+      new Response(JSON.stringify({ roots: "invalid", version: "1" }), {
         status: 200,
       }),
+    );
+    await expect(browserAPI.listFiles()).rejects.toThrow(
+      "文件列表响应格式无效",
+    );
+
+    // Root summaries and the default document reference are validated to the
+    // same strictness as the files themselves.
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          version: "1",
+          roots: [{ id: "r0", name: "docs", files: [{ path: "README.md" }] }],
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.listFiles()).rejects.toThrow(
+      "文件条目响应格式无效",
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          version: "1",
+          roots: [{ id: "r0", name: "docs", files: [] }],
+          defaultDocument: { root: "r0" },
+        }),
+        { status: 200 },
+      ),
     );
     await expect(browserAPI.listFiles()).rejects.toThrow(
       "文件列表响应格式无效",

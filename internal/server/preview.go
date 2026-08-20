@@ -28,11 +28,26 @@ type fileSummary struct {
 	Title string `json:"title"`
 }
 
+// rootSummary groups one preview root's documents. Files carry root-relative
+// paths; the id prefixes the addressable (virtual) path in a multi-root
+// workspace (see previewWorkspace.publicPath).
+type rootSummary struct {
+	ID    string        `json:"id"`
+	Name  string        `json:"name"`
+	Files []fileSummary `json:"files"`
+}
+
+// documentRef names one document by its root and root-relative path.
+type documentRef struct {
+	Root string `json:"root"`
+	Path string `json:"path"`
+}
+
 type fileListResponse struct {
-	Kind        previewKind   `json:"kind"`
-	Files       []fileSummary `json:"files"`
-	DefaultPath string        `json:"defaultPath"`
-	Version     string        `json:"version"`
+	Kind            previewKind   `json:"kind"`
+	Roots           []rootSummary `json:"roots"`
+	DefaultDocument *documentRef  `json:"defaultDocument"`
+	Version         string        `json:"version"`
 }
 
 type frontMatterEntryResponse struct {
@@ -60,32 +75,34 @@ type documentResponse struct {
 	TOC         []tocEntryResponse   `json:"toc"`
 }
 
-// previewHandler serves the unified React WebUI and its JSON API for both
-// single-file and directory preview. The only difference between the two is the
-// previewScope, which decides which Markdown files exist and are addressable.
+// previewHandler serves the unified React WebUI and its JSON API for every
+// preview shape. The previewWorkspace decides which Markdown files exist and
+// are addressable: one root behaves exactly like the historical single-input
+// preview, several roots address documents through virtual root-prefixed
+// paths while each root keeps its own access boundary.
 type previewHandler struct {
-	scope   previewScope
-	mode    markdown.Mode
-	width   markdown.Width
-	ui      fs.FS
-	version string
+	workspace previewWorkspace
+	mode      markdown.Mode
+	width     markdown.Width
+	ui        fs.FS
+	version   string
 
 	discover func(context.Context, previewScope) (files.Discovery, error)
 }
 
 func newPreviewHandler(
-	scope previewScope,
+	workspace previewWorkspace,
 	mode markdown.Mode,
 	width markdown.Width,
 	events *eventHub,
 	logger io.Writer,
 	ui fs.FS,
 ) http.Handler {
-	return newPreviewHandlerWithVersion(scope, mode, width, events, logger, ui, appversion.Development)
+	return newPreviewHandlerWithVersion(workspace, mode, width, events, logger, ui, appversion.Development)
 }
 
 func newPreviewHandlerWithVersion(
-	scope previewScope,
+	workspace previewWorkspace,
 	mode markdown.Mode,
 	width markdown.Width,
 	events *eventHub,
@@ -94,11 +111,11 @@ func newPreviewHandlerWithVersion(
 	buildVersion string,
 ) http.Handler {
 	handler := &previewHandler{
-		scope:   scope,
-		mode:    mode,
-		width:   width,
-		ui:      ui,
-		version: buildVersion,
+		workspace: workspace,
+		mode:      mode,
+		width:     width,
+		ui:        ui,
+		version:   buildVersion,
 		discover: func(ctx context.Context, scope previewScope) (files.Discovery, error) {
 			return scope.discover(ctx)
 		},
@@ -112,7 +129,7 @@ func (handler *previewHandler) routes(events *eventHub, logger io.Writer) http.H
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
 	mux.Handle("/api/events", events)
 	mux.HandleFunc("/api/", jsonNotFound)
-	mux.Handle("/assets/", newAssetHandler(handler.scope.root))
+	mux.Handle("/assets/", newAssetHandler(handler.workspace))
 	mux.Handle("/runtime/", newRuntimeHandler())
 	mux.HandleFunc("/ui/markdown.css", handler.serveMarkdownStyles)
 	mux.Handle("/ui/", http.StripPrefix("/ui/", immutableUIAssets(http.FileServer(http.FS(handler.ui)))))
@@ -126,35 +143,43 @@ func (handler *previewHandler) serveFiles(response http.ResponseWriter, request 
 		writeJSONError(response, http.StatusBadRequest, "query parameters are not supported")
 		return
 	}
-	discovered, err := handler.discover(request.Context(), handler.scope)
-	if err != nil {
-		writeJSONError(response, http.StatusInternalServerError, "discover Markdown files")
-		return
-	}
+	roots := make([]rootSummary, 0, handler.workspace.rootCount())
+	for _, root := range handler.workspace.roots {
+		discovered, err := handler.discover(request.Context(), root.scope)
+		if err != nil {
+			writeJSONError(response, http.StatusInternalServerError, "discover Markdown files")
+			return
+		}
 
-	summaries := make([]fileSummary, 0, len(discovered.Markdown))
-	for _, entry := range discovered.Markdown {
-		contents, err := os.ReadFile(entry.AbsolutePath)
-		if err != nil {
-			writeJSONError(response, http.StatusInternalServerError, "read Markdown file")
-			return
+		summaries := make([]fileSummary, 0, len(discovered.Markdown))
+		for _, entry := range discovered.Markdown {
+			contents, err := os.ReadFile(entry.AbsolutePath)
+			if err != nil {
+				writeJSONError(response, http.StatusInternalServerError, "read Markdown file")
+				return
+			}
+			title, err := markdown.Title(contents, entry.RelativePath)
+			if err != nil {
+				writeJSONError(response, http.StatusInternalServerError, "extract Markdown title")
+				return
+			}
+			summaries = append(summaries, fileSummary{
+				Path:  entry.RelativePath,
+				Name:  path.Base(entry.RelativePath),
+				Title: title,
+			})
 		}
-		title, err := markdown.Title(contents, entry.RelativePath)
-		if err != nil {
-			writeJSONError(response, http.StatusInternalServerError, "extract Markdown title")
-			return
-		}
-		summaries = append(summaries, fileSummary{
-			Path:  entry.RelativePath,
-			Name:  path.Base(entry.RelativePath),
-			Title: title,
+		roots = append(roots, rootSummary{
+			ID:    root.id,
+			Name:  root.label,
+			Files: summaries,
 		})
 	}
 	writeJSON(response, http.StatusOK, fileListResponse{
-		Kind:        handler.scope.kind(),
-		Files:       summaries,
-		DefaultPath: defaultDocument(summaries),
-		Version:     handler.version,
+		Kind:            handler.workspace.kind(),
+		Roots:           roots,
+		DefaultDocument: workspaceDefaultDocument(roots),
+		Version:         handler.version,
 	})
 }
 
@@ -164,16 +189,21 @@ func (handler *previewHandler) serveDocument(response http.ResponseWriter, reque
 		writeJSONError(response, http.StatusBadRequest, "exactly one path query parameter is required")
 		return
 	}
-	relative, err := safeRelativePath(values[0])
+	virtual, err := safeRelativePath(values[0])
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "invalid document path")
 		return
 	}
-	if !handler.scope.allowsDocument(relative) {
+	root, relative, err := handler.workspace.locate(virtual)
+	if err != nil {
 		writeJSONError(response, http.StatusNotFound, "document not found")
 		return
 	}
-	target, err := resolveRequestFile(handler.scope.root, relative)
+	if !root.scope.allowsDocument(relative) {
+		writeJSONError(response, http.StatusNotFound, "document not found")
+		return
+	}
+	target, err := resolveRequestFile(root.scope.root, relative)
 	if err != nil {
 		writeJSONError(response, http.StatusNotFound, "document not found")
 		return
@@ -203,7 +233,7 @@ func (handler *previewHandler) serveDocument(response http.ResponseWriter, reque
 		return
 	}
 	writeJSON(response, http.StatusOK, documentResponse{
-		Path:        relative,
+		Path:        handler.workspace.publicPath(root.id, relative),
 		Title:       rendered.Title,
 		HTML:        rendered.Body,
 		FrontMatter: frontMatterResponseFrom(frontMatter),
@@ -332,6 +362,19 @@ func defaultDocument(summaries []fileSummary) string {
 		return ""
 	}
 	return summaries[0].Path
+}
+
+// workspaceDefaultDocument picks the document the preview opens on: the first
+// root that has anything wins (README.md, then index.md, then its first
+// file), so the CLI's first input acts as the primary root and its default
+// beats every later root's README.
+func workspaceDefaultDocument(roots []rootSummary) *documentRef {
+	for _, root := range roots {
+		if path := defaultDocument(root.Files); path != "" {
+			return &documentRef{Root: root.ID, Path: path}
+		}
+	}
+	return nil
 }
 
 func safeRelativePath(value string) (string, error) {

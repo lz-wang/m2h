@@ -4,14 +4,29 @@ export interface FileSummary {
   title: string;
 }
 
-// PreviewKind reports whether the server is previewing one file or a directory,
-// so the WebUI can hide file navigation when there is nothing to navigate.
-export type PreviewKind = "single" | "directory";
+// RootSummary groups one preview root's documents. Files carry root-relative
+// paths; in a multi-root workspace the root id prefixes the addressable
+// (virtual) document path, so identity stays unique across roots.
+export interface RootSummary {
+  id: string;
+  name: string;
+  files: FileSummary[];
+}
+
+export interface DocumentRef {
+  root: string;
+  path: string;
+}
+
+// PreviewKind reports what the server is previewing, so the WebUI can hide
+// file navigation when there is nothing to navigate: one file, one directory,
+// or a workspace of several roots.
+export type PreviewKind = "single" | "directory" | "workspace";
 
 export interface FileListResponse {
   kind: PreviewKind;
-  files: FileSummary[];
-  defaultPath: string;
+  roots: RootSummary[];
+  defaultDocument: DocumentRef | null;
   version: string;
 }
 
@@ -78,28 +93,66 @@ function parseFileList(payload: unknown): FileListResponse {
   if (
     !isRecord(payload) ||
     typeof payload.version !== "string" ||
-    !Array.isArray(payload.files) ||
-    typeof payload.defaultPath !== "string"
+    !Array.isArray(payload.roots)
   ) {
     throw new Error("文件列表响应格式无效");
   }
-  const files = payload.files.map((value) => {
+  const roots = payload.roots.map((value) => {
     if (
       !isRecord(value) ||
-      typeof value.path !== "string" ||
+      typeof value.id !== "string" ||
       typeof value.name !== "string" ||
-      typeof value.title !== "string"
+      !Array.isArray(value.files)
     ) {
-      throw new Error("文件条目响应格式无效");
+      throw new Error("文件列表响应格式无效");
     }
-    return { path: value.path, name: value.name, title: value.title };
+    return {
+      id: value.id,
+      name: value.name,
+      files: value.files.map(parseFileSummary),
+    };
   });
   return {
-    kind: payload.kind === "single" ? "single" : "directory",
-    files,
-    defaultPath: payload.defaultPath,
+    kind: parsePreviewKind(payload.kind),
+    roots,
+    defaultDocument: parseDocumentRef(payload.defaultDocument),
     version: payload.version,
   };
+}
+
+function parseFileSummary(value: unknown): FileSummary {
+  if (
+    !isRecord(value) ||
+    typeof value.path !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.title !== "string"
+  ) {
+    throw new Error("文件条目响应格式无效");
+  }
+  return { path: value.path, name: value.name, title: value.title };
+}
+
+// A missing or unrecognized kind falls back to directory so the WebUI keeps
+// the richer navigation UI when the server contract is uncertain.
+function parsePreviewKind(value: unknown): PreviewKind {
+  if (value === "single" || value === "directory" || value === "workspace") {
+    return value;
+  }
+  return "directory";
+}
+
+function parseDocumentRef(payload: unknown): DocumentRef | null {
+  if (payload === undefined || payload === null) {
+    return null;
+  }
+  if (
+    !isRecord(payload) ||
+    typeof payload.root !== "string" ||
+    typeof payload.path !== "string"
+  ) {
+    throw new Error("文件列表响应格式无效");
+  }
+  return { root: payload.root, path: payload.path };
 }
 
 function parseFrontMatter(payload: unknown): FrontMatter | null {

@@ -21,6 +21,8 @@ import {
   type Mode,
   type ResolvedMode,
   readRoute,
+  rootDocumentKey,
+  rootFiles,
   routeURL,
 } from "./model";
 
@@ -166,16 +168,18 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         if (controller.signal.aborted) {
           return;
         }
-        filesRef.current = loaded.files;
-        defaultPathRef.current = loaded.defaultPath;
-        setFiles(loaded.files);
+        // Documents are addressed by their virtual key: a multi-root workspace
+        // prefixes each root's files with the root id, a single root keeps
+        // bare relative paths (see model.ts rootFiles).
+        const multiRoot = loaded.roots.length > 1;
+        const flattened = rootFiles(loaded.roots);
+        const defaultPath = rootDocumentKey(loaded.defaultDocument, multiRoot);
+        filesRef.current = flattened;
+        defaultPathRef.current = defaultPath;
+        setFiles(flattened);
         setKind(loaded.kind);
         setVersion(loaded.version);
-        const target = chooseDocument(
-          loaded.files,
-          requested,
-          loaded.defaultPath,
-        );
+        const target = chooseDocument(flattened, requested, defaultPath);
         if (target === null) {
           selectedPathRef.current = null;
           setSelectedPath(null);

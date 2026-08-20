@@ -15,11 +15,17 @@ import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 const initialFiles: FileListResponse = {
   kind: "directory",
   version: "0.9.1",
-  files: [
-    { path: "README.md", name: "README.md", title: "Readme API Title" },
-    { path: "guides/setup.md", name: "setup.md", title: "Setup API Title" },
+  roots: [
+    {
+      id: "r0",
+      name: "docs",
+      files: [
+        { path: "README.md", name: "README.md", title: "Readme API Title" },
+        { path: "guides/setup.md", name: "setup.md", title: "Setup API Title" },
+      ],
+    },
   ],
-  defaultPath: "README.md",
+  defaultDocument: { root: "r0", path: "README.md" },
 };
 
 beforeEach(() => {
@@ -147,10 +153,20 @@ describe("App directory preview", () => {
       listFiles: vi.fn().mockResolvedValue({
         kind: "single",
         version: "0.9.1",
-        files: [
-          { path: "README.md", name: "README.md", title: "Readme API Title" },
+        roots: [
+          {
+            id: "r0",
+            name: "README.md",
+            files: [
+              {
+                path: "README.md",
+                name: "README.md",
+                title: "Readme API Title",
+              },
+            ],
+          },
         ],
-        defaultPath: "README.md",
+        defaultDocument: { root: "r0", path: "README.md" },
       }),
     });
     render(<App api={api} />);
@@ -163,6 +179,65 @@ describe("App directory preview", () => {
     expect(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
     ).toBeTruthy();
+  });
+
+  it("flattens a multi-root workspace into virtual document keys", async () => {
+    const getDocument = vi.fn().mockImplementation(async (path: string) => ({
+      path,
+      title: path.includes("r1/") ? "Beta Readme" : "Alpha Readme",
+      html: `<h1>${path.includes("r1/") ? "Beta" : "Alpha"}</h1>`,
+      frontmatter: null,
+      toc: [],
+    }));
+    const api = createAPI({
+      listFiles: vi.fn().mockResolvedValue({
+        kind: "workspace",
+        version: "0.9.1",
+        roots: [
+          {
+            id: "r0",
+            name: "alpha",
+            files: [
+              { path: "README.md", name: "README.md", title: "Alpha Readme" },
+            ],
+          },
+          {
+            id: "r1",
+            name: "beta",
+            files: [
+              { path: "README.md", name: "README.md", title: "Beta Readme" },
+            ],
+          },
+        ],
+        defaultDocument: { root: "r0", path: "README.md" },
+      }),
+      getDocument,
+    });
+    render(<App api={api} />);
+
+    // The workspace default opens the primary root's document under its
+    // virtual key and the URL carries the key unchanged.
+    await screen.findByRole("heading", { level: 1, name: "Alpha" });
+    expect(getDocument).toHaveBeenCalledWith(
+      "r0/README.md",
+      expect.any(AbortSignal),
+    );
+    expect(window.location.pathname).toBe("/doc/r0/README.md");
+
+    // Same-named documents in two roots stay distinct; the second root's copy
+    // is selectable through its own virtual key (the flattened tree nests it
+    // under its root-id directory until the multi-root sidebar lands).
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "r1" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Beta Readme，r1/README.md" }),
+    );
+    await screen.findByRole("heading", { level: 1, name: "Beta" });
+    expect(getDocument).toHaveBeenLastCalledWith(
+      "r1/README.md",
+      expect.any(AbortSignal),
+    );
+    expect(window.location.pathname).toBe("/doc/r1/README.md");
   });
 
   it("restores a dark deep link and expands the selected directory", async () => {
@@ -215,8 +290,8 @@ describe("App directory preview", () => {
       listFiles: vi.fn().mockResolvedValue({
         kind: "directory",
         version: "0.9.1",
-        files: [file],
-        defaultPath: path,
+        roots: [{ id: "r0", name: "testdata", files: [file] }],
+        defaultDocument: { root: "r0", path },
       }),
       getDocument: vi.fn().mockResolvedValue({
         path,
@@ -544,8 +619,8 @@ describe("App directory preview", () => {
           listFiles: vi.fn().mockResolvedValue({
             kind: "directory",
             version: "0.9.1",
-            files: [],
-            defaultPath: "",
+            roots: [{ id: "r0", name: "docs", files: [] }],
+            defaultDocument: null,
           }),
         })}
       />,
@@ -1291,7 +1366,7 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
   return {
     listFiles: vi.fn().mockResolvedValue(initialFiles),
     getDocument: vi.fn().mockImplementation(async (path: string) => {
-      const file = initialFiles.files.find(
+      const file = initialFiles.roots[0]?.files.find(
         (candidate) => candidate.path === path,
       );
       if (file === undefined) {

@@ -123,8 +123,10 @@ export function App({ api }: AppProps) {
   const preview = usePreview(api);
   usePreviewEvents(preview.reloadCurrent);
   // A single-file scope has nothing to switch between, so the file sidebar and
-  // its toolbar trigger stay hidden; every other control remains shared.
-  const navigationAvailable = preview.kind === "directory";
+  // its toolbar trigger stay hidden; directories and multi-root workspaces
+  // both offer navigation. Every other control remains shared.
+  const navigationAvailable =
+    preview.kind === "directory" || preview.kind === "workspace";
   const [initialLayout] = useState(readStoredLayout);
   const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
   const [sidebarOpen, setSidebarOpen] = useState(initialLayout.sidebarOpen);

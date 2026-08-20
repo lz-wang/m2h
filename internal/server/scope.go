@@ -24,8 +24,9 @@ type previewScope struct {
 type previewKind string
 
 const (
-	previewSingle    previewKind = "single"
-	previewDirectory previewKind = "directory"
+	previewSingle        previewKind = "single"
+	previewDirectory     previewKind = "directory"
+	previewWorkspaceKind previewKind = "workspace"
 )
 
 func (scope previewScope) kind() previewKind {

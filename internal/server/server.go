@@ -124,7 +124,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	handler := newPreviewHandlerWithVersion(workspace.primary().scope, normalized.Mode, normalized.Width, hub, logger, options.UI, normalized.Version)
+	handler := newPreviewHandlerWithVersion(workspace, normalized.Mode, normalized.Width, hub, logger, options.UI, normalized.Version)
 	httpServer := &http.Server{
 		Handler: handler,
 		BaseContext: func(net.Listener) context.Context {

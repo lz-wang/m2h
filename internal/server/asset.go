@@ -10,18 +10,17 @@ import (
 	"github.com/lz-wang/m2h/internal/files"
 )
 
-// assetHandler serves non-Markdown files rooted at a preview scope's root, so
-// local images and attachments referenced by rendered Markdown resolve in both
-// single-file and directory preview. Markdown files are deliberately refused.
+// assetHandler serves non-Markdown files for a preview workspace. A single
+// root keeps the unprefixed /assets/<path> routes; a multi-root workspace
+// requires the root id as the first segment (/assets/r0/<path>) so every
+// attachment resolves inside its own root's boundary and can never cross into
+// another root's tree. Markdown files are deliberately refused.
 type assetHandler struct {
-	root string
+	workspace previewWorkspace
 }
 
-func newAssetHandler(root string) http.Handler {
-	if canonical, err := files.CanonicalPath(root); err == nil {
-		root = canonical
-	}
-	return &assetHandler{root: root}
+func newAssetHandler(workspace previewWorkspace) http.Handler {
+	return &assetHandler{workspace: workspace}
 }
 
 func (handler *assetHandler) ServeHTTP(response http.ResponseWriter, request *http.Request) {
@@ -31,12 +30,17 @@ func (handler *assetHandler) ServeHTTP(response http.ResponseWriter, request *ht
 		return
 	}
 
-	relative, err := assetPath(request.URL)
+	virtual, err := assetPath(request.URL)
+	if err != nil {
+		http.NotFound(response, request)
+		return
+	}
+	root, relative, err := handler.workspace.locate(virtual)
 	if err != nil || files.IsMarkdown(relative) {
 		http.NotFound(response, request)
 		return
 	}
-	target, err := resolveRequestFile(handler.root, relative)
+	target, err := resolveRequestFile(root.scope.root, relative)
 	if err != nil {
 		http.NotFound(response, request)
 		return

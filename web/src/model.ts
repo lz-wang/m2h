@@ -1,4 +1,4 @@
-import type { FileSummary } from "./api";
+import type { DocumentRef, FileSummary, RootSummary } from "./api";
 
 export type Mode = "light" | "dark" | "auto";
 // ResolvedMode is the concrete light/dark the UI settles on after resolving
@@ -101,6 +101,31 @@ export function routeURL(
     .map((segment) => encodeURIComponent(segment))
     .join("/");
   return `/doc/${encoded}${search}${suffix}`;
+}
+
+// Virtual document keys: with several roots every document is addressed as
+// "<rootId>/<path>" — URL, document API, scroll storage and sidebar selection
+// all share the key — while a single root keeps bare relative paths so
+// existing /doc/foo.md URLs stay valid.
+export function rootFiles(roots: RootSummary[]): FileSummary[] {
+  if (roots.length <= 1) {
+    return roots[0]?.files ?? [];
+  }
+  return roots.flatMap((root) =>
+    root.files.map((file) => ({ ...file, path: `${root.id}/${file.path}` })),
+  );
+}
+
+// Compose the virtual key of the server's default document; "" when the
+// workspace has no documents at all.
+export function rootDocumentKey(
+  ref: DocumentRef | null,
+  multiRoot: boolean,
+): string {
+  if (ref === null) {
+    return "";
+  }
+  return multiRoot ? `${ref.root}/${ref.path}` : ref.path;
 }
 
 export function chooseDocument(

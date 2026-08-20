@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { FileSummary } from "./api";
+import type { FileSummary, RootSummary } from "./api";
 import {
   ancestorDirectories,
   buildTree,
@@ -8,6 +8,8 @@ import {
   decodeHeadingHash,
   encodeHeadingHash,
   readRoute,
+  rootDocumentKey,
+  rootFiles,
   routeURL,
 } from "./model";
 
@@ -114,6 +116,53 @@ describe("heading hash codec", () => {
 
   it("keeps the literal fragment when it is not valid percent encoding", () => {
     expect(decodeHeadingHash("#%")).toBe("%");
+  });
+});
+
+describe("workspace model", () => {
+  const readme: FileSummary = {
+    path: "README.md",
+    name: "README.md",
+    title: "Readme",
+  };
+
+  it("keeps single-root file paths unprefixed", () => {
+    const roots: RootSummary[] = [{ id: "r0", name: "docs", files: [readme] }];
+    expect(rootFiles(roots)).toEqual([readme]);
+    expect(rootFiles([])).toEqual([]);
+  });
+
+  it("prefixes every file with its root id in a multi-root workspace", () => {
+    const roots: RootSummary[] = [
+      { id: "r0", name: "alpha", files: [readme] },
+      {
+        id: "r1",
+        name: "beta",
+        files: [
+          { path: "README.md", name: "README.md", title: "Beta Readme" },
+          {
+            path: "guide/part.md",
+            name: "part.md",
+            title: "Part",
+          },
+        ],
+      },
+    ];
+    expect(rootFiles(roots)).toEqual([
+      { ...readme, path: "r0/README.md" },
+      { path: "r1/README.md", name: "README.md", title: "Beta Readme" },
+      { path: "r1/guide/part.md", name: "part.md", title: "Part" },
+    ]);
+  });
+
+  it("composes the default document key per workspace shape", () => {
+    expect(rootDocumentKey(null, false)).toBe("");
+    expect(rootDocumentKey({ root: "r0", path: "README.md" }, false)).toBe(
+      "README.md",
+    );
+    expect(rootDocumentKey({ root: "r0", path: "README.md" }, true)).toBe(
+      "r0/README.md",
+    );
   });
 });
 
