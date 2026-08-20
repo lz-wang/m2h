@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -266,14 +267,85 @@ func TestWebValidatesArgumentsAndPort(t *testing.T) {
 		args []string
 		want string
 	}{
-		{args: []string{"web"}, want: "Error: web requires exactly one file or directory"},
-		{args: []string{"web", "one.md", "two.md"}, want: "Error: web requires exactly one file or directory"},
+		{args: []string{"web"}, want: "Error: web requires one or more files or directories"},
+		{args: []string{"web", ","}, want: "Error: web requires one or more files or directories"},
+		{args: []string{"web", " , , "}, want: "Error: web requires one or more files or directories"},
 		{args: []string{"web", "missing.md", "--port", "0"}, want: "Error: --port must be between 1 and 65535"},
 		{args: []string{"web", "missing.md", "--port", "65536"}, want: "Error: --port must be between 1 and 65535"},
 	} {
 		_, _, err := runCommand(t, test.args...)
 		if err == nil || err.Error() != test.want {
 			t.Errorf("m2h %v error = %v, want %q", test.args, err, test.want)
+		}
+	}
+}
+
+func TestWebExpandsMultipleAndCommaSeparatedInputs(t *testing.T) {
+	previous := runPreview
+	t.Cleanup(func() { runPreview = previous })
+
+	var captured server.Options
+	runPreview = func(_ context.Context, options server.Options) error {
+		captured = options
+		return nil
+	}
+	for _, test := range []struct {
+		name string
+		args []string
+		want []string
+	}{
+		{name: "single input", args: []string{"web", "/a"}, want: []string{"/a"}},
+		{name: "space separated", args: []string{"web", "/a", "/b", "/c"}, want: []string{"/a", "/b", "/c"}},
+		{name: "comma separated", args: []string{"web", "/a,/b,/c"}, want: []string{"/a", "/b", "/c"}},
+		{name: "mixed separators", args: []string{"web", "/a,/b", "/c"}, want: []string{"/a", "/b", "/c"}},
+		{name: "segments are trimmed", args: []string{"web", "/a, /b"}, want: []string{"/a", "/b"}},
+		{name: "empty segments dropped", args: []string{"web", "/a,,/b"}, want: []string{"/a", "/b"}},
+		{name: "exact duplicates removed", args: []string{"web", "/a,/a", "/a"}, want: []string{"/a"}},
+	} {
+		if _, _, err := runCommand(t, test.args...); err != nil {
+			t.Fatalf("%s: web returned error: %v", test.name, err)
+		}
+		if got := captured.Inputs; !slices.Equal(got, test.want) {
+			t.Errorf("%s: inputs = %v, want %v", test.name, got, test.want)
+		}
+	}
+}
+
+func TestWebRejectsInvalidMultiRootInputs(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "guide.txt"), []byte("text"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, test := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{
+			name: "missing root",
+			args: []string{"web", filepath.Join(root, "missing"), root},
+			want: "inspect input",
+		},
+		{
+			name: "non-markdown file root",
+			args: []string{"web", filepath.Join(root, "guide.txt"), root},
+			want: "expected a Markdown file",
+		},
+		{
+			name: "duplicate canonical root",
+			args: []string{"web", root, root + string(os.PathSeparator)},
+			want: "duplicate preview root",
+		},
+	} {
+		_, _, err := runCommand(t, test.args...)
+		if err == nil || !strings.Contains(err.Error(), test.want) {
+			t.Errorf("%s: m2h %v error = %v, want %q", test.name, test.args, err, test.want)
 		}
 	}
 }

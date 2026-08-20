@@ -36,7 +36,7 @@ func New(buildVersion string, ui fs.FS, stdin io.Reader, stdout, stderr io.Write
 	command := &urfavecli.Command{
 		Name:        "m2h",
 		Usage:       "convert Markdown to HTML",
-		UsageText:   "m2h [options] <file|directory>\n   m2h web [options] <file|directory>",
+		UsageText:   "m2h [options] <file|directory>\n   m2h web [options] <file|directory>[,<file|directory>...]",
 		HideVersion: true,
 		Writer:      stdout,
 		ErrWriter:   stderr,
@@ -162,7 +162,7 @@ func webCommand(ui fs.FS, buildVersion string) *urfavecli.Command {
 	return &urfavecli.Command{
 		Name:      "web",
 		Usage:     "view Markdown in a browser",
-		ArgsUsage: "<file|directory>",
+		ArgsUsage: "<file|directory>[,<file|directory>...]",
 		Flags: []urfavecli.Flag{
 			&urfavecli.StringFlag{Name: "host", Value: defaultHost, Usage: "listen host", Local: true},
 			&urfavecli.IntFlag{
@@ -200,12 +200,38 @@ func webCommand(ui fs.FS, buildVersion string) *urfavecli.Command {
 
 var runPreview = server.Run
 
-func webAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buildVersion string) error {
-	if command.Args().Len() != 1 {
-		return fmt.Errorf("Error: web requires exactly one file or directory")
+// previewInputs expands the web command's arguments into individual preview
+// inputs. Each argument may itself carry a comma-separated list — a
+// convenience for shell histories — so "a,b c" and "a b c" are equivalent.
+// Segments are trimmed, empty segments dropped, order preserved, and exact
+// textual duplicates removed; inputs that only collide after resolution
+// (trailing separators, symlink aliases) are rejected by the server.
+func previewInputs(args urfavecli.Args) ([]string, error) {
+	inputs := []string{}
+	seen := make(map[string]bool, args.Len())
+	for index := range args.Len() {
+		for segment := range strings.SplitSeq(args.Get(index), ",") {
+			trimmed := strings.TrimSpace(segment)
+			if trimmed == "" || seen[trimmed] {
+				continue
+			}
+			seen[trimmed] = true
+			inputs = append(inputs, trimmed)
+		}
 	}
-	err := runPreview(ctx, server.Options{
-		Inputs:     []string{command.Args().First()},
+	if len(inputs) == 0 {
+		return nil, fmt.Errorf("Error: web requires one or more files or directories")
+	}
+	return inputs, nil
+}
+
+func webAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buildVersion string) error {
+	inputs, err := previewInputs(command.Args())
+	if err != nil {
+		return err
+	}
+	err = runPreview(ctx, server.Options{
+		Inputs:     inputs,
 		Host:       command.String("host"),
 		Port:       command.Int("port"),
 		Mode:       markdown.Mode(command.String("mode")),
