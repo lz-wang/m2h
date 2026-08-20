@@ -18,6 +18,11 @@ export default defineConfig({
   retries: process.env.CI ? 1 : 0,
   forbidOnly: !!process.env.CI,
   reporter: process.env.CI ? "github" : "list",
+  // The only screenshot baseline is a text-free strip of solid colors at the
+  // sidebar boundary (see tree-stress.spec.ts), which renders identically on
+  // every platform — drop the default -darwin/-linux suffix so one committed
+  // baseline serves CI and local runs alike.
+  snapshotPathTemplate: "{testDir}/{testFileName}-snapshots/{arg}{ext}",
   use: {
     baseURL: `http://127.0.0.1:${port}`,
   },
