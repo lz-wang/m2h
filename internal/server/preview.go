@@ -223,10 +223,16 @@ func (handler *previewHandler) serveDocument(response http.ResponseWriter, reque
 		return
 	}
 	rendered, err := markdown.Render(body, markdown.RenderOptions{
-		Mode:       handler.mode,
-		Width:      handler.width,
-		Target:     markdown.TargetPreview,
-		SourcePath: relative,
+		Mode:   handler.mode,
+		Width:  handler.width,
+		Target: markdown.TargetPreview,
+		// Rendering resolves relative Markdown links and attachments against
+		// the virtual (public) path, so the shared rewrite layer routes them
+		// to /doc/<root>/<...> and /assets/<root>/<...> in a multi-root
+		// workspace while a single root keeps its unprefixed URLs. "../"
+		// beyond the virtual root is refused there, which is exactly the
+		// cross-root boundary: links can never leave their own root.
+		SourcePath: virtual,
 	})
 	if err != nil {
 		writeJSONError(response, http.StatusInternalServerError, "render Markdown document")

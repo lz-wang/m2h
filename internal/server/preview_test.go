@@ -825,6 +825,81 @@ func TestWorkspaceAssetHandlerRoutesPerRoot(t *testing.T) {
 	}
 }
 
+func TestWorkspaceDocumentRendersVirtualLinkRouting(t *testing.T) {
+	t.Parallel()
+
+	// Both roots carry same-named link targets; the rendered links must name
+	// their own root, and a link climbing past the virtual root stays a
+	// dead relative href instead of crossing into the other root.
+	base := t.TempDir()
+	alpha := filepath.Join(base, "alpha")
+	beta := filepath.Join(base, "beta")
+	for _, directory := range []string{alpha, beta} {
+		if err := os.MkdirAll(filepath.Join(directory, "deep", "images"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeTestFile(t, filepath.Join(directory, "README.md"), "# Readme")
+		writeTestFile(t, filepath.Join(directory, "images", "logo.png"), "logo")
+		writeTestFile(t, filepath.Join(directory, "deep", "guide.md"),
+			"# Guide\n\n[Home](../README.md)\n\n![Logo](../images/logo.png)\n\n[Short escape](../../README.md)\n\n[Long escape](../../../README.md)\n")
+	}
+	workspace, err := newPreviewWorkspace(
+		[]files.Input{
+			resolveTestInput(t, alpha),
+			resolveTestInput(t, beta),
+		},
+		files.DiscoverOptions{Depth: 4},
+	)
+	if err != nil {
+		t.Fatalf("newPreviewWorkspace() error = %v", err)
+	}
+	handler := newPreviewHandler(workspace, markdown.ModeAuto, markdown.WidthStandard, newEventHub(time.Second), nil, directoryTestUI())
+
+	response := performRequest(handler, http.MethodGet, "/api/document?path=r1/deep/guide.md")
+	if response.Code != http.StatusOK {
+		t.Fatalf("document status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var document documentResponse
+	decodeJSON(t, response, &document)
+
+	// Same-root relative links and images resolve under the document's own
+	// root prefix.
+	for _, want := range []string{
+		`href="/doc/r1/README.md"`,
+		`src="/assets/r1/images/logo.png"`,
+	} {
+		if !strings.Contains(document.HTML, want) {
+			t.Errorf("document HTML missing %q: %s", want, document.HTML)
+		}
+	}
+	// Climbing past the own document's directory is contained by the virtual
+	// root: two ups land on the unprefixed /doc/README.md, which a multi-root
+	// workspace does not serve (404), and three ups exceed even the virtual
+	// root and stay as authored. Neither can address another root.
+	if !strings.Contains(document.HTML, `href="/doc/README.md"`) {
+		t.Errorf("short escape link was rewritten past the virtual root: %s", document.HTML)
+	}
+	if escaped := performRequest(handler, http.MethodGet, "/api/document?path=README.md"); escaped.Code != http.StatusNotFound {
+		t.Fatalf("short escape target status = %d, want 404", escaped.Code)
+	}
+	if !strings.Contains(document.HTML, `href="../../../README.md"`) {
+		t.Errorf("long escape link was rewritten: %s", document.HTML)
+	}
+	if strings.Contains(document.HTML, "/doc/r0/") || strings.Contains(document.HTML, "/assets/r0/") {
+		t.Errorf("document leaks the other root's prefix: %s", document.HTML)
+	}
+
+	// The rewritten addresses really serve their own root's bytes.
+	logo := performRequest(handler, http.MethodGet, "/assets/r1/images/logo.png")
+	if logo.Code != http.StatusOK || logo.Body.String() != "logo" {
+		t.Fatalf("linked asset = %d %q", logo.Code, logo.Body.String())
+	}
+	home := performRequest(handler, http.MethodGet, "/api/document?path=r1/README.md")
+	if home.Code != http.StatusOK {
+		t.Fatalf("linked document status = %d", home.Code)
+	}
+}
+
 func directoryFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
