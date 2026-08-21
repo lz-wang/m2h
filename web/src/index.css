@@ -628,9 +628,23 @@ body,
  * column stays in lock-step with the code lines however deep the block runs;
  * pointer-events:none keeps the gutter out of text selection entirely.
  */
-.markdown-body pre.m2h-code-with-lines {
+.markdown-body pre.m2h-code-with-lines.m2h-code-with-lines {
   display: flex;
   align-items: flex-start;
+
+  /*
+   * github-markdown-css gives every pre 1rem left padding. A sticky gutter
+   * positioned inside that padded scroll container would therefore leave a
+   * 1rem strip uncovered while source code scrolls underneath it.
+   *
+   * Let the gutter own that inset instead, so its opaque sticky box begins
+   * exactly at the scrollport's left edge. The doubled class is deliberate:
+   * the vendored theme blocks restate this padding under
+   * html:not(.dark)/html.dark .markdown-body pre (0,2,2), which outspecifies
+   * a plain .markdown-body pre.m2h-code-with-lines (0,2,1), so the zero
+   * needs (0,3,1) to win regardless of stylesheet order.
+   */
+  padding-left: 0;
 }
 
 .markdown-body pre.m2h-code-with-lines > code {
@@ -644,8 +658,17 @@ body,
   display: flex;
   flex: none;
   flex-direction: column;
-  min-width: 2rem;
+
+  /*
+   * 3rem = github-markdown-css's original 1rem pre left padding
+   *      + the gutter's original 2rem, so neither the numbers' right edge
+   *      nor the code's starting position moves.
+   */
+  box-sizing: border-box;
+  min-width: 3rem;
+  padding-left: 1rem;
   padding-right: 0.75rem;
+
   text-align: right;
   color: var(--fgColor-muted, var(--muted-foreground));
   background: var(--m2h-code-block-bg);

@@ -174,15 +174,39 @@ test("numbers code lines in a gutter that stays pinned while scrolling", async (
     const gutterRect = gutter.getBoundingClientRect();
     return {
       scrollLeft: pre.scrollLeft,
-      pinnedAtLeftEdge:
-        gutterRect.left >= preRect.left - 1 &&
-        gutterRect.left <= preRect.left + 17,
+      leftGap: gutterRect.left - preRect.left,
       visible: gutterRect.right > preRect.left,
     };
   });
   expect(sticky.scrollLeft).toBeGreaterThan(0);
-  expect(sticky.pinnedAtLeftEdge).toBe(true);
+
+  /*
+   * The sticky gutter must cover the scrollport's actual left edge. A positive
+   * ~16px gap means source text can leak through the pre's former left padding.
+   */
+  expect(Math.abs(sticky.leftGap)).toBeLessThanOrEqual(1);
+
   expect(sticky.visible).toBe(true);
+
+  // Layout responsibility invariant: the numbered pre owns no left inset; the
+  // gutter's own padding provides it. Locking both computed values keeps a
+  // future github-markdown-css upgrade (or stylesheet edit) from silently
+  // reintroducing the uncovered strip beside the gutter.
+  const paddingGeometry = await page.evaluate(() => {
+    const pre = document.querySelector<HTMLElement>("pre.m2h-code-with-lines");
+    const gutter = pre?.querySelector<HTMLElement>(
+      ":scope > .m2h-code-line-numbers",
+    );
+    if (pre === null || gutter === null) {
+      throw new Error("numbered code block was not rendered");
+    }
+    return {
+      prePaddingLeft: getComputedStyle(pre).paddingLeft,
+      gutterPaddingLeft: getComputedStyle(gutter).paddingLeft,
+    };
+  });
+  expect(paddingGeometry.prePaddingLeft).toBe("0px");
+  expect(paddingGeometry.gutterPaddingLeft).toBe("16px");
 
   // The gutter keeps its opaque plate and padding but no divider line.
   expect(
