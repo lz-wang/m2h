@@ -431,6 +431,8 @@ export function App({ api }: AppProps) {
                             files={root.files}
                             rootBase={root.id}
                             rootLabel={root.name}
+                            rootAbsolutePath={root.absolutePath}
+                            pathSeparator={root.pathSeparator}
                             searching={searchQuery.trim() !== ""}
                             selectedPath={preview.selectedPath}
                             visible={sidebarOpen}
@@ -440,6 +442,8 @@ export function App({ api }: AppProps) {
                       ) : (
                         <DocumentTree
                           files={filteredRoots[0]?.files ?? []}
+                          rootAbsolutePath={filteredRoots[0]?.absolutePath}
+                          pathSeparator={filteredRoots[0]?.pathSeparator}
                           searching={searchQuery.trim() !== ""}
                           selectedPath={preview.selectedPath}
                           visible={sidebarOpen}

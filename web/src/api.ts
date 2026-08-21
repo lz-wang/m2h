@@ -7,9 +7,14 @@ export interface FileSummary {
 // RootSummary groups one preview root's documents. Files carry root-relative
 // paths; in a multi-root workspace the root id prefixes the addressable
 // (virtual) document path, so identity stays unique across roots.
+// absolutePath is the server machine's canonical local path for the input and
+// pathSeparator is that machine's separator — the browser may run elsewhere,
+// so joining a native path must use the server-reported separator.
 export interface RootSummary {
   id: string;
   name: string;
+  absolutePath: string;
+  pathSeparator: string;
   files: FileSummary[];
 }
 
@@ -102,13 +107,19 @@ function parseFileList(payload: unknown): FileListResponse {
       !isRecord(value) ||
       typeof value.id !== "string" ||
       typeof value.name !== "string" ||
-      !Array.isArray(value.files)
+      typeof value.absolutePath !== "string" ||
+      (value.pathSeparator !== "/" && value.pathSeparator !== "\\")
     ) {
+      throw new Error("文件列表响应格式无效");
+    }
+    if (!Array.isArray(value.files)) {
       throw new Error("文件列表响应格式无效");
     }
     return {
       id: value.id,
       name: value.name,
+      absolutePath: value.absolutePath,
+      pathSeparator: value.pathSeparator,
       files: value.files.map(parseFileSummary),
     };
   });

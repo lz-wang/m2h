@@ -21,6 +21,8 @@ describe("browser API", () => {
               {
                 id: "r0",
                 name: "docs",
+                absolutePath: "/tmp/docs",
+                pathSeparator: "/",
                 files: [
                   { path: "README.md", name: "README.md", title: "Readme" },
                 ],
@@ -61,6 +63,8 @@ describe("browser API", () => {
         {
           id: "r0",
           name: "docs",
+          absolutePath: "/tmp/docs",
+          pathSeparator: "/",
           files: [{ path: "README.md", name: "README.md", title: "Readme" }],
         },
       ],
@@ -95,6 +99,8 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "README.md",
+              absolutePath: "/tmp/README.md",
+              pathSeparator: "/",
               files: [
                 { path: "README.md", name: "README.md", title: "Readme" },
               ],
@@ -118,11 +124,19 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "a",
+              absolutePath: "/tmp/a",
+              pathSeparator: "/",
               files: [
                 { path: "README.md", name: "README.md", title: "Readme" },
               ],
             },
-            { id: "r1", name: "b", files: [] },
+            {
+              id: "r1",
+              name: "b",
+              absolutePath: "D:\\work\\b",
+              pathSeparator: "\\",
+              files: [],
+            },
           ],
           defaultDocument: { root: "r0", path: "README.md" },
         }),
@@ -144,6 +158,8 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "docs",
+              absolutePath: "/tmp/docs",
+              pathSeparator: "/",
               files: [
                 { path: "README.md", name: "README.md", title: "Readme" },
               ],
@@ -191,7 +207,15 @@ describe("browser API", () => {
       new Response(
         JSON.stringify({
           version: "1",
-          roots: [{ id: "r0", name: "docs", files: [{ path: "README.md" }] }],
+          roots: [
+            {
+              id: "r0",
+              name: "docs",
+              absolutePath: "/tmp/docs",
+              pathSeparator: "/",
+              files: [{ path: "README.md" }],
+            },
+          ],
         }),
         { status: 200 },
       ),
@@ -204,8 +228,74 @@ describe("browser API", () => {
       new Response(
         JSON.stringify({
           version: "1",
-          roots: [{ id: "r0", name: "docs", files: [] }],
+          roots: [
+            {
+              id: "r0",
+              name: "docs",
+              absolutePath: "/tmp/docs",
+              pathSeparator: "/",
+              files: [],
+            },
+          ],
           defaultDocument: { root: "r0" },
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.listFiles()).rejects.toThrow(
+      "文件列表响应格式无效",
+    );
+
+    // The root's absolute path and the server-reported separator are part of
+    // the contract: a non-string path or a separator other than "/" or "\"
+    // never reaches the UI to pollute path display.
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          version: "1",
+          roots: [
+            { id: "r0", name: "docs", absolutePath: 1, pathSeparator: "/" },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.listFiles()).rejects.toThrow(
+      "文件列表响应格式无效",
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          version: "1",
+          roots: [
+            {
+              id: "r0",
+              name: "docs",
+              absolutePath: "/tmp/docs",
+              pathSeparator: null,
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.listFiles()).rejects.toThrow(
+      "文件列表响应格式无效",
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          version: "1",
+          roots: [
+            {
+              id: "r0",
+              name: "docs",
+              absolutePath: "/tmp/docs",
+              pathSeparator: "+",
+            },
+          ],
         }),
         { status: 200 },
       ),

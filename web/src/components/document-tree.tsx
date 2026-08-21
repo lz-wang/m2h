@@ -15,6 +15,21 @@ import {
   type TreeNode,
 } from "@/model";
 
+// Join a server-reported absolute root path with a root-relative slash path
+// using the SERVER machine's separator: the browser may run on a different
+// machine, so the platform's native format must come from the API, never from
+// the client's own OS sniffing.
+function localPath(root: string, relative: string, separator: string): string {
+  if (relative === "") {
+    return root;
+  }
+  const suffix = relative.split("/").join(separator);
+  if (root.endsWith(separator)) {
+    return `${root}${suffix}`;
+  }
+  return `${root}${separator}${suffix}`;
+}
+
 interface DocumentTreeProps {
   // Files of ONE root, root-relative: a multi-root workspace renders one tree
   // per root and keeps display paths free of the root-id prefix.
@@ -29,6 +44,11 @@ interface DocumentTreeProps {
   // tree nests under. Roots start expanded; collapsing uses the same
   // directory mechanics as inner directories.
   rootLabel?: string;
+  // The root's canonical local path on the server and that machine's path
+  // separator; together they build the absolute-path tooltips on directory
+  // rows. Without an absolute path the rows simply carry no tooltip.
+  rootAbsolutePath?: string;
+  pathSeparator?: string;
   searching?: boolean;
   // False while the sidebar is collapsed offcanvas: geometry measured there is
   // meaningless, so the reveal waits until the tree becomes visible again.
@@ -41,6 +61,8 @@ export function DocumentTree({
   selectedPath,
   rootBase = "",
   rootLabel,
+  rootAbsolutePath,
+  pathSeparator = "/",
   searching = false,
   visible = true,
   onSelect,
@@ -222,6 +244,8 @@ export function DocumentTree({
           key={`${node.type}:${node.path}`}
           node={node}
           base={rootBase}
+          rootAbsolutePath={rootAbsolutePath}
+          pathSeparator={pathSeparator}
           expanded={expanded}
           selectedPath={selectedRelative}
           onSelect={selectFromTree}
@@ -246,6 +270,7 @@ export function DocumentTree({
         <RootItem
           label={rootLabel}
           path={rootBase}
+          absolutePath={rootAbsolutePath}
           expanded={searching || expanded.has(rootBase)}
           onToggle={toggle}
         >
@@ -264,12 +289,14 @@ export function DocumentTree({
 function RootItem({
   label,
   path,
+  absolutePath,
   expanded,
   onToggle,
   children,
 }: {
   label: string;
   path: string;
+  absolutePath?: string;
   expanded: boolean;
   onToggle(path: string): void;
   children: ReactNode;
@@ -279,13 +306,17 @@ function RootItem({
       <SidebarMenuButton
         aria-expanded={expanded}
         aria-label={label}
-        title={label}
         data-tree-directory="true"
         data-tree-path={path}
         data-tree-depth={0}
         style={{ "--tree-sticky-top": "0rem" } as CSSProperties}
         className="document-tree-directory h-8 text-sm font-medium"
         onClick={() => onToggle(path)}
+        tooltip={
+          absolutePath === undefined
+            ? undefined
+            : directoryTooltip(absolutePath)
+        }
       >
         <ChevronRight
           aria-hidden="true"
@@ -309,6 +340,21 @@ function RootItem({
   );
 }
 
+// Directory rows (and the multi-root root row) reveal the server-local
+// absolute path through the same Base UI tooltip the file rows already use.
+// The wide panel lets a long path wrap instead of ellipsize — the path is the
+// whole point of the tooltip. Replaces the rows' former native title
+// attribute, which would double up with this tooltip.
+function directoryTooltip(absolutePath: string) {
+  return {
+    hidden: false,
+    side: "right" as const,
+    align: "start" as const,
+    className: "tree-tooltip tree-tooltip-wide",
+    children: <span className="tree-tooltip-path">{absolutePath}</span>,
+  };
+}
+
 interface TreeItemProps {
   node: TreeNode;
   // Root identity for accessible names: file rows announce their virtual
@@ -316,6 +362,8 @@ interface TreeItemProps {
   // stay distinguishable to assistive technology while the visible label
   // keeps the plain root-relative name.
   base: string;
+  rootAbsolutePath?: string;
+  pathSeparator: string;
   expanded: Set<string>;
   selectedPath: string | null;
   onSelect(path: string): void;
@@ -327,6 +375,8 @@ interface TreeItemProps {
 function TreeItem({
   node,
   base,
+  rootAbsolutePath,
+  pathSeparator,
   expanded,
   selectedPath,
   onSelect,
@@ -339,6 +389,8 @@ function TreeItem({
       <DirectoryItem
         node={node}
         base={base}
+        rootAbsolutePath={rootAbsolutePath}
+        pathSeparator={pathSeparator}
         expanded={expanded}
         selectedPath={selectedPath}
         onSelect={onSelect}
@@ -381,6 +433,8 @@ function TreeItem({
 function DirectoryItem({
   node,
   base,
+  rootAbsolutePath,
+  pathSeparator,
   expanded,
   selectedPath,
   onSelect,
@@ -394,13 +448,19 @@ function DirectoryItem({
       <SidebarMenuButton
         aria-expanded={open}
         aria-label={base === "" ? node.name : `${base}/${node.name}`}
-        title={node.name}
         data-tree-directory="true"
         data-tree-path={node.path}
         data-tree-depth={depth}
         style={{ "--tree-sticky-top": `${depth * 2}rem` } as CSSProperties}
         className="document-tree-directory h-8 text-sm font-medium"
         onClick={() => onToggle(node.path)}
+        tooltip={
+          rootAbsolutePath === undefined
+            ? undefined
+            : directoryTooltip(
+                localPath(rootAbsolutePath, node.path, pathSeparator),
+              )
+        }
       >
         <ChevronRight
           aria-hidden="true"
@@ -422,6 +482,8 @@ function DirectoryItem({
               key={`${child.type}:${child.path}`}
               node={child}
               base={base}
+              rootAbsolutePath={rootAbsolutePath}
+              pathSeparator={pathSeparator}
               expanded={expanded}
               selectedPath={selectedPath}
               onSelect={onSelect}

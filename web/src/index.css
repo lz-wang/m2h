@@ -380,6 +380,23 @@ body,
   white-space: nowrap;
 }
 
+/* Directory tooltips carry one absolute path: the wider panel plus
+ * overflow-wrap keeps a long path readable — wrapping beats ellipsis when the
+ * path itself is the information. */
+.tree-tooltip.tree-tooltip-wide {
+  max-width: 30rem;
+}
+
+.tree-tooltip-path {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  font-family:
+    ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono",
+    monospace;
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
 .toolbar-actions {
   display: flex;
   flex-shrink: 0;

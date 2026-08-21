@@ -19,6 +19,8 @@ const initialFiles: FileListResponse = {
     {
       id: "r0",
       name: "docs",
+      absolutePath: "/tmp/docs",
+      pathSeparator: "/",
       files: [
         { path: "README.md", name: "README.md", title: "Readme API Title" },
         { path: "guides/setup.md", name: "setup.md", title: "Setup API Title" },
@@ -157,6 +159,8 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "README.md",
+            absolutePath: "/tmp/README.md",
+            pathSeparator: "/",
             files: [
               {
                 path: "README.md",
@@ -197,6 +201,8 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
+            absolutePath: "/tmp/alpha",
+            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Alpha Readme" },
             ],
@@ -204,6 +210,8 @@ describe("App directory preview", () => {
           {
             id: "r1",
             name: "beta",
+            absolutePath: "/tmp/beta",
+            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Beta Readme" },
               {
@@ -323,7 +331,15 @@ describe("App directory preview", () => {
       listFiles: vi.fn().mockResolvedValue({
         kind: "directory",
         version: "0.9.1",
-        roots: [{ id: "r0", name: "testdata", files: [file] }],
+        roots: [
+          {
+            id: "r0",
+            name: "testdata",
+            absolutePath: "/tmp/testdata",
+            pathSeparator: "/",
+            files: [file],
+          },
+        ],
         defaultDocument: { root: "r0", path },
       }),
       getDocument: vi.fn().mockResolvedValue({
@@ -614,6 +630,85 @@ describe("App directory preview", () => {
     });
   });
 
+  it("reveals absolute directory paths through hover tooltips", async () => {
+    const user = userEvent.setup();
+
+    // Single-root preview: hovering the guides directory joins the server's
+    // absolute root path with the root-relative tree path.
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    await user.hover(screen.getByRole("button", { name: "guides" }));
+    const directoryPath = await screen.findByText("/tmp/docs/guides", {
+      selector: ".tree-tooltip-path",
+    });
+    expect(
+      directoryPath.closest('[data-slot="tooltip-content"]')?.classList,
+    ).toContain("tree-tooltip-wide");
+    // The native title tooltip is gone; the accessible name stays the label.
+    const guidesRow = screen.getByRole("button", { name: "guides" });
+    expect(guidesRow.getAttribute("title")).toBeNull();
+    await user.unhover(guidesRow);
+
+    // Multi-root workspace: the labeled root row shows its own path and a
+    // nested directory composes root + relative segments with the
+    // server-reported separator (here a Windows-style one).
+    const workspaceAPI = createAPI({
+      listFiles: vi.fn().mockResolvedValue({
+        kind: "workspace",
+        version: "0.9.1",
+        roots: [
+          {
+            id: "r0",
+            name: "alpha",
+            absolutePath: "/tmp/alpha",
+            pathSeparator: "/",
+            files: [
+              { path: "README.md", name: "README.md", title: "Alpha Readme" },
+            ],
+          },
+          {
+            id: "r1",
+            name: "beta",
+            absolutePath: "D:\\work\\beta",
+            pathSeparator: "\\",
+            files: [
+              {
+                path: "guide/intro.md",
+                name: "intro.md",
+                title: "Intro",
+              },
+            ],
+          },
+        ],
+        defaultDocument: { root: "r0", path: "README.md" },
+      }),
+      getDocument: vi.fn().mockImplementation(async (path: string) => ({
+        path,
+        title: path.startsWith("r1/") ? "Intro" : "Alpha Readme",
+        html: `<h1>${path.startsWith("r1/") ? "Intro" : "Alpha"}</h1>`,
+      })),
+    });
+    const view = render(<App api={workspaceAPI} />);
+    await screen.findByRole("heading", { level: 1, name: "Alpha" });
+
+    await user.hover(screen.getByRole("button", { name: "beta" }));
+    expect(
+      await screen.findByText("D:\\work\\beta", {
+        selector: ".tree-tooltip-path",
+      }),
+    ).toBeTruthy();
+    await user.unhover(screen.getByRole("button", { name: "beta" }));
+
+    await user.hover(screen.getByRole("button", { name: "r1/guide" }));
+    expect(
+      await screen.findByText("D:\\work\\beta\\guide", {
+        selector: ".tree-tooltip-path",
+      }),
+    ).toBeTruthy();
+    view.unmount();
+  });
+
   it("restores sidebar layout but removes the legacy stored document width", async () => {
     const user = userEvent.setup();
     window.localStorage.setItem(
@@ -652,7 +747,15 @@ describe("App directory preview", () => {
           listFiles: vi.fn().mockResolvedValue({
             kind: "directory",
             version: "0.9.1",
-            roots: [{ id: "r0", name: "docs", files: [] }],
+            roots: [
+              {
+                id: "r0",
+                name: "docs",
+                absolutePath: "/tmp/docs",
+                pathSeparator: "/",
+                files: [],
+              },
+            ],
             defaultDocument: null,
           }),
         })}
@@ -1458,6 +1561,8 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
+            absolutePath: "/tmp/alpha",
+            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Alpha Readme" },
             ],
@@ -1465,6 +1570,8 @@ describe("App directory preview", () => {
           {
             id: "r1",
             name: "beta",
+            absolutePath: "/tmp/beta",
+            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Beta Readme" },
             ],
@@ -1525,6 +1632,8 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
+            absolutePath: "/tmp/alpha",
+            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Alpha Readme" },
             ],
@@ -1532,6 +1641,8 @@ describe("App directory preview", () => {
           {
             id: "r1",
             name: "beta",
+            absolutePath: "/tmp/beta",
+            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Beta Readme" },
             ],

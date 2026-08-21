@@ -127,17 +127,33 @@ describe("workspace model", () => {
   };
 
   it("keeps single-root file paths unprefixed", () => {
-    const roots: RootSummary[] = [{ id: "r0", name: "docs", files: [readme] }];
+    const roots: RootSummary[] = [
+      {
+        id: "r0",
+        name: "docs",
+        absolutePath: "/tmp/docs",
+        pathSeparator: "/",
+        files: [readme],
+      },
+    ];
     expect(rootFiles(roots)).toEqual([readme]);
     expect(rootFiles([])).toEqual([]);
   });
 
   it("prefixes every file with its root id in a multi-root workspace", () => {
     const roots: RootSummary[] = [
-      { id: "r0", name: "alpha", files: [readme] },
+      {
+        id: "r0",
+        name: "alpha",
+        absolutePath: "/tmp/alpha",
+        pathSeparator: "/",
+        files: [readme],
+      },
       {
         id: "r1",
         name: "beta",
+        absolutePath: "D:\\work\\beta",
+        pathSeparator: "\\",
         files: [
           { path: "README.md", name: "README.md", title: "Beta Readme" },
           {

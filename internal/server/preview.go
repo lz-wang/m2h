@@ -30,11 +30,16 @@ type fileSummary struct {
 
 // rootSummary groups one preview root's documents. Files carry root-relative
 // paths; the id prefixes the addressable (virtual) path in a multi-root
-// workspace (see previewWorkspace.publicPath).
+// workspace (see previewWorkspace.publicPath). AbsolutePath is the server's
+// canonical local path for the input and PathSeparator is its platform's
+// separator: the browser machine may differ from the machine running m2h, so
+// the client never guesses how to join a native absolute path.
 type rootSummary struct {
-	ID    string        `json:"id"`
-	Name  string        `json:"name"`
-	Files []fileSummary `json:"files"`
+	ID            string        `json:"id"`
+	Name          string        `json:"name"`
+	AbsolutePath  string        `json:"absolutePath"`
+	PathSeparator string        `json:"pathSeparator"`
+	Files         []fileSummary `json:"files"`
 }
 
 // documentRef names one document by its root and root-relative path.
@@ -170,9 +175,11 @@ func (handler *previewHandler) serveFiles(response http.ResponseWriter, request 
 			})
 		}
 		roots = append(roots, rootSummary{
-			ID:    root.id,
-			Name:  root.label,
-			Files: summaries,
+			ID:            root.id,
+			Name:          root.label,
+			AbsolutePath:  root.input.Path,
+			PathSeparator: string(filepath.Separator),
+			Files:         summaries,
 		})
 	}
 	writeJSON(response, http.StatusOK, fileListResponse{
