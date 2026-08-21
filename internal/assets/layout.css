@@ -73,7 +73,13 @@ html[data-width="full"] .markdown-body {
 
 /*
  * Code fences are enhanced at runtime in both the standalone rich-content
- * script and the WebUI. Reserve the top-right corner so the control never
+ * script and the WebUI: every fenced <pre> is wrapped in an .m2h-code-frame,
+ * which owns the block's external geometry while the <pre> stays the pure
+ * scrollport. The copy control is positioned on the frame, not inside the
+ * scrollport — an absolutely-positioned descendant of a scroll container
+ * scrolls with the container's content, so an overlay inside the <pre> would
+ * slide away with the source text. The frame also reserves the top-right
+ * corner (through the pre's right padding below) so the control never
  * obscures source text, including on narrow screens.
  *
  * The copy control's palette is m2h variables for the same reason as the
@@ -118,8 +124,29 @@ html.m2h-mode-dark {
   }
 }
 
-.markdown-body pre {
+/*
+ * The frame is the block's positioning context and the single owner of its
+ * external margin. The explicit margin: 0 matches the vendored theme's own
+ * pre margin and keeps a future theme upgrade from introducing a double
+ * spacing — the inner pre's margin is reset below for exactly that reason.
+ */
+.markdown-body .m2h-code-frame {
   position: relative;
+  margin: 0;
+}
+
+/*
+ * The doubled class is deliberate: the preview scopes the vendored theme's
+ * pre rules under html:not(.dark)/html.dark .markdown-body pre (0,2,2), which
+ * outspecifies a plain .markdown-body .m2h-code-frame > pre (0,2,1), so the
+ * reset needs (0,3,1) to win regardless of stylesheet order — same reason as
+ * pre.m2h-code-with-lines.m2h-code-with-lines in the app stylesheet.
+ */
+.markdown-body .m2h-code-frame.m2h-code-frame > pre {
+  margin: 0;
+}
+
+.markdown-body pre {
   padding-right: 3.25rem;
 }
 
@@ -178,15 +205,19 @@ html.m2h-mode-dark {
  * Windows/Linux classic scrollbars and shift the block's layout; transparent
  * colors leave scrollLeft/scrollWidth/clientWidth untouched while the thumb
  * is invisible at rest. :focus-within covers keyboard users Tabbing to the
- * copy control above. Shared by convert output and the WebUI, so it lives
- * here rather than the app stylesheet.
+ * copy control — which now lives on the frame, outside the <pre>, so the
+ * frame-scoped selectors below keep the focus reveal working. Shared by
+ * convert output and the WebUI, so it lives here rather than the app
+ * stylesheet.
  */
 .markdown-body pre {
   scrollbar-color: transparent transparent;
 }
 
 .markdown-body pre:hover,
-.markdown-body pre:focus-within {
+.markdown-body pre:focus-within,
+.markdown-body .m2h-code-frame:hover > pre,
+.markdown-body .m2h-code-frame:focus-within > pre {
   scrollbar-color: color-mix(in srgb, currentColor 35%, transparent) transparent;
 }
 
@@ -200,7 +231,9 @@ html.m2h-mode-dark {
 }
 
 .markdown-body pre:hover::-webkit-scrollbar-thumb,
-.markdown-body pre:focus-within::-webkit-scrollbar-thumb {
+.markdown-body pre:focus-within::-webkit-scrollbar-thumb,
+.markdown-body .m2h-code-frame:hover > pre::-webkit-scrollbar-thumb,
+.markdown-body .m2h-code-frame:focus-within > pre::-webkit-scrollbar-thumb {
   background: color-mix(in srgb, currentColor 35%, transparent);
 }
 

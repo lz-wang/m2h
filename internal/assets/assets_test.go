@@ -26,6 +26,7 @@ func TestStylesheetContractSnapshot(t *testing.T) {
 				"max-width: 980px",
 				"padding: 45px",
 				".m2h-code-copy",
+				".m2h-code-frame",
 				"padding-right: 3.25rem",
 				"place-items: center",
 				"@media (max-width: 767px)",
@@ -417,6 +418,7 @@ func TestRichContentRuntimeAddsCodeCopyButtons(t *testing.T) {
 	}
 	for _, want := range []string{
 		"m2h-code-copy",
+		"m2h-code-frame",
 		"window.isSecureContext",
 		`document.execCommand("copy")`,
 	} {

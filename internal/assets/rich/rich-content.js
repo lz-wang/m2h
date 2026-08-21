@@ -74,13 +74,41 @@
     return nodes;
   }
 
+  // Wrap a fenced <pre> in the frame that owns the block's external geometry,
+  // mirroring the WebUI: the <pre> stays the only scroll container while the
+  // frame positions the absolutely-positioned copy overlay, so scrolling a
+  // long line sideways never carries the button away with the source text.
+  // Idempotent: a pre already framed is returned as-is.
+  function ensureCodeFrame(pre) {
+    var parent = pre.parentElement;
+    if (
+      parent instanceof HTMLDivElement &&
+      parent.classList.contains("m2h-code-frame")
+    ) {
+      return parent;
+    }
+
+    var frame = document.createElement("div");
+    frame.className = "m2h-code-frame";
+    pre.replaceWith(frame);
+    frame.append(pre);
+    return frame;
+  }
+
   function addCodeCopyButtons(root) {
     root.querySelectorAll("pre").forEach(function (pre) {
       var code = pre.firstElementChild;
       if (!(code instanceof HTMLElement) || code.tagName !== "CODE") {
         return;
       }
-      if (pre.querySelector(".m2h-code-copy") !== null) {
+      // Mermaid is skipped: replaceMermaidBlocks below swaps the <pre> for a
+      // rendered diagram, so a frame and button would only flash before
+      // dying with the pre.
+      if (code.classList.contains("language-mermaid")) {
+        return;
+      }
+      var frame = ensureCodeFrame(pre);
+      if (frame.querySelector(":scope > .m2h-code-copy") !== null) {
         return;
       }
 
@@ -95,7 +123,7 @@
           setCopyStatus(button, copied);
         });
       });
-      pre.append(button);
+      frame.append(button);
     });
   }
 

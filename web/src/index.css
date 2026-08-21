@@ -553,19 +553,17 @@ body,
 }
 
 /*
- * Overlong code blocks, collapsed by render-rich-content.ts. The threshold
- * rides on the wrapper as --m2h-code-collapse-lines so tuning it stays a
- * TypeScript-only change; the lh unit keeps the fold in step with the code's
- * real line height, and overflow-x keeps working (the Markdown theme's
+ * Overlong code blocks, collapsed by render-rich-content.ts. The collapse is
+ * a modifier on the shared .m2h-code-frame (see internal/assets/layout.css):
+ * the frame keeps owning the block's external geometry and positioning, and
+ * only adds the fold, its fade, and a little breathing room around itself.
+ * The threshold rides on the frame as --m2h-code-collapse-lines so tuning it
+ * stays a TypeScript-only change; the lh unit keeps the fold in step with the
+ * code's real line height, and overflow-x keeps working (the Markdown theme's
  * overflow: auto stays; only overflow-y is overridden while collapsed).
  */
-.markdown-body .m2h-code-block {
-  position: relative;
+.markdown-body .m2h-code-frame.m2h-code-block {
   margin: 1rem 0;
-}
-
-.markdown-body .m2h-code-block > pre {
-  margin: 0;
 }
 
 .markdown-body .m2h-code-block[data-collapsed="true"] > pre {

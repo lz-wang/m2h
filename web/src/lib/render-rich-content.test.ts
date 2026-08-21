@@ -104,6 +104,9 @@ describe("renderRichContent", () => {
     expect(container?.innerHTML).toContain('data-mock="mermaid"');
     expect(root.querySelector("pre")).toBeNull();
     expect(root.querySelector("code.language-mermaid")).toBeNull();
+    // Mermaid blocks never get a frame either: their pre dies with the swap,
+    // so an eagerly-created frame would linger as an empty wrapper.
+    expect(root.querySelector(".m2h-code-frame")).toBeNull();
 
     // The legacy mermaid.run path is gone; each diagram renders offscreen via
     // mermaid.render with the decoded source text, then swaps in atomically.
@@ -182,6 +185,16 @@ describe("renderRichContent", () => {
       if (button === null) {
         throw new Error("code copy button was not added");
       }
+      // DOM contract: the overlay control lives on the frame wrapping the
+      // pre — never inside the pre's scrollport, whose scrolling content
+      // would carry an absolutely-positioned child away with it.
+      const pre = root.querySelector("pre");
+      const frame = root.querySelector<HTMLElement>(".m2h-code-frame");
+      expect(frame).not.toBeNull();
+      expect(pre?.parentElement).toBe(frame);
+      expect(button.parentElement).toBe(frame);
+      expect(button.parentElement).not.toBe(pre);
+      expect(pre?.querySelector(":scope > .m2h-code-copy")).toBeNull();
       expect(button.type).toBe("button");
       expect(button.getAttribute("aria-label")).toBe("复制代码");
       expect(button.title).toBe("复制代码");
@@ -445,7 +458,12 @@ describe("collapsible code blocks", () => {
 
     expect(root.querySelectorAll(".m2h-code-block")).toHaveLength(0);
     expect(root.querySelectorAll(".m2h-code-toggle")).toHaveLength(0);
-    expect(root.querySelectorAll("pre > .m2h-code-copy")).toHaveLength(3);
+    // Short blocks still get their frame; the copy control rides on it.
+    expect(root.querySelectorAll(".m2h-code-frame")).toHaveLength(3);
+    expect(
+      root.querySelectorAll(".m2h-code-frame > .m2h-code-copy"),
+    ).toHaveLength(3);
+    expect(root.querySelectorAll("pre > .m2h-code-copy")).toHaveLength(0);
   });
 
   it("collapses blocks above the threshold by default", async () => {
@@ -461,14 +479,18 @@ describe("collapsible code blocks", () => {
     expect(wrapper?.dataset.collapsed).toBe("true");
     expect(wrapper?.dataset.lineCount).toBe("26");
 
-    // The toggle sits beside the pre (never inside it), points its
-    // aria-controls at that pre, and starts collapsed.
+    // The fold is a modifier on the frame: one frame, one scrollport (the
+    // pre), and the two overlay/controls (copy, toggle) as its children.
+    expect(wrapper?.classList.contains("m2h-code-frame")).toBe(true);
     const pre = wrapper?.querySelector("pre");
+    const copy = wrapper?.querySelector<HTMLElement>(":scope > .m2h-code-copy");
     const toggle = root.querySelector<HTMLButtonElement>(".m2h-code-toggle");
     expect(pre).not.toBeNull();
+    expect(copy).not.toBeNull();
     expect(toggle).not.toBeNull();
-    expect(toggle?.parentElement).toBe(wrapper);
     expect(pre?.parentElement).toBe(wrapper);
+    expect(copy?.parentElement).toBe(wrapper);
+    expect(toggle?.parentElement).toBe(wrapper);
     expect(toggle?.getAttribute("aria-controls")).toBe(pre?.id);
     expect(toggle?.getAttribute("aria-expanded")).toBe("false");
     expect(toggle?.textContent).toBe("展开代码（共26行）");
@@ -535,6 +557,7 @@ describe("collapsible code blocks", () => {
 
     expect(root.querySelectorAll(".m2h-code-block")).toHaveLength(1);
     expect(root.querySelectorAll(".m2h-code-toggle")).toHaveLength(1);
+    expect(root.querySelectorAll(".m2h-code-frame")).toHaveLength(1);
   });
 
   it("keeps the copy control copying the complete source", async () => {
@@ -560,7 +583,7 @@ describe("collapsible code blocks", () => {
       // Collapsing is presentation only: the DOM keeps the whole source …
       const code = root.querySelector("code");
       expect(countLines(code?.textContent ?? "")).toBe(127);
-      // … and the copy control inside the wrapped pre copies all of it.
+      // … and the copy control on the folded block's frame copies all of it.
       const copy = root.querySelector<HTMLButtonElement>(".m2h-code-copy");
       if (copy === null) {
         throw new Error("code copy button was not added");

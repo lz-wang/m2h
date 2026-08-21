@@ -1,6 +1,6 @@
 # 超长代码块回归文档
 
-这份文档用于真实浏览器环境下代码块折叠与行号的布局回归：短代码、恰好 25 行、恰好 26 行与 120 行的围栏代码块各一个，其中 120 行的块内含一条超长行，验证折叠状态下横向滚动仍然可用；文末的 Mermaid 图表验证代码行号不会附加到图表源码上。
+这份文档用于真实浏览器环境下代码块折叠与行号的布局回归：短代码、恰好 25 行、恰好 26 行与 120 行的围栏代码块各一个，其中 120 行的块内含一条超长行，验证折叠状态下横向滚动仍然可用；文末的 Mermaid 图表验证代码行号不会附加到图表源码上；最后的短而超宽代码块只有 3 行却横向溢出，独立覆盖"行数不多但需要横向滚动"的场景。
 
 ## 短代码
 
@@ -201,4 +201,12 @@
 ```mermaid
 graph TD
 A --> B
+```
+
+## 短而超宽
+
+```text
+short line
+THIS_IS_A_SINGLE_EXTREMELY_LONG_LINE_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+third line
 ```

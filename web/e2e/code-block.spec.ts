@@ -1,10 +1,12 @@
 import { expect, test } from "@playwright/test";
 
-// Real-browser regressions for collapsed overlong code blocks. The fold is
-// pure CSS layout (max-height in lh units + overflow clipping) and the toggle
-// flips data attributes the stylesheet keys on — jsdom computes no geometry,
-// so the collapsed/expanded heights and the surviving horizontal scroll can
-// only be locked down with a genuine layout engine.
+// Real-browser regressions for enhanced code blocks: the collapse fold, the
+// line-number gutter, and the frame-pinned copy control. The fold is pure CSS
+// layout (max-height in lh units + overflow clipping) and the toggle flips
+// data attributes the stylesheet keys on; the gutter and copy control must
+// hold their viewport positions while the source scrolls sideways — jsdom
+// computes no geometry, so all of it can only be locked down with a genuine
+// layout engine.
 
 // Wait until the document body has painted, so geometry assertions never race
 // the client-rendered article (same helper contract as layout.spec.ts). The
@@ -26,12 +28,13 @@ test("collapses overlong code blocks behind an expand toggle", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
-  // The fixture holds four blocks: 3 lines, exactly 25, exactly 26, and 120
-  // lines (with one very long line for the horizontal-scroll assertion).
+  // The fixture holds five blocks: 3 lines, exactly 25, exactly 26, 120 lines
+  // (with one very long line for the horizontal-scroll assertion), and a
+  // 3-line but overwide block at the end.
   await waitForBody(page, "/doc/long-code.md");
 
   // Only the >25-line blocks get a wrapper, both collapsed by default; the
-  // short and exactly-25-line blocks stay bare <pre>.
+  // short, exactly-25-line, and short-but-wide blocks stay bare <pre>.
   const blocks = await page.evaluate(() =>
     Array.from(document.querySelectorAll<HTMLElement>(".m2h-code-block")).map(
       (wrapper) => ({
@@ -50,7 +53,7 @@ test("collapses overlong code blocks behind an expand toggle", async ({
       pres.length - document.querySelectorAll(".m2h-code-block pre").length
     );
   });
-  expect(barePres).toBe(2);
+  expect(barePres).toBe(3);
 
   // Geometry of the 120-line block (index 1): the fold clips vertically …
   const collapsed = await measureBlock(page, 1);
@@ -116,6 +119,7 @@ test("numbers code lines in a gutter that stays pinned while scrolling", async (
     { numbers: 25, withLines: true },
     { numbers: 26, withLines: true },
     { numbers: 120, withLines: true },
+    { numbers: 3, withLines: true },
   ]);
 
   // The rendered diagram is never numbered.
@@ -220,6 +224,80 @@ test("numbers code lines in a gutter that stays pinned while scrolling", async (
       return getComputedStyle(gutter).borderRightWidth;
     }),
   ).toBe("0px");
+});
+
+test("pins the copy control to the frame while code scrolls sideways", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await waitForBody(page, "/doc/long-code.md");
+
+  /*
+   * The copy control is an absolutely-positioned child of .m2h-code-frame,
+   * never of the <pre> scrollport: an absolutely-positioned descendant of a
+   * scroll container scrolls with the container's content, which is exactly
+   * the regression this locks down. Both overwide shapes are covered — the
+   * collapsed 120-line block (index 3) and the 3-line but wide block
+   * (index 4) — because line count and width must never mask each other.
+   * Scrolling either sideways slides the source under the sticky gutter
+   * while the frame-pinned copy control keeps its exact viewport position.
+   */
+  const pinned = await page.evaluate(() =>
+    [3, 4].map((index) => {
+      const pre = document.querySelectorAll<HTMLElement>("pre")[index];
+      if (pre === undefined) {
+        throw new Error(`code block ${index} was not rendered`);
+      }
+      const frame = pre.closest<HTMLElement>(".m2h-code-frame");
+      const button = frame?.querySelector<HTMLElement>(
+        ":scope > .m2h-code-copy",
+      );
+      const gutter = pre.querySelector<HTMLElement>(
+        ":scope > .m2h-code-line-numbers",
+      );
+      if (frame === null || button === null || gutter === null) {
+        throw new Error("copy frame/control or gutter not found");
+      }
+
+      const buttonBefore = button.getBoundingClientRect();
+      const gutterBefore = gutter.getBoundingClientRect();
+      const preRectBefore = pre.getBoundingClientRect();
+
+      pre.scrollLeft = 300;
+
+      const buttonAfter = button.getBoundingClientRect();
+      const gutterAfter = gutter.getBoundingClientRect();
+      const frameRect = frame.getBoundingClientRect();
+
+      return {
+        collapsible: frame.classList.contains("m2h-code-block"),
+        overwide: pre.scrollWidth > pre.clientWidth,
+        scrollLeft: pre.scrollLeft,
+        copyDeltaLeft: buttonAfter.left - buttonBefore.left,
+        copyDeltaRight: buttonAfter.right - buttonBefore.right,
+        rightGap: frameRect.right - buttonAfter.right,
+        gutterDeltaLeft: gutterAfter.left - gutterBefore.left,
+        gutterLeftGap: gutterAfter.left - preRectBefore.left,
+      };
+    }),
+  );
+
+  // The 120-line block folds; the short-but-wide one stays a bare frame.
+  expect(pinned[0]?.collapsible).toBe(true);
+  expect(pinned[1]?.collapsible).toBe(false);
+
+  for (const block of pinned) {
+    expect(block.overwide).toBe(true);
+    expect(block.scrollLeft).toBeGreaterThan(0);
+    // The control keeps its viewport position while the source slides …
+    expect(Math.abs(block.copyDeltaLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(block.copyDeltaRight)).toBeLessThanOrEqual(1);
+    // … stays inset 0.5rem (8px) from the frame's right edge …
+    expect(Math.abs(block.rightGap - 8)).toBeLessThanOrEqual(1);
+    // … and the sticky gutter stays pinned at the scrollport's left edge.
+    expect(Math.abs(block.gutterDeltaLeft)).toBeLessThanOrEqual(1);
+    expect(Math.abs(block.gutterLeftGap)).toBeLessThanOrEqual(1);
+  }
 });
 
 interface BlockGeometry {

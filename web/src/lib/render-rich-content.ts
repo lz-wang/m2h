@@ -264,21 +264,48 @@ function addHeadingPermalinks(root: HTMLElement): void {
   }
 }
 
-// The direct <code> child of a fenced <pre>. The line-number gutter and the
-// copy control also live directly under the pre, so firstElementChild cannot
-// be trusted once a gutter has been prepended.
+// The direct <code> child of a fenced <pre>. The line-number gutter also
+// lives directly under the pre, so firstElementChild cannot be trusted once a
+// gutter has been prepended.
 function directCodeChild(pre: HTMLPreElement): HTMLElement | null {
   const code = pre.querySelector(":scope > code");
   return code instanceof HTMLElement ? code : null;
 }
 
+// Wrap a fenced <pre> in the frame that owns the block's external geometry.
+// The <pre> stays the code block's only scroll container, while the frame is
+// the positioning context for absolutely-positioned overlay controls (copy,
+// later the collapse toggle): an absolutely-positioned descendant of a scroll
+// container scrolls with the container's content, so the copy button must
+// never live inside the scrollport itself. Idempotent, like every enhancement
+// here: a pre already framed is returned as-is, so re-running the enhancement
+// on the same body stacks nothing.
+function ensureCodeFrame(pre: HTMLPreElement): HTMLDivElement {
+  const parent = pre.parentElement;
+  if (
+    parent instanceof HTMLDivElement &&
+    parent.classList.contains("m2h-code-frame")
+  ) {
+    return parent;
+  }
+
+  const frame = document.createElement("div");
+  frame.className = "m2h-code-frame";
+  pre.replaceWith(frame);
+  frame.append(pre);
+  return frame;
+}
+
 function addCodeCopyButtons(root: HTMLElement): void {
   for (const pre of root.querySelectorAll<HTMLPreElement>("pre")) {
     const code = directCodeChild(pre);
-    if (code === null) {
+    // Mermaid is skipped: its pass replaces the <pre> with a rendered diagram,
+    // so a frame and button would only flash before dying with the pre.
+    if (code === null || code.classList.contains("language-mermaid")) {
       continue;
     }
-    if (pre.querySelector(".m2h-code-copy") !== null) {
+    const frame = ensureCodeFrame(pre);
+    if (frame.querySelector(":scope > .m2h-code-copy") !== null) {
       continue;
     }
 
@@ -293,7 +320,7 @@ function addCodeCopyButtons(root: HTMLElement): void {
         setCopyStatus(button, copied);
       });
     });
-    pre.append(button);
+    frame.append(button);
   }
 }
 
@@ -342,14 +369,13 @@ function setCopyStatus(button: HTMLButtonElement, copied: boolean): void {
   }, 2_000);
 }
 
-// Wrap code blocks longer than CODE_COLLAPSE_LINE_THRESHOLD source lines in a
-// collapsible wrapper. Mermaid blocks are skipped: the Mermaid pass later
-// replaces their <pre> with a rendered container, and a diagram must never be
-// folded behind a toggle. The wrapper keeps the toggle outside the <pre> so it
-// never scrolls away horizontally, never fights the absolutely-positioned copy
-// control, and never gets clipped by the pre's own overflow. Idempotent: a
-// <pre> already living in a wrapper is left alone, so re-running the
-// enhancement on the same body (e.g. a same-HTML hot swap) stacks nothing.
+// Fold code blocks longer than CODE_COLLAPSE_LINE_THRESHOLD source lines by
+// turning their frame into a collapsible block (the frame gains the
+// m2h-code-block modifier and the collapse toggle). Mermaid blocks are
+// skipped: the Mermaid pass later replaces their <pre> with a rendered
+// container, and a diagram must never be folded behind a toggle. Idempotent:
+// a pre already living in a collapsible frame is left alone, so re-running
+// the enhancement on the same body (e.g. a same-HTML hot swap) stacks nothing.
 function addCollapsibleCodeBlocks(root: HTMLElement): void {
   for (const pre of root.querySelectorAll<HTMLPreElement>("pre")) {
     const code = directCodeChild(pre);
@@ -417,25 +443,28 @@ function codeSourceLineCount(code: HTMLElement): number {
   return source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
 }
 
-// Build the wrapper + toggle around one overlong <pre>. Collapsing is purely
-// presentational — the code's text content stays complete so the copy control
-// keeps copying the whole block — and only data attributes flip on toggle, so
-// the CSS owns the geometry and nothing here re-parses or rewrites the code.
+// Turn one overlong block's frame into a collapsible block: the frame gains
+// the m2h-code-block modifier and the expand/collapse toggle beside the copy
+// control, so short and long blocks share one frame structure
+// (frame > pre + copy [+ toggle]) instead of nesting a second wrapper.
+// Collapsing is purely presentational — the code's text content stays complete
+// so the copy control keeps copying the whole block — and only data attributes
+// flip on toggle, so the CSS owns the geometry and nothing here re-parses or
+// rewrites the code.
 function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
-  const wrapper = document.createElement("div");
-  wrapper.className = "m2h-code-block";
-  wrapper.dataset.collapsible = "true";
-  wrapper.dataset.collapsed = "true";
-  wrapper.dataset.lineCount = String(lineCount);
-  wrapper.style.setProperty(
+  const frame = ensureCodeFrame(pre);
+
+  frame.classList.add("m2h-code-block");
+  frame.dataset.collapsible = "true";
+  frame.dataset.collapsed = "true";
+  frame.dataset.lineCount = String(lineCount);
+  frame.style.setProperty(
     "--m2h-code-collapse-lines",
     String(CODE_COLLAPSE_LINE_THRESHOLD),
   );
 
   const preID = `m2h-code-block-${++codeBlockSequence}`;
   pre.id = preID;
-  pre.replaceWith(wrapper);
-  wrapper.append(pre);
 
   const collapsedLabel = `展开代码（共${lineCount}行）`;
   const toggle = document.createElement("button");
@@ -445,12 +474,12 @@ function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
   toggle.setAttribute("aria-controls", preID);
   toggle.textContent = collapsedLabel;
   toggle.addEventListener("click", () => {
-    const wasCollapsed = wrapper.dataset.collapsed !== "false";
-    wrapper.dataset.collapsed = wasCollapsed ? "false" : "true";
+    const wasCollapsed = frame.dataset.collapsed !== "false";
+    frame.dataset.collapsed = wasCollapsed ? "false" : "true";
     toggle.setAttribute("aria-expanded", wasCollapsed ? "true" : "false");
     toggle.textContent = wasCollapsed ? "折叠代码" : collapsedLabel;
   });
-  wrapper.append(toggle);
+  frame.append(toggle);
 }
 
 // Mermaid's official light theme is "default" and dark theme is "dark". The
