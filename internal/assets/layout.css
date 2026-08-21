@@ -172,6 +172,39 @@ html.m2h-mode-dark {
 }
 
 /*
+ * Overwide code fences keep their scroll geometry and only fade the
+ * scrollbar's paint. Hiding the scrollbar outright (scrollbar-width: none
+ * flipping to auto on hover) would change clientWidth/clientHeight under
+ * Windows/Linux classic scrollbars and shift the block's layout; transparent
+ * colors leave scrollLeft/scrollWidth/clientWidth untouched while the thumb
+ * is invisible at rest. :focus-within covers keyboard users Tabbing to the
+ * copy control above. Shared by convert output and the WebUI, so it lives
+ * here rather than the app stylesheet.
+ */
+.markdown-body pre {
+  scrollbar-color: transparent transparent;
+}
+
+.markdown-body pre:hover,
+.markdown-body pre:focus-within {
+  scrollbar-color: color-mix(in srgb, currentColor 35%, transparent) transparent;
+}
+
+.markdown-body pre::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.markdown-body pre::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.markdown-body pre:hover::-webkit-scrollbar-thumb,
+.markdown-body pre:focus-within::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, currentColor 35%, transparent);
+}
+
+/*
  * Sortable table headers, enhanced at runtime in both the standalone
  * rich-content script and the WebUI. Tablesort stamps role=columnheader on
  * header cells it wires up and writes the active direction to aria-sort, so

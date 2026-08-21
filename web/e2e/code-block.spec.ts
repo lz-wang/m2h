@@ -74,7 +74,7 @@ test("collapses overlong code blocks behind an expand toggle", async ({
   const block = page.locator(".m2h-code-block").nth(1);
   const toggle = block.locator(".m2h-code-toggle");
   await expect(toggle).toBeVisible();
-  await expect(toggle).toHaveText("展开代码 · 120 行");
+  await expect(toggle).toHaveText("展开代码（共120行）");
   await expect(toggle).toHaveAttribute("aria-expanded", "false");
   await expect(block.locator(".m2h-code-copy")).toBeVisible();
 
@@ -90,7 +90,7 @@ test("collapses overlong code blocks behind an expand toggle", async ({
 
   // … and collapsing again restores the folded height.
   await toggle.click();
-  await expect(toggle).toHaveText("展开代码 · 120 行");
+  await expect(toggle).toHaveText("展开代码（共120行）");
   const refolded = await measureBlock(page, 1);
   expect(refolded.datasetCollapsed).toBe("true");
   expect(refolded.clientHeight).toBe(collapsed.clientHeight);
@@ -183,6 +183,19 @@ test("numbers code lines in a gutter that stays pinned while scrolling", async (
   expect(sticky.scrollLeft).toBeGreaterThan(0);
   expect(sticky.pinnedAtLeftEdge).toBe(true);
   expect(sticky.visible).toBe(true);
+
+  // The gutter keeps its opaque plate and padding but no divider line.
+  expect(
+    await page.evaluate(() => {
+      const gutter = document.querySelector<HTMLElement>(
+        ".m2h-code-line-numbers",
+      );
+      if (gutter === null) {
+        throw new Error("gutter was not rendered");
+      }
+      return getComputedStyle(gutter).borderRightWidth;
+    }),
+  ).toBe("0px");
 });
 
 interface BlockGeometry {

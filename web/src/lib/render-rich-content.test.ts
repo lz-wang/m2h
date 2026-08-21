@@ -471,7 +471,7 @@ describe("collapsible code blocks", () => {
     expect(pre?.parentElement).toBe(wrapper);
     expect(toggle?.getAttribute("aria-controls")).toBe(pre?.id);
     expect(toggle?.getAttribute("aria-expanded")).toBe("false");
-    expect(toggle?.textContent).toBe("展开代码 · 26 行");
+    expect(toggle?.textContent).toBe("展开代码（共26行）");
   });
 
   it("expands and re-collapses through the toggle", async () => {
@@ -494,7 +494,7 @@ describe("collapsible code blocks", () => {
     toggle.click();
     expect(wrapper.dataset.collapsed).toBe("true");
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    expect(toggle.textContent).toBe("展开代码 · 26 行");
+    expect(toggle.textContent).toBe("展开代码（共26行）");
   });
 
   it("labels the toggle with the full line count", async () => {
@@ -509,7 +509,7 @@ describe("collapsible code blocks", () => {
     ).toBe("127");
     expect(
       root.querySelector<HTMLButtonElement>(".m2h-code-toggle")?.textContent,
-    ).toBe("展开代码 · 127 行");
+    ).toBe("展开代码（共127行）");
   });
 
   it("never folds mermaid source", async () => {
@@ -709,7 +709,7 @@ describe("code line numbers", () => {
     ).toHaveLength(30);
     expect(
       root.querySelector<HTMLButtonElement>(".m2h-code-toggle")?.textContent,
-    ).toBe("展开代码 · 30 行");
+    ).toBe("展开代码（共30行）");
   });
 });
 

@@ -437,7 +437,7 @@ function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
   pre.replaceWith(wrapper);
   wrapper.append(pre);
 
-  const collapsedLabel = `展开代码 · ${lineCount} 行`;
+  const collapsedLabel = `展开代码（共${lineCount}行）`;
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "m2h-code-toggle";

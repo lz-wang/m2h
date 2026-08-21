@@ -3,6 +3,7 @@ import {
   Check,
   Columns3,
   FileQuestion,
+  FileText,
   ImageOff,
   Inbox,
   LoaderCircle,
@@ -987,6 +988,12 @@ function PreviewContent({
       </section>
     );
   }
+  // A zero-byte, whitespace-only, or frontmatter-only Markdown document renders
+  // an empty body. The server already strips frontmatter from the body it
+  // returns, so trimming the rendered HTML is the complete emptiness test — and
+  // frontmatter stays visible above the empty state: it is valid document
+  // metadata, only the body has nothing to show.
+  const documentEmpty = html.trim() === "";
   return (
     <>
       {frontmatter !== null && frontmatter.entries.length > 0 ? (
@@ -994,13 +1001,20 @@ function PreviewContent({
           <FrontMatterPanel frontmatter={frontmatter} />
         </div>
       ) : null}
-      <article
-        ref={contentRef}
-        className="markdown-body reader-document"
-        onClick={onClick}
-        onKeyDown={onKeyDown}
-        onErrorCapture={onErrorCapture}
-      />
+      {documentEmpty ? (
+        <section className="state-panel" role="status">
+          <FileText aria-hidden="true" />
+          <p>当前文档无内容</p>
+        </section>
+      ) : (
+        <article
+          ref={contentRef}
+          className="markdown-body reader-document"
+          onClick={onClick}
+          onKeyDown={onKeyDown}
+          onErrorCapture={onErrorCapture}
+        />
+      )}
     </>
   );
 }

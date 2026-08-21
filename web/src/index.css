@@ -575,7 +575,7 @@ body,
 
 /* A quiet text-sized affordance, not a bar: the button shrinks to its label
  * and centers under the block, so hover/focus highlight exactly the words
- * "展开代码 · N 行" and nothing else. The 2rem it occupies below the pre
+ * "展开代码（共N行）" and nothing else. The 2rem it occupies below the pre
  * (0.25rem margin + 1.75rem height) is what the fade above keys on. */
 .markdown-body .m2h-code-toggle {
   display: flex;
@@ -632,7 +632,6 @@ body,
   text-align: right;
   color: var(--fgColor-muted, var(--muted-foreground));
   background: var(--m2h-code-block-bg);
-  border-right: 1px solid var(--borderColor-muted, var(--border));
   user-select: none;
   pointer-events: none;
 }

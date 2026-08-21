@@ -708,6 +708,69 @@ describe("App directory preview", () => {
     );
   });
 
+  it("shows the empty-document state for blank bodies while keeping frontmatter", async () => {
+    // Case A: a zero-byte Markdown file renders an empty body.
+    let view = render(
+      <App
+        api={createAPI({
+          getDocument: vi.fn().mockResolvedValue({
+            path: "README.md",
+            title: "Readme API Title",
+            html: "",
+            frontmatter: null,
+            toc: [],
+          }),
+        })}
+      />,
+    );
+    expect(await screen.findByText("当前文档无内容")).toBeTruthy();
+    expect(document.querySelector(".reader-document")).toBeNull();
+    view.unmount();
+
+    // Case B: whitespace-only Markdown is just as empty.
+    view = render(
+      <App
+        api={createAPI({
+          getDocument: vi.fn().mockResolvedValue({
+            path: "README.md",
+            title: "Readme API Title",
+            html: " \n ",
+            frontmatter: null,
+            toc: [],
+          }),
+        })}
+      />,
+    );
+    expect(await screen.findByText("当前文档无内容")).toBeTruthy();
+    view.unmount();
+
+    // Case C: frontmatter over an empty body keeps the metadata panel above
+    // the empty state instead of hiding it.
+    view = render(
+      <App
+        api={createAPI({
+          getDocument: vi.fn().mockResolvedValue({
+            path: "README.md",
+            title: "Readme API Title",
+            html: "",
+            frontmatter: {
+              entries: [{ key: "author", value: "lzwang" }],
+            },
+            toc: [],
+          }),
+        })}
+      />,
+    );
+    expect(await screen.findByText("当前文档无内容")).toBeTruthy();
+    expect(screen.getByText("Frontmatter")).toBeTruthy();
+    view.unmount();
+
+    // Case D: a document with a real body never shows the empty state.
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+    expect(screen.queryByText("当前文档无内容")).toBeNull();
+  });
+
   it("renders frontmatter summary and a collapsed panel", async () => {
     const user = userEvent.setup();
     const api = createAPI({
