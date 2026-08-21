@@ -143,24 +143,6 @@ jobs:
       - name: Build binary
         run: make build-os OS=${{ matrix.goos }} ARCH=${{ matrix.goarch }} VERSION=${{ needs.prepare.outputs.version }}
 
-      - name: Prepare WebDAV payload
-        shell: bash
-        run: |
-          filename="m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}"
-          (cd dist && sha256sum "${filename}" > "${filename}.sha256")
-
-      - name: Upload to WebDAV
-        continue-on-error: true
-        uses: bxb100/action-upload-webdav@v1
-        with:
-          webdav_address: ${{ secrets.WEBDAV_SERVER }}
-          webdav_username: ${{ secrets.WEBDAV_USERNAME }}
-          webdav_password: ${{ secrets.WEBDAV_PASSWORD }}
-          webdav_upload_path: "/Shares/github/${{ github.repository }}/${{ matrix.goos }}/${{ matrix.goarch }}/${{ needs.prepare.outputs.version }}"
-          files: |
-            dist/m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}
-            dist/m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}.sha256
-
       - name: Package release archive
         shell: bash
         run: |
@@ -184,6 +166,18 @@ jobs:
           rm -rf "${package_dir}"
           archive_name="$(basename "${archive}")"
           (cd "${GITHUB_WORKSPACE}/release" && sha256sum "${archive_name}" > "${archive_name}.sha256")
+
+      - name: Upload archive and checksum to WebDAV
+        continue-on-error: true
+        uses: bxb100/action-upload-webdav@v1
+        with:
+          webdav_address: ${{ secrets.WEBDAV_SERVER }}
+          webdav_username: ${{ secrets.WEBDAV_USERNAME }}
+          webdav_password: ${{ secrets.WEBDAV_PASSWORD }}
+          webdav_upload_path: "/Shares/github/${{ github.repository }}/${{ needs.prepare.outputs.version }}"
+          files: |
+            release/m2h_${{ needs.prepare.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive }}
+            release/m2h_${{ needs.prepare.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive }}.sha256
 
       - name: Upload release artifact
         uses: actions/upload-artifact@v6

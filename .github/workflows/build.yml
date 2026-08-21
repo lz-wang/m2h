@@ -87,21 +87,27 @@ jobs:
           - goos: linux
             goarch: amd64
             suffix: ""
+            archive: tar.gz
           - goos: linux
             goarch: arm64
             suffix: ""
+            archive: tar.gz
           - goos: darwin
             goarch: amd64
             suffix: ""
+            archive: tar.gz
           - goos: darwin
             goarch: arm64
             suffix: ""
+            archive: tar.gz
           - goos: windows
             goarch: amd64
             suffix: ".exe"
+            archive: zip
           - goos: windows
             goarch: arm64
             suffix: ".exe"
+            archive: zip
     steps:
       - uses: actions/checkout@v6
 
@@ -124,23 +130,36 @@ jobs:
       - name: Build binary
         run: make build-os OS=${{ matrix.goos }} ARCH=${{ matrix.goarch }} VERSION=${{ needs.readiness.outputs.version }}
 
-      - name: Prepare WebDAV payload
+      - name: Package WebDAV archive
         shell: bash
         run: |
-          filename="m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}"
-          (cd dist && sha256sum "${filename}" > "${filename}.sha256")
+          set -euo pipefail
+          version="${{ needs.readiness.outputs.version }}"
+          name="m2h_${version}_${{ matrix.goos }}_${{ matrix.goarch }}"
+          package_dir="release/${name}"
+          mkdir -p "${package_dir}"
+          cp "dist/m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}" "${package_dir}/m2h${{ matrix.suffix }}"
+          cp README.md LICENSE "${package_dir}/"
+          if [[ "${{ matrix.archive }}" == 'zip' ]]; then
+            archive="release/${name}.zip"
+            (cd "${package_dir}" && zip -qr "${GITHUB_WORKSPACE}/${archive}" .)
+          else
+            archive="release/${name}.tar.gz"
+            tar -C "${package_dir}" -czf "${archive}" .
+          fi
+          sha256sum "${archive}" > "${archive}.sha256"
 
-      - name: Upload to WebDAV
+      - name: Upload archive and checksum to WebDAV
         continue-on-error: true
         uses: bxb100/action-upload-webdav@v1
         with:
           webdav_address: ${{ secrets.WEBDAV_SERVER }}
           webdav_username: ${{ secrets.WEBDAV_USERNAME }}
           webdav_password: ${{ secrets.WEBDAV_PASSWORD }}
-          webdav_upload_path: "/Shares/github/${{ github.repository }}/${{ matrix.goos }}/${{ matrix.goarch }}/${{ needs.readiness.outputs.version }}"
+          webdav_upload_path: "/Shares/github/${{ github.repository }}/${{ needs.readiness.outputs.version }}"
           files: |
-            dist/m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}
-            dist/m2h_${{ matrix.goos }}_${{ matrix.goarch }}${{ matrix.suffix }}.sha256
+            release/m2h_${{ needs.readiness.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive }}
+            release/m2h_${{ needs.readiness.outputs.version }}_${{ matrix.goos }}_${{ matrix.goarch }}.${{ matrix.archive }}.sha256
 
       - name: Upload binary
         uses: actions/upload-artifact@v6
