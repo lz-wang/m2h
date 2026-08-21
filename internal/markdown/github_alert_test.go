@@ -41,22 +41,30 @@ func TestParseAlertMarker(t *testing.T) {
 func TestAlertIconsAndTitles(t *testing.T) {
 	t.Parallel()
 
-	for _, typ := range []AlertType{AlertNote, AlertTip, AlertImportant, AlertWarning, AlertCaution} {
+	titles := map[AlertType]string{
+		AlertNote:      "NOTE",
+		AlertTip:       "TIP",
+		AlertImportant: "IMPORTANT",
+		AlertWarning:   "WARNING",
+		AlertCaution:   "CAUTION",
+	}
+	for typ, want := range titles {
 		svg := string(alertIconSVG(typ))
 		if !strings.HasPrefix(svg, "<svg") || !strings.Contains(svg, "<path") {
 			t.Errorf("alertIconSVG(%s) not a valid inline svg: %s", typ, svg)
 		}
-		if title := alertTitleText(typ); title == "" {
-			t.Errorf("alertTitleText(%s) returned empty title", typ)
+		if title := alertTitleText(typ); title != want {
+			t.Errorf("alertTitleText(%s) = %q, want %q", typ, title, want)
 		}
 	}
 
-	// Defensive: an unknown variant yields no icon and no title rather than
-	// emitting partial markup.
+	// Defensive: an unknown variant yields no icon rather than emitting a
+	// broken one. Its title is a deterministic uppercase passthrough — and the
+	// parser only produces the five known variants, so it never renders.
 	if got := alertIconSVG("bogus"); got != nil {
 		t.Errorf("alertIconSVG(unknown) = %q, want nil", got)
 	}
-	if got := alertTitleText("bogus"); got != "" {
-		t.Errorf("alertTitleText(unknown) = %q, want empty", got)
+	if got := alertTitleText("bogus"); got != "BOGUS" {
+		t.Errorf("alertTitleText(unknown) = %q, want %q", got, "BOGUS")
 	}
 }

@@ -581,9 +581,12 @@ func TestRenderGitHubAlerts(t *testing.T) {
 		`class="markdown-alert markdown-alert-caution"`,
 		"Caution body",
 		`<p class="markdown-alert-title">`,
-		"<svg",
-		">Note</p>",
-		">Caution</p>",
+		`class="octicon"`,
+		">NOTE</p>",
+		">TIP</p>",
+		">IMPORTANT</p>",
+		">WARNING</p>",
+		">CAUTION</p>",
 	} {
 		if !strings.Contains(result.Body, want) {
 			t.Errorf("body missing %q:\n%s", want, result.Body)

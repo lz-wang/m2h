@@ -195,20 +195,11 @@ func (r *alertHTMLRenderer) renderAlert(w util.BufWriter, _ []byte, n ast.Node, 
 	return ast.WalkContinue, nil
 }
 
+// alertTitleText renders the alert variant as its uppercase title (NOTE, TIP,
+// IMPORTANT, WARNING, CAUTION). The variant string is one of the five markers
+// parseAlertMarker accepts, so uppercasing it is total.
 func alertTitleText(typ AlertType) string {
-	switch typ {
-	case AlertNote:
-		return "Note"
-	case AlertTip:
-		return "Tip"
-	case AlertImportant:
-		return "Important"
-	case AlertWarning:
-		return "Warning"
-	case AlertCaution:
-		return "Caution"
-	}
-	return ""
+	return strings.ToUpper(string(typ))
 }
 
 const (

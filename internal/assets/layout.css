@@ -205,6 +205,16 @@ html.m2h-mode-dark {
 }
 
 /*
+ * GitHub alert titles pair the octicon with the uppercase variant name. The
+ * gap is CSS, not an HTML space: whitespace collapsing is not a reliable
+ * spacing mechanism and the two glyphs must keep a stable distance in both
+ * convert output and the WebUI.
+ */
+.markdown-body .markdown-alert-title > .octicon {
+  margin-right: 0.375rem;
+}
+
+/*
  * Sortable table headers, enhanced at runtime in both the standalone
  * rich-content script and the WebUI. Tablesort stamps role=columnheader on
  * header cells it wires up and writes the active direction to aria-sort, so
