@@ -218,12 +218,18 @@ html.m2h-mode-dark {
  * Sortable table headers, enhanced at runtime in both the standalone
  * rich-content script and the WebUI. Tablesort stamps role=columnheader on
  * header cells it wires up and writes the active direction to aria-sort, so
- * the arrows key off those attributes; headers opted out through
+ * the indicator keys off those attributes; headers opted out through
  * data-sort-method="none" (interactive cells) keep their native semantics.
  *
- * The active column always shows its direction; an unsorted column only
- * hints its affordance on hover/focus, so headers read clean at rest. The
- * reserved right padding keeps the arrow from overlapping header text.
+ * The indicator is Lucide's arrow-down-up vector applied as a CSS mask: the
+ * body is not React-rendered (neither is the standalone output), so a mask
+ * keeps one shared stylesheet serving both without any JS DOM injection.
+ * The icon paints in --m2h-sort-fg through background-color and follows the
+ * theme automatically. The active column always shows the icon at full
+ * opacity — direction itself stays conveyed by aria-sort and the header
+ * title — while an unsorted column only hints its affordance on hover/focus,
+ * so headers read clean at rest. The reserved right padding keeps the icon
+ * from overlapping header text.
  *
  * Geometry is reserved statically: every plain GFM header cell (the same
  * classless <table> the sorter targets) carries the indicator space from the
@@ -232,16 +238,18 @@ html.m2h-mode-dark {
  * position. Only interaction properties are keyed on the runtime attributes,
  * because those do not affect layout.
  *
- * The arrow, hover wash, and focus ring colors are m2h variables because
+ * The icon, hover wash, and focus ring colors are m2h variables because
  * github-markdown-css defines no theme variables under these names — a bare
  * var(--bgColor-muted, …) would silently fall back to the light value on the
  * #0d1117 dark page. Dark mode (and the auto dark media query) therefore
- * swap the palette explicitly, mirroring the keycap tokens below.
+ * swap the palette explicitly, mirroring the keycap tokens below. The mask
+ * itself is theme-independent (alpha only) and defined once.
  */
 html {
   --m2h-sort-fg: #59636e;
   --m2h-sort-hover-bg: #f6f8fa;
   --m2h-sort-focus: #0969da;
+  --m2h-sort-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m3 16 4 4 4-4'/%3E%3Cpath d='M7 20V4'/%3E%3Cpath d='m21 8-4-4-4 4'/%3E%3Cpath d='M17 4v16'/%3E%3C/svg%3E");
 }
 
 html.m2h-mode-dark {
@@ -273,17 +281,26 @@ html.m2h-mode-dark {
   top: 50%;
   right: 0.75rem;
 
-  color: var(--m2h-sort-fg);
+  width: 0.875rem;
+  height: 0.875rem;
 
-  font-size: 0.75rem;
-  line-height: 1;
+  background-color: var(--m2h-sort-fg);
 
-  content: "↕";
+  -webkit-mask-image: var(--m2h-sort-icon);
+  mask-image: var(--m2h-sort-icon);
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: center;
+  mask-position: center;
+  -webkit-mask-size: contain;
+  mask-size: contain;
+
+  content: "";
   opacity: 0;
 
   transform: translateY(-50%);
   transition:
-    color 120ms ease,
+    background-color 120ms ease,
     opacity 120ms ease;
 }
 
@@ -292,13 +309,12 @@ html.m2h-mode-dark {
   opacity: 0.65;
 }
 
-.markdown-body th[aria-sort="ascending"]::after {
-  content: "↑";
-  opacity: 1;
-}
-
-.markdown-body th[aria-sort="descending"]::after {
-  content: "↓";
+/* The sorted-state selectors repeat role=columnheader so they tie the base
+ * indicator rule's specificity and win by source order — a bare
+ * th[aria-sort] rule would silently lose to the :not()-bearing base and the
+ * active column's icon would stay invisible. */
+.markdown-body th[role="columnheader"][aria-sort="ascending"]::after,
+.markdown-body th[role="columnheader"][aria-sort="descending"]::after {
   opacity: 1;
 }
 
