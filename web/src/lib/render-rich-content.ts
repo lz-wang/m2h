@@ -15,6 +15,7 @@
 // document actually uses them.
 
 import type { ResolvedMode } from "../model";
+import { copyText } from "./clipboard";
 import {
   loadKatex,
   loadMermaid,
@@ -316,39 +317,11 @@ function addCodeCopyButtons(root: HTMLElement): void {
     button.setAttribute("aria-label", "复制代码");
     button.title = "复制代码";
     button.addEventListener("click", () => {
-      void copyCode(code.textContent ?? "").then((copied) => {
+      void copyText(code.textContent ?? "").then((copied) => {
         setCopyStatus(button, copied);
       });
     });
     frame.append(button);
-  }
-}
-
-async function copyCode(value: string): Promise<boolean> {
-  // navigator.clipboard is deliberately only attempted in a secure context.
-  // m2h serves previews over HTTP by default, where execCommand remains the
-  // browser-compatible, user-gesture fallback.
-  if (window.isSecureContext) {
-    try {
-      await navigator.clipboard.writeText(value);
-      return true;
-    } catch {
-      // Fall through when clipboard permission is unavailable or denied.
-    }
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = value;
-  textarea.setAttribute("aria-hidden", "true");
-  textarea.style.cssText = "position:fixed;left:-9999px;top:0;opacity:0";
-  document.body.append(textarea);
-  textarea.select();
-  try {
-    return document.execCommand("copy");
-  } catch {
-    return false;
-  } finally {
-    textarea.remove();
   }
 }
 
