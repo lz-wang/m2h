@@ -33,6 +33,11 @@ const COPY_FAILED_ICON =
   '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><path d="m4.5 4.5 7 7m0-7-7 7"></path></svg>';
 const HEADING_ANCHOR_ICON =
   '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg>';
+// Lucide ZoomIn, verbatim path data. Like the icons above, the body DOM is not
+// owned by React, so the magnifier control renders an inline SVG instead of a
+// lucide-react component.
+const IMAGE_ZOOM_ICON =
+  '<svg aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><path d="m21 21-4.3-4.3"></path><path d="M11 8v6"></path><path d="M8 11h6"></path></svg>';
 
 // "$$" must precede "$" so the inline delimiter does not swallow the block
 // delimiter first.
@@ -101,6 +106,7 @@ export async function renderRichContent(
   addCodeCopyButtons(root);
   addCodeLineNumbers(root);
   addCollapsibleCodeBlocks(root);
+  addImageLightboxTriggers(root);
   // Kick the Tablesort download off before awaiting Mermaid/KaTeX so all
   // needed runtimes load in parallel; the tables themselves are enhanced only
   // after those settle. The reserved indicator space is static CSS, so the
@@ -453,6 +459,56 @@ function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
     toggle.textContent = wasCollapsed ? "折叠代码" : collapsedLabel;
   });
   frame.append(toggle);
+}
+
+// Give every plain <img> in the body a Lightbox trigger: a magnifier button
+// pinned to the top-right of a wrapper frame, plus document-order indexes
+// (data-m2h-lightbox-index) the React layer resolves through event delegation.
+// Mermaid never appears here as an <img> — its pass turns the source pre into a
+// div.mermaid holding an SVG — so plain img scanning excludes it for free, and
+// raw-HTML <img> tags are covered by the same query. Idempotent like every
+// enhancement: an image already carrying the marker is skipped, so re-running
+// on the same body stacks no second frame or button.
+function addImageLightboxTriggers(root: HTMLElement): void {
+  root.querySelectorAll<HTMLImageElement>("img").forEach((image, index) => {
+    if (image.dataset.m2hLightboxImage === "true") {
+      return;
+    }
+    image.dataset.m2hLightboxImage = "true";
+    image.dataset.m2hLightboxIndex = String(index);
+
+    // An image wrapped in a link keeps the anchor as its visual root — the
+    // frame then wraps the anchor, so the trigger button stays a sibling of
+    // the <a> instead of an interactive element nested inside one.
+    const target = imageVisualRoot(image);
+    const frame = document.createElement("span");
+    frame.className = "m2h-image-frame";
+    target.replaceWith(frame);
+
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "m2h-image-lightbox-trigger";
+    button.dataset.m2hLightboxIndex = String(index);
+    button.setAttribute("aria-label", "查看大图");
+    button.title = "查看大图";
+    button.innerHTML = IMAGE_ZOOM_ICON;
+
+    frame.append(target, button);
+  });
+}
+
+// The element the frame should wrap: a sole-image anchor wraps both itself and
+// the image, while an anchor holding several images (or any other parent)
+// wraps the image alone — each image then gets its own frame and trigger.
+function imageVisualRoot(image: HTMLImageElement): HTMLElement {
+  const parent = image.parentElement;
+  if (
+    parent instanceof HTMLAnchorElement &&
+    parent.querySelectorAll("img").length === 1
+  ) {
+    return parent;
+  }
+  return image;
 }
 
 // Mermaid's official light theme is "default" and dark theme is "dark". The

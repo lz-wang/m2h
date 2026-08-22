@@ -749,6 +749,145 @@ function countLines(source: string): number {
   return source.split("\n").length - (source.endsWith("\n") ? 1 : 0);
 }
 
+describe("image lightbox triggers", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    mermaidMock.initialize.mockClear();
+    mermaidMock.run.mockClear();
+    mermaidMock.render.mockClear();
+    renderMathInElementMock.mockClear();
+    loadMermaidMock.mockClear();
+    loadKatexMock.mockClear();
+    loadTablesortMock.mockClear();
+    mermaidMock.run.mockResolvedValue(undefined);
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg data-mock="mermaid"></svg>',
+    });
+  });
+
+  it("wraps a plain image in a frame with a magnifier trigger", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><img src="/a.png" alt="A"></p>';
+
+    await renderRichContent(root, "light");
+
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    const image = root.querySelector<HTMLImageElement>("img");
+    const button = root.querySelector<HTMLButtonElement>(
+      ".m2h-image-lightbox-trigger",
+    );
+    expect(frame).not.toBeNull();
+    expect(image).not.toBeNull();
+    expect(button).not.toBeNull();
+    expect(image?.parentElement).toBe(frame);
+    expect(button?.parentElement).toBe(frame);
+    expect(image?.dataset.m2hLightboxImage).toBe("true");
+    expect(image?.dataset.m2hLightboxIndex).toBe("0");
+    expect(button?.type).toBe("button");
+    expect(button?.dataset.m2hLightboxIndex).toBe("0");
+    expect(button?.getAttribute("aria-label")).toBe("查看大图");
+    expect(button?.title).toBe("查看大图");
+    expect(button?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+  });
+
+  it("indexes images in document order", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p><img src="1.png"></p><p><img src="2.png"></p><p><img src="3.png"></p>';
+
+    await renderRichContent(root, "light");
+
+    const indexes = Array.from(
+      root.querySelectorAll<HTMLImageElement>("img"),
+    ).map((image) => image.dataset.m2hLightboxIndex);
+    expect(indexes).toEqual(["0", "1", "2"]);
+    expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(3);
+    expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
+      3,
+    );
+  });
+
+  it("does not stack a second frame on repeated enhancement", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p><img src="1.png"></p><p><img src="2.png"></p><p><img src="3.png"></p>';
+
+    await renderRichContent(root, "light");
+    await renderRichContent(root, "light");
+
+    expect(root.querySelectorAll("img")).toHaveLength(3);
+    expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(3);
+    expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
+      3,
+    );
+    // No frame nested inside another frame either.
+    expect(
+      root.querySelectorAll(".m2h-image-frame .m2h-image-frame"),
+    ).toHaveLength(0);
+  });
+
+  it("wraps the anchor of a linked image, keeping the button outside the link", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><a href="/target"><img src="/a.png" alt="A"></a></p>';
+
+    await renderRichContent(root, "light");
+
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    const anchor = root.querySelector<HTMLAnchorElement>("a");
+    const image = root.querySelector<HTMLImageElement>("img");
+    const button = root.querySelector<HTMLButtonElement>(
+      ".m2h-image-lightbox-trigger",
+    );
+    expect(frame).not.toBeNull();
+    expect(anchor?.parentElement).toBe(frame);
+    expect(image?.parentElement).toBe(anchor);
+    expect(button?.parentElement).toBe(frame);
+    // Interactive content must never nest: the trigger lives beside the <a>.
+    expect(anchor?.querySelector("button")).toBeNull();
+    expect(anchor?.getAttribute("href")).toBe("/target");
+  });
+
+  it("frames each image of a multi-image anchor separately", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p><a href="/target"><img src="1.png"><img src="2.png"></a></p>';
+
+    await renderRichContent(root, "light");
+
+    const anchor = root.querySelector<HTMLAnchorElement>("a");
+    const frames = root.querySelectorAll(".m2h-image-frame");
+    expect(frames).toHaveLength(2);
+    // The anchor is not pulled into a frame; each image is framed in place so
+    // every image keeps its own trigger and document-order index.
+    expect(anchor?.querySelector("img")?.closest(".m2h-image-frame")).toBe(
+      frames[0],
+    );
+    expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
+      2,
+    );
+  });
+
+  it("never adds a trigger to a rendered mermaid diagram", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    expect(root.querySelector(".mermaid")).not.toBeNull();
+    expect(root.querySelectorAll("img")).toHaveLength(0);
+    expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
+      0,
+    );
+  });
+});
+
 describe("rerenderMermaid", () => {
   beforeEach(() => {
     // Each test re-imports the module so the lazy mermaid singleton and the
