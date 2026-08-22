@@ -2006,6 +2006,191 @@ describe("App directory preview", () => {
   });
 });
 
+describe("image lightbox integration", () => {
+  function lightboxAPI(htmls: Record<string, string>): PreviewAPI {
+    return createAPI({
+      getDocument: vi.fn().mockImplementation(async (path: string) => {
+        const html = htmls[path];
+        return {
+          path,
+          title: "Readme API Title",
+          html: html ?? `<p>Body for ${path}</p>`,
+          frontmatter: null,
+          toc: [],
+        };
+      }),
+    });
+  }
+
+  it("opens the lightbox from a dynamically injected trigger click", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        api={lightboxAPI({
+          "README.md":
+            '<p><img src="/banner.png" alt="Banner"></p><p><img src="/logo.png" alt="Logo"></p>',
+        })}
+      />,
+    );
+    const triggers = await screen.findAllByRole("button", { name: "查看大图" });
+    expect(triggers).toHaveLength(2);
+
+    await user.click(triggers[1] as HTMLButtonElement);
+
+    // The lightbox carries the clicked image's snapshot (document-order index
+    // 1) and the whole document's image list. The snapshot src is the browser-
+    // resolved URL (currentSrc), not the raw attribute.
+    const dialog = await screen.findByRole("dialog", { name: "图片预览" });
+    const image = dialog.querySelector("img");
+    expect(image?.getAttribute("src")).toContain("/logo.png");
+    expect(screen.getByText("2 / 2")).toBeTruthy();
+  });
+
+  it("keeps intercepting plain markdown links beside image triggers", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        api={lightboxAPI({
+          "README.md":
+            '<p><a href="/doc/guides/setup.md">Setup guide</a></p><p><img src="/banner.png" alt="Banner"></p>',
+        })}
+      />,
+    );
+    await screen.findAllByRole("button", { name: "查看大图" });
+
+    // The link interception path is untouched by the lightbox delegation.
+    await user.click(screen.getByRole("link", { name: "Setup guide" }));
+    await screen.findByText("Body for guides/setup.md");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("follows a linked image's anchor instead of opening the lightbox", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        api={lightboxAPI({
+          "README.md":
+            '<p><a href="/doc/guides/setup.md"><img src="/banner.png" alt="Banner"></a></p>',
+        })}
+      />,
+    );
+    await screen.findAllByRole("button", { name: "查看大图" });
+
+    // Pressing the image itself keeps the link semantics: the document
+    // switches, and no lightbox appears.
+    await user.click(screen.getByRole("img", { name: "Banner" }));
+    await screen.findByText("Body for guides/setup.md");
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("opens the lightbox from a linked image's magnifier trigger", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        api={lightboxAPI({
+          "README.md":
+            '<p><a href="/doc/guides/setup.md"><img src="/banner.png" alt="Banner"></a></p>',
+        })}
+      />,
+    );
+    await user.click(
+      (
+        await screen.findAllByRole("button", { name: "查看大图" })
+      )[0] as HTMLButtonElement,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "图片预览" });
+    expect(dialog.querySelector("img")?.getAttribute("src")).toContain(
+      "/banner.png",
+    );
+  });
+
+  it("keeps the lightbox open across a theme switch", async () => {
+    // The modal lightbox blocks the toolbar, so the theme flips the way it
+    // can while viewing: the system preference changing under "auto" mode.
+    const theme = installThemeMedia(false);
+    const user = userEvent.setup();
+    render(
+      <App
+        api={lightboxAPI({
+          "README.md": '<p><img src="/banner.png" alt="Banner"></p>',
+        })}
+      />,
+    );
+    await user.click(
+      (
+        await screen.findAllByRole("button", { name: "查看大图" })
+      )[0] as HTMLButtonElement,
+    );
+    await screen.findByRole("dialog", { name: "图片预览" });
+
+    // Switching the resolved theme re-renders Mermaid only; the article — and
+    // the lightbox riding beside it — must survive.
+    await act(async () => {
+      theme.setMatches(true);
+    });
+    expect(document.documentElement.classList).toContain("dark");
+    expect(
+      await screen.findByRole("dialog", { name: "图片预览" }),
+    ).toBeTruthy();
+    // The body was not re-enhanced either: still exactly one trigger. (The
+    // modal dialog inerts the article, so this is a DOM query, not a role
+    // query.)
+    expect(
+      document.querySelectorAll(".m2h-image-lightbox-trigger"),
+    ).toHaveLength(1);
+  });
+
+  it("closes the lightbox and re-indexes images when the body hot-swaps", async () => {
+    const getDocument = vi
+      .fn<PreviewAPI["getDocument"]>()
+      .mockResolvedValueOnce({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<p><img src="/one.png" alt="One"></p>',
+        frontmatter: null,
+        toc: [],
+      })
+      .mockResolvedValueOnce({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<p><img src="/one.png" alt="One"></p><p><img src="/two.png" alt="Two"></p><p><img src="/three.png" alt="Three"></p>',
+        frontmatter: null,
+        toc: [],
+      });
+    const api = createAPI({ getDocument });
+    const events = stubEventSource();
+    const user = userEvent.setup();
+    render(<App api={api} />);
+
+    await user.click(
+      (
+        await screen.findAllByRole("button", { name: "查看大图" })
+      )[0] as HTMLButtonElement,
+    );
+    await screen.findByRole("dialog", { name: "图片预览" });
+
+    await act(async () => {
+      events.dispatch("document-changed");
+    });
+
+    // The stale lightbox is gone and the fresh body is enhanced exactly once:
+    // three indexed triggers, no stacked frames.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const triggers = await screen.findAllByRole("button", { name: "查看大图" });
+    expect(triggers).toHaveLength(3);
+    const images = document.querySelectorAll(
+      'img[data-m2h-lightbox-image="true"]',
+    );
+    expect(
+      Array.from(images).map((image) => image.dataset.m2hLightboxIndex),
+    ).toEqual(["0", "1", "2"]);
+    expect(
+      document.querySelectorAll(".m2h-image-frame .m2h-image-frame"),
+    ).toHaveLength(0);
+  });
+});
+
 function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
   return {
     listFiles: vi.fn().mockResolvedValue(initialFiles),

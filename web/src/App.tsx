@@ -39,6 +39,7 @@ import {
 import type { FrontMatter, PreviewAPI, TocItem } from "./api";
 import { DocumentTree } from "./components/document-tree";
 import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
+import { ImageLightbox } from "./components/image-lightbox";
 import { ReaderNavigation } from "./components/reader-navigation";
 import {
   TableOfContentsPanel,
@@ -68,6 +69,10 @@ import {
   TooltipTrigger,
 } from "./components/ui/tooltip";
 import { copyText } from "./lib/clipboard";
+import {
+  collectLightboxImages,
+  type LightboxImage,
+} from "./lib/image-lightbox";
 import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 import {
@@ -1046,6 +1051,14 @@ interface PreviewContentProps {
   onErrorCapture(event: SyntheticEvent<HTMLElement>): void;
 }
 
+// The open Lightbox: a snapshot of the body's enhanced images plus the image
+// being viewed. Data only — never body element references — so a body swap can
+// simply null this out.
+interface LightboxState {
+  images: LightboxImage[];
+  index: number;
+}
+
 function PreviewContent({
   phase,
   error,
@@ -1059,6 +1072,7 @@ function PreviewContent({
 }: PreviewContentProps) {
   const contentRef = useRef<HTMLElement>(null);
   const renderGenerationRef = useRef(0);
+  const [lightbox, setLightbox] = useState<LightboxState | null>(null);
   // The resolved theme is read through a ref so the body render effect can
   // depend on [html, phase] only and a theme switch never rebuilds the
   // article. renderedModeRef records which theme the current body — and its
@@ -1095,6 +1109,9 @@ function PreviewContent({
     if (root === null || html === null) {
       return;
     }
+    // The body below is wholesale replaced, so any open Lightbox is dropped:
+    // its image snapshots belong to the outgoing document.
+    setLightbox(null);
     const generation = ++renderGenerationRef.current;
     const mode = resolvedModeRef.current;
     root.innerHTML = html;
@@ -1140,6 +1157,29 @@ function PreviewContent({
       }
     };
   }, [phase, resolvedMode]);
+
+  // The magnifier triggers are injected into the article DOM by
+  // render-rich-content.ts, outside React's tree. Rather than wiring
+  // imperative callbacks into that layer, clicks bubble to this single React
+  // handler: a trigger press is intercepted before the Markdown-link logic
+  // ever sees it, and everything else falls through unchanged.
+  const handleContentClick = (event: ReactMouseEvent<HTMLElement>) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const trigger = target?.closest<HTMLButtonElement>(
+      ".m2h-image-lightbox-trigger",
+    );
+    if (trigger !== null && contentRef.current?.contains(trigger) === true) {
+      event.preventDefault();
+      event.stopPropagation();
+      const images = collectLightboxImages(contentRef.current);
+      const index = Number(trigger.dataset.m2hLightboxIndex);
+      if (Number.isInteger(index) && index >= 0 && index < images.length) {
+        setLightbox({ images, index });
+      }
+      return;
+    }
+    onClick(event);
+  };
 
   if (phase === "loading-files" || phase === "loading-document") {
     return (
@@ -1200,11 +1240,23 @@ function PreviewContent({
         <article
           ref={contentRef}
           className="markdown-body reader-document"
-          onClick={onClick}
+          onClick={handleContentClick}
           onKeyDown={onKeyDown}
           onErrorCapture={onErrorCapture}
         />
       )}
+      {lightbox !== null ? (
+        <ImageLightbox
+          images={lightbox.images}
+          index={lightbox.index}
+          onIndexChange={(index) =>
+            setLightbox((previous) =>
+              previous === null ? previous : { ...previous, index },
+            )
+          }
+          onClose={() => setLightbox(null)}
+        />
+      ) : null}
     </>
   );
 }
