@@ -24,6 +24,7 @@ import {
   buildTree,
   type DirectoryNode,
   documentURL,
+  type FileNode,
   localPath,
   markdownURL,
   type TreeNode,
@@ -402,38 +403,30 @@ interface TreeItemProps {
   depth: number;
 }
 
-function TreeItem({
+// Dispatch-only: directory rows render through DirectoryItem, leaves through
+// FileItem, so each node kind owns its own JSX in exactly one place.
+function TreeItem({ node, ...rest }: TreeItemProps) {
+  return node.type === "directory" ? (
+    <DirectoryItem {...rest} node={node} />
+  ) : (
+    <FileItem {...rest} node={node} />
+  );
+}
+
+// The tree's leaves: one Markdown file. The visible label keeps the plain
+// root-relative file name; the accessible name additionally announces the
+// document title and the virtual key, and the context menu carries the same
+// document's addresses (see TreeItemProps for the identity rules).
+function FileItem({
   node,
   base,
   rootAbsolutePath,
   pathSeparator,
   rootKind,
   onCopyStatus,
-  expanded,
   selectedPath,
   onSelect,
-  onToggle,
-  searching,
-  depth,
-}: TreeItemProps) {
-  if (node.type === "directory") {
-    return (
-      <DirectoryItem
-        node={node}
-        base={base}
-        rootAbsolutePath={rootAbsolutePath}
-        pathSeparator={pathSeparator}
-        rootKind={rootKind}
-        onCopyStatus={onCopyStatus}
-        expanded={expanded}
-        selectedPath={selectedPath}
-        onSelect={onSelect}
-        onToggle={onToggle}
-        searching={searching}
-        depth={depth}
-      />
-    );
-  }
+}: TreeItemProps & { node: FileNode }) {
   const active = node.path === selectedPath;
   const identity = base === "" ? node.path : `${base}/${node.path}`;
   const fileLocalPath =
