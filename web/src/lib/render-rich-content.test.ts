@@ -862,7 +862,25 @@ describe("image lightbox triggers", () => {
     expect(anchor?.getAttribute("href")).toBe("/target");
   });
 
-  it("frames each image of a multi-image anchor separately", async () => {
+  it("wraps the anchor of an image nested in a span, keeping the button outside the link", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p><a href="/target"><span><img src="/a.png" alt="A"></span></a></p>';
+
+    await renderRichContent(root, "light");
+
+    // The sole-image anchor is found through closest("a") even when the image
+    // sits in a wrapper span, so the frame wraps the anchor — not the image —
+    // and no button lands inside the link.
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    const anchor = root.querySelector<HTMLAnchorElement>("a");
+    expect(anchor?.parentElement).toBe(frame);
+    expect(anchor?.querySelector("button")).toBeNull();
+    expect(anchor?.querySelector("img")?.dataset.m2hLightboxImage).toBe("true");
+  });
+
+  it("leaves a multi-image anchor untouched", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML =
@@ -870,17 +888,82 @@ describe("image lightbox triggers", () => {
 
     await renderRichContent(root, "light");
 
+    // Framing either image would nest the trigger button inside the <a>
+    // (invalid interactive content, and Enter would follow the link), so the
+    // raw-HTML structure wins: no frame, no trigger, no lightbox marker.
     const anchor = root.querySelector<HTMLAnchorElement>("a");
-    const frames = root.querySelectorAll(".m2h-image-frame");
-    expect(frames).toHaveLength(2);
-    // The anchor is not pulled into a frame; each image is framed in place so
-    // every image keeps its own trigger and document-order index.
-    expect(anchor?.querySelector("img")?.closest(".m2h-image-frame")).toBe(
-      frames[0],
-    );
+    expect(anchor?.querySelector("button")).toBeNull();
+    expect(
+      anchor?.querySelector("img")?.closest(".m2h-image-frame"),
+    ).toBeNull();
+    expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(0);
     expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
-      2,
+      0,
     );
+    expect(
+      root.querySelectorAll('img[data-m2h-lightbox-image="true"]'),
+    ).toHaveLength(0);
+  });
+
+  it("leaves images alone when one anchor spans several wrappers", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p><a href="/target"><span><img src="1.png"></span><span><img src="2.png"></span></a></p>';
+
+    await renderRichContent(root, "light");
+
+    // The multi-image anchor is detected through closest("a"), so wrapping
+    // each image in its own span must not smuggle a button into the link.
+    expect(root.querySelector("a")?.querySelector("button")).toBeNull();
+    expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
+      0,
+    );
+  });
+
+  it("wraps the picture of a responsive image, keeping source selection", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p><picture><source srcset="dark.png" media="(prefers-color-scheme: dark)"><img src="light.png" alt="L"></picture></p>';
+
+    await renderRichContent(root, "light");
+
+    // The frame wraps the <picture> itself: the <img> must stay the
+    // picture's direct child next to the <source>, or source selection
+    // breaks.
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    const picture = root.querySelector<HTMLPictureElement>("picture");
+    const image = root.querySelector<HTMLImageElement>("img");
+    const button = root.querySelector<HTMLButtonElement>(
+      ".m2h-image-lightbox-trigger",
+    );
+    expect(picture?.parentElement).toBe(frame);
+    expect(image?.parentElement).toBe(picture);
+    expect(picture?.querySelector("source")?.nextElementSibling).toBe(image);
+    expect(button?.parentElement).toBe(frame);
+    expect(image?.dataset.m2hLightboxImage).toBe("true");
+  });
+
+  it("wraps the anchor of a linked picture, keeping the button outside the link", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p><a href="/target"><picture><source srcset="dark.png" media="(prefers-color-scheme: dark)"><img src="light.png" alt="L"></picture></a></p>';
+
+    await renderRichContent(root, "light");
+
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    const anchor = root.querySelector<HTMLAnchorElement>("a");
+    const picture = root.querySelector<HTMLPictureElement>("picture");
+    const button = root.querySelector<HTMLButtonElement>(
+      ".m2h-image-lightbox-trigger",
+    );
+    expect(anchor?.parentElement).toBe(frame);
+    expect(picture?.parentElement).toBe(anchor);
+    expect(picture?.querySelector("img")?.parentElement).toBe(picture);
+    expect(button?.parentElement).toBe(frame);
+    expect(anchor?.querySelector("button")).toBeNull();
   });
 
   it("never adds a trigger to a rendered mermaid diagram", async () => {

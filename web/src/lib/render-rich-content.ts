@@ -471,18 +471,19 @@ function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
 // excludes it for free, and raw-HTML <img> tags are covered by the same
 // query. Idempotent like every enhancement: an image already carrying the
 // marker is skipped, so re-running on the same body stacks no second frame
-// or button.
+// or button. An anchor holding several images is left entirely alone (see
+// imageVisualRoot): raw-HTML semantics win over the enhancement.
 function addImageLightboxTriggers(root: HTMLElement): void {
   for (const image of root.querySelectorAll<HTMLImageElement>("img")) {
     if (image.dataset.m2hLightboxImage === "true") {
       continue;
     }
+    const target = imageVisualRoot(image);
+    if (target === null) {
+      continue;
+    }
     image.dataset.m2hLightboxImage = "true";
 
-    // An image wrapped in a link keeps the anchor as its visual root — the
-    // frame then wraps the anchor, so the trigger button stays a sibling of
-    // the <a> instead of an interactive element nested inside one.
-    const target = imageVisualRoot(image);
     const frame = document.createElement("span");
     frame.className = "m2h-image-frame";
     target.replaceWith(frame);
@@ -498,18 +499,25 @@ function addImageLightboxTriggers(root: HTMLElement): void {
   }
 }
 
-// The element the frame should wrap: a sole-image anchor wraps both itself and
-// the image, while an anchor holding several images (or any other parent)
-// wraps the image alone — each image then gets its own frame and trigger.
-function imageVisualRoot(image: HTMLImageElement): HTMLElement {
-  const parent = image.parentElement;
-  if (
-    parent instanceof HTMLAnchorElement &&
-    parent.querySelectorAll("img").length === 1
-  ) {
-    return parent;
+// The element the frame should wrap, or null when the image must not be
+// enhanced at all. A <picture>'s <img> has to stay the picture's direct child
+// for source selection to work, so the picture itself is the visual root. A
+// sole-image anchor becomes the visual root in turn — the frame then wraps
+// the anchor, keeping the trigger button a sibling of the <a> instead of an
+// interactive element nested inside one. An anchor holding several images
+// returns null: it keeps its raw-HTML structure untouched rather than growing
+// an invalid <a><button> nesting (whose Enter press would also follow the
+// link instead of pressing the button).
+function imageVisualRoot(image: HTMLImageElement): HTMLElement | null {
+  let visualRoot: HTMLElement = image;
+  if (visualRoot.parentElement instanceof HTMLPictureElement) {
+    visualRoot = visualRoot.parentElement;
   }
-  return image;
+  const anchor = visualRoot.closest("a");
+  if (anchor === null) {
+    return visualRoot;
+  }
+  return anchor.querySelectorAll("img").length === 1 ? anchor : null;
 }
 
 // Mermaid's official light theme is "default" and dark theme is "dark". The

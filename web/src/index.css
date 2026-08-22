@@ -723,7 +723,10 @@ body,
   vertical-align: middle;
 }
 
-.markdown-body .m2h-image-frame > img {
+/* The frame caps every image it wraps: a direct <img>, or the <img> of a
+ * wrapped <picture> (which must remain the picture's child for source
+ * selection, so the frame wraps the picture instead). */
+.markdown-body .m2h-image-frame img {
   max-width: 100%;
 }
 
