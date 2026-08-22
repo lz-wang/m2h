@@ -711,6 +711,27 @@ describe("App directory preview", () => {
     });
   });
 
+  it("keeps file rows visibly rendering their icon and file name", async () => {
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    // The context-menu refactor once dropped the file button's children: the
+    // row kept its aria-label, height and tooltip, so every role-based query
+    // stayed green while nothing was visibly rendered. Assert the rendered
+    // content itself, not the accessible name.
+    const fileButton = screen.getByRole("button", {
+      name: "Readme API Title，README.md",
+    });
+    expect(fileButton.textContent).toContain("README.md");
+
+    // DOM contract of a file row: button.document-tree-file renders its
+    // leading icon and the truncated file name as direct children.
+    expect(fileButton.querySelector(":scope > svg")).not.toBeNull();
+    expect(
+      fileButton.querySelector(":scope > span.truncate")?.textContent,
+    ).toBe("README.md");
+  });
+
   it("opens a four-action context menu on file rows without changing the selection", async () => {
     const user = userEvent.setup();
     const copied: string[] = [];

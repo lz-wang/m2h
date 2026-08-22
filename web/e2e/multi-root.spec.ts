@@ -88,6 +88,15 @@ test("lists both roots side by side and opens each same-named README", async ({
     "/doc/r0/README.md",
   );
 
+  // The file row visibly renders its icon and name: the context-menu refactor
+  // once emptied the button while aria-label-based queries kept passing.
+  const file = page.getByRole("button", {
+    name: "Root A Readme，r0/README.md",
+  });
+  await expect(file).toContainText("README.md");
+  await expect(file.locator("span.truncate")).toHaveText("README.md");
+  await expect(file.locator(":scope > svg")).toHaveCount(1);
+
   // The second root's same-named README opens under its own virtual path.
   await page
     .getByRole("button", { name: "Root B Readme，r1/README.md" })

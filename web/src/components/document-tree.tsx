@@ -442,34 +442,34 @@ function TreeItem({
       : rootKind === "file"
         ? rootAbsolutePath
         : localPath(rootAbsolutePath, node.path, pathSeparator);
+  const button = (
+    <SidebarMenuButton
+      isActive={active}
+      aria-current={active ? "page" : undefined}
+      aria-label={`${node.file.title}，${identity}`}
+      className="document-tree-file h-8 text-sm"
+      tooltip={{
+        hidden: false,
+        side: "right",
+        align: "start",
+        className: "tree-tooltip",
+        children: (
+          <>
+            <span className="tree-tooltip-name">{node.name}</span>
+            <span className="tree-tooltip-title">{node.file.title}</span>
+          </>
+        ),
+      }}
+      onClick={() => onSelect(node.path)}
+    >
+      <FileText aria-hidden="true" />
+      <span className="truncate">{node.name}</span>
+    </SidebarMenuButton>
+  );
   return (
     <SidebarMenuItem>
       <ContextMenu.Root>
-        <ContextMenu.Trigger
-          render={
-            <SidebarMenuButton
-              isActive={active}
-              aria-current={active ? "page" : undefined}
-              aria-label={`${node.file.title}，${identity}`}
-              className="document-tree-file h-8 text-sm"
-              tooltip={{
-                hidden: false,
-                side: "right",
-                align: "start",
-                className: "tree-tooltip",
-                children: (
-                  <>
-                    <span className="tree-tooltip-name">{node.name}</span>
-                    <span className="tree-tooltip-title">
-                      {node.file.title}
-                    </span>
-                  </>
-                ),
-              }}
-              onClick={() => onSelect(node.path)}
-            />
-          }
-        />
+        <ContextMenu.Trigger render={button} />
         <FileContextMenu
           identity={identity}
           documentLocalPath={fileLocalPath}
