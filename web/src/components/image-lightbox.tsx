@@ -27,6 +27,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -150,9 +151,15 @@ export function ImageLightbox({
   );
 
   // Every image starts from the fitted baseline: zoom, rotation, and pan are
-  // per-image viewing state, not document-wide state.
+  // per-image viewing state, not document-wide state. The reset runs as a
+  // layout effect so it lands before the browser paints — the new image never
+  // shows a frame carrying the previous image's transform — and an in-flight
+  // drag dies with the switch (dragRef and the panning flag reset too) instead
+  // of leaking pointer moves into the new image's pan.
   // biome-ignore lint/correctness/useExhaustiveDependencies: index is the deliberate re-run trigger — switching images must reset the viewing state even though the body never reads it.
-  useEffect(() => {
+  useLayoutEffect(() => {
+    dragRef.current = null;
+    setPanning(false);
     setZoom(MIN_ZOOM);
     setRotation(0);
     setPan({ x: 0, y: 0 });

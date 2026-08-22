@@ -179,9 +179,18 @@ describe("ImageLightbox", () => {
 
   it("resets zoom, rotation, and pan when the image changes", async () => {
     const images = makeImages(2);
-    const { onIndexChange } = renderLightbox(images, 0);
+    const onIndexChange = vi.fn();
+    const onClose = vi.fn();
+    const view = render(
+      <ImageLightbox
+        images={images}
+        index={0}
+        onIndexChange={onIndexChange}
+        onClose={onClose}
+      />,
+    );
 
-    // Build up non-default viewing state on the first image.
+    // Build up non-default viewing state on the first image, ending mid-drag.
     const zoomIn = screen.getByRole("button", { name: "放大图片" });
     await userEvent.click(zoomIn);
     await userEvent.click(zoomIn);
@@ -189,13 +198,36 @@ describe("ImageLightbox", () => {
     const image = currentImage();
     fireEvent.pointerDown(image, { pointerId: 1, clientX: 0, clientY: 0 });
     fireEvent.pointerMove(image, { pointerId: 1, clientX: 100, clientY: 50 });
-    fireEvent.pointerUp(image, { pointerId: 1, clientX: 100, clientY: 50 });
     expect(image.style.transform).toContain("translate3d(100px, 50px, 0)");
     expect(image.style.transform).toContain("rotate(90deg)");
+    expect(image.style.transform).toContain("scale(1.5625)");
+    expect(image.dataset.panning).toBe("true");
 
-    // Switching reports the new index; the parent then re-renders with it.
-    await userEvent.click(screen.getByRole("button", { name: "下一张图片" }));
-    expect(onIndexChange).toHaveBeenCalledWith(1);
+    // The parent feeds the switched index back as a rerender, exactly like
+    // App.tsx does — the reset must land in that same commit, before paint.
+    view.rerender(
+      <ImageLightbox
+        images={images}
+        index={1}
+        onIndexChange={onIndexChange}
+        onClose={onClose}
+      />,
+    );
+
+    const nextImage = currentImage();
+    expect(nextImage.getAttribute("src")).toBe("/img-1.png");
+    expect(nextImage.style.transform).toContain("translate3d(0px, 0px, 0)");
+    expect(nextImage.style.transform).toContain("rotate(0deg)");
+    expect(nextImage.style.transform).toContain("scale(1)");
+    // The in-flight drag died with the switch: no panning flag, and later
+    // moves from the same pointer land nowhere.
+    expect(nextImage.dataset.panning).toBeUndefined();
+    fireEvent.pointerMove(nextImage, {
+      pointerId: 1,
+      clientX: 500,
+      clientY: 500,
+    });
+    expect(nextImage.style.transform).toContain("translate3d(0px, 0px, 0)");
   });
 
   it("closes through the close button, blank area, and Escape", async () => {
