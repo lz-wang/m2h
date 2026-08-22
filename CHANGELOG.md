@@ -14,6 +14,10 @@
 
 ## [未发布]
 
+### 新增
+
+- Web 预览新增原始 Markdown 路由 `/raw/<路径>`：GET/HEAD 直接返回文档的原始源文件（`text/markdown; charset=utf-8`，包含 frontmatter），与 `/doc/<路径>` 渲染页一一对应，多根预览同样带根编号前缀（如 `/raw/r0/README.md`）；路径解析与 `/api/document` 共享同一安全边界，越界路径、未知根、未通过筛选的文件与非 Markdown 文件均被拒绝。`/api/files` 的根摘要同时新增 `kind` 字段（`file` 或 `directory`），标识该根的输入是单文件还是目录。
+
 ## [0.10.0] - 2026-08-22
 
 ### 新增

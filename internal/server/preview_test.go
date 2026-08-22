@@ -173,6 +173,9 @@ func TestFilesAPIReportsRootAbsolutePathAndSeparator(t *testing.T) {
 	if len(payload.Roots) != 1 {
 		t.Fatalf("single-directory roots = %+v, want one", payload.Roots)
 	}
+	if payload.Roots[0].Kind != "directory" {
+		t.Fatalf("single-directory kind = %q, want %q", payload.Roots[0].Kind, "directory")
+	}
 	if payload.Roots[0].AbsolutePath != canonicalAlpha {
 		t.Fatalf("single-directory absolutePath = %q, want %q", payload.Roots[0].AbsolutePath, canonicalAlpha)
 	}
@@ -207,6 +210,9 @@ func TestFilesAPIReportsRootAbsolutePathAndSeparator(t *testing.T) {
 		if got := workspacePayload.Roots[index].AbsolutePath; got != want {
 			t.Fatalf("workspace root %d absolutePath = %q, want %q", index, got, want)
 		}
+		if got := workspacePayload.Roots[index].Kind; got != "directory" {
+			t.Fatalf("workspace root %d kind = %q, want %q", index, got, "directory")
+		}
 		if got := workspacePayload.Roots[index].PathSeparator; got != string(filepath.Separator) {
 			t.Fatalf("workspace root %d pathSeparator = %q, want %q", index, got, string(filepath.Separator))
 		}
@@ -222,7 +228,7 @@ func TestFilesAPIReportsRootAbsolutePathAndSeparator(t *testing.T) {
 	if len(envelope.Roots) == 0 {
 		t.Fatal("workspace response carried no roots")
 	}
-	for _, key := range []string{"id", "name", "absolutePath", "pathSeparator", "files"} {
+	for _, key := range []string{"id", "name", "kind", "absolutePath", "pathSeparator", "files"} {
 		if _, exists := envelope.Roots[0][key]; !exists {
 			t.Fatalf("root summary is missing the %q key: %s", key, workspaceResponse.Body.String())
 		}
@@ -249,8 +255,29 @@ func TestFilesAPIReportsRootAbsolutePathAndSeparator(t *testing.T) {
 	if len(filePayload.Roots) != 1 || filePayload.Roots[0].AbsolutePath != canonicalFile {
 		t.Fatalf("single-file roots = %+v, want absolutePath %q", filePayload.Roots, canonicalFile)
 	}
+	if filePayload.Roots[0].Kind != "file" {
+		t.Fatalf("single-file kind = %q, want %q", filePayload.Roots[0].Kind, "file")
+	}
 	if filePayload.Roots[0].PathSeparator != string(filepath.Separator) {
 		t.Fatalf("single-file pathSeparator = %q, want %q", filePayload.Roots[0].PathSeparator, string(filepath.Separator))
+	}
+
+	// A mixed workspace reports each root's own kind in input order.
+	mixed, err := newPreviewWorkspace(
+		[]files.Input{resolveTestInput(t, alpha), resolveTestInput(t, filepath.Join(beta, "README.md"))},
+		files.DiscoverOptions{Depth: 2},
+	)
+	if err != nil {
+		t.Fatalf("newPreviewWorkspace() error = %v", err)
+	}
+	mixedResponse := performRequest(newPreviewHandler(mixed, markdown.ModeAuto, markdown.WidthStandard, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
+	if mixedResponse.Code != http.StatusOK {
+		t.Fatalf("GET /api/files status = %d, body = %s", mixedResponse.Code, mixedResponse.Body.String())
+	}
+	var mixedPayload fileListResponse
+	decodeJSON(t, mixedResponse, &mixedPayload)
+	if len(mixedPayload.Roots) != 2 || mixedPayload.Roots[0].Kind != "directory" || mixedPayload.Roots[1].Kind != "file" {
+		t.Fatalf("mixed roots = %+v, want directory then file", mixedPayload.Roots)
 	}
 }
 
@@ -1014,6 +1041,186 @@ func TestWorkspaceDocumentRendersVirtualLinkRouting(t *testing.T) {
 	home := performRequest(handler, http.MethodGet, "/api/document?path=r1/README.md")
 	if home.Code != http.StatusOK {
 		t.Fatalf("linked document status = %d", home.Code)
+	}
+}
+
+func TestRawMarkdownServesOriginalBytesAndHeaders(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	source := "---\ntitle: Raw\n---\n# Raw\n\nbody with `code`\n"
+	writeTestFile(t, filepath.Join(root, "README.md"), source)
+	writeTestFile(t, filepath.Join(root, "guide.md"), "# Guide")
+	handler := newPreviewHandler(
+		singleRootWorkspace(previewScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
+		markdown.ModeAuto,
+		markdown.WidthStandard,
+		newEventHub(time.Second),
+		nil,
+		directoryTestUI(),
+	)
+
+	// The raw route serves the untouched source file, frontmatter included.
+	response := performRequest(handler, http.MethodGet, "/raw/README.md")
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /raw/README.md status = %d, body = %s", response.Code, response.Body.String())
+	}
+	if response.Body.String() != source {
+		t.Fatalf("raw body = %q, want the untouched original source", response.Body.String())
+	}
+	for header, want := range map[string]string{
+		"Content-Type":           "text/markdown; charset=utf-8",
+		"Cache-Control":          "no-cache",
+		"X-Content-Type-Options": "nosniff",
+	} {
+		if got := response.Header().Get(header); got != want {
+			t.Errorf("%s = %q, want %q", header, got, want)
+		}
+	}
+
+	// Latest on-disk bytes, not a snapshot from startup.
+	updated := "# Changed\n"
+	writeTestFile(t, filepath.Join(root, "guide.md"), updated)
+	refreshed := performRequest(handler, http.MethodGet, "/raw/guide.md")
+	if refreshed.Code != http.StatusOK || refreshed.Body.String() != updated {
+		t.Fatalf("refreshed raw = %d %q, want %q", refreshed.Code, refreshed.Body.String(), updated)
+	}
+
+	head := performRequest(handler, http.MethodHead, "/raw/README.md")
+	if head.Code != http.StatusOK || head.Body.Len() != 0 {
+		t.Fatalf("HEAD /raw/README.md = %d %q, want empty body", head.Code, head.Body.String())
+	}
+	if head.Header().Get("Content-Type") != "text/markdown; charset=utf-8" {
+		t.Fatalf("HEAD content-type = %q", head.Header().Get("Content-Type"))
+	}
+
+	post := performRequest(handler, http.MethodPost, "/raw/README.md")
+	if post.Code != http.StatusMethodNotAllowed || post.Header().Get("Allow") != "GET, HEAD" {
+		t.Fatalf("POST /raw/README.md = %d allow=%q, want 405 with Allow", post.Code, post.Header().Get("Allow"))
+	}
+	if response := performRequest(handler, http.MethodGet, "/raw/README.md?extra=1"); response.Code != http.StatusBadRequest {
+		t.Fatalf("GET /raw/README.md?extra=1 status = %d, want 400", response.Code)
+	}
+}
+
+func TestRawMarkdownRejectsUnsafeAndFilteredPaths(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "README.md"), "# Readme")
+	writeTestFile(t, filepath.Join(root, "design", "architecture.md"), "# Architecture")
+	writeTestFile(t, filepath.Join(root, "deep", "topic", "details.md"), "# Deep")
+	writeTestFile(t, filepath.Join(root, "notes.txt"), "text")
+	canonical := canonicalDirectory(t, root)
+	handler := newPreviewHandler(
+		singleRootWorkspace(previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"}}),
+		markdown.ModeAuto,
+		markdown.WidthStandard,
+		newEventHub(time.Second),
+		nil,
+		directoryTestUI(),
+	)
+
+	// Malformed addressable paths are refused exactly like /api/document.
+	// Traversal is sent pre-encoded: an unencoded ".." is canonicalized away
+	// by the router (a redirect) before the handler ever sees it.
+	for _, target := range []string{
+		"/raw/",
+		"/raw/..%2Fsecret.md",
+		"/raw/%2e%2e%2fsecret.md",
+		"/raw/%252e%252e%252fsecret.md",
+		"/raw/%2Fetc%2Fpasswd",
+		"/raw/C:%5CWindows%5Csystem.md",
+		"/raw/name%00.md",
+	} {
+		if response := performRequest(handler, http.MethodGet, target); response.Code != http.StatusBadRequest {
+			t.Errorf("GET %s status = %d, want 400", target, response.Code)
+		}
+	}
+
+	// Well-formed addresses to invisible documents resolve nowhere: missing
+	// files, non-Markdown files, case mismatches and depth-filtered trees.
+	for _, target := range []string{
+		"/raw/missing.md",
+		"/raw/notes.txt",
+		"/raw/readme.md",
+		"/raw/deep%2Ftopic%2Fdetails.md",
+	} {
+		if response := performRequest(handler, http.MethodGet, target); response.Code != http.StatusNotFound {
+			t.Errorf("GET %s status = %d, want 404", target, response.Code)
+		}
+	}
+
+	if runtime.GOOS != "windows" {
+		outside := filepath.Join(t.TempDir(), "outside.md")
+		writeTestFile(t, outside, "# Outside")
+		if err := os.Symlink(outside, filepath.Join(root, "escape.md")); err != nil {
+			t.Fatal(err)
+		}
+		if response := performRequest(handler, http.MethodGet, "/raw/escape.md"); response.Code != http.StatusNotFound {
+			t.Fatalf("symlink escape status = %d, want 404", response.Code)
+		}
+	}
+}
+
+func TestRawMarkdownServesSingleFileRoot(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	writeTestFile(t, filepath.Join(base, "solo.md"), "# Solo\n\nonly document\n")
+	writeTestFile(t, filepath.Join(base, "sibling.md"), "# Sibling")
+	singleFile, err := newPreviewWorkspace(
+		[]files.Input{resolveTestInput(t, filepath.Join(base, "solo.md"))},
+		files.DiscoverOptions{Depth: 2},
+	)
+	if err != nil {
+		t.Fatalf("newPreviewWorkspace() error = %v", err)
+	}
+	handler := newPreviewHandler(singleFile, markdown.ModeAuto, markdown.WidthStandard, newEventHub(time.Second), nil, directoryTestUI())
+
+	response := performRequest(handler, http.MethodGet, "/raw/solo.md")
+	if response.Code != http.StatusOK || response.Body.String() != "# Solo\n\nonly document\n" {
+		t.Fatalf("single-file raw = %d %q", response.Code, response.Body.String())
+	}
+	// The scope admits only the named file; siblings stay unreachable.
+	if response := performRequest(handler, http.MethodGet, "/raw/sibling.md"); response.Code != http.StatusNotFound {
+		t.Fatalf("sibling status = %d, want 404", response.Code)
+	}
+}
+
+func TestRawMarkdownMultiRootNeverCrossesRoots(t *testing.T) {
+	t.Parallel()
+
+	workspace := multiRootFixture(t)
+	handler := newPreviewHandler(workspace, markdown.ModeAuto, markdown.WidthStandard, newEventHub(time.Second), nil, directoryTestUI())
+
+	// Identical relative paths in two roots serve their own root's bytes.
+	alpha := performRequest(handler, http.MethodGet, "/raw/r0/README.md")
+	if alpha.Code != http.StatusOK || alpha.Body.String() != "# Alpha Readme" {
+		t.Fatalf("alpha raw = %d %q", alpha.Code, alpha.Body.String())
+	}
+	beta := performRequest(handler, http.MethodGet, "/raw/r1/README.md")
+	if beta.Code != http.StatusOK || beta.Body.String() != "# Beta Readme" {
+		t.Fatalf("beta raw = %d %q", beta.Code, beta.Body.String())
+	}
+
+	// A multi-root workspace only serves documents through a known root id.
+	for _, target := range []string{
+		"/raw/README.md",
+		"/raw/r2/README.md",
+		"/raw/alpha/README.md",
+		"/raw/r0",
+		"/raw/r0%2Fmissing.md",
+	} {
+		if response := performRequest(handler, http.MethodGet, target); response.Code != http.StatusNotFound {
+			t.Errorf("GET %s status = %d, want 404", target, response.Code)
+		}
+	}
+
+	// Cross-root traversal is rejected by the shared path validation (400),
+	// never resolved against another root.
+	if response := performRequest(handler, http.MethodGet, "/raw/r0%2F..%2Fr1%2FREADME.md"); response.Code != http.StatusBadRequest {
+		t.Fatalf("cross-root traversal status = %d, want 400", response.Code)
 	}
 }
 

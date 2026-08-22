@@ -30,13 +30,16 @@ type fileSummary struct {
 
 // rootSummary groups one preview root's documents. Files carry root-relative
 // paths; the id prefixes the addressable (virtual) path in a multi-root
-// workspace (see previewWorkspace.publicPath). AbsolutePath is the server's
-// canonical local path for the input and PathSeparator is its platform's
+// workspace (see previewWorkspace.publicPath). Kind tells whether AbsolutePath
+// names the served file itself ("file") or the directory the root-relative
+// paths join onto ("directory") — a file root must not append its only
+// document's relative path again. PathSeparator is the server platform's
 // separator: the browser machine may differ from the machine running m2h, so
 // the client never guesses how to join a native absolute path.
 type rootSummary struct {
 	ID            string        `json:"id"`
 	Name          string        `json:"name"`
+	Kind          string        `json:"kind"`
 	AbsolutePath  string        `json:"absolutePath"`
 	PathSeparator string        `json:"pathSeparator"`
 	Files         []fileSummary `json:"files"`
@@ -139,6 +142,7 @@ func (handler *previewHandler) routes(events *eventHub, logger io.Writer) http.H
 	mux.HandleFunc("/ui/markdown.css", handler.serveMarkdownStyles)
 	mux.Handle("/ui/", http.StripPrefix("/ui/", immutableUIAssets(http.FileServer(http.FS(handler.ui)))))
 	mux.HandleFunc("/doc/", handler.serveDirectoryIndex)
+	mux.HandleFunc("/raw/", handler.serveRawMarkdown)
 	mux.HandleFunc("/", handler.serveDirectoryIndex)
 	return requestLogger(mux, logger)
 }
@@ -177,6 +181,7 @@ func (handler *previewHandler) serveFiles(response http.ResponseWriter, request 
 		roots = append(roots, rootSummary{
 			ID:            root.id,
 			Name:          root.label,
+			Kind:          rootScopeKind(root.scope),
 			AbsolutePath:  root.input.Path,
 			PathSeparator: string(filepath.Separator),
 			Files:         summaries,
@@ -201,16 +206,7 @@ func (handler *previewHandler) serveDocument(response http.ResponseWriter, reque
 		writeJSONError(response, http.StatusBadRequest, "invalid document path")
 		return
 	}
-	root, relative, err := handler.workspace.locate(virtual)
-	if err != nil {
-		writeJSONError(response, http.StatusNotFound, "document not found")
-		return
-	}
-	if !root.scope.allowsDocument(relative) {
-		writeJSONError(response, http.StatusNotFound, "document not found")
-		return
-	}
-	target, err := resolveRequestFile(root.scope.root, relative)
+	root, relative, target, err := handler.resolveVisibleDocument(virtual)
 	if err != nil {
 		writeJSONError(response, http.StatusNotFound, "document not found")
 		return
@@ -252,6 +248,65 @@ func (handler *previewHandler) serveDocument(response http.ResponseWriter, reque
 		FrontMatter: frontMatterResponseFrom(frontMatter),
 		TOC:         tocEntriesFrom(rendered.Headings),
 	})
+}
+
+// resolveVisibleDocument maps an addressable (virtual) document path onto its
+// root, root-relative path and absolute file target. It is the one filesystem
+// boundary shared by /api/document and /raw/ so both entrances can never drift
+// apart: unknown roots, filtered or non-Markdown files, traversal and symlink
+// escapes all fail here. Callers keep their own HTTP error shape and rendering.
+func (handler *previewHandler) resolveVisibleDocument(virtual string) (previewRoot, string, string, error) {
+	root, relative, err := handler.workspace.locate(virtual)
+	if err != nil {
+		return previewRoot{}, "", "", err
+	}
+	if !root.scope.allowsDocument(relative) {
+		return previewRoot{}, "", "", fmt.Errorf("document %q is not served by its root", virtual)
+	}
+	target, err := resolveRequestFile(root.scope.root, relative)
+	if err != nil {
+		return previewRoot{}, "", "", err
+	}
+	return root, relative, target, nil
+}
+
+// serveRawMarkdown streams the original Markdown source of one addressable
+// document: GET /raw/<virtual-path> is a stable, browser-addressable URL for
+// sharing and future integrations (external editors, downloads), not just an
+// internal fetch helper. Resolution goes through resolveVisibleDocument, so
+// the whole /api/document access boundary applies unchanged.
+func (handler *previewHandler) serveRawMarkdown(response http.ResponseWriter, request *http.Request) {
+	if request.Method != http.MethodGet && request.Method != http.MethodHead {
+		response.Header().Set("Allow", "GET, HEAD")
+		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	if request.URL.RawQuery != "" {
+		http.Error(response, "query parameters are not supported", http.StatusBadRequest)
+		return
+	}
+	virtual, err := safeRelativePath(strings.TrimPrefix(request.URL.Path, "/raw/"))
+	if err != nil {
+		http.Error(response, "invalid document path", http.StatusBadRequest)
+		return
+	}
+	_, _, target, err := handler.resolveVisibleDocument(virtual)
+	if err != nil {
+		http.NotFound(response, request)
+		return
+	}
+	contents, err := os.ReadFile(target)
+	if err != nil {
+		http.NotFound(response, request)
+		return
+	}
+	response.Header().Set("Content-Type", "text/markdown; charset=utf-8")
+	response.Header().Set("Cache-Control", "no-cache")
+	response.Header().Set("X-Content-Type-Options", "nosniff")
+	if request.Method == http.MethodHead {
+		return
+	}
+	_, _ = response.Write(contents)
 }
 
 func (handler *previewHandler) serveDirectoryIndex(response http.ResponseWriter, request *http.Request) {
@@ -331,6 +386,17 @@ func writeJSONError(response http.ResponseWriter, status int, message string) {
 	writeJSON(response, status, struct {
 		Error string `json:"error"`
 	}{Error: message})
+}
+
+// rootScopeKind reports one root's input kind on the wire: a "file" root's
+// AbsolutePath already names the served file, a "directory" root's files join
+// onto AbsolutePath. The scope decides — not files.Input — so single-scope
+// call sites without a resolved input report the same value as production.
+func rootScopeKind(scope previewScope) string {
+	if scope.isSingleFile() {
+		return "file"
+	}
+	return "directory"
 }
 
 func tocEntriesFrom(headings []markdown.Heading) []tocEntryResponse {
