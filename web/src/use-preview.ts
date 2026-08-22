@@ -51,6 +51,9 @@ export interface PreviewState {
   refresh(): Promise<void>;
   reloadCurrent(): Promise<void>;
   select(path: string, hash?: string): Promise<void>;
+  // Fetches the open document's original Markdown source on demand (the
+  // share menu's full-text copy); null when nothing is open.
+  readCurrentMarkdown(): Promise<string | null>;
   setMode(mode: Mode): void;
   setWidth(width: DocumentWidth): void;
   setTOC(toc: boolean): void;
@@ -311,6 +314,17 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     await loadDocument(path, "none", window.location.hash);
   }, [loadDocument]);
 
+  // The share menu's lazy fetch of the open document's raw Markdown. It uses
+  // the injected API so tests keep full control, and reports null rather than
+  // fetching when no document is open.
+  const readCurrentMarkdown = useCallback(async (): Promise<string | null> => {
+    const path = selectedPathRef.current;
+    if (path === null) {
+      return null;
+    }
+    return api.getMarkdown(path);
+  }, [api]);
+
   const select = useCallback(
     async (path: string, hash = "") => {
       if (!filesRef.current.some((file) => file.path === path)) {
@@ -387,6 +401,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     assetError,
     refresh,
     reloadCurrent,
+    readCurrentMarkdown,
     select,
     setMode,
     setWidth,

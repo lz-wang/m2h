@@ -544,6 +544,83 @@ describe("App directory preview", () => {
     ).toBe(Node.DOCUMENT_POSITION_PRECEDING);
   });
 
+  it("shares the open document from the toolbar with clean links, local path, and raw source", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(
+      null,
+      "",
+      "/doc/README.md?mode=dark&width=wide#install",
+    );
+    // jsdom has no clipboard and no execCommand: capture the fallback path's
+    // textarea content so every copied value is asserted verbatim.
+    const copied: string[] = [];
+    Object.defineProperty(document, "execCommand", {
+      configurable: true,
+      value: () => {
+        copied.push(document.querySelector("textarea")?.value ?? "");
+        return true;
+      },
+    });
+    const api = createAPI();
+    try {
+      render(<App api={api} />);
+      await screen.findByText("Body for README.md");
+
+      // The share trigger sits left of the width menu.
+      const share = screen.getByRole("button", { name: "分享文档" });
+      const width = screen.getByRole("button", { name: "文档宽度：宽" });
+      expect(
+        share.compareDocumentPosition(width) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+
+      const openMenu = async () => {
+        await user.click(screen.getByRole("button", { name: "分享文档" }));
+        await screen.findByRole("menuitem", { name: "复制文档网页链接" });
+      };
+      const copyFromMenu = async (name: string) => {
+        await openMenu();
+        await user.click(screen.getByRole("menuitem", { name }));
+      };
+
+      // Document page link: the current heading hash is kept, the sender's
+      // mode/width preferences are not.
+      await copyFromMenu("复制文档网页链接");
+      await waitFor(() =>
+        expect(copied.at(-1)).toBe("http://localhost/doc/README.md#install"),
+      );
+      expect((await screen.findByRole("status")).textContent).toBe(
+        "已复制文档链接",
+      );
+
+      await copyFromMenu("复制文档本地路径");
+      await waitFor(() => expect(copied.at(-1)).toBe("/tmp/docs/README.md"));
+      expect((await screen.findByRole("status")).textContent).toBe(
+        "已复制本地路径",
+      );
+
+      await copyFromMenu("复制 Markdown 网页链接");
+      await waitFor(() =>
+        expect(copied.at(-1)).toBe("http://localhost/raw/README.md"),
+      );
+      expect((await screen.findByRole("status")).textContent).toBe(
+        "已复制 Markdown 链接",
+      );
+
+      // Full text is fetched lazily from /raw/ only at click time.
+      expect(api.getMarkdown).not.toHaveBeenCalled();
+      await copyFromMenu("复制 Markdown 全文");
+      expect(api.getMarkdown).toHaveBeenCalledWith("README.md");
+      await waitFor(() =>
+        expect(copied.at(-1)).toBe("# Raw source of README.md\n"),
+      );
+      expect((await screen.findByRole("status")).textContent).toBe(
+        "已复制 Markdown",
+      );
+    } finally {
+      Reflect.deleteProperty(document, "execCommand");
+    }
+  });
+
   it("filters documents locally by title and file name", async () => {
     const user = userEvent.setup();
     const api = createAPI();

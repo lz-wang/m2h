@@ -2,16 +2,20 @@ import { Menu } from "@base-ui/react/menu";
 import {
   Check,
   Columns3,
+  Copy,
   FileQuestion,
   FileText,
+  HardDrive,
   ImageOff,
   Inbox,
+  Link,
   LoaderCircle,
   Maximize2,
   Moon,
   RefreshCw,
   Scaling,
   Search,
+  Share2,
   Sun,
   SunMoon,
   TriangleAlert,
@@ -23,7 +27,14 @@ import type {
   PointerEvent as ReactPointerEvent,
   SyntheticEvent,
 } from "react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import type { FrontMatter, PreviewAPI, TocItem } from "./api";
 import { DocumentTree } from "./components/document-tree";
@@ -56,14 +67,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
+import { copyText } from "./lib/clipboard";
 import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 import {
+  absoluteURL,
   type DocumentWidth,
   decodeHeadingHash,
+  documentURL,
+  localDocumentPath,
   type Mode,
+  markdownURL,
   type ResolvedMode,
   readRoute,
+  resolveDocumentLocation,
 } from "./model";
 import { useHeadingNavigation } from "./use-heading-navigation";
 import { useHeadingSpy } from "./use-heading-spy";
@@ -165,6 +182,34 @@ export function App({ api }: AppProps) {
   const multiRoot = preview.roots.length > 1;
   const loading =
     preview.phase === "loading-files" || preview.phase === "loading-document";
+  // The open document's place in the workspace — which root serves it and its
+  // root-relative path — so the share menu can build the server-local
+  // filesystem path without re-parsing the multi-root key convention.
+  const documentLocation = useMemo(
+    () => resolveDocumentLocation(preview.roots, preview.selectedPath),
+    [preview.roots, preview.selectedPath],
+  );
+  const documentLocalPath =
+    documentLocation === null
+      ? null
+      : localDocumentPath(documentLocation.root, documentLocation.relativePath);
+  // Transient "已复制……" feedback for every share-menu copy. One status line
+  // at a time, cleared by a timer; role=status announces it politely.
+  const [copyStatus, setCopyStatus] = useState<string | null>(null);
+  const copyStatusTimer = useRef(0);
+  const announceCopyStatus = useCallback((message: string) => {
+    setCopyStatus(message);
+    window.clearTimeout(copyStatusTimer.current);
+    copyStatusTimer.current = window.setTimeout(() => {
+      setCopyStatus(null);
+    }, 2_000);
+  }, []);
+  useEffect(
+    () => () => {
+      window.clearTimeout(copyStatusTimer.current);
+    },
+    [],
+  );
   // The scroll spy follows every heading (H1–H6) so the URL can reflect the
   // reading position even with the TOC panel hidden; the right-hand TOC still
   // lists H2–H4 only (the first H1 is the toolbar title, H5/H6 are too deep for
@@ -495,6 +540,12 @@ export function App({ api }: AppProps) {
               frontmatter={preview.document?.frontmatter ?? null}
             />
             <div className="toolbar-actions">
+              <ShareMenu
+                path={preview.selectedPath}
+                localPath={documentLocalPath}
+                readMarkdown={preview.readCurrentMarkdown}
+                onStatus={announceCopyStatus}
+              />
               <DocumentWidthMenu
                 width={preview.width}
                 onChange={preview.setWidth}
@@ -555,6 +606,11 @@ export function App({ api }: AppProps) {
           {/* Floating edge jumps for the window-scrolled reader; one instance
            * for both single-file and directory previews. */}
           <ReaderNavigation />
+          {copyStatus !== null ? (
+            <div className="copy-status" role="status" aria-live="polite">
+              {copyStatus}
+            </div>
+          ) : null}
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
@@ -698,6 +754,132 @@ function SidebarResizeHandle({
       onPointerDown={handlePointerDown}
       onClick={(event) => event.preventDefault()}
     />
+  );
+}
+
+// The toolbar share menu: the open document's three identities — rendered page
+// URL, raw Markdown URL, server-local filesystem path — plus its full source
+// text, each copied to the clipboard. Share URLs are share-shaped: the current
+// heading hash is kept (a shared link lands on the section being read) while
+// mode/width/toc, the sender's personal UI preferences, never enter the link.
+// The full text is fetched lazily from /raw/ so opening a document never pays
+// for a copy that may never happen.
+function ShareMenu({
+  path,
+  localPath,
+  readMarkdown,
+  onStatus,
+}: {
+  path: string | null;
+  localPath: string | null;
+  readMarkdown(): Promise<string | null>;
+  onStatus(message: string): void;
+}) {
+  const copyValue = async (value: string, success: string) => {
+    onStatus((await copyText(value)) ? success : "复制失败");
+  };
+
+  const copyDocumentURL = () => {
+    if (path === null) {
+      return;
+    }
+    // Read the hash at click time — it tracks the reader's live position.
+    void copyValue(
+      absoluteURL(
+        documentURL(path, window.location.hash),
+        window.location.origin,
+      ),
+      "已复制文档链接",
+    );
+  };
+
+  const copyLocalPath = () => {
+    if (localPath === null) {
+      return;
+    }
+    void copyValue(localPath, "已复制本地路径");
+  };
+
+  const copyMarkdownURL = () => {
+    if (path === null) {
+      return;
+    }
+    void copyValue(
+      absoluteURL(markdownURL(path), window.location.origin),
+      "已复制 Markdown 链接",
+    );
+  };
+
+  const copyMarkdownText = async () => {
+    const markdown = await readMarkdown();
+    if (markdown === null) {
+      onStatus("复制失败");
+      return;
+    }
+    await copyValue(markdown, "已复制 Markdown");
+  };
+
+  return (
+    // Non-modal: toolbar dropdowns must not trap focus or lock document scroll.
+    <Menu.Root modal={false}>
+      <Tooltip>
+        <Menu.Trigger
+          render={
+            <TooltipTrigger
+              render={
+                <Button
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label="分享文档"
+                  disabled={path === null}
+                />
+              }
+            />
+          }
+        >
+          <Share2 aria-hidden="true" />
+        </Menu.Trigger>
+        <TooltipContent side="bottom">分享</TooltipContent>
+      </Tooltip>
+      <Menu.Portal>
+        <Menu.Positioner
+          className="theme-menu-positioner"
+          align="end"
+          sideOffset={6}
+        >
+          <Menu.Popup className="theme-menu-popup">
+            <Menu.Group>
+              <Menu.GroupLabel className="theme-menu-label">
+                分享
+              </Menu.GroupLabel>
+              <Menu.Item className="theme-menu-item" onClick={copyDocumentURL}>
+                <Link aria-hidden="true" />
+                <span>复制文档网页链接</span>
+              </Menu.Item>
+              <Menu.Item
+                className="theme-menu-item"
+                onClick={copyLocalPath}
+                disabled={localPath === null}
+              >
+                <HardDrive aria-hidden="true" />
+                <span>复制文档本地路径</span>
+              </Menu.Item>
+              <Menu.Item className="theme-menu-item" onClick={copyMarkdownURL}>
+                <FileText aria-hidden="true" />
+                <span>复制 Markdown 网页链接</span>
+              </Menu.Item>
+              <Menu.Item
+                className="theme-menu-item"
+                onClick={() => void copyMarkdownText()}
+              >
+                <Copy aria-hidden="true" />
+                <span>复制 Markdown 全文</span>
+              </Menu.Item>
+            </Menu.Group>
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.Root>
   );
 }
 

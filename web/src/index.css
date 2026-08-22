@@ -493,6 +493,27 @@ body,
   border-top: 1px solid var(--border);
 }
 
+/* Transient "已复制……" plate for the share menu's clipboard actions. Same
+ * plate vocabulary as the reader navigation (border, popover surface, soft
+ * shadow); centered at the bottom, clear of the notched home indicator, and
+ * below the overlay layers (menus, tooltips) so a still-open menu never
+ * overlaps the feedback it just triggered. */
+.copy-status {
+  position: fixed;
+  bottom: calc(1.5rem + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  z-index: 30;
+  transform: translateX(-50%);
+  padding: 0.4rem 0.85rem;
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) * 1.2);
+  background: var(--popover);
+  box-shadow: 0 4px 14px oklch(0 0 0 / 14%);
+  color: var(--popover-foreground);
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
 .reader-canvas {
   flex: 1;
   min-width: 0;

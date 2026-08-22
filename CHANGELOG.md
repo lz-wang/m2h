@@ -16,6 +16,7 @@
 
 ### 新增
 
+- Web 预览工具栏新增分享菜单（Share 图标，位于宽度调整左侧）：可复制当前文档的文档网页链接（保留当前标题位置的 hash、不携带主题/宽度/目录等个人界面参数）、文档本地路径（按根的输入类型正确拼接，单文件输入不会重复追加文件名）、Markdown 网页链接（`/raw/<路径>`）与 Markdown 全文（点击时才按需获取原始源文件，含 frontmatter）；复制成功后页面底部显示短暂状态提示，HTTP 环境下复制自动走 execCommand 兜底。
 - Web 预览新增原始 Markdown 路由 `/raw/<路径>`：GET/HEAD 直接返回文档的原始源文件（`text/markdown; charset=utf-8`，包含 frontmatter），与 `/doc/<路径>` 渲染页一一对应，多根预览同样带根编号前缀（如 `/raw/r0/README.md`）；路径解析与 `/api/document` 共享同一安全边界，越界路径、未知根、未通过筛选的文件与非 Markdown 文件均被拒绝。`/api/files` 的根摘要同时新增 `kind` 字段（`file` 或 `directory`），标识该根的输入是单文件还是目录。
 
 ## [0.10.0] - 2026-08-22
