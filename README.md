@@ -15,13 +15,13 @@
 macOS 和 Linux：
 
 ```console
-$ brew install lz-wang/tap/m2h
+brew install lz-wang/tap/m2h
 ```
 
 升级已安装的版本：
 
 ```console
-$ brew upgrade m2h
+brew upgrade m2h
 ```
 
 ### GitHub Releases
@@ -39,8 +39,8 @@ m2h_<version>_windows_{amd64,arm64}.zip
 ## 快速开始
 
 ```console
-$ m2h README.md
-$ m2h web docs
+m2h README.md
+m2h web docs
 ```
 
 使用 `m2h --version` 查看当前版本。
@@ -49,16 +49,16 @@ $ m2h web docs
 
 ```console
 # 转换单个文件，生成完全自包含的 README.html
-$ m2h README.md
+m2h README.md
 
 # 指定输出文件
-$ m2h README.md --output public/index.html
+m2h README.md --output public/index.html
 
 # 转换目录中的 Markdown，并保留目录结构
-$ m2h docs --output public/docs --depth 3 --glob '**/plan_*.md'
+m2h docs --output public/docs --depth 3 --glob '**/plan_*.md'
 
 # 目录转换时让每个 HTML 也自包含
-$ m2h docs --standalone
+m2h docs --standalone
 ```
 
 单文件转换默认生成完全自包含的 HTML：页面样式、数学公式与 Mermaid 运行时、字体以及本地图片全部内嵌，输出旁不再生成 `.m2h/` 目录，文件可独立离线打开与分享；文档没有公式或图表时不会内嵌对应运行时。目录转换会在输出根部生成共享的 `.m2h/` 运行时目录，并默认复制非 Markdown 资源（`--copy-assets=false` 关闭）；使用 `--standalone` 可让目录中每个 HTML 也自包含。相对 Markdown 链接会改为对应的 `.html` 链接。
@@ -88,14 +88,14 @@ Output HTML files:
 
 ```console
 # 预览单个文件；保存后局部刷新正文，不显示文件侧边栏
-$ m2h web README.md
+m2h web README.md
 
 # 预览目录；提供文件树、搜索、分享、主题、正文宽度、文档目录与右下角回到顶部/前往底部按钮
-$ m2h web docs --mode dark --width wide
+m2h web docs --mode dark --width wide
 
 # 同时预览多个文件或目录（逗号分隔与空格分隔等价）
-$ m2h web docs,wiki
-$ m2h web docs wiki notes.md
+m2h web docs,wiki
+m2h web docs wiki notes.md
 ```
 
 服务默认监听 `http://127.0.0.1:8793` 并自动打开浏览器，按 `Ctrl+C` 停止服务；加 `--no-open` 可仅启动服务。
