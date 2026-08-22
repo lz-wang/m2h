@@ -84,9 +84,70 @@ export function ImageLightbox({
   const [stage, setStage] = useState<Size>({ width: 0, height: 0 });
   const [layout, setLayout] = useState<Size>({ width: 0, height: 0 });
 
-  const popupRef = useRef<HTMLDivElement>(null);
-  const imageRef = useRef<HTMLImageElement>(null);
+  // The dialog's portaled content mounts on a later commit than the component
+  // itself, so the geometry observer must attach through callback refs: an
+  // effect with [] deps runs once while the nodes are still null and never
+  // again, which would silently leave the fit and the pan clamp without
+  // measurements in a real browser.
+  const stageNodeRef = useRef<HTMLDivElement | null>(null);
+  const imageNodeRef = useRef<HTMLImageElement | null>(null);
+  const observerRef = useRef<ResizeObserver | null>(null);
   const dragRef = useRef<PanDragState | null>(null);
+
+  const ensureObserver = useCallback(() => {
+    if (observerRef.current === null) {
+      observerRef.current = new ResizeObserver((entries) => {
+        for (const entry of entries) {
+          const size = {
+            width: entry.contentRect.width,
+            height: entry.contentRect.height,
+          };
+          if (entry.target === stageNodeRef.current) {
+            setStage(size);
+          } else if (entry.target === imageNodeRef.current) {
+            setLayout(size);
+          }
+        }
+      });
+    }
+    return observerRef.current;
+  }, []);
+
+  const handleStageRef = useCallback(
+    (node: HTMLDivElement | null) => {
+      const observer = observerRef.current;
+      if (stageNodeRef.current !== null && observer !== null) {
+        observer.unobserve(stageNodeRef.current);
+      }
+      stageNodeRef.current = node;
+      if (node !== null) {
+        ensureObserver().observe(node);
+      }
+    },
+    [ensureObserver],
+  );
+
+  const handleImageRef = useCallback(
+    (node: HTMLImageElement | null) => {
+      const observer = observerRef.current;
+      if (imageNodeRef.current !== null && observer !== null) {
+        observer.unobserve(imageNodeRef.current);
+      }
+      imageNodeRef.current = node;
+      if (node !== null) {
+        ensureObserver().observe(node);
+      }
+    },
+    [ensureObserver],
+  );
+
+  useEffect(
+    () => () => {
+      observerRef.current?.disconnect();
+      observerRef.current = null;
+    },
+    [],
+  );
 
   // Every image starts from the fitted baseline: zoom, rotation, and pan are
   // per-image viewing state, not document-wide state.
@@ -96,35 +157,6 @@ export function ImageLightbox({
     setRotation(0);
     setPan({ x: 0, y: 0 });
   }, [index]);
-
-  // Track the popup (the panning viewport) and the image (its CSS-fitted
-  // layout size, unaffected by the transform) so the fit and pan bounds can be
-  // recomputed on resize, rotation, and image switches.
-  useEffect(() => {
-    const popup = popupRef.current;
-    const imageElement = imageRef.current;
-    if (popup === null || imageElement === null) {
-      return;
-    }
-    const observer = new ResizeObserver((entries) => {
-      for (const entry of entries) {
-        const size = {
-          width: entry.contentRect.width,
-          height: entry.contentRect.height,
-        };
-        if (entry.target === popup) {
-          setStage(size);
-        } else {
-          setLayout(size);
-        }
-      }
-    });
-    observer.observe(popup);
-    observer.observe(imageElement);
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
 
   const rotated = rotation === 90 || rotation === 270;
   const geometryKnown =
@@ -255,8 +287,9 @@ export function ImageLightbox({
     setPanning(false);
   };
 
-  // The popup fills the viewport, so a press whose target is the popup itself
-  // landed on true empty space (not the image, toolbar, or close button).
+  // The popup fills the viewport and the stage is pointer-transparent, so a
+  // press whose target is the popup itself landed on true empty space (not the
+  // image, toolbar, or close button).
   const handlePopupPointerDown = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.target === event.currentTarget) {
       onClose();
@@ -295,7 +328,6 @@ export function ImageLightbox({
       <Dialog.Portal>
         <Dialog.Backdrop className="image-lightbox-backdrop" />
         <Dialog.Popup
-          ref={popupRef}
           className="image-lightbox"
           onPointerDown={handlePopupPointerDown}
           onKeyDown={handleKeyDown}
@@ -307,25 +339,31 @@ export function ImageLightbox({
           >
             <X aria-hidden="true" />
           </Dialog.Close>
-          <img
-            ref={imageRef}
-            className="image-lightbox-image"
-            src={image.src}
-            srcSet={image.srcSet ?? undefined}
-            sizes={image.sizes ?? undefined}
-            alt={image.alt}
-            title={image.title ?? undefined}
-            draggable={false}
-            style={{
-              transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg) scale(${scale})`,
-              cursor: panning ? "grabbing" : undefined,
-            }}
-            data-panning={panning ? "true" : undefined}
-            onPointerDown={handleImagePointerDown}
-            onPointerMove={handleImagePointerMove}
-            onPointerUp={handleImagePointerEnd}
-            onPointerCancel={handleImagePointerEnd}
-          />
+          {/* The stage is the one coordinate system for layout, rotation fit,
+           * and pan clamping: the stylesheet reserves the toolbar zone here,
+           * and the transform math measures this same box. It is
+           * pointer-transparent so blank-area presses still reach the popup. */}
+          <div className="image-lightbox-stage" ref={handleStageRef}>
+            <img
+              ref={handleImageRef}
+              className="image-lightbox-image"
+              src={image.src}
+              srcSet={image.srcSet ?? undefined}
+              sizes={image.sizes ?? undefined}
+              alt={image.alt}
+              title={image.title ?? undefined}
+              draggable={false}
+              style={{
+                transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg) scale(${scale})`,
+                cursor: panning ? "grabbing" : undefined,
+              }}
+              data-panning={panning ? "true" : undefined}
+              onPointerDown={handleImagePointerDown}
+              onPointerMove={handleImagePointerMove}
+              onPointerUp={handleImagePointerEnd}
+              onPointerCancel={handleImagePointerEnd}
+            />
+          </div>
           <div className="image-lightbox-toolbar">
             <button
               type="button"

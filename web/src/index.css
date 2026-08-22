@@ -766,7 +766,7 @@ body,
 /*
  * Full-viewport lightbox. Portaled to <body>, so these selectors live outside
  * .markdown-body. The near-black scrim (not pure #000) matches the GitHub/
- * shadcn neutral palette; the popup covers the viewport and centers the image.
+ * shadcn neutral palette; the popup covers the viewport.
  */
 .image-lightbox-backdrop {
   position: fixed;
@@ -781,25 +781,39 @@ body,
   inset: 0;
   z-index: 101;
 
+  outline: none;
+}
+
+/* The stage is the one coordinate system shared by the stylesheet, the
+ * rotation fit, and the pan clamp: it insets the viewport to reserve the
+ * bottom toolbar zone, so a rotated image re-fitting the stage can never
+ * reach under the toolbar. It is pointer-transparent — blank-area presses
+ * pass through to the popup's close-on-press handler — while the image opts
+ * back into pointer events for panning. */
+.image-lightbox-stage {
+  position: absolute;
+  inset: 1rem 1rem 6rem;
+
   display: flex;
   align-items: center;
   justify-content: center;
 
-  outline: none;
+  pointer-events: none;
 }
 
 /* The fitted baseline the zoom transform scales from: the image contains into
- * the viewport minus a side inset and the bottom toolbar's breathing room.
+ * the stage (the viewport minus the toolbar reserve).
  * touch-action none hands all touch drags to the pointer-pan handlers, and the
  * transform (never width/height) carries zoom/rotate/pan so dragging stays
  * compositor-only. */
 .image-lightbox-image {
   display: block;
-  max-width: calc(100vw - 2rem);
-  max-height: calc(100svh - 8rem);
+  max-width: 100%;
+  max-height: 100%;
   object-fit: contain;
   user-select: none;
   touch-action: none;
+  pointer-events: auto;
   cursor: grab;
   will-change: transform;
 }

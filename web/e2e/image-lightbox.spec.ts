@@ -161,6 +161,47 @@ test("disables previous on the first image and next on the last", async ({
   await expect(previous).toBeEnabled();
 });
 
+test("keeps a rotated landscape image clear of the bottom toolbar", async ({
+  page,
+}) => {
+  await openDocument(page);
+  const before = await captureInvariants(page);
+
+  // The first image is the 1200×600 landscape fixture: tall enough that a
+  // quarter turn produces a portrait taller than the toolbar-free area, so a
+  // fit computed against the whole viewport would slide under the toolbar.
+  await openLightbox(page, 0);
+  const image = page.locator(".image-lightbox-image");
+  const toolbar = page.locator(".image-lightbox-toolbar");
+
+  // The rotate fit consumes geometry the ResizeObserver reports once the
+  // lightbox image is laid out; wait for the nonzero fitted box so the
+  // assertions below measure the real fit, not the pre-measure fallback.
+  const fittedHeight = async () => (await image.boundingBox())?.height ?? 0;
+  await expect
+    .poll(fittedHeight, { timeout: 5_000 })
+    .toBeGreaterThanOrEqual(599);
+
+  // Unrotated fit: the image already sits inside the stage.
+  let imageBox = await image.boundingBox();
+  let toolbarBox = await toolbar.boundingBox();
+  expect(imageBox).not.toBeNull();
+  expect(toolbarBox).not.toBeNull();
+  expect(imageBox.y + imageBox.height).toBeLessThanOrEqual(toolbarBox.y);
+
+  // A quarter turn swaps the visual axes; the re-fit must land inside the
+  // stage (the popup minus the toolbar reserve), never under the toolbar.
+  await page.getByRole("button", { name: "顺时针旋转" }).click();
+  await expect
+    .poll(fittedHeight, { timeout: 5_000 })
+    .toBeGreaterThanOrEqual(700);
+  imageBox = await image.boundingBox();
+  toolbarBox = await toolbar.boundingBox();
+  expect(imageBox.y + imageBox.height).toBeLessThanOrEqual(toolbarBox.y + 1);
+
+  await expectInvariantsUnchanged(page, before);
+});
+
 test("keeps the linked image's anchor while its trigger opens the lightbox", async ({
   page,
 }) => {
