@@ -478,6 +478,8 @@ export function App({ api }: AppProps) {
                             rootLabel={root.name}
                             rootAbsolutePath={root.absolutePath}
                             pathSeparator={root.pathSeparator}
+                            rootKind={root.kind}
+                            onCopyStatus={announceCopyStatus}
                             searching={searchQuery.trim() !== ""}
                             selectedPath={preview.selectedPath}
                             visible={sidebarOpen}
@@ -489,6 +491,8 @@ export function App({ api }: AppProps) {
                           files={filteredRoots[0]?.files ?? []}
                           rootAbsolutePath={filteredRoots[0]?.absolutePath}
                           pathSeparator={filteredRoots[0]?.pathSeparator}
+                          rootKind={filteredRoots[0]?.kind}
+                          onCopyStatus={announceCopyStatus}
                           searching={searchQuery.trim() !== ""}
                           selectedPath={preview.selectedPath}
                           visible={sidebarOpen}

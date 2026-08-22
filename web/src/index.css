@@ -461,6 +461,14 @@ body,
   justify-content: center;
 }
 
+/* Hairline between the sidebar context menu's groups (e.g. "新页面打开" and
+ * the copy actions). Shares the toolbar menus' popup surface. */
+.context-menu-separator {
+  height: 1px;
+  margin: 0.25rem 0.5rem;
+  background: var(--border);
+}
+
 .reader-main {
   display: flex;
   flex: 1;
