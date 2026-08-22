@@ -642,7 +642,7 @@ function FileContextMenu({
             }
           >
             <FileText aria-hidden="true" />
-            <span>复制 Markdown 网页链接</span>
+            <span>复制 Markdown 链接</span>
           </ContextMenu.Item>
         </ContextMenu.Popup>
       </ContextMenu.Positioner>

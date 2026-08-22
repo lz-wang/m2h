@@ -2,6 +2,11 @@ import { type ChildProcess, spawn } from "node:child_process";
 import path from "node:path";
 import { expect, test } from "@playwright/test";
 
+// Copy actions assert the real clipboard contents: 127.0.0.1 is a secure
+// context, so copyText() takes the async Clipboard API path and readback needs
+// the granted permissions.
+test.use({ permissions: ["clipboard-read", "clipboard-write"] });
+
 // Real-browser coverage for a multi-root workspace. The config's shared
 // preview server serves the single-root fixture tree; this spec starts a
 // second `m2h web root-a,root-b` process on its own port once that build
@@ -197,4 +202,79 @@ test("search matches a root's name and keeps results grouped by root", async ({
     page.getByRole("button", { name: "Root A Readme，r0/README.md" }),
   ).toBeHidden();
   await expect(page.getByText("2 个 Markdown 文件")).toBeVisible();
+});
+
+test("raw routes serve each root's original Markdown bytes", async ({
+  request,
+}) => {
+  const alpha = await request.get(`${baseURL}/raw/r0/README.md`);
+  expect(alpha.status()).toBe(200);
+  expect(alpha.headers()["content-type"]).toContain("text/markdown");
+  expect(await alpha.text()).toContain("# Root A Readme");
+
+  const beta = await request.get(`${baseURL}/raw/r1/README.md`);
+  expect(beta.status()).toBe(200);
+  expect(await beta.text()).toContain("# Root B Readme");
+
+  // A multi-root workspace only serves raw documents through a known root id.
+  // (Traversal itself is covered by the Go handler tests: every spec-compliant
+  // URL client — browser fetch and Playwright included — normalizes ".."
+  // path segments away before a request is ever sent.)
+  for (const target of ["/raw/README.md", "/raw/r9/README.md"]) {
+    const response = await request.get(baseURL + target);
+    expect(response.status(), target).toBe(404);
+    expect(await response.text()).not.toContain("# Root");
+  }
+});
+
+test("right-clicking same-named files copies each root's own addresses", async ({
+  page,
+}) => {
+  await openWorkspace(page, "/doc/r0/README.md");
+
+  // The first root's same-named README copies r0 addresses. Right-clicking
+  // must not select it: the open document stays r0's README.
+  await page
+    .getByRole("button", { name: "Root A Readme，r0/README.md" })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "复制文档网页链接" }).click();
+  await expect(page.getByRole("status")).toHaveText("已复制文档链接");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    `${baseURL}/doc/r0/README.md`,
+  );
+
+  // The second root's copy routes to r1 — the same relative path never leaks
+  // across roots — while the open document and URL remain r0's.
+  await page
+    .getByRole("button", { name: "Root B Readme，r1/README.md" })
+    .click({ button: "right" });
+  await page.getByRole("menuitem", { name: "复制 Markdown 链接" }).click();
+  await expect(page.getByRole("status")).toHaveText("已复制 Markdown 链接");
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(
+    `${baseURL}/raw/r1/README.md`,
+  );
+  expect(await page.evaluate(() => window.location.pathname)).toBe(
+    "/doc/r0/README.md",
+  );
+  await expect(page.locator(".markdown-body h1")).toHaveText("Root A Readme");
+});
+
+test("context-menu open-in-new-tab really opens a popup with the document", async ({
+  page,
+  context,
+}) => {
+  await openWorkspace(page, "/doc/r1/README.md");
+
+  await page
+    .getByRole("button", { name: "Root B Readme，r1/README.md" })
+    .click({ button: "right" });
+  const [popup] = await Promise.all([
+    context.waitForEvent("page"),
+    page.getByRole("menuitem", { name: "新页面打开" }).click(),
+  ]);
+  await popup.waitForFunction(
+    () => document.querySelector(".reader-document h1") !== null,
+  );
+  await expect(popup.locator(".markdown-body h1")).toHaveText("Root B Readme");
+  expect(new URL(popup.url()).pathname).toBe("/doc/r1/README.md");
 });

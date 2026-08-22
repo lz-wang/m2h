@@ -601,7 +601,7 @@ describe("App directory preview", () => {
         "已复制本地路径",
       );
 
-      await copyFromMenu("复制 Markdown 网页链接");
+      await copyFromMenu("复制 Markdown 链接");
       await waitFor(() =>
         expect(copied.at(-1)).toBe("http://localhost/raw/README.md"),
       );
@@ -743,7 +743,7 @@ describe("App directory preview", () => {
       for (const name of [
         "复制文档网页链接",
         "复制文档本地路径",
-        "复制 Markdown 网页链接",
+        "复制 Markdown 链接",
       ]) {
         expect(screen.getByRole("menuitem", { name })).toBeTruthy();
       }
@@ -888,7 +888,7 @@ describe("App directory preview", () => {
         ).getAttribute("href"),
       ).toBe("/doc/r0/README.md");
       await user.click(
-        screen.getByRole("menuitem", { name: "复制 Markdown 网页链接" }),
+        screen.getByRole("menuitem", { name: "复制 Markdown 链接" }),
       );
       await waitFor(() =>
         expect(copied.at(-1)).toBe("http://localhost/raw/r0/README.md"),

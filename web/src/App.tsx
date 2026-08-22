@@ -870,7 +870,7 @@ function ShareMenu({
               </Menu.Item>
               <Menu.Item className="theme-menu-item" onClick={copyMarkdownURL}>
                 <FileText aria-hidden="true" />
-                <span>复制 Markdown 网页链接</span>
+                <span>复制 Markdown 链接</span>
               </Menu.Item>
               <Menu.Item
                 className="theme-menu-item"
