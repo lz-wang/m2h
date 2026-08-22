@@ -12,23 +12,9 @@ import {
   ancestorDirectories,
   buildTree,
   type DirectoryNode,
+  localPath,
   type TreeNode,
 } from "@/model";
-
-// Join a server-reported absolute root path with a root-relative slash path
-// using the SERVER machine's separator: the browser may run on a different
-// machine, so the platform's native format must come from the API, never from
-// the client's own OS sniffing.
-function localPath(root: string, relative: string, separator: string): string {
-  if (relative === "") {
-    return root;
-  }
-  const suffix = relative.split("/").join(separator);
-  if (root.endsWith(separator)) {
-    return `${root}${suffix}`;
-  }
-  return `${root}${separator}${suffix}`;
-}
 
 interface DocumentTreeProps {
   // Files of ONE root, root-relative: a multi-root workspace renders one tree

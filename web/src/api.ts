@@ -1,3 +1,8 @@
+// model.ts imports only types from this module, so pulling its URL builder in
+// here creates no runtime cycle — and keeps every /raw/ address shaped by one
+// encoder shared with the sidebar and toolbar links.
+import { markdownURL } from "./model";
+
 export interface FileSummary {
   path: string;
   name: string;
@@ -6,17 +11,23 @@ export interface FileSummary {
 
 // RootSummary groups one preview root's documents. Files carry root-relative
 // paths; in a multi-root workspace the root id prefixes the addressable
-// (virtual) document path, so identity stays unique across roots.
-// absolutePath is the server machine's canonical local path for the input and
-// pathSeparator is that machine's separator — the browser may run elsewhere,
-// so joining a native path must use the server-reported separator.
+// (virtual) document path, so identity stays unique across roots. kind tells
+// whether absolutePath names the served file itself ("file") or the directory
+// the root-relative paths join onto ("directory") — a file root must not have
+// its only document's path appended again. absolutePath is the server machine's
+// canonical local path for the input and pathSeparator is that machine's
+// separator — the browser may run elsewhere, so joining a native path must use
+// the server-reported separator.
 export interface RootSummary {
   id: string;
   name: string;
+  kind: RootKind;
   absolutePath: string;
   pathSeparator: string;
   files: FileSummary[];
 }
+
+export type RootKind = "file" | "directory";
 
 export interface DocumentRef {
   root: string;
@@ -63,6 +74,10 @@ export interface DocumentResponse {
 export interface PreviewAPI {
   listFiles(signal?: AbortSignal): Promise<FileListResponse>;
   getDocument(path: string, signal?: AbortSignal): Promise<DocumentResponse>;
+  // Fetches the document's original Markdown source (frontmatter included)
+  // from /raw/<virtual-path> on demand — sharing keeps it out of every
+  // /api/document response until the reader actually asks for the full text.
+  getMarkdown(path: string, signal?: AbortSignal): Promise<string>;
 }
 
 export class APIError extends Error {
@@ -94,6 +109,22 @@ async function requestJSON(
   return payload;
 }
 
+// /raw/ answers errors as plain text (http.Error), so unlike requestJSON there
+// is no JSON error body to mine — the status alone decides.
+async function requestText(url: string, signal?: AbortSignal): Promise<string> {
+  const response = await fetch(url, {
+    headers: { Accept: "text/markdown" },
+    signal,
+  });
+  if (!response.ok) {
+    throw new APIError(
+      response.status,
+      response.statusText || `HTTP ${response.status}`,
+    );
+  }
+  return response.text();
+}
+
 function parseFileList(payload: unknown): FileListResponse {
   if (
     !isRecord(payload) ||
@@ -107,6 +138,7 @@ function parseFileList(payload: unknown): FileListResponse {
       !isRecord(value) ||
       typeof value.id !== "string" ||
       typeof value.name !== "string" ||
+      !isRootKind(value.kind) ||
       typeof value.absolutePath !== "string" ||
       (value.pathSeparator !== "/" && value.pathSeparator !== "\\")
     ) {
@@ -118,6 +150,7 @@ function parseFileList(payload: unknown): FileListResponse {
     return {
       id: value.id,
       name: value.name,
+      kind: value.kind,
       absolutePath: value.absolutePath,
       pathSeparator: value.pathSeparator,
       files: value.files.map(parseFileSummary),
@@ -247,6 +280,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+// The root kind decides how the client joins a local absolute path, so a
+// missing or unrecognized value is a broken contract rather than a default.
+function isRootKind(value: unknown): value is RootKind {
+  return value === "file" || value === "directory";
+}
+
 export const browserAPI: PreviewAPI = {
   async listFiles(signal) {
     return parseFileList(await requestJSON("/api/files", signal));
@@ -256,5 +295,8 @@ export const browserAPI: PreviewAPI = {
     return parseDocument(
       await requestJSON(`/api/document?${query.toString()}`, signal),
     );
+  },
+  async getMarkdown(path, signal) {
+    return requestText(markdownURL(path), signal);
   },
 };

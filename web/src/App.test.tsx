@@ -19,6 +19,7 @@ const initialFiles: FileListResponse = {
     {
       id: "r0",
       name: "docs",
+      kind: "directory",
       absolutePath: "/tmp/docs",
       pathSeparator: "/",
       files: [
@@ -1712,6 +1713,15 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
         frontmatter: null,
         toc: [],
       };
+    }),
+    getMarkdown: vi.fn().mockImplementation(async (path: string) => {
+      const file = initialFiles.roots[0]?.files.find(
+        (candidate) => candidate.path === path,
+      );
+      if (file === undefined) {
+        throw new APIError(404, "not found");
+      }
+      return `# Raw source of ${path}\n`;
     }),
     ...overrides,
   };

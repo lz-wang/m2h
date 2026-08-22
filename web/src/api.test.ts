@@ -21,6 +21,7 @@ describe("browser API", () => {
               {
                 id: "r0",
                 name: "docs",
+                kind: "directory",
                 absolutePath: "/tmp/docs",
                 pathSeparator: "/",
                 files: [
@@ -63,6 +64,7 @@ describe("browser API", () => {
         {
           id: "r0",
           name: "docs",
+          kind: "directory",
           absolutePath: "/tmp/docs",
           pathSeparator: "/",
           files: [{ path: "README.md", name: "README.md", title: "Readme" }],
@@ -99,6 +101,7 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "README.md",
+              kind: "file",
               absolutePath: "/tmp/README.md",
               pathSeparator: "/",
               files: [
@@ -124,6 +127,7 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "a",
+              kind: "directory",
               absolutePath: "/tmp/a",
               pathSeparator: "/",
               files: [
@@ -133,6 +137,7 @@ describe("browser API", () => {
             {
               id: "r1",
               name: "b",
+              kind: "directory",
               absolutePath: "D:\\work\\b",
               pathSeparator: "\\",
               files: [],
@@ -158,6 +163,7 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "docs",
+              kind: "directory",
               absolutePath: "/tmp/docs",
               pathSeparator: "/",
               files: [
@@ -211,6 +217,7 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "docs",
+              kind: "directory",
               absolutePath: "/tmp/docs",
               pathSeparator: "/",
               files: [{ path: "README.md" }],
@@ -232,6 +239,7 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "docs",
+              kind: "directory",
               absolutePath: "/tmp/docs",
               pathSeparator: "/",
               files: [],
@@ -246,15 +254,21 @@ describe("browser API", () => {
       "文件列表响应格式无效",
     );
 
-    // The root's absolute path and the server-reported separator are part of
-    // the contract: a non-string path or a separator other than "/" or "\"
-    // never reaches the UI to pollute path display.
+    // The root's kind, absolute path and the server-reported separator are
+    // part of the contract: a wrong kind, a non-string path or a separator
+    // other than "/" or "\" never reaches the UI to pollute path handling.
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           version: "1",
           roots: [
-            { id: "r0", name: "docs", absolutePath: 1, pathSeparator: "/" },
+            {
+              id: "r0",
+              name: "docs",
+              kind: "symlink",
+              absolutePath: "/tmp/docs",
+              pathSeparator: "/",
+            },
           ],
         }),
         { status: 200 },
@@ -272,6 +286,28 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "docs",
+              kind: "directory",
+              absolutePath: 1,
+              pathSeparator: "/",
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.listFiles()).rejects.toThrow(
+      "文件列表响应格式无效",
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          version: "1",
+          roots: [
+            {
+              id: "r0",
+              name: "docs",
+              kind: "directory",
               absolutePath: "/tmp/docs",
               pathSeparator: null,
             },
@@ -292,6 +328,7 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "docs",
+              kind: "directory",
               absolutePath: "/tmp/docs",
               pathSeparator: "+",
             },
@@ -312,6 +349,44 @@ describe("browser API", () => {
     await expect(browserAPI.getDocument("a.md")).rejects.toThrow(
       "文档响应格式无效",
     );
+  });
+
+  it("fetches raw Markdown through the encoded /raw/ address", async () => {
+    const source = "---\ntitle: Raw\n---\n# Raw\n\nbody\n";
+    fetchMock.mockResolvedValueOnce(
+      new Response(source, {
+        status: 200,
+        headers: { "Content-Type": "text/markdown; charset=utf-8" },
+      }),
+    );
+    await expect(browserAPI.getMarkdown("docs/a b.md")).resolves.toBe(source);
+    expect(fetchMock.mock.calls[0]?.[0]).toBe("/raw/docs/a%20b.md");
+    expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({
+      headers: { Accept: "text/markdown" },
+    });
+
+    // Multi-root keys keep their root prefix, Unicode segments stay encoded.
+    fetchMock.mockResolvedValueOnce(new Response("# Beta", { status: 200 }));
+    await expect(browserAPI.getMarkdown("r1/计划.md")).resolves.toBe("# Beta");
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      `/raw/r1/${encodeURIComponent("计划.md")}`,
+    );
+  });
+
+  it("surfaces raw Markdown HTTP errors without a JSON body", async () => {
+    // /raw/ answers errors as plain text (http.Error on the server), so only
+    // the status is available to the caller.
+    fetchMock.mockResolvedValueOnce(
+      new Response("document not found\n", {
+        status: 404,
+        statusText: "Not Found",
+        headers: { "Content-Type": "text/plain" },
+      }),
+    );
+    await expect(browserAPI.getMarkdown("missing.md")).rejects.toMatchObject({
+      name: "APIError",
+      status: 404,
+    });
   });
 
   it("accepts null, missing, and malformed frontmatter", async () => {
