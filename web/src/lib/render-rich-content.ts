@@ -462,20 +462,22 @@ function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
 }
 
 // Give every plain <img> in the body a Lightbox trigger: a magnifier button
-// pinned to the top-right of a wrapper frame, plus document-order indexes
-// (data-m2h-lightbox-index) the React layer resolves through event delegation.
-// Mermaid never appears here as an <img> — its pass turns the source pre into a
-// div.mermaid holding an SVG — so plain img scanning excludes it for free, and
-// raw-HTML <img> tags are covered by the same query. Idempotent like every
-// enhancement: an image already carrying the marker is skipped, so re-running
-// on the same body stacks no second frame or button.
+// pinned to the top-right of a wrapper frame, plus the marker the React layer
+// keys its click-time image lookup on. No position index is recorded here:
+// DOM order at click time is the only source of truth, so another enhancement
+// that reorders the body (a sortable table moving <tr> rows) cannot desync
+// the Lightbox. Mermaid never appears here as an <img> — its pass turns the
+// source pre into a div.mermaid holding an SVG — so plain img scanning
+// excludes it for free, and raw-HTML <img> tags are covered by the same
+// query. Idempotent like every enhancement: an image already carrying the
+// marker is skipped, so re-running on the same body stacks no second frame
+// or button.
 function addImageLightboxTriggers(root: HTMLElement): void {
-  root.querySelectorAll<HTMLImageElement>("img").forEach((image, index) => {
+  for (const image of root.querySelectorAll<HTMLImageElement>("img")) {
     if (image.dataset.m2hLightboxImage === "true") {
-      return;
+      continue;
     }
     image.dataset.m2hLightboxImage = "true";
-    image.dataset.m2hLightboxIndex = String(index);
 
     // An image wrapped in a link keeps the anchor as its visual root — the
     // frame then wraps the anchor, so the trigger button stays a sibling of
@@ -488,13 +490,12 @@ function addImageLightboxTriggers(root: HTMLElement): void {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "m2h-image-lightbox-trigger";
-    button.dataset.m2hLightboxIndex = String(index);
     button.setAttribute("aria-label", "查看大图");
     button.title = "查看大图";
     button.innerHTML = IMAGE_ZOOM_ICON;
 
     frame.append(target, button);
-  });
+  }
 }
 
 // The element the frame should wrap: a sole-image anchor wraps both itself and

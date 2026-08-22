@@ -69,10 +69,7 @@ import {
   TooltipTrigger,
 } from "./components/ui/tooltip";
 import { copyText } from "./lib/clipboard";
-import {
-  collectLightboxImages,
-  type LightboxImage,
-} from "./lib/image-lightbox";
+import { collectLightboxState, type LightboxState } from "./lib/image-lightbox";
 import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 import {
@@ -1051,14 +1048,6 @@ interface PreviewContentProps {
   onErrorCapture(event: SyntheticEvent<HTMLElement>): void;
 }
 
-// The open Lightbox: a snapshot of the body's enhanced images plus the image
-// being viewed. Data only — never body element references — so a body swap can
-// simply null this out.
-interface LightboxState {
-  images: LightboxImage[];
-  index: number;
-}
-
 function PreviewContent({
   phase,
   error,
@@ -1172,10 +1161,21 @@ function PreviewContent({
     ) {
       event.preventDefault();
       event.stopPropagation();
-      const images = collectLightboxImages(contentRef.current);
-      const index = Number(candidate.dataset.m2hLightboxIndex);
-      if (Number.isInteger(index) && index >= 0 && index < images.length) {
-        setLightbox({ images, index });
+      // Resolve the pressed trigger's own image through its frame, then index
+      // it against the body's current DOM order at click time. No index is
+      // baked into the DOM: a sortable table moves <tr> rows after the
+      // triggers were injected, so a recorded position could address another
+      // image than the one under this trigger.
+      const root = contentRef.current;
+      const frame = candidate.closest(".m2h-image-frame");
+      const selectedImage = frame?.querySelector<HTMLImageElement>(
+        'img[data-m2h-lightbox-image="true"]',
+      );
+      if (root !== null && selectedImage != null) {
+        const state = collectLightboxState(root, selectedImage);
+        if (state !== null) {
+          setLightbox(state);
+        }
       }
       return;
     }

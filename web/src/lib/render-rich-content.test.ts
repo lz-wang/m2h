@@ -765,6 +765,12 @@ describe("image lightbox triggers", () => {
     });
   });
 
+  // The table-sort cross-feature test below installs the real tablesort
+  // runtime; drop it again so later describes never see a stale bundle.
+  afterEach(() => {
+    delete window.Tablesort;
+  });
+
   it("wraps a plain image in a frame with a magnifier trigger", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
@@ -783,15 +789,13 @@ describe("image lightbox triggers", () => {
     expect(image?.parentElement).toBe(frame);
     expect(button?.parentElement).toBe(frame);
     expect(image?.dataset.m2hLightboxImage).toBe("true");
-    expect(image?.dataset.m2hLightboxIndex).toBe("0");
     expect(button?.type).toBe("button");
-    expect(button?.dataset.m2hLightboxIndex).toBe("0");
     expect(button?.getAttribute("aria-label")).toBe("查看大图");
     expect(button?.title).toBe("查看大图");
     expect(button?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
   });
 
-  it("indexes images in document order", async () => {
+  it("frames images in document order without baking in position indexes", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML =
@@ -799,11 +803,18 @@ describe("image lightbox triggers", () => {
 
     await renderRichContent(root, "light");
 
-    const indexes = Array.from(
-      root.querySelectorAll<HTMLImageElement>("img"),
-    ).map((image) => image.dataset.m2hLightboxIndex);
-    expect(indexes).toEqual(["0", "1", "2"]);
-    expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(3);
+    const images = Array.from(root.querySelectorAll<HTMLImageElement>("img"));
+    const frames = Array.from(
+      root.querySelectorAll<HTMLElement>(".m2h-image-frame"),
+    );
+    expect(frames).toHaveLength(3);
+    // Document order pairs each image with its own frame, and the DOM carries
+    // no position index for a click-time lookup to go stale against (a
+    // sortable table reorders rows after this pass).
+    expect(images.map((image) => image.closest(".m2h-image-frame"))).toEqual(
+      frames,
+    );
+    expect(root.querySelector("[data-m2h-lightbox-index]")).toBeNull();
     expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
       3,
     );
@@ -885,6 +896,56 @@ describe("image lightbox triggers", () => {
     expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
       0,
     );
+  });
+
+  // Cross-feature regression: Tablesort really moves <tr> elements, so the
+  // image a trigger addresses must be resolved from the DOM order at click
+  // time. With a position index baked in at enhancement time, this test opens
+  // the wrong image after the first sort.
+  it("resolves the clicked image after a table sort reorders rows", async () => {
+    installTablesortRuntime();
+    loadTablesortMock.mockImplementation(async () => {
+      const Tablesort = window.Tablesort;
+      if (Tablesort === undefined) {
+        throw new Error("tablesort runtime is not installed");
+      }
+      return Tablesort;
+    });
+    const { renderRichContent } = await import("./render-rich-content");
+    const { collectLightboxState } = await import("./image-lightbox");
+    const root = document.createElement("div");
+    root.innerHTML = `<table><thead><tr><th>Name</th><th>Image</th></tr></thead>
+      <tbody>
+        <tr><td>Alpha</td><td><img src="/a.png" alt="A"></td></tr>
+        <tr><td>Beta</td><td><img src="/b.png" alt="B"></td></tr>
+      </tbody></table>`;
+
+    await renderRichContent(root, "light");
+
+    // Sort by name descending: the Beta row — and its b.png — moves first.
+    const header = root.querySelector<HTMLTableCellElement>("thead th");
+    header?.click();
+    header?.click();
+    expect(
+      Array.from(root.querySelectorAll("tbody td:first-child")).map(
+        (cell) => cell.textContent,
+      ),
+    ).toEqual(["Beta", "Alpha"]);
+
+    // The trigger press resolves through the frame to its own image, which is
+    // then indexed against the current DOM order: b.png is now image 0.
+    const frame = root.querySelector<HTMLElement>("tbody .m2h-image-frame");
+    const selected = frame?.querySelector<HTMLImageElement>(
+      'img[data-m2h-lightbox-image="true"]',
+    );
+    const state =
+      selected === undefined || selected === null
+        ? null
+        : collectLightboxState(root, selected);
+    expect(state?.index).toBe(0);
+    expect(
+      (state?.images ?? []).map((image) => new URL(image.src).pathname),
+    ).toEqual(["/b.png", "/a.png"]);
   });
 });
 

@@ -2141,7 +2141,7 @@ describe("image lightbox integration", () => {
     ).toHaveLength(1);
   });
 
-  it("closes the lightbox and re-indexes images when the body hot-swaps", async () => {
+  it("closes the lightbox and re-enhances images when the body hot-swaps", async () => {
     const getDocument = vi
       .fn<PreviewAPI["getDocument"]>()
       .mockResolvedValueOnce({
@@ -2175,19 +2175,53 @@ describe("image lightbox integration", () => {
     });
 
     // The stale lightbox is gone and the fresh body is enhanced exactly once:
-    // three indexed triggers, no stacked frames.
+    // three framed triggers, no stacked frames.
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const triggers = await screen.findAllByRole("button", { name: "查看大图" });
     expect(triggers).toHaveLength(3);
-    const images = document.querySelectorAll<HTMLImageElement>(
-      'img[data-m2h-lightbox-image="true"]',
-    );
     expect(
-      Array.from(images).map((image) => image.dataset.m2hLightboxIndex),
-    ).toEqual(["0", "1", "2"]);
+      document.querySelectorAll('img[data-m2h-lightbox-image="true"]'),
+    ).toHaveLength(3);
     expect(
       document.querySelectorAll(".m2h-image-frame .m2h-image-frame"),
     ).toHaveLength(0);
+  });
+
+  // Cross-feature regression: a sortable table reorders <tr> rows after the
+  // triggers were injected. The pressed trigger must open the image currently
+  // beside it, not whatever held its position when the body was enhanced.
+  it("opens the image beside the pressed trigger after table rows reorder", async () => {
+    const user = userEvent.setup();
+    render(
+      <App
+        api={lightboxAPI({
+          "README.md": `<table><thead><tr><th>Name</th><th>Image</th></tr></thead>
+            <tbody>
+              <tr><td>Alpha</td><td><img src="/a.png" alt="A"></td></tr>
+              <tr><td>Beta</td><td><img src="/b.png" alt="B"></td></tr>
+            </tbody></table>`,
+        })}
+      />,
+    );
+    const triggers = await screen.findAllByRole("button", { name: "查看大图" });
+    expect(triggers).toHaveLength(2);
+
+    // What Tablesort's afterSort does to the DOM: the Beta row is moved to
+    // the front, so the first trigger in document order is Beta's.
+    const rows = document.querySelectorAll("tbody tr");
+    rows[0]?.parentElement?.prepend(rows[1] as Node);
+
+    await user.click(
+      (
+        await screen.findAllByRole("button", { name: "查看大图" })
+      )[0] as HTMLButtonElement,
+    );
+
+    const dialog = await screen.findByRole("dialog", { name: "图片预览" });
+    expect(dialog.querySelector("img")?.getAttribute("src")).toContain(
+      "/b.png",
+    );
+    expect(screen.getByText("1 / 2")).toBeTruthy();
   });
 });
 
