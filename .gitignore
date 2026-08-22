@@ -20,7 +20,7 @@ coverage.out
 coverage.html
 
 # Web outputs
-web/node_modules/
+node_modules/
 web/dist/
 web/coverage/
 web/test-results/
