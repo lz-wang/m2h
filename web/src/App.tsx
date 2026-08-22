@@ -1165,14 +1165,15 @@ function PreviewContent({
   // ever sees it, and everything else falls through unchanged.
   const handleContentClick = (event: ReactMouseEvent<HTMLElement>) => {
     const target = event.target instanceof Element ? event.target : null;
-    const trigger = target?.closest<HTMLButtonElement>(
-      ".m2h-image-lightbox-trigger",
-    );
-    if (trigger !== null && contentRef.current?.contains(trigger) === true) {
+    const candidate = target?.closest(".m2h-image-lightbox-trigger");
+    if (
+      candidate instanceof HTMLButtonElement &&
+      contentRef.current?.contains(candidate) === true
+    ) {
       event.preventDefault();
       event.stopPropagation();
       const images = collectLightboxImages(contentRef.current);
-      const index = Number(trigger.dataset.m2hLightboxIndex);
+      const index = Number(candidate.dataset.m2hLightboxIndex);
       if (Number.isInteger(index) && index >= 0 && index < images.length) {
         setLightbox({ images, index });
       }

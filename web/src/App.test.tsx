@@ -2179,7 +2179,7 @@ describe("image lightbox integration", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const triggers = await screen.findAllByRole("button", { name: "查看大图" });
     expect(triggers).toHaveLength(3);
-    const images = document.querySelectorAll(
+    const images = document.querySelectorAll<HTMLImageElement>(
       'img[data-m2h-lightbox-image="true"]',
     );
     expect(
