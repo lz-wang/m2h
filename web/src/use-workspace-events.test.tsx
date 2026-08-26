@@ -1,18 +1,18 @@
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { usePreviewEvents } from "./use-preview-events";
+import { useWorkspaceEvents } from "./use-workspace-events";
 
 function HookHarness({ handler }: { handler: () => void }) {
-  usePreviewEvents(handler);
+  useWorkspaceEvents(handler);
   return null;
 }
 
-describe("usePreviewEvents", () => {
+describe("useWorkspaceEvents", () => {
   afterEach(() => {
     MockEventSource.reset();
   });
 
-  it("invokes the callback only for document-changed events", () => {
+  it("invokes the callback only for workspace-changed events", () => {
     const handler = vi.fn();
     vi.stubGlobal("EventSource", MockEventSource);
     render(<HookHarness handler={handler} />);
@@ -21,7 +21,7 @@ describe("usePreviewEvents", () => {
     expect(MockEventSource.last?.url).toBe("/api/events");
     expect(handler).not.toHaveBeenCalled();
 
-    MockEventSource.last?.dispatch("document-changed");
+    MockEventSource.last?.dispatch("workspace-changed");
     expect(handler).toHaveBeenCalledTimes(1);
 
     // Unrelated SSE events must not trigger a reload.

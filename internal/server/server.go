@@ -55,6 +55,7 @@ type Options struct {
 type dependencies struct {
 	listen      func(string, string) (net.Listener, error)
 	watch       func(context.Context, string, time.Duration, func(), io.Writer) error
+	watchTree   func(context.Context, string, time.Duration, func(), io.Writer) error
 	openBrowser func(string) error
 	keepAlive   time.Duration
 	debounce    time.Duration
@@ -65,6 +66,7 @@ func Run(ctx context.Context, options Options) error {
 	return run(ctx, options, dependencies{
 		listen:      net.Listen,
 		watch:       watcher.Watch,
+		watchTree:   watcher.WatchTree,
 		openBrowser: openBrowser,
 		keepAlive:   defaultKeepAlive,
 		debounce:    watcher.DefaultDebounce,
@@ -124,7 +126,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	handler := newDocumentHandlerWithVersion(workspace, hub, logger, options.UI, normalized.Version)
+	handler := newDocumentHandlerWithOptions(workspace, hub, logger, options.UI, normalized.Version, hostIsLoopback(normalized.Host))
 	httpServer := &http.Server{
 		Handler: handler,
 		BaseContext: func(net.Listener) context.Context {
@@ -143,17 +145,29 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	go func() {
 		serveDone <- httpServer.Serve(listener)
 	}()
-	// One watcher per single-file root; a change in any of them refreshes the
-	// shared event stream. Directory roots are not watched.
-	if watchTargets := workspace.singleFilePaths(); len(watchTargets) > 0 {
+	// Every root is watched — single-file roots through their file, directory
+	// roots recursively — and every change publishes the same workspace event,
+	// so the WebUI refetches the file tree and reloads (or replaces) the open
+	// document.
+	watchTargets := append(workspace.singleFilePaths(), workspace.directoryPaths()...)
+	if len(watchTargets) > 0 {
 		watchResults := make(chan error, len(watchTargets))
 		watchDone = watchResults
-		for _, target := range watchTargets {
-			go func(target string) {
-				watchResults <- deps.watch(runContext, target, deps.debounce, func() {
-					hub.publish(documentChanged)
-				}, logger)
-			}(target)
+		for _, root := range workspace.roots {
+			switch root.input.Kind {
+			case files.KindFile:
+				go func(target string) {
+					watchResults <- deps.watch(runContext, target, deps.debounce, func() {
+						hub.publish(workspaceChanged)
+					}, logger)
+				}(root.input.Path)
+			case files.KindDirectory:
+				go func(target string) {
+					watchResults <- deps.watchTree(runContext, target, deps.debounce, func() {
+						hub.publish(workspaceChanged)
+					}, logger)
+				}(root.input.Path)
+			}
 		}
 	}
 
@@ -234,6 +248,23 @@ func normalizeOptions(options Options) (Options, error) {
 		return Options{}, err
 	}
 	return options, nil
+}
+
+// hostIsLoopback reports whether the listener host only accepts local
+// connections. Serving on loopback is the local-reading case (absolute paths
+// in the API are fine); anything wider treats every client as remote and keeps
+// the serving machine's directory layout to itself.
+func hostIsLoopback(host string) bool {
+	host = strings.TrimSpace(host)
+	if host == "" || host == "localhost" {
+		return true
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return ip.IsLoopback()
+	}
+	// An unresolvable or unusual host is treated as public: the safe default
+	// costs only the copy-path menu items.
+	return false
 }
 
 func serverURL(host string, address net.Addr) string {

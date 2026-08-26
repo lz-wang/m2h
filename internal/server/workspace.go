@@ -144,11 +144,23 @@ func (workspace workspace) anyDirectory() bool {
 }
 
 // singleFilePaths lists the absolute paths of the single-file roots — the
-// files the change watcher should observe. Directory roots are not watched.
+// files the change watcher observes directly.
 func (workspace workspace) singleFilePaths() []string {
 	paths := make([]string, 0, len(workspace.roots))
 	for _, root := range workspace.roots {
 		if root.input.Kind == files.KindFile {
+			paths = append(paths, root.input.Path)
+		}
+	}
+	return paths
+}
+
+// directoryPaths lists the absolute paths of the directory roots — each one is
+// watched recursively by the tree watcher.
+func (workspace workspace) directoryPaths() []string {
+	paths := make([]string, 0, len(workspace.roots))
+	for _, root := range workspace.roots {
+		if root.input.Kind == files.KindDirectory {
 			paths = append(paths, root.input.Path)
 		}
 	}

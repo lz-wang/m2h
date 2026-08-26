@@ -7,7 +7,11 @@ import (
 	"time"
 )
 
-const documentChanged = "document-changed"
+// workspaceChanged is the single change signal the server streams: any
+// watched input — a single-file root or a directory tree — reports the same
+// event, and the WebUI answers by refetching /api/files and reloading (or
+// replacing) the open document.
+const workspaceChanged = "workspace-changed"
 
 type eventHub struct {
 	mu            sync.Mutex

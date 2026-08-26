@@ -33,14 +33,17 @@ type fileSummary struct {
 // workspace (see workspace.publicPath). Kind tells whether AbsolutePath
 // names the served file itself ("file") or the directory the root-relative
 // paths join onto ("directory") — a file root must not append its only
-// document's relative path again. PathSeparator is the server platform's
-// separator: the browser machine may differ from the machine running m2h, so
-// the client never guesses how to join a native absolute path.
+// document's relative path again. AbsolutePath is reported only when the
+// server listens on loopback: exposing the serving machine's directory
+// layout to a public listener is a needless information leak. PathSeparator
+// is the server platform's separator: the browser machine may differ from
+// the machine running m2h, so the client never guesses how to join a native
+// absolute path.
 type rootSummary struct {
 	ID            string        `json:"id"`
 	Name          string        `json:"name"`
 	Kind          string        `json:"kind"`
-	AbsolutePath  string        `json:"absolutePath"`
+	AbsolutePath  string        `json:"absolutePath,omitempty"`
 	PathSeparator string        `json:"pathSeparator"`
 	Files         []fileSummary `json:"files"`
 }
@@ -91,6 +94,10 @@ type documentHandler struct {
 	workspace workspace
 	ui        fs.FS
 	version   string
+	// exposeRootPaths reports the roots' absolute paths to the API. Only a
+	// loopback listener does: the local user asked for them (copy-path menu
+	// items), a public listener's clients did not.
+	exposeRootPaths bool
 
 	discover func(context.Context, rootScope) (files.Discovery, error)
 }
@@ -111,10 +118,22 @@ func newDocumentHandlerWithVersion(
 	ui fs.FS,
 	buildVersion string,
 ) http.Handler {
+	return newDocumentHandlerWithOptions(workspace, events, logger, ui, buildVersion, true)
+}
+
+func newDocumentHandlerWithOptions(
+	workspace workspace,
+	events *eventHub,
+	logger io.Writer,
+	ui fs.FS,
+	buildVersion string,
+	exposeRootPaths bool,
+) http.Handler {
 	handler := &documentHandler{
-		workspace: workspace,
-		ui:        ui,
-		version:   buildVersion,
+		workspace:       workspace,
+		ui:              ui,
+		version:         buildVersion,
+		exposeRootPaths: exposeRootPaths,
 		discover: func(ctx context.Context, scope rootScope) (files.Discovery, error) {
 			return scope.discover(ctx)
 		},
@@ -169,14 +188,17 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 				Title: title,
 			})
 		}
-		roots = append(roots, rootSummary{
+		summary := rootSummary{
 			ID:            root.id,
 			Name:          root.label,
 			Kind:          rootScopeKind(root.scope),
-			AbsolutePath:  root.input.Path,
 			PathSeparator: string(filepath.Separator),
 			Files:         summaries,
-		})
+		}
+		if handler.exposeRootPaths {
+			summary.AbsolutePath = root.input.Path
+		}
+		roots = append(roots, summary)
 	}
 	writeJSON(response, http.StatusOK, fileListResponse{
 		Kind:            handler.workspace.kind(),

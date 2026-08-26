@@ -11,12 +11,15 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
+	appversion "github.com/lz-wang/m2h/internal/version"
+	"github.com/lz-wang/m2h/internal/watcher"
 )
 
 func TestRunBindsServesAndGracefullyStops(t *testing.T) {
@@ -440,13 +443,14 @@ func TestRunRejectsDuplicateInputs(t *testing.T) {
 	}
 }
 
-func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
+func TestRunDirectoryRootGetsTreeWatcher(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "README.md"), "# Directory")
 	ctx, cancel := context.WithCancel(context.Background())
 	watchCalled := false
+	treeWatched := make(chan string, 1)
 	listeningAddress := ""
 	deps := testDependencies()
 	deps.listen = func(string, string) (net.Listener, error) {
@@ -454,7 +458,13 @@ func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
 	}
 	deps.watch = func(context.Context, string, time.Duration, func(), io.Writer) error {
 		watchCalled = true
-		return errors.New("directory watcher must not run")
+		return errors.New("directory workspace must not get a single-file watcher")
+	}
+	deps.watchTree = func(ctx context.Context, target string, _ time.Duration, onChange func(), _ io.Writer) error {
+		treeWatched <- target
+		onChange()
+		<-ctx.Done()
+		return nil
 	}
 	err := run(ctx, Options{
 		Inputs: []string{root + string(os.PathSeparator)},
@@ -468,7 +478,19 @@ func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
 		t.Fatalf("directory run error = %v", err)
 	}
 	if watchCalled {
-		t.Fatal("directory workspace created a watcher")
+		t.Fatal("directory workspace created a single-file watcher")
+	}
+	rootCanonical, err := files.CanonicalPath(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case target := <-treeWatched:
+		if target != rootCanonical {
+			t.Fatalf("tree watcher target = %q, want %q", target, rootCanonical)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("directory workspace never started its tree watcher")
 	}
 	if !strings.HasSuffix(listeningAddress, "/?mode=dark") {
 		t.Fatalf("directory workspace address = %q, want non-default mode query", listeningAddress)
@@ -555,14 +577,127 @@ func (address stringAddress) Network() string { return "tcp" }
 func (address stringAddress) String() string { return string(address) }
 
 func testDependencies() dependencies {
+	idle := func(ctx context.Context, _ string, _ time.Duration, _ func(), _ io.Writer) error {
+		<-ctx.Done()
+		return nil
+	}
 	return dependencies{
 		listen: net.Listen,
-		watch: func(ctx context.Context, _ string, _ time.Duration, _ func(), _ io.Writer) error {
-			<-ctx.Done()
-			return nil
+		watch: func(ctx context.Context, target string, debounce time.Duration, onChange func(), log io.Writer) error {
+			return idle(ctx, target, debounce, onChange, log)
+		},
+		watchTree: func(ctx context.Context, target string, debounce time.Duration, onChange func(), log io.Writer) error {
+			return idle(ctx, target, debounce, onChange, log)
 		},
 		openBrowser: func(string) error { return nil },
 		keepAlive:   time.Second,
 		debounce:    time.Millisecond,
+	}
+}
+
+// TestRunDirectoryWatcherStreamsWorkspaceChanged covers the resident-service
+// experience end to end with the real tree watcher: editing a Markdown file
+// inside a served directory publishes the workspace-changed SSE event the
+// WebUI answers by refetching /api/files.
+func TestRunDirectoryWatcherStreamsWorkspaceChanged(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("file-event timing varies on Windows CI")
+	}
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "README.md"), "# v1")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	address := make(chan string, 1)
+	deps := testDependencies()
+	deps.listen = func(string, string) (net.Listener, error) {
+		return net.Listen("tcp", "127.0.0.1:0")
+	}
+	deps.watchTree = watcher.WatchTree
+	done := make(chan error, 1)
+	go func() {
+		done <- run(ctx, Options{
+			Inputs:      []string{root},
+			Mode:        markdown.ModeAuto,
+			OnListening: func(url string) { address <- url },
+		}, deps)
+	}()
+
+	listening := <-address
+	// The URL is the document root with options; the event stream lives on the
+	// server itself.
+	streamURL := strings.TrimSuffix(listening, "/") + "/api/events"
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, streamURL, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	reader := bufio.NewReader(response.Body)
+	if line, err := reader.ReadString('\n'); err != nil || line != ": connected\n" {
+		t.Fatalf("initial SSE line = %q, %v", line, err)
+	}
+
+	// The recursive registration needs a moment before the first write.
+	time.Sleep(150 * time.Millisecond)
+	writeTestFile(t, filepath.Join(root, "README.md"), "# v2")
+	stream := readUntil(t, reader, "data: {}", 3*time.Second)
+	if !strings.Contains(stream, "event: workspace-changed") {
+		t.Fatalf("directory change did not stream workspace-changed: %q", stream)
+	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("run error = %v", err)
+	}
+}
+
+func TestHostIsLoopback(t *testing.T) {
+	t.Parallel()
+
+	for _, test := range []struct {
+		host string
+		want bool
+	}{
+		{host: "", want: true},
+		{host: "localhost", want: true},
+		{host: "127.0.0.1", want: true},
+		{host: "::1", want: true},
+		{host: "0.0.0.0", want: false},
+		{host: "192.168.1.4", want: false},
+		{host: "docs.example.com", want: false},
+	} {
+		if got := hostIsLoopback(test.host); got != test.want {
+			t.Errorf("hostIsLoopback(%q) = %v, want %v", test.host, got, test.want)
+		}
+	}
+}
+
+func TestFilesAPIHidesRootPathsBeyondLoopback(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "guide.md"), "# Guide")
+	workspace, err := newWorkspace([]files.Input{{Path: root, Kind: files.KindDirectory}}, files.DiscoverOptions{Depth: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	handler := newDocumentHandlerWithOptions(workspace, newEventHub(time.Second), nil, directoryTestUI(), appversion.Development, false)
+	response := performRequest(handler, http.MethodGet, "/api/files")
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /api/files status = %d", response.Code)
+	}
+	if strings.Contains(response.Body.String(), "absolutePath") {
+		t.Fatalf("non-loopback response exposes absolutePath: %s", response.Body.String())
+	}
+
+	loopback := newDocumentHandlerWithOptions(workspace, newEventHub(time.Second), nil, directoryTestUI(), appversion.Development, true)
+	response = performRequest(loopback, http.MethodGet, "/api/files")
+	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "absolutePath") {
+		t.Fatalf("loopback response missing absolutePath: %d %s", response.Code, response.Body.String())
 	}
 }

@@ -15,14 +15,15 @@ export interface FileSummary {
 // whether absolutePath names the served file itself ("file") or the directory
 // the root-relative paths join onto ("directory") — a file root must not have
 // its only document's path appended again. absolutePath is the server machine's
-// canonical local path for the input and pathSeparator is that machine's
-// separator — the browser may run elsewhere, so joining a native path must use
-// the server-reported separator.
+// canonical local path for the input; it is reported only when the server
+// listens on loopback, so the copy-path affordances treat it as optional.
+// pathSeparator is that machine's separator — the browser may run elsewhere,
+// so joining a native path must use the server-reported separator.
 export interface RootSummary {
   id: string;
   name: string;
   kind: RootKind;
-  absolutePath: string;
+  absolutePath?: string;
   pathSeparator: string;
   files: FileSummary[];
 }

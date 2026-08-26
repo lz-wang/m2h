@@ -120,7 +120,7 @@ describe("App directory preview", () => {
     expect(development.getAttribute("target")).toBe("_blank");
   });
 
-  it("hot-swaps the document body on a server-sent document-changed event", async () => {
+  it("hot-swaps the document body on a server-sent workspace-changed event", async () => {
     const getDocument = vi
       .fn<PreviewAPI["getDocument"]>()
       .mockResolvedValueOnce({
@@ -145,10 +145,46 @@ describe("App directory preview", () => {
     expect(getDocument).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      events.dispatch("document-changed");
+      events.dispatch("workspace-changed");
     });
     await screen.findByText("Updated body");
     expect(getDocument).toHaveBeenCalledTimes(2);
+  });
+
+  it("opens the default document when a workspace-changed refresh drops the open file", async () => {
+    const withoutSetup: FileListResponse = {
+      ...initialFiles,
+      roots: [
+        {
+          ...initialFiles.roots[0],
+          files: [initialFiles.roots[0].files[0]],
+        },
+      ],
+    };
+    const listFiles = vi
+      .fn<PreviewAPI["listFiles"]>()
+      .mockResolvedValueOnce(initialFiles)
+      .mockResolvedValueOnce(withoutSetup);
+    const api = createAPI({ listFiles });
+    const events = stubEventSource();
+    render(<App api={api} />);
+
+    const user = userEvent.setup();
+    await screen.findByText("Body for README.md");
+    await user.click(screen.getByRole("button", { name: "guides" }));
+    await user.click(
+      screen.getByRole("button", { name: "Setup API Title，guides/setup.md" }),
+    );
+    await screen.findByText("Body for guides/setup.md");
+    expect(listFiles).toHaveBeenCalledTimes(1);
+
+    // The watcher saw the file disappear; the refreshed tree no longer lists
+    // it, so the workspace falls back to its default document.
+    await act(async () => {
+      events.dispatch("workspace-changed");
+    });
+    await screen.findByText("Body for README.md");
+    expect(listFiles).toHaveBeenCalledTimes(2);
   });
 
   it("hides file navigation for a single-file preview", async () => {
@@ -1722,7 +1758,7 @@ describe("App directory preview", () => {
     vi.mocked(Element.prototype.scrollIntoView).mockClear();
 
     await act(async () => {
-      events.dispatch("document-changed");
+      events.dispatch("workspace-changed");
     });
     await screen.findByText("Updated body");
     expect(getDocument).toHaveBeenCalledTimes(2);
@@ -2171,7 +2207,7 @@ describe("image lightbox integration", () => {
     await screen.findByRole("dialog", { name: "图片预览" });
 
     await act(async () => {
-      events.dispatch("document-changed");
+      events.dispatch("workspace-changed");
     });
 
     // The stale lightbox is gone and the fresh body is enhanced exactly once:
@@ -2329,7 +2365,7 @@ function installThemeMedia(initialMatches: boolean): {
 }
 
 // stubEventSource replaces window.EventSource with a mock the test can dispatch
-// onto. It mirrors the real EventSource surface used by usePreviewEvents.
+// onto. It mirrors the real EventSource surface used by useWorkspaceEvents.
 function stubEventSource(): { dispatch(type: string): void } {
   const sources: Array<{
     dispatch(type: string): void;

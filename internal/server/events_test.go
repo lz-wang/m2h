@@ -32,9 +32,9 @@ func TestEventHubBroadcastsKeepsAliveAndCleansUp(t *testing.T) {
 	}
 	waitForClientCount(t, hub, 1)
 
-	hub.publish(documentChanged)
+	hub.publish(workspaceChanged)
 	stream := readUntil(t, reader, "data: {}", time.Second)
-	if !strings.Contains(stream, "event: document-changed") {
+	if !strings.Contains(stream, "event: workspace-changed") {
 		t.Fatalf("SSE stream is missing event name: %q", stream)
 	}
 	stream = readUntil(t, reader, ": keep-alive", time.Second)

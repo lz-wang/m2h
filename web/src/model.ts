@@ -223,14 +223,18 @@ export function localPath(
   return `${root}${separator}${suffix}`;
 }
 
-// The document's absolute path on the server machine. A file root's
-// absolutePath already names the file itself, so the relative path is not
-// appended again — the root kind keeps single-file and mixed workspaces both
-// correct.
+// The document's absolute path on the server machine, or null when the server
+// did not report root paths (a non-loopback listener never does). A file
+// root's absolutePath already names the file itself, so the relative path is
+// not appended again — the root kind keeps single-file and mixed workspaces
+// both correct.
 export function localDocumentPath(
   root: RootSummary,
   relativePath: string,
-): string {
+): string | null {
+  if (root.absolutePath === undefined) {
+    return null;
+  }
   if (root.kind === "file") {
     return root.absolutePath;
   }

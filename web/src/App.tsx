@@ -87,7 +87,7 @@ import {
 import { useHeadingNavigation } from "./use-heading-navigation";
 import { useHeadingSpy } from "./use-heading-spy";
 import { usePreview } from "./use-preview";
-import { usePreviewEvents } from "./use-preview-events";
+import { useWorkspaceEvents } from "./use-workspace-events";
 
 interface AppProps {
   api?: PreviewAPI;
@@ -141,7 +141,11 @@ const documentWidths: Array<{
 
 export function App({ api }: AppProps) {
   const preview = usePreview(api);
-  usePreviewEvents(preview.reloadCurrent);
+  // Any watched change — a single-file root's file or any file inside a
+  // directory root — refreshes the whole workspace listing: the open document
+  // reloads when it still exists and the default document opens when it does
+  // not, so added and removed files stay in sync without a manual reload.
+  useWorkspaceEvents(preview.refresh);
   // A single-file scope has nothing to switch between, so the file sidebar and
   // its toolbar trigger stay hidden; directories and multi-root workspaces
   // both offer navigation. Every other control remains shared.
@@ -862,14 +866,12 @@ function ShareMenu({
                 <Link aria-hidden="true" />
                 <span>复制文档网页链接</span>
               </Menu.Item>
-              <Menu.Item
-                className="theme-menu-item"
-                onClick={copyLocalPath}
-                disabled={localPath === null}
-              >
-                <HardDrive aria-hidden="true" />
-                <span>复制文档本地路径</span>
-              </Menu.Item>
+              {localPath !== null && (
+                <Menu.Item className="theme-menu-item" onClick={copyLocalPath}>
+                  <HardDrive aria-hidden="true" />
+                  <span>复制文档本地路径</span>
+                </Menu.Item>
+              )}
               <Menu.Item className="theme-menu-item" onClick={copyMarkdownURL}>
                 <FileText aria-hidden="true" />
                 <span>复制 Markdown 链接</span>
