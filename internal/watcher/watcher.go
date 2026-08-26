@@ -79,7 +79,11 @@ func run(
 			if !ok {
 				return fmt.Errorf("watch %q: event stream closed", target)
 			}
-			if filepath.Clean(event.Name) != target || event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Rename) == 0 {
+			// Remove is included so deleting the watched file still reports a
+			// change: the server refetches the file tree and the WebUI swaps
+			// to its error/default-document state; a later recreate arrives
+			// as Create and restores the document.
+			if filepath.Clean(event.Name) != target || event.Op&(fsnotify.Create|fsnotify.Write|fsnotify.Remove|fsnotify.Rename) == 0 {
 				continue
 			}
 			_, _ = fmt.Fprintf(logWriter, "m2h: detected change to %s\n", filepath.Base(target))

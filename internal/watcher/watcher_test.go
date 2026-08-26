@@ -32,6 +32,7 @@ func TestRunFiltersAndDebouncesEvents(t *testing.T) {
 	events <- fsnotify.Event{Name: target, Op: fsnotify.Write}
 	events <- fsnotify.Event{Name: target, Op: fsnotify.Create}
 	events <- fsnotify.Event{Name: target, Op: fsnotify.Rename}
+	events <- fsnotify.Event{Name: target, Op: fsnotify.Remove}
 
 	select {
 	case <-changed:
@@ -143,6 +144,35 @@ func TestWatchDetectsWriteAndAtomicRename(t *testing.T) {
 		t.Fatal("unrelated file triggered a change")
 	case <-time.After(100 * time.Millisecond):
 	}
+
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("Watch() returned error: %v", err)
+	}
+}
+
+func TestWatchReportsDeletion(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "guide.md")
+	if err := os.WriteFile(source, []byte("before"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	changed := make(chan struct{}, 2)
+	done := make(chan error, 1)
+	go func() {
+		done <- Watch(ctx, source, 30*time.Millisecond, func() {
+			changed <- struct{}{}
+		}, nil)
+	}()
+	time.Sleep(50 * time.Millisecond)
+
+	if err := os.Remove(source); err != nil {
+		t.Fatal(err)
+	}
+	waitForChange(t, changed, "file deletion")
 
 	cancel()
 	if err := <-done; err != nil {
