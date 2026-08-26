@@ -16,8 +16,6 @@ func TestRenderStandardGFM(t *testing.T) {
 		t.Fatal(err)
 	}
 	result, err := Render(source, RenderOptions{
-		Mode:       ModeAuto,
-		Target:     TargetConvert,
 		SourcePath: "gfm.md",
 	})
 	if err != nil {
@@ -44,7 +42,7 @@ func TestRenderRawHTMLAndSanitizesDangerousURLs(t *testing.T) {
 
 	source := []byte("<span data-raw=\"yes\">raw</span>\n\n[danger](javascript:alert(1))")
 
-	result, err := Render(source, RenderOptions{Mode: ModeLight, Target: TargetConvert, SourcePath: "raw-html.md"})
+	result, err := Render(source, RenderOptions{SourcePath: "raw-html.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,8 +62,7 @@ func TestRenderRewritesPreviewRawHTMLURLs(t *testing.T) {
   <a href="docs/guide.md#install">Guide</a>
 </p>`)
 	preview, err := Render(source, RenderOptions{
-		Mode:       ModeAuto,
-		Target:     TargetPreview,
+		URLMode:    URLWeb,
 		SourcePath: "README.md",
 	})
 	if err != nil {
@@ -81,8 +78,6 @@ func TestRenderRewritesPreviewRawHTMLURLs(t *testing.T) {
 	}
 
 	convert, err := Render(source, RenderOptions{
-		Mode:       ModeAuto,
-		Target:     TargetConvert,
 		SourcePath: "README.md",
 	})
 	if err != nil {
@@ -103,21 +98,21 @@ func TestRenderRewritesLocalLinksAtASTLevel(t *testing.T) {
 
 	tests := []struct {
 		name        string
-		target      Target
+		urlMode     URLMode
 		sourcePath  string
 		destination string
 		want        string
 	}{
-		{name: "convert relative", target: TargetConvert, sourcePath: "design/current.md", destination: "guide.md", want: "guide.html"},
-		{name: "convert dot relative", target: TargetConvert, sourcePath: "design/current.md", destination: "./guide.md#start", want: "./guide.html#start"},
-		{name: "convert parent and query", target: TargetConvert, sourcePath: "design/current.md", destination: "../guide.markdown?mode=full#start", want: "../guide.html?mode=full#start"},
-		{name: "preview relative", target: TargetPreview, sourcePath: "design/current.md", destination: "guide.md", want: "/doc/design/guide.md"},
-		{name: "preview parent", target: TargetPreview, sourcePath: "design/current.md", destination: "../guide.md?mode=full#start", want: "/doc/guide.md?mode=full#start"},
-		{name: "absolute URL", target: TargetPreview, sourcePath: "design/current.md", destination: "https://example.com/a.md", want: "https://example.com/a.md"},
-		{name: "mailto", target: TargetConvert, sourcePath: "current.md", destination: "mailto:user@example.com", want: "mailto:user@example.com"},
-		{name: "anchor", target: TargetConvert, sourcePath: "current.md", destination: "#install", want: "#install"},
-		{name: "non markdown", target: TargetConvert, sourcePath: "current.md", destination: "guide.txt", want: "guide.txt"},
-		{name: "preview attachment", target: TargetPreview, sourcePath: "design/current.md", destination: "files/guide.pdf?download=1", want: "/assets/design/files/guide.pdf?download=1"},
+		{name: "passthrough relative", urlMode: URLPassthrough, sourcePath: "design/current.md", destination: "guide.md", want: "guide.md"},
+		{name: "passthrough dot relative", urlMode: URLPassthrough, sourcePath: "design/current.md", destination: "./guide.md#start", want: "./guide.md#start"},
+		{name: "passthrough parent and query", urlMode: URLPassthrough, sourcePath: "design/current.md", destination: "../guide.markdown?mode=full#start", want: "../guide.markdown?mode=full#start"},
+		{name: "web relative", urlMode: URLWeb, sourcePath: "design/current.md", destination: "guide.md", want: "/doc/design/guide.md"},
+		{name: "web parent", urlMode: URLWeb, sourcePath: "design/current.md", destination: "../guide.md?mode=full#start", want: "/doc/guide.md?mode=full#start"},
+		{name: "absolute URL", urlMode: URLWeb, sourcePath: "design/current.md", destination: "https://example.com/a.md", want: "https://example.com/a.md"},
+		{name: "mailto", urlMode: URLPassthrough, sourcePath: "current.md", destination: "mailto:user@example.com", want: "mailto:user@example.com"},
+		{name: "anchor", urlMode: URLPassthrough, sourcePath: "current.md", destination: "#install", want: "#install"},
+		{name: "non markdown", urlMode: URLPassthrough, sourcePath: "current.md", destination: "guide.txt", want: "guide.txt"},
+		{name: "web attachment", urlMode: URLWeb, sourcePath: "design/current.md", destination: "files/guide.pdf?download=1", want: "/assets/design/files/guide.pdf?download=1"},
 	}
 
 	for _, test := range tests {
@@ -127,8 +122,7 @@ func TestRenderRewritesLocalLinksAtASTLevel(t *testing.T) {
 
 			source := []byte("[link](" + test.destination + ")")
 			result, err := Render(source, RenderOptions{
-				Mode:       ModeAuto,
-				Target:     test.target,
+				URLMode:    test.urlMode,
 				SourcePath: test.sourcePath,
 			})
 			if err != nil {
@@ -145,7 +139,7 @@ func TestRenderRewritesPreviewAssetsAndPreservesConvertAssets(t *testing.T) {
 	t.Parallel()
 
 	source := []byte("![diagram](../images/diagram.png?raw=1#preview)")
-	preview, err := Render(source, RenderOptions{Mode: ModeAuto, Target: TargetPreview, SourcePath: "design/current.md"})
+	preview, err := Render(source, RenderOptions{URLMode: URLWeb, SourcePath: "design/current.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +147,7 @@ func TestRenderRewritesPreviewAssetsAndPreservesConvertAssets(t *testing.T) {
 		t.Fatalf("preview image was not rewritten: %s", preview.Body)
 	}
 
-	convert, err := Render(source, RenderOptions{Mode: ModeAuto, Target: TargetConvert, SourcePath: "design/current.md"})
+	convert, err := Render(source, RenderOptions{SourcePath: "design/current.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,16 +161,13 @@ func TestRenderExtractsFirstH1Title(t *testing.T) {
 
 	result, err := Render(
 		[]byte("## Before\n\n# Hello *emphasis* [link](guide.md) `code`\n\n# Later"),
-		RenderOptions{Mode: ModeDark, Target: TargetConvert, SourcePath: "fallback.md"},
+		RenderOptions{SourcePath: "fallback.md"},
 	)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got, want := result.Title, "Hello emphasis link code"; got != want {
 		t.Fatalf("Title = %q, want %q", got, want)
-	}
-	if !strings.Contains(result.HTML, "<title>Hello emphasis link code</title>") {
-		t.Fatalf("HTML title is missing: %s", result.HTML)
 	}
 }
 
@@ -185,7 +176,7 @@ func TestRenderUsesFilenameWhenH1IsMissing(t *testing.T) {
 
 	result, err := Render(
 		[]byte("No heading"),
-		RenderOptions{Mode: ModeAuto, Target: TargetPreview, SourcePath: "notes/计划.md"},
+		RenderOptions{URLMode: URLWeb, SourcePath: "notes/计划.md"},
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -193,43 +184,29 @@ func TestRenderUsesFilenameWhenH1IsMissing(t *testing.T) {
 	if got, want := result.Title, "计划.md"; got != want {
 		t.Fatalf("Title = %q, want %q", got, want)
 	}
-	for _, want := range []string{
-		"<!doctype html>",
-		"<title>计划.md</title>",
-		`class="m2h-mode-auto"`,
-		`data-target="preview"`,
-		`class="markdown-body"`,
-	} {
-		if !strings.Contains(result.HTML, want) {
-			t.Errorf("HTML does not contain %q: %s", want, result.HTML)
-		}
-	}
 }
 
-func TestConvertAndPreviewShareRenderedBody(t *testing.T) {
+func TestPassthroughAndWebShareRenderedBody(t *testing.T) {
 	t.Parallel()
 
 	source := []byte("# Title\n\nText with [guide](guide.md).")
-	convert, err := Render(source, RenderOptions{Mode: ModeAuto, Target: TargetConvert, SourcePath: "docs/current.md"})
+	passthrough, err := Render(source, RenderOptions{SourcePath: "docs/current.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := Render(source, RenderOptions{Mode: ModeAuto, Target: TargetPreview, SourcePath: "docs/current.md"})
+	web, err := Render(source, RenderOptions{URLMode: URLWeb, SourcePath: "docs/current.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	normalizedPreview := strings.Replace(preview.Body, "/doc/docs/guide.md", "guide.html", 1)
-	if convert.Body != normalizedPreview {
-		t.Fatalf("convert and preview bodies differ beyond rewritten link:\nconvert: %s\npreview: %s", convert.Body, preview.Body)
+	normalizedWeb := strings.Replace(web.Body, "/doc/docs/guide.md", "guide.md", 1)
+	if passthrough.Body != normalizedWeb {
+		t.Fatalf("passthrough and web bodies differ beyond rewritten link:\npassthrough: %s\nweb: %s", passthrough.Body, web.Body)
 	}
-	if convert.HTML == preview.HTML {
-		t.Fatal("target-specific outer documents are identical")
-	}
-	// Live reload is now owned by the React WebUI; the rendered HTML document
-	// (preview or convert) must never embed a live-reload client itself.
-	if strings.Contains(convert.HTML, "EventSource") || strings.Contains(preview.HTML, "EventSource") {
-		t.Fatal("rendered HTML embeds a live-reload client")
+	// Live reload is owned by the React WebUI; the rendered fragment must
+	// never embed a live-reload client itself.
+	if strings.Contains(passthrough.Body, "EventSource") || strings.Contains(web.Body, "EventSource") {
+		t.Fatal("rendered fragment embeds a live-reload client")
 	}
 }
 
@@ -237,10 +214,9 @@ func TestRenderRejectsInvalidOptions(t *testing.T) {
 	t.Parallel()
 
 	for _, options := range []RenderOptions{
-		{Mode: "sepia", Target: TargetConvert, SourcePath: "doc.md"},
-		{Mode: ModeAuto, Target: "terminal", SourcePath: "doc.md"},
-		{Mode: ModeAuto, Target: TargetPreview, SourcePath: "../outside.md"},
-		{Mode: ModeAuto, Target: TargetConvert, SourcePath: "doc.md", Width: "huge"},
+		{URLMode: URLMode(9), SourcePath: "doc.md"},
+		{SourcePath: "../outside.md"},
+		{SourcePath: "/absolute.md"},
 	} {
 		if _, err := Render([]byte("text"), options); err == nil {
 			t.Fatalf("Render() accepted invalid options: %+v", options)
@@ -256,23 +232,19 @@ func TestRenderRichMarkdownFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	convert, err := Render(source, RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "rich.md",
-	})
+	passthrough, err := Render(source, RenderOptions{SourcePath: "rich.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := Render(source, RenderOptions{
-		Mode: ModeAuto, Target: TargetPreview, SourcePath: "rich.md",
-	})
+	web, err := Render(source, RenderOptions{URLMode: URLWeb, SourcePath: "rich.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	// Lists, fenced code and math delimiters must survive the shared renderer so
 	// the browser-side rich-content layer (KaTeX/Mermaid) and the list CSS fix
-	// have something to operate on. Convert and preview share the same body.
-	for _, result := range []Result{convert, preview} {
+	// have something to operate on. Both URL modes share the same body.
+	for _, result := range []Result{passthrough, web} {
 		for _, want := range []string{
 			"<ul>",
 			"<li>A</li>",
@@ -299,7 +271,7 @@ func TestRenderBackslashMathDelimitersAreConsumed(t *testing.T) {
 	t.Parallel()
 
 	result, err := Render([]byte(`\( a \) \[ b \]`), RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "math.md",
+		SourcePath: "math.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -310,59 +282,6 @@ func TestRenderBackslashMathDelimitersAreConsumed(t *testing.T) {
 	for _, want := range []string{"( a )", "[ b ]"} {
 		if !strings.Contains(result.Body, want) {
 			t.Errorf("expected rendered %q in %s", want, result.Body)
-		}
-	}
-}
-
-func TestRenderInjectsCDNRuntimeOnlyWhenUsed(t *testing.T) {
-	t.Parallel()
-
-	plain := []byte("# Title\n\nbody and a ``` fenced block without math or diagrams.")
-	result, err := Render(plain, RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "guide.md",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	// A plain document loads no CDN runtime; only the inline bootstrap
-	// enhancer ships with every exported page.
-	if strings.Contains(result.HTML, "cdn.jsdelivr.net") {
-		t.Errorf("plain document unexpectedly loads CDN runtimes")
-	}
-	if !strings.Contains(result.HTML, "renderMathInElement") {
-		t.Errorf("exported page missing the bootstrap enhancer")
-	}
-
-	rich := []byte("# Title\n\nInline $E = mc^2$.\n\n```mermaid\nflowchart LR\n    A-->B\n```\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n")
-	result, err = Render(rich, RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "guide.md",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{
-		`<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/katex.min.css">`,
-		`<script src="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/katex.min.js"></script>`,
-		`<script src="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/contrib/auto-render.min.js"></script>`,
-		`<script src="https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.min.js"></script>`,
-		`<script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/tablesort.min.js"></script>`,
-		`<script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/tablesort.number.js"></script>`,
-		"renderMathInElement",
-	} {
-		if !strings.Contains(result.HTML, want) {
-			t.Errorf("rich document missing %q", want)
-		}
-	}
-
-	preview, err := Render(rich, RenderOptions{
-		Mode: ModeAuto, Target: TargetPreview, SourcePath: "guide.md",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, unwanted := range []string{"cdn.jsdelivr.net", "renderMathInElement"} {
-		if strings.Contains(preview.HTML, unwanted) {
-			t.Errorf("preview unexpectedly carries export runtime %q", unwanted)
 		}
 	}
 }
@@ -396,7 +315,7 @@ func TestRenderGitHubHeadingIDs(t *testing.T) {
 
 	source := []byte("# GitHub Extensions\n\n## 7. 代码\n\n[跳转到第 7 节](#7-代码)\n\n## API\n\n## API\n")
 	result, err := Render(source, RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "anchors.md",
+		SourcePath: "anchors.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -426,7 +345,7 @@ func TestRenderExtractsHeadingsFromSharedAST(t *testing.T) {
 
 	source := []byte("# 标题\n\n## 安装\n\n## 安装\n\n### Homebrew\n\n#### C++ API\n")
 	result, err := Render(source, RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "headings.md",
+		SourcePath: "headings.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -457,7 +376,7 @@ func TestRenderExtractsNoHeadingsForPlainDocument(t *testing.T) {
 	t.Parallel()
 
 	result, err := Render([]byte("A paragraph without headings."), RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "plain.md",
+		SourcePath: "plain.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -471,7 +390,7 @@ func TestRenderStripsDangerousImageURL(t *testing.T) {
 	t.Parallel()
 
 	result, err := Render([]byte("![danger](javascript:alert(1))"), RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "doc.md",
+		SourcePath: "doc.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -485,7 +404,7 @@ func TestRenderPreviewImageOutsideRootUnchanged(t *testing.T) {
 	t.Parallel()
 
 	result, err := Render([]byte("![escape](../../outside.png)"), RenderOptions{
-		Mode: ModeAuto, Target: TargetPreview, SourcePath: "design/current.md",
+		URLMode: URLWeb, SourcePath: "design/current.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -501,7 +420,7 @@ func TestRenderFootnotes(t *testing.T) {
 	source := []byte("正文有一个脚注[^1]，再次引用同一脚注[^1]。\n\n" +
 		"[^1]: 脚注内容含 [链接](guide.md) 和 `代码`。\n")
 	result, err := Render(source, RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "footnotes.md",
+		SourcePath: "footnotes.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -511,7 +430,7 @@ func TestRenderFootnotes(t *testing.T) {
 		`class="footnotes"`,
 		`href="#fn:1"`,
 		"脚注内容含",
-		`href="guide.html"`,
+		`href="guide.md"`,
 		`<code>代码</code>`,
 	} {
 		if !strings.Contains(result.Body, want) {
@@ -529,7 +448,7 @@ func TestRenderEmojiShortcodes(t *testing.T) {
 	source := []byte("Hello :smile: :rocket: `:smile:` and :not_a_real_emoji:\n\n" +
 		"```\n:smile:\n```\n")
 	result, err := Render(source, RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "emoji.md",
+		SourcePath: "emoji.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -550,7 +469,7 @@ func TestRenderEmojiDoesNotBreakURLs(t *testing.T) {
 	t.Parallel()
 
 	result, err := Render([]byte("https://x.com/:smile:/path\n"), RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "url.md",
+		SourcePath: "url.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -569,7 +488,7 @@ func TestRenderGitHubAlerts(t *testing.T) {
 		"> [!WARNING]\n> Warning body.\n\n" +
 		"> [!CAUTION]\n> Caution body.\n")
 	result, err := Render(source, RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "alerts.md",
+		SourcePath: "alerts.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -611,7 +530,7 @@ func TestRenderAlertsFallbackToBlockquote(t *testing.T) {
 
 	source := []byte("> Plain quote.\n\n> [!UNKNOWN]\n> Not a real alert.\n\nText [!NOTE] inline.\n")
 	result, err := Render(source, RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "fallback.md",
+		SourcePath: "fallback.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -632,7 +551,7 @@ func TestRenderAlertWithBlankLineAfterMarker(t *testing.T) {
 	// When the marker sits on its own paragraph (blank line before the body),
 	// the transformer drops the empty first paragraph instead of slicing lines.
 	result, err := Render([]byte("> [!NOTE]\n>\n> Body after a blank line.\n"), RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "alert-blank.md",
+		SourcePath: "alert-blank.md",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -653,11 +572,11 @@ func TestRenderGitHubExtensionsFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	convert, err := Render(source, RenderOptions{Mode: ModeAuto, Target: TargetConvert, SourcePath: "github-extensions.md"})
+	convert, err := Render(source, RenderOptions{SourcePath: "github-extensions.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	preview, err := Render(source, RenderOptions{Mode: ModeAuto, Target: TargetPreview, SourcePath: "github-extensions.md"})
+	preview, err := Render(source, RenderOptions{URLMode: URLWeb, SourcePath: "github-extensions.md"})
 	if err != nil {
 		t.Fatal(err)
 	}

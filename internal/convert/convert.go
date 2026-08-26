@@ -79,19 +79,19 @@ func Run(ctx context.Context, options Options) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("read Markdown %q: %w", source, err)
 	}
-	// The page inlines m2h's own Markdown CSS; large third-party runtimes
-	// (KaTeX, Mermaid, Tablesort) load from a pinned CDN only when the
-	// document actually uses them.
+	// Relative links and images keep their original destinations so the
+	// exported HTML continues to reference the source tree's files.
 	rendered, err := markdown.Render(contents, markdown.RenderOptions{
-		Mode:       options.Mode,
-		Width:      options.Width,
-		Target:     markdown.TargetConvert,
 		SourcePath: filepath.Base(source),
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("render Markdown %q: %w", source, err)
 	}
-	if err := writeAtomic(destination, []byte(rendered.HTML), 0o644); err != nil {
+	page, err := buildPage(options.Mode, options.Width, rendered)
+	if err != nil {
+		return Result{}, fmt.Errorf("build HTML page for %q: %w", source, err)
+	}
+	if err := writeAtomic(destination, []byte(page), 0o644); err != nil {
 		return Result{}, fmt.Errorf("write HTML %q: %w", destination, err)
 	}
 	return Result{Output: destination}, nil

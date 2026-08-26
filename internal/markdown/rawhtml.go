@@ -14,10 +14,10 @@ import (
 )
 
 // addRawHTMLURLRewriter makes local URLs inside raw HTML follow the same
-// preview routes as Markdown links and images. Convert output intentionally
-// keeps those URLs relative so copied assets continue to work offline.
+// web routes as Markdown links and images. Passthrough renders intentionally
+// keep those URLs relative so the source tree's files keep working.
 func addRawHTMLURLRewriter(engine goldmark.Markdown, options RenderOptions) {
-	if options.Target != TargetPreview {
+	if options.URLMode != URLWeb {
 		return
 	}
 	engine.Renderer().AddOptions(renderer.WithNodeRenderers(

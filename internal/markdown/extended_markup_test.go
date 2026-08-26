@@ -10,8 +10,6 @@ import (
 func renderBody(t *testing.T, source string) string {
 	t.Helper()
 	result, err := Render([]byte(source), RenderOptions{
-		Mode:       ModeLight,
-		Target:     TargetConvert,
 		SourcePath: "doc.md",
 	})
 	if err != nil {

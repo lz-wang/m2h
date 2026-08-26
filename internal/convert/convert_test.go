@@ -53,7 +53,7 @@ func TestRunConvertsSingleFileToDefaultAndExplicitOutput(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{"<title>Guide</title>", `href="next.html"`, `class="markdown-body"`} {
+	for _, want := range []string{"<!doctype html>", "<title>Guide</title>", `href="next.md"`, `class="markdown-body"`, `class="m2h-mode-auto"`, `data-width="standard"`} {
 		if !bytes.Contains(defaultHTML, []byte(want)) {
 			t.Errorf("default output does not contain %q", want)
 		}

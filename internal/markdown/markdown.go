@@ -1,10 +1,11 @@
 // Package markdown is the sole GFM parsing and HTML rendering core for m2h.
+// It renders a Markdown source into an HTML fragment (body, title, headings);
+// assembling a complete page around the fragment is the caller's job.
 package markdown
 
 import (
 	"bytes"
 	stdhtml "html"
-	"html/template"
 	"net/url"
 	pathpkg "path"
 	"strings"
@@ -18,11 +19,9 @@ import (
 	"github.com/yuin/goldmark/parser"
 	goldmarkhtml "github.com/yuin/goldmark/renderer/html"
 	"github.com/yuin/goldmark/text"
-
-	"github.com/lz-wang/m2h/internal/assets"
 )
 
-// Mode controls the rendered color theme.
+// Mode controls the rendered color theme of a surrounding page.
 type Mode string
 
 const (
@@ -40,20 +39,35 @@ const (
 	WidthFull     Width = "full"
 )
 
-// Target controls local link rewriting for generated files or live previews.
-type Target string
+// URLMode controls how relative local links and images in the Markdown source
+// are rewritten for the surrounding document.
+type URLMode uint8
 
 const (
-	TargetConvert Target = "convert"
-	TargetPreview Target = "preview"
+	// URLPassthrough keeps every relative destination exactly as written, so
+	// an exported HTML file continues to reference the source tree's files.
+	URLPassthrough URLMode = iota
+	// URLWeb rewrites relative Markdown links to /doc/<path> and other local
+	// references to /assets/<path>, the address space of the document server.
+	URLWeb
 )
+
+// String names the URL mode for option errors.
+func (mode URLMode) String() string {
+	switch mode {
+	case URLPassthrough:
+		return "passthrough"
+	case URLWeb:
+		return "web"
+	default:
+		return "URLMode(%d)"
+	}
+}
 
 // RenderOptions configures a single Markdown render.
 type RenderOptions struct {
-	Mode       Mode
-	Width      Width
-	Target     Target
 	SourcePath string
+	URLMode    URLMode
 }
 
 // Heading is one entry of the document's table of contents, extracted from the
@@ -65,32 +79,15 @@ type Heading struct {
 	Text  string
 }
 
-// Result contains both the reusable rendered body and a complete HTML page.
+// Result contains the rendered fragment and its metadata.
 type Result struct {
-	HTML     string
 	Body     string
 	Title    string
 	Headings []Heading
 }
 
-var pageTemplate = template.Must(template.New("document").Parse(`<!doctype html>
-<html lang="zh-CN" class="m2h-mode-{{.Mode}}" data-target="{{.Target}}" data-width="{{.Width}}">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{.Title}}</title>
-  <style>
-{{.Styles}}
-  </style>
-{{.ExtraHead}}</head>
-<body class="m2h-page">
-  <article class="markdown-body">
-{{.Body}}  </article>
-{{.ExtraBody}}</body>
-</html>
-`))
-
-// Render parses standard GFM once, rewrites its AST, and renders a complete page.
+// Render parses standard GFM once, rewrites its AST, and renders the body
+// fragment.
 func Render(source []byte, options RenderOptions) (Result, error) {
 	normalized, err := normalizeOptions(options)
 	if err != nil {
@@ -112,40 +109,7 @@ func Render(source []byte, options RenderOptions) (Result, error) {
 		return Result{}, err
 	}
 
-	stylesheet, err := assets.Stylesheet(string(normalized.Mode))
-	if err != nil {
-		return Result{}, err
-	}
-	extraHead, extraBody, err := runtimeFragments(normalized, body.String())
-	if err != nil {
-		return Result{}, err
-	}
-
-	var page bytes.Buffer
-	data := struct {
-		Mode      Mode
-		Width     Width
-		Target    Target
-		Title     string
-		Styles    template.CSS
-		Body      template.HTML
-		ExtraHead template.HTML
-		ExtraBody template.HTML
-	}{
-		Mode:      normalized.Mode,
-		Width:     normalized.Width,
-		Target:    normalized.Target,
-		Title:     title,
-		Styles:    template.CSS(stylesheet),
-		Body:      template.HTML(body.String()),
-		ExtraHead: extraHead,
-		ExtraBody: extraBody,
-	}
-	if err := pageTemplate.Execute(&page, data); err != nil {
-		return Result{}, err
-	}
-
-	return Result{HTML: page.String(), Body: body.String(), Title: title, Headings: headings}, nil
+	return Result{Body: body.String(), Title: title, Headings: headings}, nil
 }
 
 // Title extracts the first H1 as plain text and falls back to the filename.
@@ -206,23 +170,10 @@ func newEngine() goldmark.Markdown {
 }
 
 func normalizeOptions(options RenderOptions) (RenderOptions, error) {
-	switch options.Mode {
-	case ModeLight, ModeDark, ModeAuto:
+	switch options.URLMode {
+	case URLPassthrough, URLWeb:
 	default:
-		return RenderOptions{}, &OptionError{Name: "mode", Value: string(options.Mode)}
-	}
-	if options.Width == "" {
-		options.Width = WidthStandard
-	}
-	switch options.Width {
-	case WidthStandard, WidthWide, WidthFull:
-	default:
-		return RenderOptions{}, &OptionError{Name: "width", Value: string(options.Width)}
-	}
-	switch options.Target {
-	case TargetConvert, TargetPreview:
-	default:
-		return RenderOptions{}, &OptionError{Name: "target", Value: string(options.Target)}
+		return RenderOptions{}, &OptionError{Name: "url mode", Value: options.URLMode.String()}
 	}
 
 	normalizedSource, err := normalizeSourcePath(options.SourcePath)
@@ -260,7 +211,15 @@ func rewriteDocument(document ast.Node, options RenderOptions) error {
 	})
 }
 
+// rewriteDestination maps a relative local destination onto the address space
+// selected by URLMode. Non-relative destinations (absolute URLs, anchors,
+// scheme links) are always kept as written; URLPassthrough keeps relative
+// destinations too, so an exported file keeps referencing the source tree.
 func rewriteDestination(destination []byte, options RenderOptions, image bool) []byte {
+	if options.URLMode != URLWeb {
+		return destination
+	}
+
 	original := string(destination)
 	pathPart, suffix := splitDestination(original)
 	if !isRelativeLocalPath(pathPart) {
@@ -268,36 +227,25 @@ func rewriteDestination(destination []byte, options RenderOptions, image bool) [
 	}
 
 	if image {
-		if options.Target == TargetConvert {
-			return destination
-		}
-		resolved, ok := resolveWithinRoot(options.SourcePath, pathPart)
-		if !ok {
-			return destination
-		}
-		return []byte("/assets/" + resolved + suffix)
+		return webAsset(pathPart, suffix, options)
 	}
-
 	extension := pathpkg.Ext(pathPart)
 	if !strings.EqualFold(extension, ".md") && !strings.EqualFold(extension, ".markdown") {
-		if options.Target == TargetPreview {
-			resolved, ok := resolveWithinRoot(options.SourcePath, pathPart)
-			if !ok {
-				return destination
-			}
-			return []byte("/assets/" + resolved + suffix)
-		}
-		return destination
+		return webAsset(pathPart, suffix, options)
 	}
-	if options.Target == TargetConvert {
-		return []byte(strings.TrimSuffix(pathPart, extension) + ".html" + suffix)
-	}
-
 	resolved, ok := resolveWithinRoot(options.SourcePath, pathPart)
 	if !ok {
 		return destination
 	}
 	return []byte("/doc/" + resolved + suffix)
+}
+
+func webAsset(pathPart, suffix string, options RenderOptions) []byte {
+	resolved, ok := resolveWithinRoot(options.SourcePath, pathPart)
+	if !ok {
+		return []byte(pathPart + suffix)
+	}
+	return []byte("/assets/" + resolved + suffix)
 }
 
 func splitDestination(destination string) (string, string) {

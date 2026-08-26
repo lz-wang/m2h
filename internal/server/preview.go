@@ -90,8 +90,6 @@ type documentResponse struct {
 // paths while each root keeps its own access boundary.
 type previewHandler struct {
 	workspace previewWorkspace
-	mode      markdown.Mode
-	width     markdown.Width
 	ui        fs.FS
 	version   string
 
@@ -100,19 +98,15 @@ type previewHandler struct {
 
 func newPreviewHandler(
 	workspace previewWorkspace,
-	mode markdown.Mode,
-	width markdown.Width,
 	events *eventHub,
 	logger io.Writer,
 	ui fs.FS,
 ) http.Handler {
-	return newPreviewHandlerWithVersion(workspace, mode, width, events, logger, ui, appversion.Development)
+	return newPreviewHandlerWithVersion(workspace, events, logger, ui, appversion.Development)
 }
 
 func newPreviewHandlerWithVersion(
 	workspace previewWorkspace,
-	mode markdown.Mode,
-	width markdown.Width,
 	events *eventHub,
 	logger io.Writer,
 	ui fs.FS,
@@ -120,8 +114,6 @@ func newPreviewHandlerWithVersion(
 ) http.Handler {
 	handler := &previewHandler{
 		workspace: workspace,
-		mode:      mode,
-		width:     width,
 		ui:        ui,
 		version:   buildVersion,
 		discover: func(ctx context.Context, scope previewScope) (files.Discovery, error) {
@@ -226,9 +218,7 @@ func (handler *previewHandler) serveDocument(response http.ResponseWriter, reque
 		return
 	}
 	rendered, err := markdown.Render(body, markdown.RenderOptions{
-		Mode:   handler.mode,
-		Width:  handler.width,
-		Target: markdown.TargetPreview,
+		URLMode: markdown.URLWeb,
 		// Rendering resolves relative Markdown links and attachments against
 		// the virtual (public) path, so the shared rewrite layer routes them
 		// to /doc/<root>/<...> and /assets/<root>/<...> in a multi-root

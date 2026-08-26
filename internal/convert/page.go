@@ -1,9 +1,12 @@
-package markdown
+package convert
 
 import (
 	"fmt"
 	"html/template"
 	"strings"
+
+	"github.com/lz-wang/m2h/internal/assets"
+	"github.com/lz-wang/m2h/internal/markdown"
 )
 
 // Rich-content runtime versions are pinned to the same releases vendored under
@@ -16,6 +19,57 @@ const (
 )
 
 const cdnBase = "https://cdn.jsdelivr.net/npm"
+
+var pageTemplate = template.Must(template.New("document").Parse(`<!doctype html>
+<html lang="zh-CN" class="m2h-mode-{{.Mode}}" data-width="{{.Width}}">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{.Title}}</title>
+  <style>
+{{.Styles}}
+  </style>
+{{.ExtraHead}}</head>
+<body class="m2h-page">
+  <article class="markdown-body">
+{{.Body}}  </article>
+{{.ExtraBody}}</body>
+</html>
+`))
+
+// buildPage wraps one rendered Markdown fragment in a complete HTML page:
+// m2h's own Markdown CSS inline, the CDN runtimes the document actually uses,
+// and a small inline bootstrap enhancer.
+func buildPage(mode markdown.Mode, width markdown.Width, rendered markdown.Result) (string, error) {
+	stylesheet, err := assets.Stylesheet(string(mode))
+	if err != nil {
+		return "", err
+	}
+	extraHead, extraBody := runtimeFragments(rendered.Body)
+
+	var page strings.Builder
+	data := struct {
+		Mode      markdown.Mode
+		Width     markdown.Width
+		Title     string
+		Styles    template.CSS
+		Body      template.HTML
+		ExtraHead template.HTML
+		ExtraBody template.HTML
+	}{
+		Mode:      mode,
+		Width:     width,
+		Title:     rendered.Title,
+		Styles:    template.CSS(stylesheet),
+		Body:      template.HTML(rendered.Body),
+		ExtraHead: extraHead,
+		ExtraBody: extraBody,
+	}
+	if err := pageTemplate.Execute(&page, data); err != nil {
+		return "", err
+	}
+	return page.String(), nil
+}
 
 // runtimeURLs collects every CDN URL an exported page may reference, so no
 // CDN string is spelled out anywhere else.
@@ -42,14 +96,10 @@ func newRuntimeURLs() runtimeURLs {
 }
 
 // runtimeFragments builds the page fragments that deliver the rich-content
-// runtime for exported HTML: ExtraHead carries the KaTeX stylesheet link and
-// ExtraBody carries the CDN scripts plus a small inline bootstrap. Previews
-// render with neither — the React WebUI loads the runtime itself.
-func runtimeFragments(options RenderOptions, body string) (template.HTML, template.HTML, error) {
-	if options.Target != TargetConvert {
-		return "", "", nil
-	}
-
+// runtime: ExtraHead carries the KaTeX stylesheet link and ExtraBody carries
+// the CDN scripts plus a small inline bootstrap, each loaded only when the
+// rendered body uses it.
+func runtimeFragments(body string) (template.HTML, template.HTML) {
 	urls := newRuntimeURLs()
 	var head strings.Builder
 	var scripts strings.Builder
@@ -67,7 +117,7 @@ func runtimeFragments(options RenderOptions, body string) (template.HTML, templa
 		}
 	}
 	scripts.WriteString(exportBootstrapScript)
-	return template.HTML(head.String()), template.HTML(scripts.String()), nil
+	return template.HTML(head.String()), template.HTML(scripts.String())
 }
 
 // tablesortScripts lists the client-side table sorter and its comparator

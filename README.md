@@ -55,7 +55,7 @@ m2h convert README.md
 m2h convert README.md --output public/index.html
 ```
 
-转换输出为单个 HTML 文件：m2h 的 Markdown 页面样式直接内联；KaTeX、Mermaid 与表格排序运行时按需从 jsDelivr CDN 加载固定版本（与 WebUI 内嵌运行时一致），没有公式、图表或表格的文档不会加载任何大型脚本，查看公式与图表需要网络连接。本地图片保留原始相对路径，输出 HTML 与 Markdown 源文件放在同一目录即可正常引用图片；相对 Markdown 链接会改为对应的 `.html` 链接。
+转换输出为单个 HTML 文件：m2h 的 Markdown 页面样式直接内联；KaTeX、Mermaid 与表格排序运行时按需从 jsDelivr CDN 加载固定版本（与 WebUI 内嵌运行时一致），没有公式、图表或表格的文档不会加载任何大型脚本，查看公式与图表需要网络连接。本地图片与相对 Markdown 链接保留原始相对路径，输出 HTML 与 Markdown 源文件放在同一目录即可正常引用图片与相互链接。
 
 输出文件已存在时转换会报错退出；加 `--force` 覆盖已有输出，适合脚本与 CI：
 

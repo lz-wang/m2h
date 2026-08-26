@@ -386,7 +386,7 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, want := range []string{`<title>Guide</title>`, `href="next.html"`, `class="m2h-mode-dark"`, `data-width="wide"`, `<details>raw HTML</details>`} {
+	for _, want := range []string{`<title>Guide</title>`, `href="next.md"`, `class="m2h-mode-dark"`, `data-width="wide"`, `<details>raw HTML</details>`} {
 		if !bytes.Contains(html, []byte(want)) {
 			t.Errorf("HTML does not contain %q", want)
 		}
