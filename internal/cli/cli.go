@@ -127,12 +127,6 @@ func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buil
 	if command.Args().Len() == 0 {
 		return urfavecli.ShowRootCommandHelp(command)
 	}
-	// "m2h web" served documents before the root command became the server
-	// itself. Callers migrating from that CLI get a pointed error instead of a
-	// confusing "input not found" failure.
-	if removed := command.Args().First(); removed == "web" {
-		return fmt.Errorf("Error: unknown command %q", removed)
-	}
 	inputs, err := serverInputs(command.Args())
 	if err != nil {
 		return err

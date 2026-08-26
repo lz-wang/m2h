@@ -164,21 +164,38 @@ func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
 	}
 }
 
-func TestServeRejectsRemovedWebCommand(t *testing.T) {
-	t.Parallel()
+// "web" stopped being a subcommand when the root command became the server
+// itself, so it must now reach the server as an ordinary input path — like any
+// directory a project happens to call "web" — instead of being rejected as a
+// reserved word.
+func TestServeAcceptsWebAsInput(t *testing.T) {
+	tests := []struct {
+		name  string
+		args  []string
+		input []string
+	}{
+		{name: "single", args: []string{"web"}, input: []string{"web"}},
+		{name: "among others", args: []string{"web", "docs"}, input: []string{"web", "docs"}},
+		{name: "after options", args: []string{"--no-open", "web"}, input: []string{"web"}},
+	}
 
-	for _, args := range [][]string{
-		{"web"},
-		{"web", "docs"},
-		{"web", "docs", "wiki"},
-	} {
-		_, _, err := runCommand(t, args...)
-		if err == nil {
-			t.Fatalf("m2h %v succeeded, want unknown command error", args)
-		}
-		if got, want := err.Error(), `Error: unknown command "web"`; got != want {
-			t.Fatalf("m2h %v error = %q, want %q", args, got, want)
-		}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			previous := runServer
+			t.Cleanup(func() { runServer = previous })
+
+			var captured server.Options
+			runServer = func(_ context.Context, options server.Options) error {
+				captured = options
+				return nil
+			}
+			if _, _, err := runCommand(t, test.args...); err != nil {
+				t.Fatalf("m2h %v returned error: %v", test.args, err)
+			}
+			if !slices.Equal(captured.Inputs, test.input) {
+				t.Fatalf("m2h %v inputs = %v, want %v", test.args, captured.Inputs, test.input)
+			}
+		})
 	}
 }
 
