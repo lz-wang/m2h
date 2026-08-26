@@ -37,17 +37,19 @@ function ScrollArea({
   // Scroll is high-frequency: the flag is written straight to the root's
   // dataset so no React state — and no re-render — ever happens per event.
   // A new event resets the timer; 700ms of quiet removes the flag and the
-  // CSS fades the scrollbar back out.
+  // CSS fades the scrollbar back out. The attribute is m2h-prefixed because
+  // Base UI reserves data-scrolling on the Root for its own state and would
+  // clobber a bare name on every internal re-render.
   const handleScroll = transient
     ? () => {
         const root = rootRef.current;
         if (root === null) {
           return;
         }
-        root.dataset.scrolling = "true";
+        root.dataset.m2hScrolling = "true";
         window.clearTimeout(timerRef.current);
         timerRef.current = window.setTimeout(() => {
-          delete root.dataset.scrolling;
+          delete root.dataset.m2hScrolling;
         }, SCROLLING_GRACE_MS);
       }
     : undefined;

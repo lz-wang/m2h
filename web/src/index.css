@@ -207,8 +207,8 @@ body,
  * sidebar depends on Base UI's stable ScrollArea geometry (viewport
  * ResizeObserver, collapse normalization, active-file reveal, sticky
  * directories, manual scrollTop fixes); mounting/unmounting it would invite
- * those compositor issues back. The component flips data-scrolling on the
- * root for ~700ms around real scrolling; see scroll-area.tsx.
+ * those compositor issues back. The component flips data-m2h-scrolling on
+ * the root for ~700ms around real scrolling; see scroll-area.tsx.
  */
 [data-scrollbar-visibility="scrolling"] [data-slot="scroll-area-scrollbar"] {
   opacity: 0;
@@ -216,7 +216,7 @@ body,
   transition: opacity 120ms ease;
 }
 
-[data-scrollbar-visibility="scrolling"][data-scrolling="true"]
+[data-scrollbar-visibility="scrolling"][data-m2h-scrolling="true"]
   [data-slot="scroll-area-scrollbar"] {
   opacity: 1;
   pointer-events: auto;

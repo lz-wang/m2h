@@ -133,6 +133,189 @@ test("centers the capped document inside a wide canvas", async ({ page }) => {
   expect(Math.abs(gaps.left - gaps.right)).toBeLessThanOrEqual(1);
 });
 
+test("opens the workspace root unselected without fetching a document", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const documentRequests: string[] = [];
+  page.on("request", (request) => {
+    if (request.url().includes("/api/document")) {
+      documentRequests.push(request.url());
+    }
+  });
+
+  await page.goto("/");
+  await expect(
+    page.getByRole("status").filter({ hasText: "请选择要查看的文件" }),
+  ).toBeVisible();
+  // The root URL means the workspace, not a document: nothing was fetched and
+  // the address stays put.
+  expect(documentRequests).toHaveLength(0);
+  expect(await page.evaluate(() => window.location.pathname)).toBe("/");
+
+  // The unselected single-root tree presents its first level ready to browse,
+  // while the second level stays collapsed.
+  for (const name of ["a", "tree"]) {
+    await expect(
+      page.getByRole("button", { name, exact: true }),
+    ).toHaveAttribute("aria-expanded", "true");
+  }
+  await expect(page.locator('[data-tree-path="a/b"]')).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+
+  // Picking a document from the tree opens it under /doc/ (expanding the
+  // collapsed second level on the way).
+  await page.locator('[data-tree-path="a/b"]').click();
+  await page.getByRole("button", { name: "笔记 A-01，a/b/a-01.md" }).click();
+  await expect(page.locator(".markdown-body")).toBeVisible();
+  expect(await page.evaluate(() => window.location.pathname)).toBe(
+    "/doc/a/b/a-01.md",
+  );
+});
+
+test("shows the image magnifier on hover and keyboard focus only", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await waitForBody(page, "/doc/images.md");
+  await page.waitForFunction(
+    () => document.querySelectorAll(".m2h-image-lightbox-trigger").length > 0,
+  );
+
+  const readOpacity = () =>
+    page.evaluate(() => {
+      const trigger = document.querySelector(
+        ".m2h-image-lightbox-trigger",
+      ) as HTMLElement | null;
+      return trigger === null ? null : getComputedStyle(trigger).opacity;
+    });
+
+  // Idle: the trigger is fully faded out and click-transparent.
+  await expect.poll(readOpacity).toBe("0");
+
+  // Hovering the image's frame fades it in (the 120ms transition settles).
+  await page.hover(".m2h-image-frame");
+  await expect.poll(readOpacity).toBe("1");
+
+  // Keyboard focus keeps it visible: :focus-visible must survive the hover
+  // gating or Tab users would reach an invisible button. Park the mouse away
+  // from the image so hover cannot do the work, then Tab to the trigger.
+  await page.mouse.move(1, 1);
+  await page.evaluate(() => {
+    (document.activeElement as HTMLElement | null)?.blur();
+  });
+  for (let step = 0; step < 50; step += 1) {
+    const focused = await page.evaluate(() =>
+      document.activeElement?.classList.contains("m2h-image-lightbox-trigger"),
+    );
+    if (focused === true) {
+      break;
+    }
+    await page.keyboard.press("Tab");
+  }
+  await expect
+    .poll(() =>
+      page.evaluate(() =>
+        document.activeElement?.classList.contains(
+          "m2h-image-lightbox-trigger",
+        ),
+      ),
+    )
+    .toBe(true);
+  await expect.poll(readOpacity).toBe("1");
+});
+
+test("keeps the floating navigation beside the reader canvas, clear of the TOC rail", async ({
+  page,
+}) => {
+  // scroll.md has one H2, so the TOC rail renders and offsets the pair.
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await waitForBody(page, "/doc/scroll.md");
+  await expect(page.locator(".reader-toc")).toBeVisible();
+
+  const beside = await page.evaluate(() => {
+    const nav = document.querySelector(".reader-navigation");
+    const toc = document.querySelector(".reader-toc");
+    if (nav === null || toc === null) {
+      throw new Error("navigation or TOC rail was not rendered");
+    }
+    return {
+      gap: toc.getBoundingClientRect().left - nav.getBoundingClientRect().right,
+    };
+  });
+  // The pair sits fully left of the rail with the standard 1.5rem gap.
+  expect(Math.round(beside.gap)).toBe(24);
+
+  // Below 1200px the rail hides and the pair returns to the viewport edge.
+  await page.setViewportSize({ width: 1100, height: 800 });
+  await expect(page.locator(".reader-toc")).toBeHidden();
+  const narrow = await page.evaluate(() => {
+    const nav = document.querySelector(".reader-navigation");
+    if (nav === null) {
+      throw new Error("reader navigation was not rendered");
+    }
+    return Math.round(window.innerWidth - nav.getBoundingClientRect().right);
+  });
+  expect(narrow).toBe(24);
+});
+
+test("fades the sidebar scrollbar in while scrolling and out after it stops", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  // The tree fixture holds 24 notes, so the sidebar viewport overflows.
+  await waitForBody(page, "/doc/tree/note-24.md");
+
+  const readScrollbar = () =>
+    page.evaluate(() => {
+      const root = document.querySelector(
+        '.tree-scroll[data-scrollbar-visibility="scrolling"]',
+      ) as HTMLElement | null;
+      const bar = root?.querySelector<HTMLElement>(
+        '[data-slot="scroll-area-scrollbar"]',
+      );
+      if (root === null || root === undefined) {
+        return { mounted: false, opacity: null, scrolling: null };
+      }
+      return {
+        mounted: bar !== null && bar !== undefined,
+        opacity: bar ? getComputedStyle(bar).opacity : null,
+        scrolling: root.dataset.m2hScrolling ?? null,
+      };
+    });
+
+  // The initial active-file reveal scrolls the tree (note-24 sits at its
+  // bottom), which legitimately shows the scrollbar; let that burst settle
+  // before asserting the idle state.
+  await expect.poll(async () => (await readScrollbar()).scrolling).toBeNull();
+
+  // Idle: the (overflowing) scrollbar is mounted but fully faded out.
+  const idle = await readScrollbar();
+  expect(idle.mounted).toBe(true);
+  expect(idle.opacity).toBe("0");
+
+  // A real wheel over the tree fades it in. Start from the top of the tree —
+  // the reveal above already scrolled it to the bottom, where a downward
+  // wheel has nowhere to go and no scroll event would fire.
+  await setSidebarScrollTop(page, "top");
+  const viewport = await readSidebarGeometry(page);
+  await page.mouse.move(
+    viewport.x + viewport.width / 2,
+    viewport.y + viewport.height / 2,
+  );
+  await page.mouse.wheel(0, 400);
+  await expect.poll(async () => (await readScrollbar()).scrolling).toBe("true");
+  await expect.poll(async () => (await readScrollbar()).opacity).toBe("1");
+
+  // … and ~700ms after the last scroll it fades back out.
+  await expect
+    .poll(async () => (await readScrollbar()).opacity, { timeout: 5_000 })
+    .toBe("0");
+  expect((await readScrollbar()).scrolling).toBeNull();
+});
+
 test("offers the outline in a sheet on narrow viewports", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await waitForBody(page, "/doc/scroll.md");

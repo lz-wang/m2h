@@ -5,8 +5,8 @@ import { ScrollArea } from "./scroll-area";
 
 // The transient scrollbar is contract-tested through DOM attributes, not the
 // faded opacity: jsdom applies no CSS, and the component's real job is to flip
-// data-scrolling on the root (per scroll event, no React state) and remove it
-// again after the grace period. The CSS layer only reacts to those flags.
+// data-m2h-scrolling on the root (per scroll event, no React state) and remove
+// it again after the grace period. The CSS layer only reacts to those flags.
 describe("ScrollArea scrollbarVisibility", () => {
   beforeEach(() => {
     // Only the timeout APIs the grace period uses: the shared setup file
@@ -37,7 +37,7 @@ describe("ScrollArea scrollbarVisibility", () => {
       </ScrollArea>,
     );
     expect(root.dataset.scrollbarVisibility).toBe("always");
-    expect(root.dataset.scrolling).toBeUndefined();
+    expect(root.dataset.m2hScrolling).toBeUndefined();
   });
 
   it("flags the root while scrolling and clears it after the grace period", () => {
@@ -47,7 +47,7 @@ describe("ScrollArea scrollbarVisibility", () => {
       </ScrollArea>,
     );
     expect(root.dataset.scrollbarVisibility).toBe("scrolling");
-    expect(root.dataset.scrolling).toBeUndefined();
+    expect(root.dataset.m2hScrolling).toBeUndefined();
 
     const viewport = root.querySelector<HTMLElement>(
       '[data-slot="scroll-area-viewport"]',
@@ -56,15 +56,15 @@ describe("ScrollArea scrollbarVisibility", () => {
       throw new Error("scroll area viewport was not rendered");
     }
     fireEvent.scroll(viewport);
-    expect(root.dataset.scrolling).toBe("true");
+    expect(root.dataset.m2hScrolling).toBe("true");
 
     // Halfway through the grace period another scroll re-arms the timer.
     vi.advanceTimersByTime(400);
     fireEvent.scroll(viewport);
     vi.advanceTimersByTime(400);
-    expect(root.dataset.scrolling).toBe("true");
+    expect(root.dataset.m2hScrolling).toBe("true");
 
     vi.advanceTimersByTime(300);
-    expect(root.dataset.scrolling).toBeUndefined();
+    expect(root.dataset.m2hScrolling).toBeUndefined();
   });
 });

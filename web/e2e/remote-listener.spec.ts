@@ -7,9 +7,10 @@ import { expect, test } from "@playwright/test";
 // config's shared server binds 127.0.0.1, so this spec starts its own
 // `m2h --host 0.0.0.0` process on another port once that build exists — same
 // binary, exactly the command a VPS deployment types. Serving documents must
-// not depend on the loopback-only conveniences: the file tree and documents
-// still render, while every affordance that leaks the serving machine's
-// absolute paths (tooltips, share and context-menu items) disappears.
+// not depend on loopback-only conveniences. The server's local paths are not
+// conditional anymore — they never enter the API on any listener — so this
+// spec now locks down that unconditional contract on the public deployment
+// shape and keeps the local-path affordances out of the UI.
 
 const port = 8875;
 const baseURL = `http://127.0.0.1:${port}`;
@@ -59,19 +60,25 @@ async function openDocument(
   );
 }
 
-test("serves documents and the file tree while omitting absolute paths", async ({
+test("serves documents and the file tree with a path-free API", async ({
   page,
   request,
 }) => {
-  // The API is the contract: a non-loopback listener omits every root's
-  // absolutePath entirely — no empty-string stand-in a client could mistake
-  // for a real path.
+  // The API is the contract: no root summary carries the serving machine's
+  // paths, separators or input kind, and the envelope carries no server-picked
+  // default document — on this public listener or any other.
   const response = await request.get(`${baseURL}/api/files`);
   const listing = (await response.json()) as {
     roots: Array<Record<string, unknown>>;
+    defaultDocument?: unknown;
   };
   expect(listing.roots).toHaveLength(1);
-  expect(Object.hasOwn(listing.roots[0], "absolutePath")).toBe(false);
+  expect(Object.keys(listing.roots[0] ?? {}).sort()).toEqual([
+    "files",
+    "id",
+    "name",
+  ]);
+  expect(listing.defaultDocument).toBeUndefined();
 
   // Documents and the file tree still render through the loopback-facing URL.
   await openDocument(page);
@@ -83,11 +90,12 @@ test("serves documents and the file tree while omitting absolute paths", async (
   ).toBeVisible();
 });
 
-test("hides every server-local path affordance", async ({ page }) => {
+test("keeps every server-local path affordance out of the UI", async ({
+  page,
+}) => {
   await openDocument(page);
 
-  // The toolbar share menu keeps the shareable identities but drops the
-  // local-path item entirely.
+  // The toolbar share menu keeps the shareable identities only.
   await page.getByRole("button", { name: "分享文档" }).click();
   await expect(
     page.getByRole("menuitem", { name: "复制文档网页链接" }),
@@ -97,8 +105,7 @@ test("hides every server-local path affordance", async ({ page }) => {
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  // The file context menu drops its local-path item entirely — the server's
-  // path is never sent to the browser at all.
+  // The file context menu keeps its open/copy actions only.
   await page
     .getByRole("button", { name: "延迟图片回归文档，images.md" })
     .click({ button: "right" });

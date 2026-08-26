@@ -47,6 +47,11 @@ async function expectInvariantsUnchanged(
 }
 
 async function openLightbox(page: Page, triggerIndex = 0) {
+  // The trigger is hover-gated in the reader (opacity/pointer-events until
+  // its frame is hovered). Hovering the FRAME first — always hoverable —
+  // makes the trigger clickable; the mouse is then already inside the frame,
+  // exactly how a user reaches the magnifier.
+  await page.locator(".m2h-image-frame").nth(triggerIndex).hover();
   await page.locator(".m2h-image-lightbox-trigger").nth(triggerIndex).click();
   const popup = page.locator(".image-lightbox");
   await expect(popup).toBeVisible();
@@ -288,7 +293,9 @@ test("keeps the linked image's anchor while its trigger opens the lightbox", asy
   );
   expect(await page.locator(".image-lightbox").count()).toBe(0);
 
-  // The magnifier on the same frame opens the lightbox instead.
+  // The magnifier on the same frame opens the lightbox instead. Hover the
+  // frame first: the trigger is hover-gated in the reader.
+  await page.locator(".m2h-image-frame:has(> a)").hover();
   await page
     .locator(".m2h-image-frame:has(> a) .m2h-image-lightbox-trigger")
     .click();
