@@ -95,6 +95,74 @@ describe("App directory preview", () => {
     ).toBeTruthy();
   });
 
+  it("keeps a missing deep link and shows its not-found state", async () => {
+    window.history.replaceState(null, "", "/doc/missing.md");
+    const getDocument = vi
+      .fn<PreviewAPI["getDocument"]>()
+      .mockRejectedValue(new APIError(404, "not found"));
+    const api = createAPI({ getDocument });
+    render(<App api={api} />);
+
+    const notFound = await screen.findByRole("status");
+    expect(notFound.textContent).toContain("您浏览的文档不存在或已被删除");
+    expect(getDocument).toHaveBeenCalledWith(
+      "missing.md",
+      expect.any(AbortSignal),
+    );
+    expect(window.location.pathname).toBe("/doc/missing.md");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("shows not-found when a sidebar document becomes stale", async () => {
+    const getDocument = vi
+      .fn<PreviewAPI["getDocument"]>()
+      .mockRejectedValue(new APIError(404, "not found"));
+    const api = createAPI({ getDocument });
+    render(<App api={api} />);
+
+    const notFound = await screen.findByRole("status");
+    expect(notFound.textContent).toContain("您浏览的文档不存在或已被删除");
+    expect(api.listFiles).toHaveBeenCalledTimes(1);
+    expect(getDocument).toHaveBeenCalledWith(
+      "README.md",
+      expect.any(AbortSignal),
+    );
+    expect(window.location.pathname).toBe("/doc/README.md");
+  });
+
+  it("requests a deleted popstate document even when it is absent from the tree", async () => {
+    const getDocument = vi
+      .fn<PreviewAPI["getDocument"]>()
+      .mockImplementation(async (path: string) => {
+        if (path === "deleted.md") {
+          throw new APIError(404, "not found");
+        }
+        return {
+          path,
+          title: "Readme API Title",
+          html: "<p>Body for README.md</p>",
+          frontmatter: null,
+          toc: [],
+        };
+      });
+    const api = createAPI({ getDocument });
+    render(<App api={api} />);
+    await screen.findByText("Body for README.md");
+
+    await act(async () => {
+      window.history.pushState(null, "", "/doc/deleted.md");
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    const notFound = await screen.findByRole("status");
+    expect(notFound.textContent).toContain("您浏览的文档不存在或已被删除");
+    expect(getDocument).toHaveBeenLastCalledWith(
+      "deleted.md",
+      expect.any(AbortSignal),
+    );
+    expect(window.location.pathname).toBe("/doc/deleted.md");
+  });
+
   it("starts a multi-root workspace at / with every root collapsed", async () => {
     window.history.replaceState(null, "", "/");
     const api = createAPI({
@@ -186,77 +254,6 @@ describe("App directory preview", () => {
     );
     expect(development.getAttribute("target")).toBe("_blank");
   });
-
-  /* removed watcher-driven body hot-swap coverage */
-  /* it("hot-swaps the document body on a server-sent workspace-changed event", async () => {
-    const getDocument = vi
-      .fn<PreviewAPI["getDocument"]>()
-      .mockResolvedValueOnce({
-        path: "README.md",
-        title: "Readme API Title",
-        html: "<p>Original body</p>",
-        frontmatter: null,
-        toc: [],
-      })
-      .mockResolvedValueOnce({
-        path: "README.md",
-        title: "Readme API Title",
-        html: "<p>Updated body</p>",
-        frontmatter: null,
-        toc: [],
-      });
-    const api = createAPI({ getDocument });
-    const events = stubEventSource();
-    render(<App api={api} />);
-
-    await screen.findByText("Original body");
-    expect(getDocument).toHaveBeenCalledTimes(1);
-
-    await act(async () => {
-      events.dispatch("workspace-changed");
-    });
-    await screen.findByText("Updated body");
-    expect(getDocument).toHaveBeenCalledTimes(2);
-  }); */
-
-  /* it("returns to the unselected state when a refresh drops the open file", async () => {
-    const withoutSetup: FileListResponse = {
-      ...initialFiles,
-      roots: [
-        {
-          ...initialFiles.roots[0],
-          files: [initialFiles.roots[0].files[0]],
-        },
-      ],
-    };
-    const listFiles = vi
-      .fn<PreviewAPI["listFiles"]>()
-      .mockResolvedValueOnce(initialFiles)
-      .mockResolvedValueOnce(withoutSetup);
-    const api = createAPI({ listFiles });
-    const events = stubEventSource();
-    render(<App api={api} />);
-
-    const user = userEvent.setup();
-    await screen.findByText("Body for README.md");
-    await user.click(screen.getByRole("button", { name: "guides" }));
-    await user.click(
-      screen.getByRole("button", { name: "Setup API Title，guides/setup.md" }),
-    );
-    await screen.findByText("Body for guides/setup.md");
-    expect(listFiles).toHaveBeenCalledTimes(1);
-
-    // The watcher saw the file disappear; the refreshed tree no longer lists
-    // it, so the reader lands back in the unselected state — not on some
-    // other document and not in the "no Markdown" empty state.
-    await act(async () => {
-      events.dispatch("workspace-changed");
-    });
-    await screen.findByText("请选择要查看的文件");
-    expect(screen.queryByText("目录中没有 Markdown 文件")).toBeNull();
-    expect(window.location.pathname).toBe("/");
-    expect(listFiles).toHaveBeenCalledTimes(2);
-  }); */
 
   it("hides file navigation for a single-file preview and opens its only document", async () => {
     window.history.replaceState(null, "", "/");
@@ -1052,10 +1049,10 @@ describe("App directory preview", () => {
         })}
       />,
     );
-    expect(await screen.findAllByText("目录中没有 Markdown 文件")).toHaveLength(
-      2,
+    expect(await screen.findByText("目录中没有 Markdown 文件")).toBeTruthy();
+    expect(window.location.pathname + window.location.search).toBe(
+      "/doc/README.md",
     );
-    expect(window.location.pathname + window.location.search).toBe("/");
     view.unmount();
 
     view = render(
@@ -1069,8 +1066,7 @@ describe("App directory preview", () => {
     expect(listAlert.textContent).toContain("无法读取 Markdown 文件列表");
     view.unmount();
 
-    // The URL drifted to "/" in the empty sub-test above; the deleted-document
-    // error needs an explicit document request.
+    // Set an explicit document route for the deleted-document request.
     window.history.replaceState(null, "", "/doc/README.md");
     view = render(
       <App
@@ -1081,8 +1077,9 @@ describe("App directory preview", () => {
         })}
       />,
     );
-    const deletionAlert = await screen.findByRole("alert");
-    expect(deletionAlert.textContent).toContain("文档已被删除");
+    const notFound = await screen.findByRole("status");
+    expect(notFound.textContent).toContain("您浏览的文档不存在或已被删除");
+    expect(screen.queryByRole("alert")).toBeNull();
     view.unmount();
 
     render(
@@ -1692,44 +1689,6 @@ describe("App directory preview", () => {
     expect(readScrollPosition("README.md")).toBe(310);
   });
 
-  /* it("does not re-jump to the fragment when the same document is hot-swapped", async () => {
-    // After the initial fragment landing, the URL hash follows the reading
-    // position. A server-sent body hot-swap of the same document must not
-    // treat that hash as a fresh deep link: the never-unmounted ScrollArea
-    // keeps the offset and scroll anchoring absorbs the reflow.
-    const getDocument = vi
-      .fn<PreviewAPI["getDocument"]>()
-      .mockResolvedValueOnce({
-        path: "README.md",
-        title: "Readme API Title",
-        html: '<h2 id="install">Install</h2><p>Original body</p>',
-        frontmatter: null,
-        toc: [{ level: 2, id: "install", text: "Install" }],
-      })
-      .mockResolvedValueOnce({
-        path: "README.md",
-        title: "Readme API Title",
-        html: '<h2 id="install">Install</h2><p>Updated body</p>',
-        frontmatter: null,
-        toc: [{ level: 2, id: "install", text: "Install" }],
-      });
-    const api = createAPI({ getDocument });
-    const events = stubEventSource();
-    render(<App api={api} />);
-
-    await screen.findByText("Original body");
-    // The reader scrolled: the spy wrote the section into the URL.
-    window.history.replaceState(null, "", "/doc/README.md#install");
-    vi.mocked(Element.prototype.scrollIntoView).mockClear();
-
-    await act(async () => {
-      events.dispatch("workspace-changed");
-    });
-    await screen.findByText("Updated body");
-    expect(getDocument).toHaveBeenCalledTimes(2);
-    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
-  }); */
-
   it("shows floating jump buttons that reflect the scroll boundaries", async () => {
     // Model a tall document: jsdom reports no layout, so the scrollable height
     // is stubbed directly on the scrolling element. Earlier tests leave the
@@ -2132,52 +2091,6 @@ describe("image lightbox integration", () => {
       document.querySelectorAll(".m2h-image-lightbox-trigger"),
     ).toHaveLength(1);
   });
-
-  /* it("closes the lightbox and re-enhances images when the body hot-swaps", async () => {
-    const getDocument = vi
-      .fn<PreviewAPI["getDocument"]>()
-      .mockResolvedValueOnce({
-        path: "README.md",
-        title: "Readme API Title",
-        html: '<p><img src="/one.png" alt="One"></p>',
-        frontmatter: null,
-        toc: [],
-      })
-      .mockResolvedValueOnce({
-        path: "README.md",
-        title: "Readme API Title",
-        html: '<p><img src="/one.png" alt="One"></p><p><img src="/two.png" alt="Two"></p><p><img src="/three.png" alt="Three"></p>',
-        frontmatter: null,
-        toc: [],
-      });
-    const api = createAPI({ getDocument });
-    const events = stubEventSource();
-    const user = userEvent.setup();
-    render(<App api={api} />);
-
-    await user.click(
-      (
-        await screen.findAllByRole("button", { name: "查看大图" })
-      )[0] as HTMLButtonElement,
-    );
-    await screen.findByRole("dialog", { name: "图片预览" });
-
-    await act(async () => {
-      events.dispatch("workspace-changed");
-    });
-
-    // The stale lightbox is gone and the fresh body is enhanced exactly once:
-    // three framed triggers, no stacked frames.
-    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    const triggers = await screen.findAllByRole("button", { name: "查看大图" });
-    expect(triggers).toHaveLength(3);
-    expect(
-      document.querySelectorAll('img[data-m2h-lightbox-image="true"]'),
-    ).toHaveLength(3);
-    expect(
-      document.querySelectorAll(".m2h-image-frame .m2h-image-frame"),
-    ).toHaveLength(0);
-  }); */
 
   // Cross-feature regression: a sortable table reorders <tr> rows after the
   // triggers were injected. The pressed trigger must open the image currently

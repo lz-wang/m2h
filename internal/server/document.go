@@ -84,16 +84,7 @@ type documentHandler struct {
 	discover func(context.Context, rootScope) (files.Discovery, error)
 }
 
-func newDocumentHandler(workspace workspace, values ...any) http.Handler {
-	var logger io.Writer
-	var ui fs.FS
-	if len(values) == 2 {
-		logger, _ = values[0].(io.Writer)
-		ui, _ = values[1].(fs.FS)
-	} else if len(values) == 3 {
-		logger, _ = values[1].(io.Writer)
-		ui, _ = values[2].(fs.FS)
-	}
+func newDocumentHandler(workspace workspace, logger io.Writer, ui fs.FS) http.Handler {
 	return newDocumentHandlerWithVersion(workspace, logger, ui, appversion.Development)
 }
 
@@ -114,13 +105,7 @@ func newDocumentHandlerWithVersion(
 	return handler.routes(logger)
 }
 
-func (handler *documentHandler) routes(values ...any) http.Handler {
-	var logger io.Writer
-	if len(values) == 1 {
-		logger, _ = values[0].(io.Writer)
-	} else if len(values) == 2 {
-		logger, _ = values[1].(io.Writer)
-	}
+func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
@@ -308,8 +293,13 @@ func (handler *documentHandler) serveDirectoryIndex(response http.ResponseWriter
 		http.NotFound(response, request)
 		return
 	}
-	response.Header().Set("Content-Type", "text/html; charset=utf-8")
-	response.Header().Set("Cache-Control", "no-cache")
+	index, err := fs.ReadFile(handler.ui, "index.html")
+	if err != nil {
+		http.Error(response, "read embedded WebUI", http.StatusInternalServerError)
+		return
+	}
+
+	status := http.StatusOK
 	if strings.HasPrefix(request.URL.Path, "/doc/") {
 		virtual, err := safeRelativePath(strings.TrimPrefix(request.URL.Path, "/doc/"))
 		if err != nil {
@@ -317,15 +307,13 @@ func (handler *documentHandler) serveDirectoryIndex(response http.ResponseWriter
 			return
 		}
 		if _, _, _, err := handler.resolveVisibleDocument(virtual); err != nil {
-			response.WriteHeader(http.StatusNotFound)
+			status = http.StatusNotFound
 		}
 	}
+	response.Header().Set("Content-Type", "text/html; charset=utf-8")
+	response.Header().Set("Cache-Control", "no-cache")
+	response.WriteHeader(status)
 	if request.Method == http.MethodGet {
-		index, err := fs.ReadFile(handler.ui, "index.html")
-		if err != nil {
-			http.Error(response, "read embedded WebUI", http.StatusInternalServerError)
-			return
-		}
 		_, _ = response.Write(index)
 	}
 }

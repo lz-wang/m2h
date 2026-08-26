@@ -17,25 +17,18 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
-	"time"
 
 	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/files"
 	appversion "github.com/lz-wang/m2h/internal/version"
 )
 
-// newEventHub is retained only as a no-op test argument while the historical
-// handler fixtures are migrated; production has no event hub or SSE route.
-type eventHub struct{}
-
-func newEventHub(time.Duration) *eventHub { return &eventHub{} }
-
 func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	root := directoryFixture(t)
 	canonical := canonicalDirectory(t, root)
 	options := files.DiscoverOptions{Depth: 2, Pattern: "**/*.md"}
 	var logOutput bytes.Buffer
-	handler := newDocumentHandler(singleRootWorkspace(rootScope{root: canonical, discovery: options}), newEventHub(time.Second), &logOutput, directoryTestUI())
+	handler := newDocumentHandler(singleRootWorkspace(rootScope{root: canonical, discovery: options}), &logOutput, directoryTestUI())
 
 	response := performRequest(handler, http.MethodGet, "/api/files")
 	if response.Code != http.StatusOK {
@@ -97,7 +90,7 @@ func TestDirectoryFilesAPIDepthGlobRefresh(t *testing.T) {
 		requests++
 		return scope.discover(ctx)
 	}
-	handler := handlerState.routes(newEventHub(time.Second), nil)
+	handler := handlerState.routes(nil)
 
 	first := performRequest(handler, http.MethodGet, "/api/files")
 	var initial fileListResponse
@@ -165,7 +158,7 @@ func TestFilesAPIRootSummariesCarryNoServerPaths(t *testing.T) {
 			if err != nil {
 				t.Fatalf("newWorkspace() error = %v", err)
 			}
-			response := performRequest(newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
+			response := performRequest(newDocumentHandler(workspace, nil, directoryTestUI()), http.MethodGet, "/api/files")
 			if response.Code != http.StatusOK {
 				t.Fatalf("GET /api/files status = %d, body = %s", response.Code, response.Body.String())
 			}
@@ -230,7 +223,7 @@ func TestDirectoryFilesAPIEmptyAndFailures(t *testing.T) {
 			return scope.discover(ctx)
 		},
 	}
-	handler := handlerState.routes(newEventHub(time.Second), nil)
+	handler := handlerState.routes(nil)
 	response := performRequest(handler, http.MethodGet, "/api/files")
 	var payload fileListResponse
 	decodeJSON(t, response, &payload)
@@ -279,7 +272,6 @@ func TestDirectoryDocumentAPIReadsLatestContent(t *testing.T) {
 	canonical := canonicalDirectory(t, root)
 	handler := newDocumentHandler(
 		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
-		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
 	)
@@ -325,7 +317,6 @@ func TestDirectoryDocumentAPIRejectsUnsafeAndFilteredPaths(t *testing.T) {
 	canonical := canonicalDirectory(t, root)
 	handler := newDocumentHandler(
 		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"}}),
-		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
 	)
@@ -387,7 +378,6 @@ func TestDirectoryDocumentAPIExposesFrontMatter(t *testing.T) {
 	canonical := canonicalDirectory(t, root)
 	handler := newDocumentHandler(
 		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
-		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
 	)
@@ -458,7 +448,6 @@ func TestDirectoryDocumentAPIExposesTableOfContents(t *testing.T) {
 	canonical := canonicalDirectory(t, root)
 	handler := newDocumentHandler(
 		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
-		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
 	)
@@ -506,7 +495,6 @@ func TestDirectoryDocumentAPIInvalidFrontMatter(t *testing.T) {
 	canonical := canonicalDirectory(t, root)
 	handler := newDocumentHandler(
 		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
-		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
 	)
@@ -525,7 +513,6 @@ func TestDirectoryAssetsSPAFallbackAndAPINotFound(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "styles", "site.css"), "body { color: red; }")
 	handler := newDocumentHandler(
 		singleRootWorkspace(rootScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
-		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
 	)
@@ -580,7 +567,7 @@ func TestDirectoryWebUIAssetsAndSharedMarkdownStyles(t *testing.T) {
 		},
 		ui: ui,
 	}
-	handler := handlerState.routes(newEventHub(time.Second), nil)
+	handler := handlerState.routes(nil)
 
 	// The Markdown stylesheet is one stable, query-independent resource: its
 	// URL never changes on a theme switch, so toggling light/dark issues no new
@@ -648,7 +635,6 @@ func TestDirectoryRequestLogContainsMetadataNotBody(t *testing.T) {
 	var logOutput bytes.Buffer
 	handler := newDocumentHandler(
 		singleRootWorkspace(rootScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
-		newEventHub(time.Second),
 		&logOutput,
 		directoryTestUI(),
 	)
@@ -767,7 +753,7 @@ func TestWorkspaceFilesAPILabelsRootsAndPrefersThePrimaryRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newWorkspace() error = %v", err)
 	}
-	handler := newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(workspace, nil, directoryTestUI())
 
 	response := performRequest(handler, http.MethodGet, "/api/files")
 	if response.Code != http.StatusOK {
@@ -794,7 +780,7 @@ func TestWorkspaceDocumentAPIRoutesVirtualPathsPerRoot(t *testing.T) {
 	t.Parallel()
 
 	workspace := multiRootFixture(t)
-	handler := newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(workspace, nil, directoryTestUI())
 
 	// Identical relative paths in two roots resolve to their own root's file.
 	alpha := performRequest(handler, http.MethodGet, "/api/document?path=r0/README.md")
@@ -842,7 +828,7 @@ func TestWorkspaceAssetHandlerRoutesPerRoot(t *testing.T) {
 	t.Parallel()
 
 	workspace := multiRootFixture(t)
-	handler := newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(workspace, nil, directoryTestUI())
 
 	// Same-named attachments never cross roots.
 	alpha := performRequest(handler, http.MethodGet, "/assets/r0/images/logo.png")
@@ -902,7 +888,7 @@ func TestWorkspaceDocumentRendersVirtualLinkRouting(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newWorkspace() error = %v", err)
 	}
-	handler := newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(workspace, nil, directoryTestUI())
 
 	response := performRequest(handler, http.MethodGet, "/api/document?path=r1/deep/guide.md")
 	if response.Code != http.StatusOK {
@@ -958,7 +944,6 @@ func TestRawMarkdownServesOriginalBytesAndHeaders(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "guide.md"), "# Guide")
 	handler := newDocumentHandler(
 		singleRootWorkspace(rootScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
-		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
 	)
@@ -1017,7 +1002,6 @@ func TestRawMarkdownRejectsUnsafeAndFilteredPaths(t *testing.T) {
 	canonical := canonicalDirectory(t, root)
 	handler := newDocumentHandler(
 		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"}}),
-		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
 	)
@@ -1077,7 +1061,7 @@ func TestRawMarkdownServesSingleFileRoot(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newWorkspace() error = %v", err)
 	}
-	handler := newDocumentHandler(singleFile, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(singleFile, nil, directoryTestUI())
 
 	response := performRequest(handler, http.MethodGet, "/raw/solo.md")
 	if response.Code != http.StatusOK || response.Body.String() != "# Solo\n\nonly document\n" {
@@ -1093,7 +1077,7 @@ func TestRawMarkdownMultiRootNeverCrossesRoots(t *testing.T) {
 	t.Parallel()
 
 	workspace := multiRootFixture(t)
-	handler := newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(workspace, nil, directoryTestUI())
 
 	// Identical relative paths in two roots serve their own root's bytes.
 	alpha := performRequest(handler, http.MethodGet, "/raw/r0/README.md")
