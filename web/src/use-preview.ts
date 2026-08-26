@@ -49,7 +49,6 @@ export interface PreviewState {
   error: string | null;
   assetError: string | null;
   refresh(): Promise<void>;
-  reloadCurrent(): Promise<void>;
   select(path: string, hash?: string): Promise<void>;
   // Fetches the open document's original Markdown source on demand (the
   // share menu's full-text copy); null when nothing is open.
@@ -312,17 +311,6 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     await loadFiles(selectedPathRef.current, window.location.hash);
   }, [loadFiles]);
 
-  // reloadCurrent re-fetches only the open document without touching history,
-  // so a server-sent "document-changed" event can hot-swap the body while
-  // preserving sidebar, theme, width, TOC and URL state.
-  const reloadCurrent = useCallback(async () => {
-    const path = selectedPathRef.current;
-    if (path === null) {
-      return;
-    }
-    await loadDocument(path, "none", window.location.hash);
-  }, [loadDocument]);
-
   // The share menu's lazy fetch of the open document's raw Markdown. It uses
   // the injected API so tests keep full control, and reports null rather than
   // fetching when no document is open.
@@ -409,7 +397,6 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     error,
     assetError,
     refresh,
-    reloadCurrent,
     readCurrentMarkdown,
     select,
     setMode,

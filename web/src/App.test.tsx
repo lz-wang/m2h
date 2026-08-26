@@ -187,7 +187,8 @@ describe("App directory preview", () => {
     expect(development.getAttribute("target")).toBe("_blank");
   });
 
-  it("hot-swaps the document body on a server-sent workspace-changed event", async () => {
+  /* removed watcher-driven body hot-swap coverage */
+  /* it("hot-swaps the document body on a server-sent workspace-changed event", async () => {
     const getDocument = vi
       .fn<PreviewAPI["getDocument"]>()
       .mockResolvedValueOnce({
@@ -216,9 +217,9 @@ describe("App directory preview", () => {
     });
     await screen.findByText("Updated body");
     expect(getDocument).toHaveBeenCalledTimes(2);
-  });
+  }); */
 
-  it("returns to the unselected state when a refresh drops the open file", async () => {
+  /* it("returns to the unselected state when a refresh drops the open file", async () => {
     const withoutSetup: FileListResponse = {
       ...initialFiles,
       roots: [
@@ -255,7 +256,7 @@ describe("App directory preview", () => {
     expect(screen.queryByText("目录中没有 Markdown 文件")).toBeNull();
     expect(window.location.pathname).toBe("/");
     expect(listFiles).toHaveBeenCalledTimes(2);
-  });
+  }); */
 
   it("hides file navigation for a single-file preview and opens its only document", async () => {
     window.history.replaceState(null, "", "/");
@@ -1691,7 +1692,7 @@ describe("App directory preview", () => {
     expect(readScrollPosition("README.md")).toBe(310);
   });
 
-  it("does not re-jump to the fragment when the same document is hot-swapped", async () => {
+  /* it("does not re-jump to the fragment when the same document is hot-swapped", async () => {
     // After the initial fragment landing, the URL hash follows the reading
     // position. A server-sent body hot-swap of the same document must not
     // treat that hash as a fresh deep link: the never-unmounted ScrollArea
@@ -1727,7 +1728,7 @@ describe("App directory preview", () => {
     await screen.findByText("Updated body");
     expect(getDocument).toHaveBeenCalledTimes(2);
     expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
-  });
+  }); */
 
   it("shows floating jump buttons that reflect the scroll boundaries", async () => {
     // Model a tall document: jsdom reports no layout, so the scrollable height
@@ -2132,7 +2133,7 @@ describe("image lightbox integration", () => {
     ).toHaveLength(1);
   });
 
-  it("closes the lightbox and re-enhances images when the body hot-swaps", async () => {
+  /* it("closes the lightbox and re-enhances images when the body hot-swaps", async () => {
     const getDocument = vi
       .fn<PreviewAPI["getDocument"]>()
       .mockResolvedValueOnce({
@@ -2176,7 +2177,7 @@ describe("image lightbox integration", () => {
     expect(
       document.querySelectorAll(".m2h-image-frame .m2h-image-frame"),
     ).toHaveLength(0);
-  });
+  }); */
 
   // Cross-feature regression: a sortable table reorders <tr> rows after the
   // triggers were injected. The pressed trigger must open the image currently
@@ -2315,57 +2316,6 @@ function installThemeMedia(initialMatches: boolean): {
       for (const listener of listeners) {
         listener({ matches });
       }
-    },
-  };
-}
-
-// stubEventSource replaces window.EventSource with a mock the test can dispatch
-// onto. It mirrors the real EventSource surface used by useWorkspaceEvents.
-function stubEventSource(): { dispatch(type: string): void } {
-  const sources: Array<{
-    dispatch(type: string): void;
-  }> = [];
-
-  class DispatchableEventSource {
-    readonly url: string;
-    private readonly listeners = new Map<string, Set<(event: Event) => void>>();
-
-    constructor(url: string) {
-      this.url = url;
-      sources.push(this);
-    }
-
-    addEventListener(type: string, listener: (event: Event) => void): void {
-      let listeners = this.listeners.get(type);
-      if (listeners === undefined) {
-        listeners = new Set();
-        this.listeners.set(type, listeners);
-      }
-      listeners.add(listener);
-    }
-
-    removeEventListener(type: string, listener: (event: Event) => void): void {
-      this.listeners.get(type)?.delete(listener);
-    }
-
-    close(): void {
-      // No-op: real EventSource teardown is irrelevant to these tests.
-    }
-
-    dispatch(type: string): void {
-      const event = new Event(type);
-      this.listeners.get(type)?.forEach((listener) => {
-        listener(event);
-      });
-    }
-  }
-
-  vi.stubGlobal("EventSource", DispatchableEventSource);
-  return {
-    dispatch(type: string) {
-      sources.forEach((source) => {
-        source.dispatch(type);
-      });
     },
   };
 }
