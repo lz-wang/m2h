@@ -85,7 +85,8 @@ func TestHelpDocumentsContract(t *testing.T) {
 				"--host", "(default: \"127.0.0.1\")", "--port", "-p", "(default: 8793)",
 				"--[no-]open", "(default: true)", "--mode", "(default: \"auto\")",
 				"--width", "(default: \"standard\")", "--toc", "(default: true)",
-				"--glob", "--depth", "-d", "(default: 4)", "--version", "-v",
+				"--glob", "--depth", "-d", "(default: 4)", "--no-local-paths",
+				"--version", "-v",
 			},
 		},
 		{
@@ -150,6 +151,7 @@ func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
 		{"convert", "README.md", "--open"},
 		{"convert", "README.md", "--glob", "*.md"},
 		{"convert", "README.md", "--depth", "2"},
+		{"convert", "README.md", "--no-local-paths"},
 		{"convert", "README.md", "--standalone"},
 		{"convert", "README.md", "--copy-assets=false"},
 		{"convert", "README.md", "--yes"},
@@ -228,6 +230,30 @@ func TestServeForwardsOptions(t *testing.T) {
 	// --open and --toc default to true but neither flag is set explicitly.
 	if !captured.TOC || captured.TOCSet {
 		t.Fatalf("serve toc = %+v, want TOC=true TOCSet=false", captured)
+	}
+}
+
+func TestServeNoLocalPaths(t *testing.T) {
+	previous := runServer
+	t.Cleanup(func() { runServer = previous })
+
+	var captured server.Options
+	runServer = func(_ context.Context, options server.Options) error {
+		captured = options
+		return nil
+	}
+	if _, _, err := runCommand(t, "guide.md", "--no-local-paths"); err != nil {
+		t.Fatalf("serve returned error: %v", err)
+	}
+	if !captured.HideLocalPaths {
+		t.Fatal("serve HideLocalPaths = false, want true with --no-local-paths")
+	}
+
+	if _, _, err := runCommand(t, "guide.md"); err != nil {
+		t.Fatalf("serve returned error: %v", err)
+	}
+	if captured.HideLocalPaths {
+		t.Fatal("serve HideLocalPaths = true, want false by default")
 	}
 }
 

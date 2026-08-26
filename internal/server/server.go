@@ -45,9 +45,14 @@ type Options struct {
 	PatternSet bool
 	DepthSet   bool
 	TOCSet     bool
-	Log        io.Writer
-	UI         fs.FS
-	Version    string
+	// HideLocalPaths suppresses the roots' absolute paths in the API even on
+	// a loopback listener. A reverse proxy forwards public traffic to a
+	// loopback address, where the listener alone cannot tell local readers
+	// from remote ones; the explicit flag closes that gap.
+	HideLocalPaths bool
+	Log            io.Writer
+	UI             fs.FS
+	Version        string
 
 	OnListening func(string)
 }
@@ -126,7 +131,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	handler := newDocumentHandlerWithOptions(workspace, hub, logger, options.UI, normalized.Version, hostIsLoopback(normalized.Host))
+	handler := newDocumentHandlerWithOptions(workspace, hub, logger, options.UI, normalized.Version, hostIsLoopback(normalized.Host) && !normalized.HideLocalPaths)
 	httpServer := &http.Server{
 		Handler: handler,
 		BaseContext: func(net.Listener) context.Context {

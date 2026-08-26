@@ -93,6 +93,12 @@ func serverFlags() []urfavecli.Flag {
 		},
 		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
 		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
+		&urfavecli.BoolFlag{
+			Name: "no-local-paths",
+			Usage: "never expose the server's local paths, even on a loopback listener " +
+				"(for reverse-proxy deployments)",
+			Local: true,
+		},
 	}
 }
 
@@ -132,21 +138,22 @@ func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buil
 		return err
 	}
 	err = runServer(ctx, server.Options{
-		Inputs:     inputs,
-		Host:       command.String("host"),
-		Port:       command.Int("port"),
-		Mode:       markdown.Mode(command.String("mode")),
-		Width:      markdown.Width(command.String("width")),
-		Browser:    command.Bool("open"),
-		TOC:        command.Bool("toc"),
-		Pattern:    command.String("glob"),
-		Depth:      command.Int("depth"),
-		PatternSet: command.IsSet("glob"),
-		DepthSet:   command.IsSet("depth"),
-		TOCSet:     command.IsSet("toc"),
-		Log:        command.Root().ErrWriter,
-		UI:         ui,
-		Version:    buildVersion,
+		Inputs:         inputs,
+		Host:           command.String("host"),
+		Port:           command.Int("port"),
+		Mode:           markdown.Mode(command.String("mode")),
+		Width:          markdown.Width(command.String("width")),
+		Browser:        command.Bool("open"),
+		TOC:            command.Bool("toc"),
+		Pattern:        command.String("glob"),
+		Depth:          command.Int("depth"),
+		PatternSet:     command.IsSet("glob"),
+		DepthSet:       command.IsSet("depth"),
+		TOCSet:         command.IsSet("toc"),
+		HideLocalPaths: command.Bool("no-local-paths"),
+		Log:            command.Root().ErrWriter,
+		UI:             ui,
+		Version:        buildVersion,
 	})
 	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
 		return err

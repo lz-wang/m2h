@@ -701,3 +701,57 @@ func TestFilesAPIHidesRootPathsBeyondLoopback(t *testing.T) {
 		t.Fatalf("loopback response missing absolutePath: %d %s", response.Code, response.Body.String())
 	}
 }
+
+// A reverse proxy forwards public traffic to a loopback listener, so the
+// listener address alone cannot tell a local reader from a remote one. The
+// explicit hide option closes that gap; without it the local-reading default
+// keeps serving absolute paths on loopback.
+func TestRunHidesLocalPathsOnLoopbackWhenRequested(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "README.md"), "# Paths")
+	deps := testDependencies()
+	deps.listen = func(string, string) (net.Listener, error) {
+		return net.Listen("tcp", "127.0.0.1:0")
+	}
+
+	fetchFiles := func(hideLocalPaths bool) string {
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		listening := make(chan string, 1)
+		done := make(chan error, 1)
+		go func() {
+			done <- run(ctx, Options{
+				Inputs:         []string{root},
+				HideLocalPaths: hideLocalPaths,
+				Mode:           markdown.ModeAuto,
+				UI:             directoryTestUI(),
+				OnListening: func(address string) {
+					listening <- address
+				},
+			}, deps)
+		}()
+		response, err := http.Get(<-listening + "api/files")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		body, err := io.ReadAll(response.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cancel()
+		if err := <-done; err != nil {
+			t.Fatalf("run() returned error: %v", err)
+		}
+		return string(body)
+	}
+
+	if body := fetchFiles(true); strings.Contains(body, "absolutePath") {
+		t.Fatalf("hidden local paths on loopback still expose absolutePath: %s", body)
+	}
+	if body := fetchFiles(false); !strings.Contains(body, "absolutePath") {
+		t.Fatalf("loopback default response missing absolutePath: %s", body)
+	}
+}
