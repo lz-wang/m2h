@@ -59,7 +59,12 @@ function measureScrollBoundary(): { atTop: boolean; atBottom: boolean } {
 // stable for a document reader. The group rides above normal content but
 // below overlays (Sheet/Menu/Tooltip) and clears the home-indicator safe
 // area on notched devices.
-export function ReaderNavigation() {
+//
+// Positioning stays `fixed` (the whole reader scrolls the window — heading
+// spy, hash following and scroll restore all rely on that): when the TOC rail
+// is visible, the CSS shifts the group left by the rail's width so the
+// buttons sit beside the reader canvas instead of over the rail.
+export function ReaderNavigation({ tocVisible }: { tocVisible: boolean }) {
   const { atTop, atBottom } = useScrollBoundary();
 
   const scrollToTop = () => {
@@ -74,7 +79,11 @@ export function ReaderNavigation() {
   };
 
   return (
-    <nav className="reader-navigation" aria-label="阅读位置导航">
+    <nav
+      className="reader-navigation"
+      data-toc-visible={tocVisible ? "true" : "false"}
+      aria-label="阅读位置导航"
+    >
       <Tooltip>
         <TooltipTrigger
           render={

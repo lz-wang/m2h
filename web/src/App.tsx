@@ -442,6 +442,7 @@ export function App({ api }: AppProps) {
             <SidebarContent className="min-w-0 overflow-clip">
               <ScrollArea
                 className="tree-scroll"
+                scrollbarVisibility="scrolling"
                 contentProps={{
                   // The tree is vertical-only: shrink Base UI Content's default
                   // minWidth: fit-content back to the viewport width so a long
@@ -593,8 +594,9 @@ export function App({ api }: AppProps) {
             ) : null}
           </div>
           {/* Floating edge jumps for the window-scrolled reader; one instance
-           * for both single-file and directory previews. */}
-          <ReaderNavigation />
+           * for both single-file and directory previews. When the TOC rail is
+           * up, the buttons shift left of it (see .reader-navigation CSS). */}
+          <ReaderNavigation tocVisible={tocVisible} />
           {copyStatus !== null ? (
             <div className="copy-status" role="status" aria-live="polite">
               {copyStatus}

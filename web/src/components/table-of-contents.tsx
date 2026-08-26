@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import type { TocItem } from "../api";
 import { Button } from "./ui/button";
+import { ScrollArea } from "./ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "./ui/sheet";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
@@ -92,12 +93,14 @@ export function TableOfContentsPanel({
 }: TableOfContentsPanelProps) {
   return (
     <nav className="reader-toc" aria-label="文档目录">
-      <div className="reader-toc-scroll">
+      {/* The same transient-scrollbar ScrollArea the sidebar uses, so both
+       * scrollable rails share one scrollbar behavior. */}
+      <ScrollArea className="reader-toc-scroll" scrollbarVisibility="scrolling">
         <div className="reader-toc-content">
           <p className="reader-toc-title">本页目录</p>
           <TOCLinks items={items} activeID={activeID} onNavigate={onNavigate} />
         </div>
-      </div>
+      </ScrollArea>
     </nav>
   );
 }
@@ -145,9 +148,16 @@ export function TableOfContentsSheet({
           <SheetHeader>
             <SheetTitle>本页目录</SheetTitle>
           </SheetHeader>
-          <nav className="reader-toc-sheet-scroll" aria-label="文档目录">
+          {/* Same ScrollArea behavior as the desktop rail, so the narrow
+           * screen's outline scrolls exactly like the wide one. */}
+          <ScrollArea
+            className="reader-toc-sheet-scroll"
+            scrollbarVisibility="scrolling"
+            role="navigation"
+            aria-label="文档目录"
+          >
             <TOCLinks items={items} activeID={activeID} onNavigate={navigate} />
-          </nav>
+          </ScrollArea>
         </SheetContent>
       </Sheet>
     </>

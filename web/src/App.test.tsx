@@ -1381,9 +1381,23 @@ describe("App directory preview", () => {
     await screen.findByRole("navigation", { name: "文档目录" });
     expect(window.location.search).toBe("");
 
+    // The floating jump pair shifts left of the rail (CSS offsets it by
+    // --reader-toc-width); the attribute is the toggle the CSS keys on.
+    const readerNavigation = document.querySelector(".reader-navigation");
+    expect(readerNavigation?.getAttribute("data-toc-visible")).toBe("true");
+    // The rail scrolls through the same transient-scrollbar ScrollArea as
+    // the sidebar.
+    expect(
+      document.querySelector(
+        '.reader-toc-scroll[data-scrollbar-visibility="scrolling"]',
+      ),
+    ).not.toBeNull();
+
     await user.click(screen.getByRole("button", { name: "隐藏文档目录" }));
     expect(screen.queryByRole("navigation", { name: "文档目录" })).toBeNull();
     expect(window.location.search).toBe("?toc=false");
+    // No rail: the pair hugs the viewport's right edge again.
+    expect(readerNavigation?.getAttribute("data-toc-visible")).toBe("false");
 
     await user.click(screen.getByRole("button", { name: "显示文档目录" }));
     expect(
