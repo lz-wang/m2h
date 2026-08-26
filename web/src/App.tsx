@@ -5,7 +5,6 @@ import {
   Copy,
   FileQuestion,
   FileText,
-  HardDrive,
   ImageOff,
   Inbox,
   Link,
@@ -77,12 +76,10 @@ import {
   type DocumentWidth,
   decodeHeadingHash,
   documentURL,
-  localDocumentPath,
   type Mode,
   markdownURL,
   type ResolvedMode,
   readRoute,
-  resolveDocumentLocation,
 } from "./model";
 import { useHeadingNavigation } from "./use-heading-navigation";
 import { useHeadingSpy } from "./use-heading-spy";
@@ -188,17 +185,6 @@ export function App({ api }: AppProps) {
   const multiRoot = preview.roots.length > 1;
   const loading =
     preview.phase === "loading-files" || preview.phase === "loading-document";
-  // The open document's place in the workspace — which root serves it and its
-  // root-relative path — so the share menu can build the server-local
-  // filesystem path without re-parsing the multi-root key convention.
-  const documentLocation = useMemo(
-    () => resolveDocumentLocation(preview.roots, preview.selectedPath),
-    [preview.roots, preview.selectedPath],
-  );
-  const documentLocalPath =
-    documentLocation === null
-      ? null
-      : localDocumentPath(documentLocation.root, documentLocation.relativePath);
   // Transient "已复制……" feedback for every share-menu copy. One status line
   // at a time, cleared by a timer; role=status announces it politely.
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
@@ -482,9 +468,6 @@ export function App({ api }: AppProps) {
                             files={root.files}
                             rootBase={root.id}
                             rootLabel={root.name}
-                            rootAbsolutePath={root.absolutePath}
-                            pathSeparator={root.pathSeparator}
-                            rootKind={root.kind}
                             onCopyStatus={announceCopyStatus}
                             searching={searchQuery.trim() !== ""}
                             selectedPath={preview.selectedPath}
@@ -495,9 +478,6 @@ export function App({ api }: AppProps) {
                       ) : (
                         <DocumentTree
                           files={filteredRoots[0]?.files ?? []}
-                          rootAbsolutePath={filteredRoots[0]?.absolutePath}
-                          pathSeparator={filteredRoots[0]?.pathSeparator}
-                          rootKind={filteredRoots[0]?.kind}
                           onCopyStatus={announceCopyStatus}
                           searching={searchQuery.trim() !== ""}
                           selectedPath={preview.selectedPath}
@@ -552,7 +532,6 @@ export function App({ api }: AppProps) {
             <div className="toolbar-actions">
               <ShareMenu
                 path={preview.selectedPath}
-                localPath={documentLocalPath}
                 readMarkdown={preview.readCurrentMarkdown}
                 onStatus={announceCopyStatus}
               />
@@ -767,21 +746,19 @@ function SidebarResizeHandle({
   );
 }
 
-// The toolbar share menu: the open document's three identities — rendered page
-// URL, raw Markdown URL, server-local filesystem path — plus its full source
-// text, each copied to the clipboard. Share URLs are share-shaped: the current
-// heading hash is kept (a shared link lands on the section being read) while
+// The toolbar share menu: the open document's two shareable identities — the
+// rendered page URL and the raw Markdown URL — plus its full source text, each
+// copied to the clipboard. Share URLs are share-shaped: the current heading
+// hash is kept (a shared link lands on the section being read) while
 // mode/width/toc, the sender's personal UI preferences, never enter the link.
 // The full text is fetched lazily from /raw/ so opening a document never pays
 // for a copy that may never happen.
 function ShareMenu({
   path,
-  localPath,
   readMarkdown,
   onStatus,
 }: {
   path: string | null;
-  localPath: string | null;
   readMarkdown(): Promise<string | null>;
   onStatus(message: string): void;
 }) {
@@ -801,13 +778,6 @@ function ShareMenu({
       ),
       "已复制文档链接",
     );
-  };
-
-  const copyLocalPath = () => {
-    if (localPath === null) {
-      return;
-    }
-    void copyValue(localPath, "已复制本地路径");
   };
 
   const copyMarkdownURL = () => {
@@ -866,12 +836,6 @@ function ShareMenu({
                 <Link aria-hidden="true" />
                 <span>复制文档网页链接</span>
               </Menu.Item>
-              {localPath !== null && (
-                <Menu.Item className="theme-menu-item" onClick={copyLocalPath}>
-                  <HardDrive aria-hidden="true" />
-                  <span>复制文档本地路径</span>
-                </Menu.Item>
-              )}
               <Menu.Item className="theme-menu-item" onClick={copyMarkdownURL}>
                 <FileText aria-hidden="true" />
                 <span>复制 Markdown 链接</span>

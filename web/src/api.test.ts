@@ -21,9 +21,6 @@ describe("browser API", () => {
               {
                 id: "r0",
                 name: "docs",
-                kind: "directory",
-                absolutePath: "/tmp/docs",
-                pathSeparator: "/",
                 files: [
                   { path: "README.md", name: "README.md", title: "Readme" },
                 ],
@@ -64,9 +61,6 @@ describe("browser API", () => {
         {
           id: "r0",
           name: "docs",
-          kind: "directory",
-          absolutePath: "/tmp/docs",
-          pathSeparator: "/",
           files: [{ path: "README.md", name: "README.md", title: "Readme" }],
         },
       ],
@@ -101,9 +95,6 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "README.md",
-              kind: "file",
-              absolutePath: "/tmp/README.md",
-              pathSeparator: "/",
               files: [
                 { path: "README.md", name: "README.md", title: "Readme" },
               ],
@@ -127,9 +118,6 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "a",
-              kind: "directory",
-              absolutePath: "/tmp/a",
-              pathSeparator: "/",
               files: [
                 { path: "README.md", name: "README.md", title: "Readme" },
               ],
@@ -137,9 +125,6 @@ describe("browser API", () => {
             {
               id: "r1",
               name: "b",
-              kind: "directory",
-              absolutePath: "D:\\work\\b",
-              pathSeparator: "\\",
               files: [],
             },
           ],
@@ -163,9 +148,6 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "docs",
-              kind: "directory",
-              absolutePath: "/tmp/docs",
-              pathSeparator: "/",
               files: [
                 { path: "README.md", name: "README.md", title: "Readme" },
               ],
@@ -217,9 +199,6 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "docs",
-              kind: "directory",
-              absolutePath: "/tmp/docs",
-              pathSeparator: "/",
               files: [{ path: "README.md" }],
             },
           ],
@@ -235,16 +214,7 @@ describe("browser API", () => {
       new Response(
         JSON.stringify({
           version: "1",
-          roots: [
-            {
-              id: "r0",
-              name: "docs",
-              kind: "directory",
-              absolutePath: "/tmp/docs",
-              pathSeparator: "/",
-              files: [],
-            },
-          ],
+          roots: [{ id: "r0", name: "docs", files: [] }],
           defaultDocument: { root: "r0" },
         }),
         { status: 200 },
@@ -254,121 +224,13 @@ describe("browser API", () => {
       "文件列表响应格式无效",
     );
 
-    // The root's kind, absolute path and the server-reported separator are
-    // part of the contract: a wrong kind, a non-string path or a separator
-    // other than "/" or "\" never reaches the UI to pollute path handling.
+    // id, name and files are each required strings/array: a root missing any
+    // of them never reaches the UI.
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
           version: "1",
-          roots: [
-            {
-              id: "r0",
-              name: "docs",
-              kind: "symlink",
-              absolutePath: "/tmp/docs",
-              pathSeparator: "/",
-            },
-          ],
-        }),
-        { status: 200 },
-      ),
-    );
-    await expect(browserAPI.listFiles()).rejects.toThrow(
-      "文件列表响应格式无效",
-    );
-
-    fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          version: "1",
-          roots: [
-            {
-              id: "r0",
-              name: "docs",
-              kind: "directory",
-              absolutePath: 1,
-              pathSeparator: "/",
-            },
-          ],
-        }),
-        { status: 200 },
-      ),
-    );
-    await expect(browserAPI.listFiles()).rejects.toThrow(
-      "文件列表响应格式无效",
-    );
-
-    // A non-loopback server omits absolutePath entirely (the serving machine
-    // keeps its directory layout private), so a missing field must parse —
-    // only a present but non-string value breaks the contract.
-    fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          kind: "directory",
-          version: "1",
-          roots: [
-            {
-              id: "r0",
-              name: "docs",
-              kind: "directory",
-              pathSeparator: "/",
-              files: [],
-            },
-          ],
-        }),
-        { status: 200 },
-      ),
-    );
-    await expect(browserAPI.listFiles()).resolves.toEqual({
-      kind: "directory",
-      version: "1",
-      roots: [
-        {
-          id: "r0",
-          name: "docs",
-          kind: "directory",
-          pathSeparator: "/",
-          files: [],
-        },
-      ],
-      defaultDocument: null,
-    });
-
-    fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          version: "1",
-          roots: [
-            {
-              id: "r0",
-              name: "docs",
-              kind: "directory",
-              absolutePath: "/tmp/docs",
-              pathSeparator: null,
-            },
-          ],
-        }),
-        { status: 200 },
-      ),
-    );
-    await expect(browserAPI.listFiles()).rejects.toThrow(
-      "文件列表响应格式无效",
-    );
-
-    fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          version: "1",
-          roots: [
-            {
-              id: "r0",
-              name: "docs",
-              kind: "directory",
-              absolutePath: "/tmp/docs",
-              pathSeparator: "+",
-            },
-          ],
+          roots: [{ id: "r0", files: [] }],
         }),
         { status: 200 },
       ),

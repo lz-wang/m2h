@@ -19,9 +19,6 @@ const initialFiles: FileListResponse = {
     {
       id: "r0",
       name: "docs",
-      kind: "directory",
-      absolutePath: "/tmp/docs",
-      pathSeparator: "/",
       files: [
         { path: "README.md", name: "README.md", title: "Readme API Title" },
         { path: "guides/setup.md", name: "setup.md", title: "Setup API Title" },
@@ -196,9 +193,6 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "README.md",
-            kind: "file",
-            absolutePath: "/tmp/README.md",
-            pathSeparator: "/",
             files: [
               {
                 path: "README.md",
@@ -239,9 +233,6 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
-            kind: "directory",
-            absolutePath: "/tmp/alpha",
-            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Alpha Readme" },
             ],
@@ -249,9 +240,6 @@ describe("App directory preview", () => {
           {
             id: "r1",
             name: "beta",
-            kind: "directory",
-            absolutePath: "/tmp/beta",
-            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Beta Readme" },
               {
@@ -375,8 +363,6 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "testdata",
-            absolutePath: "/tmp/testdata",
-            pathSeparator: "/",
             files: [file],
           },
         ],
@@ -583,7 +569,7 @@ describe("App directory preview", () => {
     ).toBe(Node.DOCUMENT_POSITION_PRECEDING);
   });
 
-  it("shares the open document from the toolbar with clean links, local path, and raw source", async () => {
+  it("shares the open document from the toolbar with clean links and raw source", async () => {
     const user = userEvent.setup();
     window.history.replaceState(
       null,
@@ -629,12 +615,6 @@ describe("App directory preview", () => {
       );
       expect((await screen.findByRole("status")).textContent).toBe(
         "已复制文档链接",
-      );
-
-      await copyFromMenu("复制文档本地路径");
-      await waitFor(() => expect(copied.at(-1)).toBe("/tmp/docs/README.md"));
-      expect((await screen.findByRole("status")).textContent).toBe(
-        "已复制本地路径",
       );
 
       await copyFromMenu("复制 Markdown 链接");
@@ -768,7 +748,7 @@ describe("App directory preview", () => {
     ).toBe("README.md");
   });
 
-  it("opens a four-action context menu on file rows without changing the selection", async () => {
+  it("opens a three-action context menu on file rows without changing the selection", async () => {
     const user = userEvent.setup();
     const copied: string[] = [];
     Object.defineProperty(document, "execCommand", {
@@ -797,13 +777,14 @@ describe("App directory preview", () => {
       expect(open.getAttribute("target")).toBe("_blank");
       expect(open.getAttribute("rel")).toContain("noopener");
       expect(open.getAttribute("rel")).toContain("noreferrer");
-      for (const name of [
-        "复制文档网页链接",
-        "复制文档本地路径",
-        "复制 Markdown 链接",
-      ]) {
+      for (const name of ["复制文档网页链接", "复制 Markdown 链接"]) {
         expect(screen.getByRole("menuitem", { name })).toBeTruthy();
       }
+      // The server's local path is never part of the menu: it never crosses
+      // the API in the first place.
+      expect(
+        screen.queryByRole("menuitem", { name: "复制文档本地路径" }),
+      ).toBeNull();
 
       // Right-clicking navigated nowhere: the open document, its body and
       // its request count are all unchanged.
@@ -826,58 +807,27 @@ describe("App directory preview", () => {
     }
   });
 
-  it("opens a folder-only context menu on directory rows", async () => {
+  it("opens no context menu on directory rows and keeps left-click toggling", async () => {
     const user = userEvent.setup();
-    const copied: string[] = [];
-    Object.defineProperty(document, "execCommand", {
-      configurable: true,
-      value: () => {
-        copied.push(document.querySelector("textarea")?.value ?? "");
-        return true;
-      },
-    });
-    try {
-      render(<App api={createAPI()} />);
-      await screen.findByText("Body for README.md");
-      // Captured before the menu opens: an open Base UI menu hides the rest
-      // of the page from the accessibility tree.
-      const guidesRow = screen.getByRole("button", { name: "guides" });
-      expect(guidesRow.getAttribute("aria-expanded")).toBe("false");
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+    const guidesRow = screen.getByRole("button", { name: "guides" });
+    expect(guidesRow.getAttribute("aria-expanded")).toBe("false");
 
-      fireEvent.contextMenu(guidesRow);
-      const copyItem = await screen.findByRole("menuitem", {
-        name: "复制文件夹本地路径",
-      });
+    // Directory rows carry no context menu at all — the folder's local path
+    // is server-private information.
+    fireEvent.contextMenu(guidesRow);
+    await waitFor(() => expect(screen.queryByRole("menuitem")).toBeNull());
 
-      // The folder menu carries no document actions.
-      expect(screen.queryByRole("menuitem", { name: "新页面打开" })).toBeNull();
-      expect(
-        screen.queryByRole("menuitem", { name: "复制文档网页链接" }),
-      ).toBeNull();
-
-      await user.click(copyItem);
-      await waitFor(() => expect(copied.at(-1)).toBe("/tmp/docs/guides"));
-      expect((await screen.findByRole("status")).textContent).toBe(
-        "已复制文件夹路径",
-      );
-
-      // Right-click neither expanded the directory nor selected anything:
-      // the collapsed child row stays absent and the open document is
-      // untouched.
-      expect(
-        screen.queryByRole("button", {
-          name: "Setup API Title，guides/setup.md",
-        }),
-      ).toBeNull();
-      expect(guidesRow.getAttribute("aria-expanded")).toBe("false");
-      expect(screen.getByText("Body for README.md")).toBeTruthy();
-      expect(window.location.pathname).toBe("/doc/README.md");
-    } finally {
-      Reflect.deleteProperty(document, "execCommand");
-    }
+    // Left-click behavior is untouched: the directory toggles open and the
+    // open document stays put.
+    await user.click(guidesRow);
+    expect(guidesRow.getAttribute("aria-expanded")).toBe("true");
+    expect(screen.getByText("Body for README.md")).toBeTruthy();
+    expect(window.location.pathname).toBe("/doc/README.md");
   });
 
-  it("opens root-row folder menus and root-prefixed file menus in a workspace", async () => {
+  it("opens root-prefixed file menus in a workspace", async () => {
     const user = userEvent.setup();
     const copied: string[] = [];
     Object.defineProperty(document, "execCommand", {
@@ -895,9 +845,6 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
-            kind: "directory",
-            absolutePath: "/tmp/alpha",
-            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Alpha Readme" },
             ],
@@ -905,9 +852,6 @@ describe("App directory preview", () => {
           {
             id: "r1",
             name: "beta",
-            kind: "directory",
-            absolutePath: "/tmp/beta",
-            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Beta Readme" },
             ],
@@ -927,12 +871,9 @@ describe("App directory preview", () => {
       render(<App api={api} />);
       await screen.findByText("Body for r0/README.md");
 
-      // The root row is a folder: its menu copies the root's own path.
+      // The root row carries no context menu — only file rows do.
       fireEvent.contextMenu(screen.getByRole("button", { name: "beta" }));
-      await user.click(
-        await screen.findByRole("menuitem", { name: "复制文件夹本地路径" }),
-      );
-      await waitFor(() => expect(copied.at(-1)).toBe("/tmp/beta"));
+      await waitFor(() => expect(screen.queryByRole("menuitem")).toBeNull());
 
       // Same-named files carry their own root's addresses, never the other
       // root's.
@@ -960,95 +901,16 @@ describe("App directory preview", () => {
         ).getAttribute("href"),
       ).toBe("/doc/r1/README.md");
       await user.click(
-        screen.getByRole("menuitem", { name: "复制文档本地路径" }),
+        screen.getByRole("menuitem", { name: "复制 Markdown 链接" }),
       );
-      await waitFor(() => expect(copied.at(-1)).toBe("/tmp/beta/README.md"));
+      await waitFor(() =>
+        expect(copied.at(-1)).toBe("http://localhost/raw/r1/README.md"),
+      );
       // The right-clicked second-root document never became the open one.
       expect(window.location.pathname).toBe("/doc/r0/README.md");
     } finally {
       Reflect.deleteProperty(document, "execCommand");
     }
-  });
-
-  it("reveals absolute directory paths through hover tooltips", async () => {
-    const user = userEvent.setup();
-
-    // Single-root preview: hovering the guides directory joins the server's
-    // absolute root path with the root-relative tree path.
-    render(<App api={createAPI()} />);
-    await screen.findByText("Body for README.md");
-
-    await user.hover(screen.getByRole("button", { name: "guides" }));
-    const directoryPath = await screen.findByText("/tmp/docs/guides", {
-      selector: ".tree-tooltip-path",
-    });
-    expect(
-      directoryPath.closest('[data-slot="tooltip-content"]')?.classList,
-    ).toContain("tree-tooltip-wide");
-    // The native title tooltip is gone; the accessible name stays the label.
-    const guidesRow = screen.getByRole("button", { name: "guides" });
-    expect(guidesRow.getAttribute("title")).toBeNull();
-    await user.unhover(guidesRow);
-
-    // Multi-root workspace: the labeled root row shows its own path and a
-    // nested directory composes root + relative segments with the
-    // server-reported separator (here a Windows-style one).
-    const workspaceAPI = createAPI({
-      listFiles: vi.fn().mockResolvedValue({
-        kind: "workspace",
-        version: "0.9.1",
-        roots: [
-          {
-            id: "r0",
-            name: "alpha",
-            kind: "directory",
-            absolutePath: "/tmp/alpha",
-            pathSeparator: "/",
-            files: [
-              { path: "README.md", name: "README.md", title: "Alpha Readme" },
-            ],
-          },
-          {
-            id: "r1",
-            name: "beta",
-            kind: "directory",
-            absolutePath: "D:\\work\\beta",
-            pathSeparator: "\\",
-            files: [
-              {
-                path: "guide/intro.md",
-                name: "intro.md",
-                title: "Intro",
-              },
-            ],
-          },
-        ],
-        defaultDocument: { root: "r0", path: "README.md" },
-      }),
-      getDocument: vi.fn().mockImplementation(async (path: string) => ({
-        path,
-        title: path.startsWith("r1/") ? "Intro" : "Alpha Readme",
-        html: `<h1>${path.startsWith("r1/") ? "Intro" : "Alpha"}</h1>`,
-      })),
-    });
-    const view = render(<App api={workspaceAPI} />);
-    await screen.findByRole("heading", { level: 1, name: "Alpha" });
-
-    await user.hover(screen.getByRole("button", { name: "beta" }));
-    expect(
-      await screen.findByText("D:\\work\\beta", {
-        selector: ".tree-tooltip-path",
-      }),
-    ).toBeTruthy();
-    await user.unhover(screen.getByRole("button", { name: "beta" }));
-
-    await user.hover(screen.getByRole("button", { name: "r1/guide" }));
-    expect(
-      await screen.findByText("D:\\work\\beta\\guide", {
-        selector: ".tree-tooltip-path",
-      }),
-    ).toBeTruthy();
-    view.unmount();
   });
 
   it("restores sidebar layout but removes the legacy stored document width", async () => {
@@ -1093,9 +955,6 @@ describe("App directory preview", () => {
               {
                 id: "r0",
                 name: "docs",
-                kind: "directory",
-                absolutePath: "/tmp/docs",
-                pathSeparator: "/",
                 files: [],
               },
             ],
@@ -1904,9 +1763,6 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
-            kind: "directory",
-            absolutePath: "/tmp/alpha",
-            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Alpha Readme" },
             ],
@@ -1914,9 +1770,6 @@ describe("App directory preview", () => {
           {
             id: "r1",
             name: "beta",
-            kind: "directory",
-            absolutePath: "/tmp/beta",
-            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Beta Readme" },
             ],
@@ -1977,9 +1830,6 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
-            kind: "directory",
-            absolutePath: "/tmp/alpha",
-            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Alpha Readme" },
             ],
@@ -1987,9 +1837,6 @@ describe("App directory preview", () => {
           {
             id: "r1",
             name: "beta",
-            kind: "directory",
-            absolutePath: "/tmp/beta",
-            pathSeparator: "/",
             files: [
               { path: "README.md", name: "README.md", title: "Beta Readme" },
             ],

@@ -13,6 +13,7 @@ import (
 	"reflect"
 	"regexp"
 	"runtime"
+	"sort"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -135,7 +136,12 @@ func TestDirectoryFilesAPIDepthGlobRefreshAndDefaultSelection(t *testing.T) {
 	}
 }
 
-func TestFilesAPIReportsRootAbsolutePathAndSeparator(t *testing.T) {
+// The root summary carries exactly the logical document information the WebUI
+// navigates with. The server's filesystem layout — absolute paths, platform
+// separators, the root's input kind — must never reach the wire for any
+// listener, workspace shape, or root kind: the browser has no use for it and
+// every listener may be public.
+func TestFilesAPIRootSummariesCarryNoServerPaths(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
@@ -149,134 +155,63 @@ func TestFilesAPIReportsRootAbsolutePathAndSeparator(t *testing.T) {
 	writeTestFile(t, filepath.Join(alpha, "README.md"), "# Alpha Readme")
 	writeTestFile(t, filepath.Join(beta, "README.md"), "# Beta Readme")
 
-	// A single directory root reports its canonical absolute path and the
-	// server platform's separator; the wire shape carries both keys.
-	single, err := newWorkspace(
-		[]files.Input{resolveTestInput(t, alpha)},
-		files.DiscoverOptions{Depth: 2},
-	)
-	if err != nil {
-		t.Fatalf("newWorkspace() error = %v", err)
+	cases := []struct {
+		name   string
+		inputs []files.Input
+	}{
+		{name: "single directory", inputs: []files.Input{resolveTestInput(t, alpha)}},
+		{name: "multi-root", inputs: []files.Input{resolveTestInput(t, alpha), resolveTestInput(t, beta)}},
+		{name: "single file", inputs: []files.Input{resolveTestInput(t, filepath.Join(beta, "README.md"))}},
+		{
+			name:   "mixed directory and file",
+			inputs: []files.Input{resolveTestInput(t, alpha), resolveTestInput(t, filepath.Join(beta, "README.md"))},
+		},
 	}
-	response := performRequest(newDocumentHandler(single, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
-	if response.Code != http.StatusOK {
-		t.Fatalf("GET /api/files status = %d, body = %s", response.Code, response.Body.String())
-	}
-	var payload fileListResponse
-	decodeJSON(t, response, &payload)
-	canonicalAlpha, err := files.CanonicalPath(alpha)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(payload.Roots) != 1 {
-		t.Fatalf("single-directory roots = %+v, want one", payload.Roots)
-	}
-	if payload.Roots[0].Kind != "directory" {
-		t.Fatalf("single-directory kind = %q, want %q", payload.Roots[0].Kind, "directory")
-	}
-	if payload.Roots[0].AbsolutePath != canonicalAlpha {
-		t.Fatalf("single-directory absolutePath = %q, want %q", payload.Roots[0].AbsolutePath, canonicalAlpha)
-	}
-	if payload.Roots[0].PathSeparator != string(filepath.Separator) {
-		t.Fatalf("single-directory pathSeparator = %q, want %q", payload.Roots[0].PathSeparator, string(filepath.Separator))
-	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
 
-	// A multi-root workspace reports each root's own path in input order.
-	workspace, err := newWorkspace(
-		[]files.Input{resolveTestInput(t, alpha), resolveTestInput(t, beta)},
-		files.DiscoverOptions{Depth: 2},
-	)
-	if err != nil {
-		t.Fatalf("newWorkspace() error = %v", err)
+			workspace, err := newWorkspace(test.inputs, files.DiscoverOptions{Depth: 2})
+			if err != nil {
+				t.Fatalf("newWorkspace() error = %v", err)
+			}
+			response := performRequest(newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
+			if response.Code != http.StatusOK {
+				t.Fatalf("GET /api/files status = %d, body = %s", response.Code, response.Body.String())
+			}
+			var envelope struct {
+				Roots []map[string]json.RawMessage `json:"roots"`
+			}
+			if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
+				t.Fatal(err)
+			}
+			if len(envelope.Roots) == 0 {
+				t.Fatalf("response carried no roots: %s", response.Body.String())
+			}
+			for index, root := range envelope.Roots {
+				if len(root) != 3 {
+					t.Fatalf("root %d keys = %v, want exactly id/name/files: %s", index, mapKeys(root), response.Body.String())
+				}
+				for _, key := range []string{"id", "name", "files"} {
+					if _, exists := root[key]; !exists {
+						t.Fatalf("root %d is missing the %q key: %s", index, key, response.Body.String())
+					}
+				}
+			}
+			if strings.Contains(response.Body.String(), base) {
+				t.Fatalf("response leaks the serving machine's paths: %s", response.Body.String())
+			}
+		})
 	}
-	workspaceResponse := performRequest(newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
-	if workspaceResponse.Code != http.StatusOK {
-		t.Fatalf("GET /api/files status = %d, body = %s", workspaceResponse.Code, workspaceResponse.Body.String())
-	}
-	var workspacePayload struct {
-		Roots []rootSummary `json:"roots"`
-	}
-	decodeJSON(t, workspaceResponse, &workspacePayload)
-	canonicalBeta, err := files.CanonicalPath(beta)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(workspacePayload.Roots) != 2 {
-		t.Fatalf("workspace roots = %+v, want two", workspacePayload.Roots)
-	}
-	for index, want := range []string{canonicalAlpha, canonicalBeta} {
-		if got := workspacePayload.Roots[index].AbsolutePath; got != want {
-			t.Fatalf("workspace root %d absolutePath = %q, want %q", index, got, want)
-		}
-		if got := workspacePayload.Roots[index].Kind; got != "directory" {
-			t.Fatalf("workspace root %d kind = %q, want %q", index, got, "directory")
-		}
-		if got := workspacePayload.Roots[index].PathSeparator; got != string(filepath.Separator) {
-			t.Fatalf("workspace root %d pathSeparator = %q, want %q", index, got, string(filepath.Separator))
-		}
-	}
+}
 
-	// The raw wire format carries the new keys alongside id/name/files.
-	var envelope struct {
-		Roots []map[string]json.RawMessage `json:"roots"`
+func mapKeys(root map[string]json.RawMessage) []string {
+	keys := make([]string, 0, len(root))
+	for key := range root {
+		keys = append(keys, key)
 	}
-	if err := json.Unmarshal(workspaceResponse.Body.Bytes(), &envelope); err != nil {
-		t.Fatal(err)
-	}
-	if len(envelope.Roots) == 0 {
-		t.Fatal("workspace response carried no roots")
-	}
-	for _, key := range []string{"id", "name", "kind", "absolutePath", "pathSeparator", "files"} {
-		if _, exists := envelope.Roots[0][key]; !exists {
-			t.Fatalf("root summary is missing the %q key: %s", key, workspaceResponse.Body.String())
-		}
-	}
-
-	// A single-file root keeps the API shape and names the file itself.
-	singleFile, err := newWorkspace(
-		[]files.Input{resolveTestInput(t, filepath.Join(beta, "README.md"))},
-		files.DiscoverOptions{Depth: 2},
-	)
-	if err != nil {
-		t.Fatalf("newWorkspace() error = %v", err)
-	}
-	fileResponse := performRequest(newDocumentHandler(singleFile, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
-	if fileResponse.Code != http.StatusOK {
-		t.Fatalf("GET /api/files status = %d, body = %s", fileResponse.Code, fileResponse.Body.String())
-	}
-	var filePayload fileListResponse
-	decodeJSON(t, fileResponse, &filePayload)
-	canonicalFile, err := files.CanonicalPath(filepath.Join(beta, "README.md"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(filePayload.Roots) != 1 || filePayload.Roots[0].AbsolutePath != canonicalFile {
-		t.Fatalf("single-file roots = %+v, want absolutePath %q", filePayload.Roots, canonicalFile)
-	}
-	if filePayload.Roots[0].Kind != "file" {
-		t.Fatalf("single-file kind = %q, want %q", filePayload.Roots[0].Kind, "file")
-	}
-	if filePayload.Roots[0].PathSeparator != string(filepath.Separator) {
-		t.Fatalf("single-file pathSeparator = %q, want %q", filePayload.Roots[0].PathSeparator, string(filepath.Separator))
-	}
-
-	// A mixed workspace reports each root's own kind in input order.
-	mixed, err := newWorkspace(
-		[]files.Input{resolveTestInput(t, alpha), resolveTestInput(t, filepath.Join(beta, "README.md"))},
-		files.DiscoverOptions{Depth: 2},
-	)
-	if err != nil {
-		t.Fatalf("newWorkspace() error = %v", err)
-	}
-	mixedResponse := performRequest(newDocumentHandler(mixed, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
-	if mixedResponse.Code != http.StatusOK {
-		t.Fatalf("GET /api/files status = %d, body = %s", mixedResponse.Code, mixedResponse.Body.String())
-	}
-	var mixedPayload fileListResponse
-	decodeJSON(t, mixedResponse, &mixedPayload)
-	if len(mixedPayload.Roots) != 2 || mixedPayload.Roots[0].Kind != "directory" || mixedPayload.Roots[1].Kind != "file" {
-		t.Fatalf("mixed roots = %+v, want directory then file", mixedPayload.Roots)
-	}
+	sort.Strings(keys)
+	return keys
 }
 
 func TestDirectoryFilesAPIEmptyAndFailures(t *testing.T) {

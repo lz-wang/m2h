@@ -5,12 +5,11 @@ import {
   FileText,
   Folder,
   FolderOpen,
-  HardDrive,
   Link,
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { FileSummary, RootKind } from "@/api";
+import type { FileSummary } from "@/api";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -25,7 +24,6 @@ import {
   type DirectoryNode,
   documentURL,
   type FileNode,
-  localPath,
   markdownURL,
   type TreeNode,
 } from "@/model";
@@ -44,14 +42,6 @@ interface DocumentTreeProps {
   // tree nests under. Roots start expanded; collapsing uses the same
   // directory mechanics as inner directories.
   rootLabel?: string;
-  // The root's canonical local path on the server and that machine's path
-  // separator; together they build the absolute-path tooltips on directory
-  // rows. Without an absolute path the rows simply carry no tooltip.
-  rootAbsolutePath?: string;
-  pathSeparator?: string;
-  // The root's input kind: a "file" root's absolutePath already names the
-  // served file, and only "directory" roots carry the folder context menu.
-  rootKind?: RootKind;
   // Reports context-menu copy outcomes to the app-level status line, shared
   // with the toolbar share menu.
   onCopyStatus?(message: string): void;
@@ -67,9 +57,6 @@ export function DocumentTree({
   selectedPath,
   rootBase = "",
   rootLabel,
-  rootAbsolutePath,
-  pathSeparator = "/",
-  rootKind,
   onCopyStatus,
   searching = false,
   visible = true,
@@ -252,9 +239,6 @@ export function DocumentTree({
           key={`${node.type}:${node.path}`}
           node={node}
           base={rootBase}
-          rootAbsolutePath={rootAbsolutePath}
-          pathSeparator={pathSeparator}
-          rootKind={rootKind}
           onCopyStatus={onCopyStatus}
           expanded={expanded}
           selectedPath={selectedRelative}
@@ -280,9 +264,6 @@ export function DocumentTree({
         <RootItem
           label={rootLabel}
           path={rootBase}
-          absolutePath={rootAbsolutePath}
-          rootKind={rootKind}
-          onCopyStatus={onCopyStatus}
           expanded={searching || expanded.has(rootBase)}
           onToggle={toggle}
         >
@@ -296,70 +277,46 @@ export function DocumentTree({
 }
 
 // The labeled top-level row of one preview root in a multi-root workspace.
-// It behaves exactly like a directory row — sticky, collapsible, chevron and
-// folder context menu included — so the workspace reads as one tree of
-// parallel roots. A file-kind root never offers the folder menu: its
-// absolutePath names a document, not a folder.
+// It behaves exactly like a directory row — sticky, collapsible, chevron
+// included — so the workspace reads as one tree of parallel roots.
 function RootItem({
   label,
   path,
-  absolutePath,
-  rootKind,
-  onCopyStatus,
   expanded,
   onToggle,
   children,
 }: {
   label: string;
   path: string;
-  absolutePath?: string;
-  rootKind?: RootKind;
-  onCopyStatus?: (message: string) => void;
   expanded: boolean;
   onToggle(path: string): void;
   children: ReactNode;
 }) {
-  const button = (
-    <SidebarMenuButton
-      aria-expanded={expanded}
-      aria-label={label}
-      data-tree-directory="true"
-      data-tree-path={path}
-      data-tree-depth={0}
-      style={{ "--tree-sticky-top": "0rem" } as CSSProperties}
-      className="document-tree-directory h-8 text-sm font-medium"
-      onClick={() => onToggle(path)}
-      tooltip={
-        absolutePath === undefined ? undefined : directoryTooltip(absolutePath)
-      }
-    >
-      <ChevronRight
-        aria-hidden="true"
-        className={
-          expanded ? "rotate-90 transition-transform" : "transition-transform"
-        }
-      />
-      {expanded ? (
-        <FolderOpen aria-hidden="true" />
-      ) : (
-        <Folder aria-hidden="true" />
-      )}
-      <span className="truncate">{label}</span>
-    </SidebarMenuButton>
-  );
   return (
     <SidebarMenuItem>
-      {absolutePath !== undefined && rootKind === "directory" ? (
-        <ContextMenu.Root>
-          <ContextMenu.Trigger render={button} />
-          <FolderContextMenu
-            folderPath={absolutePath}
-            onCopyStatus={onCopyStatus}
-          />
-        </ContextMenu.Root>
-      ) : (
-        button
-      )}
+      <SidebarMenuButton
+        aria-expanded={expanded}
+        aria-label={label}
+        data-tree-directory="true"
+        data-tree-path={path}
+        data-tree-depth={0}
+        style={{ "--tree-sticky-top": "0rem" } as CSSProperties}
+        className="document-tree-directory h-8 text-sm font-medium"
+        onClick={() => onToggle(path)}
+      >
+        <ChevronRight
+          aria-hidden="true"
+          className={
+            expanded ? "rotate-90 transition-transform" : "transition-transform"
+          }
+        />
+        {expanded ? (
+          <FolderOpen aria-hidden="true" />
+        ) : (
+          <Folder aria-hidden="true" />
+        )}
+        <span className="truncate">{label}</span>
+      </SidebarMenuButton>
       {expanded ? (
         <SidebarMenuSub className="document-tree-sub">
           {children}
@@ -369,21 +326,6 @@ function RootItem({
   );
 }
 
-// Directory rows (and the multi-root root row) reveal the server-local
-// absolute path through the same Base UI tooltip the file rows already use.
-// The wide panel lets a long path wrap instead of ellipsize — the path is the
-// whole point of the tooltip. Replaces the rows' former native title
-// attribute, which would double up with this tooltip.
-function directoryTooltip(absolutePath: string) {
-  return {
-    hidden: false,
-    side: "right" as const,
-    align: "start" as const,
-    className: "tree-tooltip tree-tooltip-wide",
-    children: <span className="tree-tooltip-path">{absolutePath}</span>,
-  };
-}
-
 interface TreeItemProps {
   node: TreeNode;
   // Root identity for accessible names: file rows announce their virtual
@@ -391,9 +333,6 @@ interface TreeItemProps {
   // stay distinguishable to assistive technology while the visible label
   // keeps the plain root-relative name.
   base: string;
-  rootAbsolutePath?: string;
-  pathSeparator: string;
-  rootKind?: RootKind;
   onCopyStatus?: (message: string) => void;
   expanded: Set<string>;
   selectedPath: string | null;
@@ -420,21 +359,12 @@ function TreeItem({ node, ...rest }: TreeItemProps) {
 function FileItem({
   node,
   base,
-  rootAbsolutePath,
-  pathSeparator,
-  rootKind,
   onCopyStatus,
   selectedPath,
   onSelect,
 }: TreeItemProps & { node: FileNode }) {
   const active = node.path === selectedPath;
   const identity = base === "" ? node.path : `${base}/${node.path}`;
-  const fileLocalPath =
-    rootAbsolutePath === undefined
-      ? null
-      : rootKind === "file"
-        ? rootAbsolutePath
-        : localPath(rootAbsolutePath, node.path, pathSeparator);
   const button = (
     <SidebarMenuButton
       isActive={active}
@@ -463,11 +393,7 @@ function FileItem({
     <SidebarMenuItem>
       <ContextMenu.Root>
         <ContextMenu.Trigger render={button} />
-        <FileContextMenu
-          identity={identity}
-          documentLocalPath={fileLocalPath}
-          onCopyStatus={onCopyStatus}
-        />
+        <FileContextMenu identity={identity} onCopyStatus={onCopyStatus} />
       </ContextMenu.Root>
     </SidebarMenuItem>
   );
@@ -476,9 +402,6 @@ function FileItem({
 function DirectoryItem({
   node,
   base,
-  rootAbsolutePath,
-  pathSeparator,
-  rootKind,
   onCopyStatus,
   expanded,
   selectedPath,
@@ -488,48 +411,31 @@ function DirectoryItem({
   depth,
 }: TreeItemProps & { node: DirectoryNode }) {
   const open = searching || expanded.has(node.path);
-  const folderMenu = rootAbsolutePath !== undefined && rootKind === "directory";
-  const button = (
-    <SidebarMenuButton
-      aria-expanded={open}
-      aria-label={base === "" ? node.name : `${base}/${node.name}`}
-      data-tree-directory="true"
-      data-tree-path={node.path}
-      data-tree-depth={depth}
-      style={{ "--tree-sticky-top": `${depth * 2}rem` } as CSSProperties}
-      className="document-tree-directory h-8 text-sm font-medium"
-      onClick={() => onToggle(node.path)}
-      tooltip={
-        rootAbsolutePath === undefined
-          ? undefined
-          : directoryTooltip(
-              localPath(rootAbsolutePath, node.path, pathSeparator),
-            )
-      }
-    >
-      <ChevronRight
-        aria-hidden="true"
-        className={
-          open ? "rotate-90 transition-transform" : "transition-transform"
-        }
-      />
-      {open ? <FolderOpen aria-hidden="true" /> : <Folder aria-hidden="true" />}
-      <span className="truncate">{node.name}</span>
-    </SidebarMenuButton>
-  );
   return (
     <SidebarMenuItem>
-      {folderMenu && rootAbsolutePath !== undefined ? (
-        <ContextMenu.Root>
-          <ContextMenu.Trigger render={button} />
-          <FolderContextMenu
-            folderPath={localPath(rootAbsolutePath, node.path, pathSeparator)}
-            onCopyStatus={onCopyStatus}
-          />
-        </ContextMenu.Root>
-      ) : (
-        button
-      )}
+      <SidebarMenuButton
+        aria-expanded={open}
+        aria-label={base === "" ? node.name : `${base}/${node.name}`}
+        data-tree-directory="true"
+        data-tree-path={node.path}
+        data-tree-depth={depth}
+        style={{ "--tree-sticky-top": `${depth * 2}rem` } as CSSProperties}
+        className="document-tree-directory h-8 text-sm font-medium"
+        onClick={() => onToggle(node.path)}
+      >
+        <ChevronRight
+          aria-hidden="true"
+          className={
+            open ? "rotate-90 transition-transform" : "transition-transform"
+          }
+        />
+        {open ? (
+          <FolderOpen aria-hidden="true" />
+        ) : (
+          <Folder aria-hidden="true" />
+        )}
+        <span className="truncate">{node.name}</span>
+      </SidebarMenuButton>
       {open ? (
         <SidebarMenuSub className="document-tree-sub">
           {node.children.map((child) => (
@@ -537,9 +443,6 @@ function DirectoryItem({
               key={`${child.type}:${child.path}`}
               node={child}
               base={base}
-              rootAbsolutePath={rootAbsolutePath}
-              pathSeparator={pathSeparator}
-              rootKind={rootKind}
               onCopyStatus={onCopyStatus}
               expanded={expanded}
               selectedPath={selectedPath}
@@ -569,16 +472,14 @@ function copyWithStatus(
 
 // The file-row context menu: open the rendered page in a new tab (a real
 // anchor keeps the browser's native link semantics and accessibility) plus
-// the document's copyable identities. Right-clicking never selects the
+// the document's copyable addresses. Right-clicking never selects the
 // document — the menu is a shortcut to actions, not navigation — so the
 // reader's current document and scroll position stay untouched.
 function FileContextMenu({
   identity,
-  documentLocalPath,
   onCopyStatus,
 }: {
   identity: string;
-  documentLocalPath: string | null;
   onCopyStatus?: (message: string) => void;
 }) {
   return (
@@ -610,22 +511,6 @@ function FileContextMenu({
           </ContextMenu.Item>
           <ContextMenu.Item
             className="theme-menu-item"
-            disabled={documentLocalPath === null}
-            onClick={() => {
-              if (documentLocalPath !== null) {
-                copyWithStatus(
-                  documentLocalPath,
-                  "已复制本地路径",
-                  onCopyStatus,
-                );
-              }
-            }}
-          >
-            <HardDrive aria-hidden="true" />
-            <span>复制文档本地路径</span>
-          </ContextMenu.Item>
-          <ContextMenu.Item
-            className="theme-menu-item"
             onClick={() =>
               copyWithStatus(
                 absoluteURL(markdownURL(identity), window.location.origin),
@@ -636,34 +521,6 @@ function FileContextMenu({
           >
             <FileText aria-hidden="true" />
             <span>复制 Markdown 链接</span>
-          </ContextMenu.Item>
-        </ContextMenu.Popup>
-      </ContextMenu.Positioner>
-    </ContextMenu.Portal>
-  );
-}
-
-// Directory rows (and directory-kind root rows) offer just the folder's
-// server-local path — the same value the row's tooltip already shows.
-function FolderContextMenu({
-  folderPath,
-  onCopyStatus,
-}: {
-  folderPath: string;
-  onCopyStatus?: (message: string) => void;
-}) {
-  return (
-    <ContextMenu.Portal>
-      <ContextMenu.Positioner className="theme-menu-positioner" sideOffset={4}>
-        <ContextMenu.Popup className="theme-menu-popup">
-          <ContextMenu.Item
-            className="theme-menu-item"
-            onClick={() =>
-              copyWithStatus(folderPath, "已复制文件夹路径", onCopyStatus)
-            }
-          >
-            <HardDrive aria-hidden="true" />
-            <span>复制文件夹本地路径</span>
           </ContextMenu.Item>
         </ContextMenu.Popup>
       </ContextMenu.Positioner>

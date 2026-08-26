@@ -30,22 +30,14 @@ type fileSummary struct {
 
 // rootSummary groups one workspace root's documents. Files carry root-relative
 // paths; the id prefixes the addressable (virtual) path in a multi-root
-// workspace (see workspace.publicPath). Kind tells whether AbsolutePath
-// names the served file itself ("file") or the directory the root-relative
-// paths join onto ("directory") — a file root must not append its only
-// document's relative path again. AbsolutePath is reported only when the
-// server listens on loopback: exposing the serving machine's directory
-// layout to a public listener is a needless information leak. PathSeparator
-// is the server platform's separator: the browser machine may differ from
-// the machine running m2h, so the client never guesses how to join a native
-// absolute path.
+// workspace (see workspace.publicPath). The summary deliberately carries only
+// what the WebUI needs to navigate: the server's filesystem layout (absolute
+// paths, platform separators) never crosses this boundary, so nothing about
+// the serving machine leaks to any listener.
 type rootSummary struct {
-	ID            string        `json:"id"`
-	Name          string        `json:"name"`
-	Kind          string        `json:"kind"`
-	AbsolutePath  string        `json:"absolutePath,omitempty"`
-	PathSeparator string        `json:"pathSeparator"`
-	Files         []fileSummary `json:"files"`
+	ID    string        `json:"id"`
+	Name  string        `json:"name"`
+	Files []fileSummary `json:"files"`
 }
 
 // documentRef names one document by its root and root-relative path.
@@ -94,10 +86,6 @@ type documentHandler struct {
 	workspace workspace
 	ui        fs.FS
 	version   string
-	// exposeRootPaths reports the roots' absolute paths to the API. Only a
-	// loopback listener does: the local user asked for them (copy-path menu
-	// items), a public listener's clients did not.
-	exposeRootPaths bool
 
 	discover func(context.Context, rootScope) (files.Discovery, error)
 }
@@ -118,22 +106,10 @@ func newDocumentHandlerWithVersion(
 	ui fs.FS,
 	buildVersion string,
 ) http.Handler {
-	return newDocumentHandlerWithOptions(workspace, events, logger, ui, buildVersion, true)
-}
-
-func newDocumentHandlerWithOptions(
-	workspace workspace,
-	events *eventHub,
-	logger io.Writer,
-	ui fs.FS,
-	buildVersion string,
-	exposeRootPaths bool,
-) http.Handler {
 	handler := &documentHandler{
-		workspace:       workspace,
-		ui:              ui,
-		version:         buildVersion,
-		exposeRootPaths: exposeRootPaths,
+		workspace: workspace,
+		ui:        ui,
+		version:   buildVersion,
 		discover: func(ctx context.Context, scope rootScope) (files.Discovery, error) {
 			return scope.discover(ctx)
 		},
@@ -188,17 +164,11 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 				Title: title,
 			})
 		}
-		summary := rootSummary{
-			ID:            root.id,
-			Name:          root.label,
-			Kind:          rootScopeKind(root.scope),
-			PathSeparator: string(filepath.Separator),
-			Files:         summaries,
-		}
-		if handler.exposeRootPaths {
-			summary.AbsolutePath = root.input.Path
-		}
-		roots = append(roots, summary)
+		roots = append(roots, rootSummary{
+			ID:    root.id,
+			Name:  root.label,
+			Files: summaries,
+		})
 	}
 	writeJSON(response, http.StatusOK, fileListResponse{
 		Kind:            handler.workspace.kind(),
@@ -397,17 +367,6 @@ func writeJSONError(response http.ResponseWriter, status int, message string) {
 	writeJSON(response, status, struct {
 		Error string `json:"error"`
 	}{Error: message})
-}
-
-// rootScopeKind reports one root's input kind on the wire: a "file" root's
-// AbsolutePath already names the served file, a "directory" root's files join
-// onto AbsolutePath. The scope decides — not files.Input — so single-scope
-// call sites without a resolved input report the same value as production.
-func rootScopeKind(scope rootScope) string {
-	if scope.isSingleFile() {
-		return "file"
-	}
-	return "directory"
 }
 
 func tocEntriesFrom(headings []markdown.Heading) []tocEntryResponse {

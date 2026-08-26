@@ -97,8 +97,8 @@ test("hides every server-local path affordance", async ({ page }) => {
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  // The file context menu renders its local-path item disabled — the server's
-  // path cannot be copied, but the rest of the menu keeps working.
+  // The file context menu drops its local-path item entirely — the server's
+  // path is never sent to the browser at all.
   await page
     .getByRole("button", { name: "延迟图片回归文档，images.md" })
     .click({ button: "right" });
@@ -107,7 +107,7 @@ test("hides every server-local path affordance", async ({ page }) => {
   ).toBeVisible();
   await expect(
     page.getByRole("menuitem", { name: "复制文档本地路径" }),
-  ).toBeDisabled();
+  ).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   // Directory rows carry no context menu and no absolute-path tooltip. Hover

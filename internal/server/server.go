@@ -45,14 +45,9 @@ type Options struct {
 	PatternSet bool
 	DepthSet   bool
 	TOCSet     bool
-	// HideLocalPaths suppresses the roots' absolute paths in the API even on
-	// a loopback listener. A reverse proxy forwards public traffic to a
-	// loopback address, where the listener alone cannot tell local readers
-	// from remote ones; the explicit flag closes that gap.
-	HideLocalPaths bool
-	Log            io.Writer
-	UI             fs.FS
-	Version        string
+	Log        io.Writer
+	UI         fs.FS
+	Version    string
 
 	OnListening func(string)
 }
@@ -131,7 +126,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	handler := newDocumentHandlerWithOptions(workspace, hub, logger, options.UI, normalized.Version, hostIsLoopback(normalized.Host) && !normalized.HideLocalPaths)
+	handler := newDocumentHandlerWithVersion(workspace, hub, logger, options.UI, normalized.Version)
 	httpServer := &http.Server{
 		Handler: handler,
 		BaseContext: func(net.Listener) context.Context {
@@ -253,23 +248,6 @@ func normalizeOptions(options Options) (Options, error) {
 		return Options{}, err
 	}
 	return options, nil
-}
-
-// hostIsLoopback reports whether the listener host only accepts local
-// connections. Serving on loopback is the local-reading case (absolute paths
-// in the API are fine); anything wider treats every client as remote and keeps
-// the serving machine's directory layout to itself.
-func hostIsLoopback(host string) bool {
-	host = strings.TrimSpace(host)
-	if host == "" || host == "localhost" {
-		return true
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		return ip.IsLoopback()
-	}
-	// An unresolvable or unusual host is treated as public: the safe default
-	// costs only the copy-path menu items.
-	return false
 }
 
 func serverURL(host string, address net.Addr) string {

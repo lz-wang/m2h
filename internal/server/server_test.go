@@ -18,7 +18,6 @@ import (
 
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
-	appversion "github.com/lz-wang/m2h/internal/version"
 	"github.com/lz-wang/m2h/internal/watcher"
 )
 
@@ -652,106 +651,5 @@ func TestRunDirectoryWatcherStreamsWorkspaceChanged(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("run error = %v", err)
-	}
-}
-
-func TestHostIsLoopback(t *testing.T) {
-	t.Parallel()
-
-	for _, test := range []struct {
-		host string
-		want bool
-	}{
-		{host: "", want: true},
-		{host: "localhost", want: true},
-		{host: "127.0.0.1", want: true},
-		{host: "::1", want: true},
-		{host: "0.0.0.0", want: false},
-		{host: "192.168.1.4", want: false},
-		{host: "docs.example.com", want: false},
-	} {
-		if got := hostIsLoopback(test.host); got != test.want {
-			t.Errorf("hostIsLoopback(%q) = %v, want %v", test.host, got, test.want)
-		}
-	}
-}
-
-func TestFilesAPIHidesRootPathsBeyondLoopback(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	writeTestFile(t, filepath.Join(root, "guide.md"), "# Guide")
-	workspace, err := newWorkspace([]files.Input{{Path: root, Kind: files.KindDirectory}}, files.DiscoverOptions{Depth: 1})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	handler := newDocumentHandlerWithOptions(workspace, newEventHub(time.Second), nil, directoryTestUI(), appversion.Development, false)
-	response := performRequest(handler, http.MethodGet, "/api/files")
-	if response.Code != http.StatusOK {
-		t.Fatalf("GET /api/files status = %d", response.Code)
-	}
-	if strings.Contains(response.Body.String(), "absolutePath") {
-		t.Fatalf("non-loopback response exposes absolutePath: %s", response.Body.String())
-	}
-
-	loopback := newDocumentHandlerWithOptions(workspace, newEventHub(time.Second), nil, directoryTestUI(), appversion.Development, true)
-	response = performRequest(loopback, http.MethodGet, "/api/files")
-	if response.Code != http.StatusOK || !strings.Contains(response.Body.String(), "absolutePath") {
-		t.Fatalf("loopback response missing absolutePath: %d %s", response.Code, response.Body.String())
-	}
-}
-
-// A reverse proxy forwards public traffic to a loopback listener, so the
-// listener address alone cannot tell a local reader from a remote one. The
-// explicit hide option closes that gap; without it the local-reading default
-// keeps serving absolute paths on loopback.
-func TestRunHidesLocalPathsOnLoopbackWhenRequested(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	writeTestFile(t, filepath.Join(root, "README.md"), "# Paths")
-	deps := testDependencies()
-	deps.listen = func(string, string) (net.Listener, error) {
-		return net.Listen("tcp", "127.0.0.1:0")
-	}
-
-	fetchFiles := func(hideLocalPaths bool) string {
-		ctx, cancel := context.WithCancel(context.Background())
-		t.Cleanup(cancel)
-		listening := make(chan string, 1)
-		done := make(chan error, 1)
-		go func() {
-			done <- run(ctx, Options{
-				Inputs:         []string{root},
-				HideLocalPaths: hideLocalPaths,
-				Mode:           markdown.ModeAuto,
-				UI:             directoryTestUI(),
-				OnListening: func(address string) {
-					listening <- address
-				},
-			}, deps)
-		}()
-		response, err := http.Get(<-listening + "api/files")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer response.Body.Close()
-		body, err := io.ReadAll(response.Body)
-		if err != nil {
-			t.Fatal(err)
-		}
-		cancel()
-		if err := <-done; err != nil {
-			t.Fatalf("run() returned error: %v", err)
-		}
-		return string(body)
-	}
-
-	if body := fetchFiles(true); strings.Contains(body, "absolutePath") {
-		t.Fatalf("hidden local paths on loopback still expose absolutePath: %s", body)
-	}
-	if body := fetchFiles(false); !strings.Contains(body, "absolutePath") {
-		t.Fatalf("loopback default response missing absolutePath: %s", body)
 	}
 }
