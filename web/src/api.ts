@@ -135,12 +135,16 @@ function parseFileList(payload: unknown): FileListResponse {
     throw new Error("文件列表响应格式无效");
   }
   const roots = payload.roots.map((value) => {
+    // absolutePath is omitted when the server listens beyond loopback, so a
+    // missing field is valid — only a present but non-string value breaks
+    // the contract.
     if (
       !isRecord(value) ||
       typeof value.id !== "string" ||
       typeof value.name !== "string" ||
       !isRootKind(value.kind) ||
-      typeof value.absolutePath !== "string" ||
+      (value.absolutePath !== undefined &&
+        typeof value.absolutePath !== "string") ||
       (value.pathSeparator !== "/" && value.pathSeparator !== "\\")
     ) {
       throw new Error("文件列表响应格式无效");
@@ -148,14 +152,17 @@ function parseFileList(payload: unknown): FileListResponse {
     if (!Array.isArray(value.files)) {
       throw new Error("文件列表响应格式无效");
     }
-    return {
+    const root: RootSummary = {
       id: value.id,
       name: value.name,
       kind: value.kind,
-      absolutePath: value.absolutePath,
       pathSeparator: value.pathSeparator,
       files: value.files.map(parseFileSummary),
     };
+    if (typeof value.absolutePath === "string") {
+      root.absolutePath = value.absolutePath;
+    }
+    return root;
   });
   return {
     kind: parsePreviewKind(payload.kind),

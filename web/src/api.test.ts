@@ -299,6 +299,42 @@ describe("browser API", () => {
       "文件列表响应格式无效",
     );
 
+    // A non-loopback server omits absolutePath entirely (the serving machine
+    // keeps its directory layout private), so a missing field must parse —
+    // only a present but non-string value breaks the contract.
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          kind: "directory",
+          version: "1",
+          roots: [
+            {
+              id: "r0",
+              name: "docs",
+              kind: "directory",
+              pathSeparator: "/",
+              files: [],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.listFiles()).resolves.toEqual({
+      kind: "directory",
+      version: "1",
+      roots: [
+        {
+          id: "r0",
+          name: "docs",
+          kind: "directory",
+          pathSeparator: "/",
+          files: [],
+        },
+      ],
+      defaultDocument: null,
+    });
+
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
