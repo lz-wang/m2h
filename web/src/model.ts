@@ -212,6 +212,35 @@ export function ancestorDirectories(path: string | null): string[] {
     .map((_, index) => segments.slice(0, index + 1).join("/"));
 }
 
+// The tree's initial expansion, one rule per starting point:
+// - A selection (deep link or user click) expands exactly its ancestor
+//   directories, plus its own root row in a multi-root workspace — other
+//   roots stay collapsed, so a deep link into one root opens a focused view.
+// - No selection in a single-root tree expands every first-level directory:
+//   the unselected state presents the workspace's top level ready to browse,
+//   while deeper levels stay collapsed.
+// - No selection in a multi-root workspace expands nothing — parallel roots
+//   read as a compact list until the reader opens one.
+export function initialExpandedPaths(
+  tree: TreeNode[],
+  selectedRelative: string | null,
+  hasRootRow: boolean,
+  rootBase: string,
+): Set<string> {
+  const expanded = new Set(ancestorDirectories(selectedRelative));
+  if (selectedRelative !== null && hasRootRow) {
+    expanded.add(rootBase);
+  }
+  if (selectedRelative === null && !hasRootRow) {
+    for (const node of tree) {
+      if (node.type === "directory") {
+        expanded.add(node.path);
+      }
+    }
+  }
+  return expanded;
+}
+
 function sortTree(nodes: TreeNode[]): void {
   nodes.sort((left, right) => {
     if (left.type !== right.type) {

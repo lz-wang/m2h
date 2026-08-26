@@ -24,6 +24,7 @@ import {
   type DirectoryNode,
   documentURL,
   type FileNode,
+  initialExpandedPaths,
   markdownURL,
   type TreeNode,
 } from "@/model";
@@ -39,8 +40,9 @@ interface DocumentTreeProps {
   // the root id whose virtual prefix this tree owns.
   rootBase?: string;
   // Present only in a multi-root workspace: renders the labeled root row the
-  // tree nests under. Roots start expanded; collapsing uses the same
-  // directory mechanics as inner directories.
+  // tree nests under. Roots start collapsed unless the selection lives in
+  // them (see initialExpandedPaths); collapsing uses the same directory
+  // mechanics as inner directories.
   rootLabel?: string;
   // Reports context-menu copy outcomes to the app-level status line, shared
   // with the toolbar share menu.
@@ -74,19 +76,19 @@ export function DocumentTree({
         ? selectedPath
         : selectedPath.slice(rootBase.length + 1)
       : null;
-  const [expanded, setExpanded] = useState<Set<string>>(() => {
-    const initial = new Set(ancestorDirectories(selectedRelative));
-    if (hasRootRow) {
-      initial.add(rootBase);
-    }
-    return initial;
-  });
+  const [expanded, setExpanded] = useState<Set<string>>(() =>
+    initialExpandedPaths(tree, selectedRelative, hasRootRow, rootBase),
+  );
   const treeRef = useRef<HTMLUListElement>(null);
   const revealedPathRef = useRef<string | null>(null);
 
+  // A new selection only ever ADDS expansion: its ancestors (and its own root
+  // row in a multi-root workspace) merge into whatever the reader has already
+  // opened. The initial single-root first-level expansion lives in
+  // initialExpandedPaths and is not re-derived here.
   useLayoutEffect(() => {
     const next = new Set(ancestorDirectories(selectedRelative));
-    if (hasRootRow) {
+    if (selectedRelative !== null && hasRootRow) {
       next.add(rootBase);
     }
     setExpanded((current) => {

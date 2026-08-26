@@ -61,6 +61,12 @@ describe("App directory preview", () => {
     expect(
       screen.getByRole("button", { name: "Readme API Title，README.md" }),
     ).toBeTruthy();
+    // The single-root tree presents its first level ready to browse.
+    expect(
+      screen
+        .getByRole("button", { name: "guides" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
   });
 
   it("opens an explicit deep link and uses API title metadata", async () => {
@@ -87,6 +93,52 @@ describe("App directory preview", () => {
     expect(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
     ).toBeTruthy();
+  });
+
+  it("starts a multi-root workspace at / with every root collapsed", async () => {
+    window.history.replaceState(null, "", "/");
+    const api = createAPI({
+      listFiles: vi.fn().mockResolvedValue({
+        kind: "workspace",
+        version: "0.9.1",
+        roots: [
+          {
+            id: "r0",
+            name: "alpha",
+            files: [
+              { path: "README.md", name: "README.md", title: "Alpha Readme" },
+            ],
+          },
+          {
+            id: "r1",
+            name: "beta",
+            files: [
+              { path: "README.md", name: "README.md", title: "Beta Readme" },
+            ],
+          },
+        ],
+      }),
+      getDocument: vi.fn().mockImplementation(async (path: string) => ({
+        path,
+        title: path.startsWith("r1/") ? "Beta Readme" : "Alpha Readme",
+        html: `<p>Body for ${path}</p>`,
+        frontmatter: null,
+        toc: [],
+      })),
+    });
+    render(<App api={api} />);
+
+    await screen.findByText("请选择要查看的文件");
+    expect(api.getDocument).not.toHaveBeenCalled();
+    // Parallel roots read as a compact collapsed list until one is opened.
+    for (const label of ["alpha", "beta"]) {
+      expect(
+        screen
+          .getByRole("button", { name: label })
+          .getAttribute("aria-expanded"),
+      ).toBe("false");
+    }
+    expect(window.location.pathname).toBe("/");
   });
 
   it("opens the project and release links from the sidebar footer in new tabs", async () => {
@@ -244,7 +296,7 @@ describe("App directory preview", () => {
     ).toBeTruthy();
   });
 
-  it("groups a multi-root workspace into labeled, expanded root trees", async () => {
+  it("groups a multi-root workspace into labeled root trees, expanding only the selected root", async () => {
     window.history.replaceState(null, "", "/doc/r0/README.md");
     const getDocument = vi.fn().mockImplementation(async (path: string) => ({
       path,
@@ -292,18 +344,25 @@ describe("App directory preview", () => {
     );
     expect(window.location.pathname).toBe("/doc/r0/README.md");
 
-    // Both roots render as labeled top-level rows, expanded by default so the
-    // workspace is immediately browsable.
-    for (const label of ["alpha", "beta"]) {
-      const row = screen.getByRole("button", { name: label });
-      expect(row.getAttribute("aria-expanded")).toBe("true");
-    }
+    // Only the root holding the selection starts expanded; the other root
+    // reads as a collapsed parallel row until the reader opens it.
+    expect(
+      screen
+        .getByRole("button", { name: "alpha" })
+        .getAttribute("aria-expanded"),
+    ).toBe("true");
+    expect(
+      screen
+        .getByRole("button", { name: "beta" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
     expect(screen.getByText("3 个 Markdown 文件")).toBeTruthy();
 
     // Same-named documents in two roots stay distinct; the second root's copy
     // is selectable through its own virtual key while showing its plain
     // root-relative name.
     const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "beta" }));
     await user.click(
       screen.getByRole("button", { name: "Beta Readme，r1/README.md" }),
     );
@@ -919,6 +978,9 @@ describe("App directory preview", () => {
         expect(copied.at(-1)).toBe("http://localhost/raw/r0/README.md"),
       );
 
+      // The second root starts collapsed (the open document lives in r0);
+      // expand it to reach its file row.
+      await user.click(screen.getByRole("button", { name: "beta" }));
       fireEvent.contextMenu(
         screen.getByRole("button", { name: "Beta Readme，r1/README.md" }),
       );
@@ -1825,8 +1887,11 @@ describe("App directory preview", () => {
       "/doc/r1/README.md#section",
     );
 
-    // Switching to the first root's copy pushes its own virtual path.
+    // Switching to the first root's copy pushes its own virtual path. The
+    // first root starts collapsed (the deep link lives in the second), so it
+    // opens first.
     const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "alpha" }));
     await user.click(
       screen.getByRole("button", { name: "Alpha Readme，r0/README.md" }),
     );
@@ -1885,8 +1950,10 @@ describe("App directory preview", () => {
     await screen.findByText("Body for r1/README.md");
     expect(scrollTo).toHaveBeenCalledWith(0, 222);
 
-    // Switching documents restores the first root's own offset.
+    // Switching documents restores the first root's own offset. The first
+    // root starts collapsed, so it opens first.
     const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "alpha" }));
     await user.click(
       screen.getByRole("button", { name: "Alpha Readme，r0/README.md" }),
     );

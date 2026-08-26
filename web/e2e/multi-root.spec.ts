@@ -72,15 +72,15 @@ test("lists both roots side by side and opens each same-named README", async ({
 }) => {
   await openWorkspace(page);
 
-  // Both roots render as labeled top-level rows, expanded by default; the
-  // deep link opens the primary root's document.
+  // Only the root holding the deep-linked document starts expanded; the
+  // other root reads as a collapsed parallel row.
   await expect(page.getByRole("button", { name: "root-a" })).toHaveAttribute(
     "aria-expanded",
     "true",
   );
   await expect(page.getByRole("button", { name: "root-b" })).toHaveAttribute(
     "aria-expanded",
-    "true",
+    "false",
   );
   await expect(page.locator(".markdown-body h1")).toHaveText("Root A Readme");
   expect(await page.evaluate(() => window.location.pathname)).toBe(
@@ -97,6 +97,7 @@ test("lists both roots side by side and opens each same-named README", async ({
   await expect(file.locator(":scope > svg")).toHaveCount(1);
 
   // The second root's same-named README opens under its own virtual path.
+  await page.getByRole("button", { name: "root-b" }).click();
   await page
     .getByRole("button", { name: "Root B Readme，r1/README.md" })
     .click();
@@ -252,7 +253,9 @@ test("right-clicking same-named files copies each root's own addresses", async (
   );
 
   // The second root's copy routes to r1 — the same relative path never leaks
-  // across roots — while the open document and URL remain r0's.
+  // across roots — while the open document and URL remain r0's. The root
+  // starts collapsed (the open document lives in r0), so it opens first.
+  await page.getByRole("button", { name: "root-b" }).click();
   await page
     .getByRole("button", { name: "Root B Readme，r1/README.md" })
     .click({ button: "right" });
