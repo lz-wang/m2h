@@ -10,16 +10,16 @@ import (
 	"github.com/lz-wang/m2h/internal/files"
 )
 
-// assetHandler serves non-Markdown files for a preview workspace. A single
+// assetHandler serves non-Markdown files for a served workspace. A single
 // root keeps the unprefixed /assets/<path> routes; a multi-root workspace
 // requires the root id as the first segment (/assets/r0/<path>) so every
 // attachment resolves inside its own root's boundary and can never cross into
 // another root's tree. Markdown files are deliberately refused.
 type assetHandler struct {
-	workspace previewWorkspace
+	workspace workspace
 }
 
-func newAssetHandler(workspace previewWorkspace) http.Handler {
+func newAssetHandler(workspace workspace) http.Handler {
 	return &assetHandler{workspace: workspace}
 }
 

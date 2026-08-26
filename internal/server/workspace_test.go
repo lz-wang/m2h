@@ -18,7 +18,7 @@ func resolveTestInput(t *testing.T, path string) files.Input {
 	return input
 }
 
-func TestNewPreviewWorkspaceAssignsIDsAndLabelsInInputOrder(t *testing.T) {
+func TestNewWorkspaceAssignsIDsAndLabelsInInputOrder(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
@@ -30,7 +30,7 @@ func TestNewPreviewWorkspaceAssignsIDsAndLabelsInInputOrder(t *testing.T) {
 		}
 		writeTestFile(t, filepath.Join(directory, "README.md"), "# Readme")
 	}
-	workspace, err := newPreviewWorkspace(
+	workspace, err := newWorkspace(
 		[]files.Input{
 			resolveTestInput(t, alpha),
 			resolveTestInput(t, beta),
@@ -38,7 +38,7 @@ func TestNewPreviewWorkspaceAssignsIDsAndLabelsInInputOrder(t *testing.T) {
 		files.DiscoverOptions{Depth: 4},
 	)
 	if err != nil {
-		t.Fatalf("newPreviewWorkspace() error = %v", err)
+		t.Fatalf("newWorkspace() error = %v", err)
 	}
 
 	if workspace.rootCount() != 2 {
@@ -60,12 +60,12 @@ func TestNewPreviewWorkspaceAssignsIDsAndLabelsInInputOrder(t *testing.T) {
 	if paths := workspace.singleFilePaths(); len(paths) != 0 {
 		t.Fatalf("singleFilePaths() = %v, want none", paths)
 	}
-	if first.scope.kind() != previewDirectory || second.scope.kind() != previewDirectory {
+	if first.scope.kind() != workspaceDirectory || second.scope.kind() != workspaceDirectory {
 		t.Fatalf("directory roots reported kinds %q, %q", first.scope.kind(), second.scope.kind())
 	}
 }
 
-func TestNewPreviewWorkspaceKeepsSingleFileAndDirectoryRootsIndependent(t *testing.T) {
+func TestNewWorkspaceKeepsSingleFileAndDirectoryRootsIndependent(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
@@ -77,7 +77,7 @@ func TestNewPreviewWorkspaceKeepsSingleFileAndDirectoryRootsIndependent(t *testi
 	}
 	writeTestFile(t, filepath.Join(docs, "README.md"), "# Docs")
 
-	workspace, err := newPreviewWorkspace(
+	workspace, err := newWorkspace(
 		[]files.Input{
 			resolveTestInput(t, document),
 			resolveTestInput(t, docs),
@@ -85,12 +85,12 @@ func TestNewPreviewWorkspaceKeepsSingleFileAndDirectoryRootsIndependent(t *testi
 		files.DiscoverOptions{Depth: 4},
 	)
 	if err != nil {
-		t.Fatalf("newPreviewWorkspace() error = %v", err)
+		t.Fatalf("newWorkspace() error = %v", err)
 	}
 
 	first, second := workspace.roots[0], workspace.roots[1]
-	if first.scope.kind() != previewSingle {
-		t.Fatalf("file root kind = %q, want %q", first.scope.kind(), previewSingle)
+	if first.scope.kind() != workspaceSingle {
+		t.Fatalf("file root kind = %q, want %q", first.scope.kind(), workspaceSingle)
 	}
 	if first.label != "notes.md" {
 		t.Fatalf("file root label = %q, want notes.md", first.label)
@@ -98,8 +98,8 @@ func TestNewPreviewWorkspaceKeepsSingleFileAndDirectoryRootsIndependent(t *testi
 	if !first.scope.allowsDocument("notes.md") || first.scope.allowsDocument("other.md") {
 		t.Fatal("single-file root must only admit its own document")
 	}
-	if second.scope.kind() != previewDirectory {
-		t.Fatalf("directory root kind = %q, want %q", second.scope.kind(), previewDirectory)
+	if second.scope.kind() != workspaceDirectory {
+		t.Fatalf("directory root kind = %q, want %q", second.scope.kind(), workspaceDirectory)
 	}
 	if !second.scope.allowsDocument("README.md") {
 		t.Fatal("directory root must admit its Markdown files")
@@ -112,7 +112,7 @@ func TestNewPreviewWorkspaceKeepsSingleFileAndDirectoryRootsIndependent(t *testi
 	}
 }
 
-func TestNewPreviewWorkspaceLabelsDuplicateBasenamesUniquely(t *testing.T) {
+func TestNewWorkspaceLabelsDuplicateBasenamesUniquely(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
@@ -125,7 +125,7 @@ func TestNewPreviewWorkspaceLabelsDuplicateBasenamesUniquely(t *testing.T) {
 		}
 	}
 
-	workspace, err := newPreviewWorkspace(
+	workspace, err := newWorkspace(
 		[]files.Input{
 			resolveTestInput(t, one),
 			resolveTestInput(t, two),
@@ -134,7 +134,7 @@ func TestNewPreviewWorkspaceLabelsDuplicateBasenamesUniquely(t *testing.T) {
 		files.DiscoverOptions{Depth: 4},
 	)
 	if err != nil {
-		t.Fatalf("newPreviewWorkspace() error = %v", err)
+		t.Fatalf("newWorkspace() error = %v", err)
 	}
 
 	want := []string{"docs", "docs (2)", "docs (3)"}
@@ -151,7 +151,7 @@ func TestNewPreviewWorkspaceLabelsDuplicateBasenamesUniquely(t *testing.T) {
 	}
 }
 
-func TestNewPreviewWorkspaceRejectsDuplicateCanonicalRoots(t *testing.T) {
+func TestNewWorkspaceRejectsDuplicateCanonicalRoots(t *testing.T) {
 	t.Parallel()
 
 	base := t.TempDir()
@@ -163,27 +163,27 @@ func TestNewPreviewWorkspaceRejectsDuplicateCanonicalRoots(t *testing.T) {
 	writeTestFile(t, filepath.Join(docs, "guide.md"), "# Guide")
 
 	t.Run("same directory twice", func(t *testing.T) {
-		_, err := newPreviewWorkspace(
+		_, err := newWorkspace(
 			[]files.Input{
 				resolveTestInput(t, docs),
 				resolveTestInput(t, docs+string(os.PathSeparator)),
 			},
 			files.DiscoverOptions{Depth: 4},
 		)
-		if err == nil || !strings.Contains(err.Error(), "duplicate preview root") {
+		if err == nil || !strings.Contains(err.Error(), "duplicate workspace root") {
 			t.Fatalf("duplicate directory error = %v", err)
 		}
 	})
 
 	t.Run("same file twice", func(t *testing.T) {
-		_, err := newPreviewWorkspace(
+		_, err := newWorkspace(
 			[]files.Input{
 				resolveTestInput(t, filepath.Join(docs, "README.md")),
 				resolveTestInput(t, filepath.Join(docs, "README.md")),
 			},
 			files.DiscoverOptions{Depth: 4},
 		)
-		if err == nil || !strings.Contains(err.Error(), "duplicate preview root") {
+		if err == nil || !strings.Contains(err.Error(), "duplicate workspace root") {
 			t.Fatalf("duplicate file error = %v", err)
 		}
 	})
@@ -193,14 +193,14 @@ func TestNewPreviewWorkspaceRejectsDuplicateCanonicalRoots(t *testing.T) {
 		if err := os.Symlink(docs, alias); err != nil {
 			t.Skipf("symlink unavailable: %v", err)
 		}
-		_, err := newPreviewWorkspace(
+		_, err := newWorkspace(
 			[]files.Input{
 				resolveTestInput(t, docs),
 				resolveTestInput(t, alias),
 			},
 			files.DiscoverOptions{Depth: 4},
 		)
-		if err == nil || !strings.Contains(err.Error(), "duplicate preview root") {
+		if err == nil || !strings.Contains(err.Error(), "duplicate workspace root") {
 			t.Fatalf("symlink alias error = %v", err)
 		}
 	})

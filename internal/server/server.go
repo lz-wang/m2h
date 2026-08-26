@@ -1,4 +1,4 @@
-// Package server provides the browser preview HTTP service.
+// Package server provides the browser document-server HTTP service.
 package server
 
 import (
@@ -29,9 +29,9 @@ const (
 	shutdownTimeout  = 3 * time.Second
 )
 
-// Options configures a preview service.
+// Options configures a document server.
 type Options struct {
-	// Inputs lists one or more files or directories to preview. Each entry
+	// Inputs lists one or more files or directories to serve. Each entry
 	// keeps its own access boundary; they are never merged into one root.
 	Inputs     []string
 	Host       string
@@ -60,7 +60,7 @@ type dependencies struct {
 	debounce    time.Duration
 }
 
-// Run validates, starts, and gracefully shuts down one preview service.
+// Run validates, starts, and gracefully shuts down one document server.
 func Run(ctx context.Context, options Options) error {
 	return run(ctx, options, dependencies{
 		listen:      net.Listen,
@@ -77,7 +77,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		return err
 	}
 	if err := ctx.Err(); err != nil {
-		return fmt.Errorf("preview: %w", err)
+		return fmt.Errorf("server: %w", err)
 	}
 
 	inputs := make([]files.Input, 0, len(normalized.Inputs))
@@ -87,7 +87,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 			return err
 		}
 		if input.Kind == files.KindFile && !files.IsMarkdown(input.Path) {
-			return fmt.Errorf("preview %q: expected a Markdown file", input.Path)
+			return fmt.Errorf("serve %q: expected a Markdown file", input.Path)
 		}
 		inputs = append(inputs, input)
 	}
@@ -103,10 +103,10 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		}
 	}
 	if normalized.PatternSet && !hasDirectoryRoot {
-		return fmt.Errorf("--glob can only be used when previewing a directory")
+		return fmt.Errorf("--glob can only be used when serving a directory")
 	}
 	if normalized.DepthSet && !hasDirectoryRoot {
-		return fmt.Errorf("--depth can only be used when previewing a directory")
+		return fmt.Errorf("--depth can only be used when serving a directory")
 	}
 
 	logger := normalized.Log
@@ -116,7 +116,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	runContext, cancel := context.WithCancel(ctx)
 	defer cancel()
 	hub := newEventHub(deps.keepAlive)
-	workspace, err := newPreviewWorkspace(inputs, files.DiscoverOptions{
+	workspace, err := newWorkspace(inputs, files.DiscoverOptions{
 		Depth:   normalized.Depth,
 		Pattern: normalized.Pattern,
 		Log:     logger,
@@ -124,7 +124,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	handler := newPreviewHandlerWithVersion(workspace, hub, logger, options.UI, normalized.Version)
+	handler := newDocumentHandlerWithVersion(workspace, hub, logger, options.UI, normalized.Version)
 	httpServer := &http.Server{
 		Handler: handler,
 		BaseContext: func(net.Listener) context.Context {
@@ -157,8 +157,8 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		}
 	}
 
-	address := previewOptionsURL(previewURL(normalized.Host, listener.Addr()), normalized.Mode, normalized.Width, normalized.TOC)
-	_, _ = fmt.Fprintf(logger, "m2h: previewing %s at %s\n", strings.Join(workspace.inputPaths(), ", "), address)
+	address := serverOptionsURL(serverURL(normalized.Host, listener.Addr()), normalized.Mode, normalized.Width, normalized.TOC)
+	_, _ = fmt.Fprintf(logger, "m2h: serving %s at %s\n", strings.Join(workspace.inputPaths(), ", "), address)
 	if normalized.OnListening != nil {
 		normalized.OnListening(address)
 	}
@@ -177,7 +177,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		}
 	case err := <-serveDone:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
-			runErr = fmt.Errorf("serve preview: %w", err)
+			runErr = fmt.Errorf("serve documents: %w", err)
 		}
 	}
 
@@ -185,7 +185,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	shutdownContext, stopShutdown := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer stopShutdown()
 	if err := httpServer.Shutdown(shutdownContext); err != nil && runErr == nil {
-		runErr = fmt.Errorf("shut down preview: %w", err)
+		runErr = fmt.Errorf("shut down server: %w", err)
 	}
 	return runErr
 }
@@ -203,7 +203,7 @@ func normalizeOptions(options Options) (Options, error) {
 		options.Version = appversion.Development
 	}
 	if _, err := appversion.Parse(options.Version); err != nil {
-		return Options{}, fmt.Errorf("invalid preview version: %w", err)
+		return Options{}, fmt.Errorf("invalid server version: %w", err)
 	}
 	if options.Host == "" {
 		options.Host = DefaultHost
@@ -236,7 +236,7 @@ func normalizeOptions(options Options) (Options, error) {
 	return options, nil
 }
 
-func previewURL(host string, address net.Addr) string {
+func serverURL(host string, address net.Addr) string {
 	if host == "0.0.0.0" || host == "::" || host == "" {
 		host = DefaultHost
 	}
@@ -251,7 +251,7 @@ func previewURL(host string, address net.Addr) string {
 	return "http://" + net.JoinHostPort(host, strconv.Itoa(port)) + "/"
 }
 
-func previewOptionsURL(address string, mode markdown.Mode, width markdown.Width, toc bool) string {
+func serverOptionsURL(address string, mode markdown.Mode, width markdown.Width, toc bool) string {
 	parameters := url.Values{}
 	if mode != markdown.ModeAuto {
 		parameters.Set("mode", string(mode))

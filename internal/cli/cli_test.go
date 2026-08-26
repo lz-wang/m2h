@@ -353,7 +353,7 @@ func TestServeRejectsInvalidMultiRootInputs(t *testing.T) {
 		{
 			name: "duplicate canonical root",
 			args: []string{root, root + string(os.PathSeparator)},
-			want: "duplicate preview root",
+			want: "duplicate workspace root",
 		},
 	} {
 		_, _, err := runCommand(t, test.args...)

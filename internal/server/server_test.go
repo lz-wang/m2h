@@ -53,7 +53,7 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 	}
 	address := <-listening
 
-	// A single-file preview now serves the unified React WebUI: the shell is
+	// A single-file workspace now serves the unified React WebUI: the shell is
 	// the embedded SPA and the document arrives through the JSON API.
 	shell, err := http.Get(address)
 	if err != nil {
@@ -65,7 +65,7 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 		t.Fatal(err)
 	}
 	if shell.StatusCode != http.StatusOK || !bytes.Contains(shellBody, []byte(`id="root"`)) {
-		t.Fatalf("preview shell = %d %q", shell.StatusCode, shellBody)
+		t.Fatalf("document shell = %d %q", shell.StatusCode, shellBody)
 	}
 
 	listResponse, err := http.Get(address + "api/files")
@@ -83,8 +83,8 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 	if list.DefaultDocument == nil || list.DefaultDocument.Root != "r0" || list.DefaultDocument.Path != "guide.md" {
 		t.Fatalf("single-file default = %+v", list.DefaultDocument)
 	}
-	if list.Kind != previewSingle {
-		t.Fatalf("single-file kind = %q, want %q", list.Kind, previewSingle)
+	if list.Kind != workspaceSingle {
+		t.Fatalf("single-file kind = %q, want %q", list.Kind, workspaceSingle)
 	}
 	if list.Version != "1.2.3" {
 		t.Fatalf("single-file version = %q, want 1.2.3", list.Version)
@@ -102,8 +102,8 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 	if document.StatusCode != http.StatusOK || !bytes.Contains(documentBody, []byte("Running")) {
 		t.Fatalf("document response = %d %q", document.StatusCode, documentBody)
 	}
-	if !strings.Contains(logOutput.String(), "m2h: previewing") {
-		t.Fatalf("preview log = %q", logOutput.String())
+	if !strings.Contains(logOutput.String(), "m2h: serving") {
+		t.Fatalf("server log = %q", logOutput.String())
 	}
 
 	cancel()
@@ -243,7 +243,7 @@ func TestRunReturnsListenWatcherAndServeErrors(t *testing.T) {
 		}
 		return listener, nil
 	}
-	if err := run(context.Background(), base, serveFailure); err == nil || !strings.Contains(err.Error(), "serve preview") {
+	if err := run(context.Background(), base, serveFailure); err == nil || !strings.Contains(err.Error(), "serve documents") {
 		t.Fatalf("serve failure = %v", err)
 	}
 }
@@ -278,7 +278,7 @@ func TestRunValidatesBeforeFilesystemAndNetwork(t *testing.T) {
 		{name: "port", options: Options{Inputs: []string{missing}, Port: 70000, Mode: markdown.ModeAuto}, want: "invalid port"},
 		{name: "mode", options: Options{Inputs: []string{missing}, Mode: "sepia"}, want: "invalid mode"},
 		{name: "width", options: Options{Inputs: []string{missing}, Mode: markdown.ModeAuto, Width: "narrow"}, want: "invalid width"},
-		{name: "version", options: Options{Inputs: []string{missing}, Mode: markdown.ModeAuto, Version: "latest"}, want: "invalid preview version"},
+		{name: "version", options: Options{Inputs: []string{missing}, Mode: markdown.ModeAuto, Version: "latest"}, want: "invalid server version"},
 		{name: "depth", options: Options{Inputs: []string{missing}, Mode: markdown.ModeAuto, Depth: -1}, want: "invalid depth"},
 		{name: "glob", options: Options{Inputs: []string{missing}, Mode: markdown.ModeAuto, Pattern: "["}, want: "invalid glob"},
 	}
@@ -435,7 +435,7 @@ func TestRunRejectsDuplicateInputs(t *testing.T) {
 		Inputs: []string{root, root},
 		Mode:   markdown.ModeAuto,
 	}, testDependencies())
-	if err == nil || !strings.Contains(err.Error(), "duplicate preview root") {
+	if err == nil || !strings.Contains(err.Error(), "duplicate workspace root") {
 		t.Fatalf("duplicate input error = %v", err)
 	}
 }
@@ -468,14 +468,14 @@ func TestRunDirectoryDoesNotCreateWatcher(t *testing.T) {
 		t.Fatalf("directory run error = %v", err)
 	}
 	if watchCalled {
-		t.Fatal("directory preview created a watcher")
+		t.Fatal("directory workspace created a watcher")
 	}
 	if !strings.HasSuffix(listeningAddress, "/?mode=dark") {
-		t.Fatalf("directory preview address = %q, want non-default mode query", listeningAddress)
+		t.Fatalf("directory workspace address = %q, want non-default mode query", listeningAddress)
 	}
 }
 
-func TestRunDirectoryPreviewURLRespectsTOCFlag(t *testing.T) {
+func TestRunDirectoryServerURLRespectsTOCFlag(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -503,7 +503,7 @@ func TestRunDirectoryPreviewURLRespectsTOCFlag(t *testing.T) {
 		t.Fatalf("directory run error = %v", err)
 	}
 	if !strings.HasSuffix(listeningAddress, "/?mode=dark&toc=false") {
-		t.Fatalf("directory preview address = %q, want toc=false query", listeningAddress)
+		t.Fatalf("directory workspace address = %q, want toc=false query", listeningAddress)
 	}
 }
 
@@ -526,25 +526,25 @@ func TestDirectoryPreviewURLOmitsDefaultParameters(t *testing.T) {
 		{name: "toc disabled with width", mode: markdown.ModeAuto, width: markdown.WidthWide, toc: false, want: "http://127.0.0.1:8793/?toc=false&width=wide"},
 	} {
 		t.Run(test.name, func(t *testing.T) {
-			if got := previewOptionsURL("http://127.0.0.1:8793/", test.mode, test.width, test.toc); got != test.want {
-				t.Fatalf("previewOptionsURL() = %q, want %q", got, test.want)
+			if got := serverOptionsURL("http://127.0.0.1:8793/", test.mode, test.width, test.toc); got != test.want {
+				t.Fatalf("serverOptionsURL() = %q, want %q", got, test.want)
 			}
 		})
 	}
 }
 
-func TestPreviewURLNormalizesWildcardAndAddressTypes(t *testing.T) {
+func TestServerURLNormalizesWildcardAndAddressTypes(t *testing.T) {
 	t.Parallel()
 
 	tcpAddress := &net.TCPAddr{IP: net.ParseIP("0.0.0.0"), Port: 4321}
-	if got, want := previewURL("0.0.0.0", tcpAddress), "http://127.0.0.1:4321/"; got != want {
-		t.Fatalf("previewURL wildcard = %q, want %q", got, want)
+	if got, want := serverURL("0.0.0.0", tcpAddress), "http://127.0.0.1:4321/"; got != want {
+		t.Fatalf("serverURL wildcard = %q, want %q", got, want)
 	}
-	if got, want := previewURL("::1", stringAddress("[::1]:5432")), "http://[::1]:5432/"; got != want {
-		t.Fatalf("previewURL IPv6 = %q, want %q", got, want)
+	if got, want := serverURL("::1", stringAddress("[::1]:5432")), "http://[::1]:5432/"; got != want {
+		t.Fatalf("serverURL IPv6 = %q, want %q", got, want)
 	}
-	if got, want := previewURL("localhost", stringAddress("invalid")), "http://localhost:8793/"; got != want {
-		t.Fatalf("previewURL fallback = %q, want %q", got, want)
+	if got, want := serverURL("localhost", stringAddress("invalid")), "http://localhost:8793/"; got != want {
+		t.Fatalf("serverURL fallback = %q, want %q", got, want)
 	}
 }
 

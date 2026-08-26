@@ -28,7 +28,7 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	canonical := canonicalDirectory(t, root)
 	options := files.DiscoverOptions{Depth: 2, Pattern: "**/*.md"}
 	var logOutput bytes.Buffer
-	handler := newPreviewHandler(singleRootWorkspace(previewScope{root: canonical, discovery: options}), newEventHub(time.Second), &logOutput, directoryTestUI())
+	handler := newDocumentHandler(singleRootWorkspace(rootScope{root: canonical, discovery: options}), newEventHub(time.Second), &logOutput, directoryTestUI())
 
 	response := performRequest(handler, http.MethodGet, "/api/files")
 	if response.Code != http.StatusOK {
@@ -36,8 +36,8 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	}
 	var payload fileListResponse
 	decodeJSON(t, response, &payload)
-	if payload.Kind != previewDirectory {
-		t.Fatalf("directory kind = %q, want %q", payload.Kind, previewDirectory)
+	if payload.Kind != workspaceDirectory {
+		t.Fatalf("directory kind = %q, want %q", payload.Kind, workspaceDirectory)
 	}
 	if payload.Version != appversion.Development {
 		t.Fatalf("directory version = %q, want %q", payload.Version, appversion.Development)
@@ -82,14 +82,14 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 func TestDirectoryFilesAPIDepthGlobRefreshAndDefaultSelection(t *testing.T) {
 	root := directoryFixture(t)
 	canonical := canonicalDirectory(t, root)
-	handlerState := &previewHandler{
-		workspace: singleRootWorkspace(previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"}}),
-		discover: func(ctx context.Context, scope previewScope) (files.Discovery, error) {
+	handlerState := &documentHandler{
+		workspace: singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"}}),
+		discover: func(ctx context.Context, scope rootScope) (files.Discovery, error) {
 			return scope.discover(ctx)
 		},
 	}
 	requests := 0
-	handlerState.discover = func(ctx context.Context, scope previewScope) (files.Discovery, error) {
+	handlerState.discover = func(ctx context.Context, scope rootScope) (files.Discovery, error) {
 		requests++
 		return scope.discover(ctx)
 	}
@@ -151,14 +151,14 @@ func TestFilesAPIReportsRootAbsolutePathAndSeparator(t *testing.T) {
 
 	// A single directory root reports its canonical absolute path and the
 	// server platform's separator; the wire shape carries both keys.
-	single, err := newPreviewWorkspace(
+	single, err := newWorkspace(
 		[]files.Input{resolveTestInput(t, alpha)},
 		files.DiscoverOptions{Depth: 2},
 	)
 	if err != nil {
-		t.Fatalf("newPreviewWorkspace() error = %v", err)
+		t.Fatalf("newWorkspace() error = %v", err)
 	}
-	response := performRequest(newPreviewHandler(single, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
+	response := performRequest(newDocumentHandler(single, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
 	if response.Code != http.StatusOK {
 		t.Fatalf("GET /api/files status = %d, body = %s", response.Code, response.Body.String())
 	}
@@ -182,14 +182,14 @@ func TestFilesAPIReportsRootAbsolutePathAndSeparator(t *testing.T) {
 	}
 
 	// A multi-root workspace reports each root's own path in input order.
-	workspace, err := newPreviewWorkspace(
+	workspace, err := newWorkspace(
 		[]files.Input{resolveTestInput(t, alpha), resolveTestInput(t, beta)},
 		files.DiscoverOptions{Depth: 2},
 	)
 	if err != nil {
-		t.Fatalf("newPreviewWorkspace() error = %v", err)
+		t.Fatalf("newWorkspace() error = %v", err)
 	}
-	workspaceResponse := performRequest(newPreviewHandler(workspace, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
+	workspaceResponse := performRequest(newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
 	if workspaceResponse.Code != http.StatusOK {
 		t.Fatalf("GET /api/files status = %d, body = %s", workspaceResponse.Code, workspaceResponse.Body.String())
 	}
@@ -233,14 +233,14 @@ func TestFilesAPIReportsRootAbsolutePathAndSeparator(t *testing.T) {
 	}
 
 	// A single-file root keeps the API shape and names the file itself.
-	singleFile, err := newPreviewWorkspace(
+	singleFile, err := newWorkspace(
 		[]files.Input{resolveTestInput(t, filepath.Join(beta, "README.md"))},
 		files.DiscoverOptions{Depth: 2},
 	)
 	if err != nil {
-		t.Fatalf("newPreviewWorkspace() error = %v", err)
+		t.Fatalf("newWorkspace() error = %v", err)
 	}
-	fileResponse := performRequest(newPreviewHandler(singleFile, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
+	fileResponse := performRequest(newDocumentHandler(singleFile, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
 	if fileResponse.Code != http.StatusOK {
 		t.Fatalf("GET /api/files status = %d, body = %s", fileResponse.Code, fileResponse.Body.String())
 	}
@@ -261,14 +261,14 @@ func TestFilesAPIReportsRootAbsolutePathAndSeparator(t *testing.T) {
 	}
 
 	// A mixed workspace reports each root's own kind in input order.
-	mixed, err := newPreviewWorkspace(
+	mixed, err := newWorkspace(
 		[]files.Input{resolveTestInput(t, alpha), resolveTestInput(t, filepath.Join(beta, "README.md"))},
 		files.DiscoverOptions{Depth: 2},
 	)
 	if err != nil {
-		t.Fatalf("newPreviewWorkspace() error = %v", err)
+		t.Fatalf("newWorkspace() error = %v", err)
 	}
-	mixedResponse := performRequest(newPreviewHandler(mixed, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
+	mixedResponse := performRequest(newDocumentHandler(mixed, newEventHub(time.Second), nil, directoryTestUI()), http.MethodGet, "/api/files")
 	if mixedResponse.Code != http.StatusOK {
 		t.Fatalf("GET /api/files status = %d, body = %s", mixedResponse.Code, mixedResponse.Body.String())
 	}
@@ -283,9 +283,9 @@ func TestDirectoryFilesAPIEmptyAndFailures(t *testing.T) {
 	t.Parallel()
 
 	root := canonicalDirectory(t, t.TempDir())
-	handlerState := &previewHandler{
-		workspace: singleRootWorkspace(previewScope{root: root, discovery: files.DiscoverOptions{Depth: 2}}),
-		discover: func(ctx context.Context, scope previewScope) (files.Discovery, error) {
+	handlerState := &documentHandler{
+		workspace: singleRootWorkspace(rootScope{root: root, discovery: files.DiscoverOptions{Depth: 2}}),
+		discover: func(ctx context.Context, scope rootScope) (files.Discovery, error) {
 			return scope.discover(ctx)
 		},
 	}
@@ -305,13 +305,13 @@ func TestDirectoryFilesAPIEmptyAndFailures(t *testing.T) {
 		t.Errorf("POST /api/files Allow = %q", response.Header().Get("Allow"))
 	}
 
-	handlerState.discover = func(context.Context, previewScope) (files.Discovery, error) {
+	handlerState.discover = func(context.Context, rootScope) (files.Discovery, error) {
 		return files.Discovery{}, errors.New("scan failed")
 	}
 	response = performRequest(handler, http.MethodGet, "/api/files")
 	assertJSONError(t, response, http.StatusInternalServerError)
 
-	handlerState.discover = func(context.Context, previewScope) (files.Discovery, error) {
+	handlerState.discover = func(context.Context, rootScope) (files.Discovery, error) {
 		return files.Discovery{Markdown: []files.Entry{{AbsolutePath: filepath.Join(root, "missing.md"), RelativePath: "missing.md"}}}, nil
 	}
 	response = performRequest(handler, http.MethodGet, "/api/files")
@@ -319,7 +319,7 @@ func TestDirectoryFilesAPIEmptyAndFailures(t *testing.T) {
 
 	valid := filepath.Join(root, "valid.md")
 	writeTestFile(t, valid, "# Valid")
-	handlerState.discover = func(context.Context, previewScope) (files.Discovery, error) {
+	handlerState.discover = func(context.Context, rootScope) (files.Discovery, error) {
 		return files.Discovery{Markdown: []files.Entry{{AbsolutePath: valid, RelativePath: "../invalid.md"}}}, nil
 	}
 	response = performRequest(handler, http.MethodGet, "/api/files")
@@ -334,8 +334,8 @@ func TestDirectoryDocumentAPIReadsLatestContent(t *testing.T) {
 	writeTestFile(t, source, "# Architecture\n\n[Guide](../guide.md)\n\nold body\n\n<details>raw HTML</details>")
 	writeTestFile(t, filepath.Join(root, "guide.md"), "# Guide")
 	canonical := canonicalDirectory(t, root)
-	handler := newPreviewHandler(
-		singleRootWorkspace(previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
+	handler := newDocumentHandler(
+		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -380,8 +380,8 @@ func TestDirectoryDocumentAPIRejectsUnsafeAndFilteredPaths(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "deep", "topic", "details.md"), "# Deep")
 	writeTestFile(t, filepath.Join(root, "notes.txt"), "text")
 	canonical := canonicalDirectory(t, root)
-	handler := newPreviewHandler(
-		singleRootWorkspace(previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"}}),
+	handler := newDocumentHandler(
+		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"}}),
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -442,8 +442,8 @@ func TestDirectoryDocumentAPIExposesFrontMatter(t *testing.T) {
 	)
 	writeTestFile(t, filepath.Join(root, "plain.md"), "# Plain\n\nno metadata\n")
 	canonical := canonicalDirectory(t, root)
-	handler := newPreviewHandler(
-		singleRootWorkspace(previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
+	handler := newDocumentHandler(
+		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -513,8 +513,8 @@ func TestDirectoryDocumentAPIExposesTableOfContents(t *testing.T) {
 	)
 	writeTestFile(t, filepath.Join(root, "plain.md"), "No headings here.\n")
 	canonical := canonicalDirectory(t, root)
-	handler := newPreviewHandler(
-		singleRootWorkspace(previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
+	handler := newDocumentHandler(
+		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -561,8 +561,8 @@ func TestDirectoryDocumentAPIInvalidFrontMatter(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "broken.md"), "---\ntags: [\n---\n# Broken\n")
 	writeTestFile(t, filepath.Join(root, "scalar.md"), "---\njust text\n---\n# Scalar\n")
 	canonical := canonicalDirectory(t, root)
-	handler := newPreviewHandler(
-		singleRootWorkspace(previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
+	handler := newDocumentHandler(
+		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -580,8 +580,8 @@ func TestDirectoryAssetsSPAFallbackAndAPINotFound(t *testing.T) {
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "README.md"), "# Readme")
 	writeTestFile(t, filepath.Join(root, "styles", "site.css"), "body { color: red; }")
-	handler := newPreviewHandler(
-		singleRootWorkspace(previewScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
+	handler := newDocumentHandler(
+		singleRootWorkspace(rootScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -630,9 +630,9 @@ func TestDirectoryWebUIAssetsAndSharedMarkdownStyles(t *testing.T) {
 		"assets/index.js":  &fstest.MapFile{Data: []byte(`console.log("m2h")`)},
 		"assets/index.css": &fstest.MapFile{Data: []byte(`.app { color: blue; }`)},
 	}
-	handlerState := &previewHandler{
-		workspace: singleRootWorkspace(previewScope{root: root, discovery: files.DiscoverOptions{Depth: 2}}),
-		discover: func(ctx context.Context, scope previewScope) (files.Discovery, error) {
+	handlerState := &documentHandler{
+		workspace: singleRootWorkspace(rootScope{root: root, discovery: files.DiscoverOptions{Depth: 2}}),
+		discover: func(ctx context.Context, scope rootScope) (files.Discovery, error) {
 			return scope.discover(ctx)
 		},
 		ui: ui,
@@ -647,7 +647,7 @@ func TestDirectoryWebUIAssetsAndSharedMarkdownStyles(t *testing.T) {
 		t.Fatalf("GET Markdown CSS status = %d", styles.Code)
 	}
 	if styles.Body.String() != assets.PreviewStylesheet() {
-		t.Errorf("Markdown CSS did not serve the stable preview stylesheet")
+		t.Errorf("Markdown CSS did not serve the stable WebUI stylesheet")
 	}
 	if !strings.HasPrefix(styles.Header().Get("Content-Type"), "text/css") || styles.Header().Get("Cache-Control") != "no-cache" {
 		t.Errorf("Markdown CSS headers content-type=%q cache=%q", styles.Header().Get("Content-Type"), styles.Header().Get("Cache-Control"))
@@ -703,8 +703,8 @@ func TestDirectoryRequestLogContainsMetadataNotBody(t *testing.T) {
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "guide.md"), "# Secret title\n\nsensitive-body-text")
 	var logOutput bytes.Buffer
-	handler := newPreviewHandler(
-		singleRootWorkspace(previewScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
+	handler := newDocumentHandler(
+		singleRootWorkspace(rootScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
 		newEventHub(time.Second),
 		&logOutput,
 		directoryTestUI(),
@@ -771,7 +771,7 @@ func TestSafeRelativePathAndExactResolution(t *testing.T) {
 // multiRootFixture builds a two-root workspace whose roots deliberately share
 // file names: both carry README.md and images/logo.png so routing can prove
 // that identical relative paths never cross between roots.
-func multiRootFixture(t *testing.T) previewWorkspace {
+func multiRootFixture(t *testing.T) workspace {
 	t.Helper()
 
 	base := t.TempDir()
@@ -788,7 +788,7 @@ func multiRootFixture(t *testing.T) previewWorkspace {
 	writeTestFile(t, filepath.Join(beta, "README.md"), "# Beta Readme")
 	writeTestFile(t, filepath.Join(beta, "images", "logo.png"), "beta-logo")
 
-	workspace, err := newPreviewWorkspace(
+	workspace, err := newWorkspace(
 		[]files.Input{
 			resolveTestInput(t, alpha),
 			resolveTestInput(t, beta),
@@ -796,7 +796,7 @@ func multiRootFixture(t *testing.T) previewWorkspace {
 		files.DiscoverOptions{Depth: 4},
 	)
 	if err != nil {
-		t.Fatalf("newPreviewWorkspace() error = %v", err)
+		t.Fatalf("newWorkspace() error = %v", err)
 	}
 	return workspace
 }
@@ -806,7 +806,7 @@ func TestWorkspaceFilesAPILabelsRootsAndPrefersThePrimaryRoot(t *testing.T) {
 
 	// The primary root has neither README.md nor index.md while the second
 	// root has a README: the primary's first document still wins — the CLI's
-	// first input decides where the preview opens.
+	// first input decides where the WebUI opens.
 	base := t.TempDir()
 	alpha := filepath.Join(base, "alpha")
 	beta := filepath.Join(base, "beta")
@@ -817,14 +817,14 @@ func TestWorkspaceFilesAPILabelsRootsAndPrefersThePrimaryRoot(t *testing.T) {
 	}
 	writeTestFile(t, filepath.Join(alpha, "zeta.md"), "# Zeta")
 	writeTestFile(t, filepath.Join(beta, "README.md"), "# Beta Readme")
-	workspace, err := newPreviewWorkspace(
+	workspace, err := newWorkspace(
 		[]files.Input{resolveTestInput(t, alpha), resolveTestInput(t, beta)},
 		files.DiscoverOptions{Depth: 4},
 	)
 	if err != nil {
-		t.Fatalf("newPreviewWorkspace() error = %v", err)
+		t.Fatalf("newWorkspace() error = %v", err)
 	}
-	handler := newPreviewHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
 
 	response := performRequest(handler, http.MethodGet, "/api/files")
 	if response.Code != http.StatusOK {
@@ -832,8 +832,8 @@ func TestWorkspaceFilesAPILabelsRootsAndPrefersThePrimaryRoot(t *testing.T) {
 	}
 	var payload fileListResponse
 	decodeJSON(t, response, &payload)
-	if payload.Kind != previewWorkspaceKind {
-		t.Fatalf("workspace kind = %q, want %q", payload.Kind, previewWorkspaceKind)
+	if payload.Kind != workspaceMultiRootKind {
+		t.Fatalf("workspace kind = %q, want %q", payload.Kind, workspaceMultiRootKind)
 	}
 	if len(payload.Roots) != 2 {
 		t.Fatalf("roots = %+v, want two", payload.Roots)
@@ -854,7 +854,7 @@ func TestWorkspaceDocumentAPIRoutesVirtualPathsPerRoot(t *testing.T) {
 	t.Parallel()
 
 	workspace := multiRootFixture(t)
-	handler := newPreviewHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
 
 	// Identical relative paths in two roots resolve to their own root's file.
 	alpha := performRequest(handler, http.MethodGet, "/api/document?path=r0/README.md")
@@ -902,7 +902,7 @@ func TestWorkspaceAssetHandlerRoutesPerRoot(t *testing.T) {
 	t.Parallel()
 
 	workspace := multiRootFixture(t)
-	handler := newPreviewHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
 
 	// Same-named attachments never cross roots.
 	alpha := performRequest(handler, http.MethodGet, "/assets/r0/images/logo.png")
@@ -952,7 +952,7 @@ func TestWorkspaceDocumentRendersVirtualLinkRouting(t *testing.T) {
 		writeTestFile(t, filepath.Join(directory, "deep", "guide.md"),
 			"# Guide\n\n[Home](../README.md)\n\n![Logo](../images/logo.png)\n\n[Short escape](../../README.md)\n\n[Long escape](../../../README.md)\n")
 	}
-	workspace, err := newPreviewWorkspace(
+	workspace, err := newWorkspace(
 		[]files.Input{
 			resolveTestInput(t, alpha),
 			resolveTestInput(t, beta),
@@ -960,9 +960,9 @@ func TestWorkspaceDocumentRendersVirtualLinkRouting(t *testing.T) {
 		files.DiscoverOptions{Depth: 4},
 	)
 	if err != nil {
-		t.Fatalf("newPreviewWorkspace() error = %v", err)
+		t.Fatalf("newWorkspace() error = %v", err)
 	}
-	handler := newPreviewHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
 
 	response := performRequest(handler, http.MethodGet, "/api/document?path=r1/deep/guide.md")
 	if response.Code != http.StatusOK {
@@ -1016,8 +1016,8 @@ func TestRawMarkdownServesOriginalBytesAndHeaders(t *testing.T) {
 	source := "---\ntitle: Raw\n---\n# Raw\n\nbody with `code`\n"
 	writeTestFile(t, filepath.Join(root, "README.md"), source)
 	writeTestFile(t, filepath.Join(root, "guide.md"), "# Guide")
-	handler := newPreviewHandler(
-		singleRootWorkspace(previewScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
+	handler := newDocumentHandler(
+		singleRootWorkspace(rootScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -1075,8 +1075,8 @@ func TestRawMarkdownRejectsUnsafeAndFilteredPaths(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "deep", "topic", "details.md"), "# Deep")
 	writeTestFile(t, filepath.Join(root, "notes.txt"), "text")
 	canonical := canonicalDirectory(t, root)
-	handler := newPreviewHandler(
-		singleRootWorkspace(previewScope{root: canonical, discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"}}),
+	handler := newDocumentHandler(
+		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 1, Pattern: "**/*.md"}}),
 		newEventHub(time.Second),
 		nil,
 		directoryTestUI(),
@@ -1130,14 +1130,14 @@ func TestRawMarkdownServesSingleFileRoot(t *testing.T) {
 	base := t.TempDir()
 	writeTestFile(t, filepath.Join(base, "solo.md"), "# Solo\n\nonly document\n")
 	writeTestFile(t, filepath.Join(base, "sibling.md"), "# Sibling")
-	singleFile, err := newPreviewWorkspace(
+	singleFile, err := newWorkspace(
 		[]files.Input{resolveTestInput(t, filepath.Join(base, "solo.md"))},
 		files.DiscoverOptions{Depth: 2},
 	)
 	if err != nil {
-		t.Fatalf("newPreviewWorkspace() error = %v", err)
+		t.Fatalf("newWorkspace() error = %v", err)
 	}
-	handler := newPreviewHandler(singleFile, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(singleFile, newEventHub(time.Second), nil, directoryTestUI())
 
 	response := performRequest(handler, http.MethodGet, "/raw/solo.md")
 	if response.Code != http.StatusOK || response.Body.String() != "# Solo\n\nonly document\n" {
@@ -1153,7 +1153,7 @@ func TestRawMarkdownMultiRootNeverCrossesRoots(t *testing.T) {
 	t.Parallel()
 
 	workspace := multiRootFixture(t)
-	handler := newPreviewHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
+	handler := newDocumentHandler(workspace, newEventHub(time.Second), nil, directoryTestUI())
 
 	// Identical relative paths in two roots serve their own root's bytes.
 	alpha := performRequest(handler, http.MethodGet, "/raw/r0/README.md")

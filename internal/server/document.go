@@ -28,9 +28,9 @@ type fileSummary struct {
 	Title string `json:"title"`
 }
 
-// rootSummary groups one preview root's documents. Files carry root-relative
+// rootSummary groups one workspace root's documents. Files carry root-relative
 // paths; the id prefixes the addressable (virtual) path in a multi-root
-// workspace (see previewWorkspace.publicPath). Kind tells whether AbsolutePath
+// workspace (see workspace.publicPath). Kind tells whether AbsolutePath
 // names the served file itself ("file") or the directory the root-relative
 // paths join onto ("directory") — a file root must not append its only
 // document's relative path again. PathSeparator is the server platform's
@@ -52,7 +52,7 @@ type documentRef struct {
 }
 
 type fileListResponse struct {
-	Kind            previewKind   `json:"kind"`
+	Kind            workspaceKind `json:"kind"`
 	Roots           []rootSummary `json:"roots"`
 	DefaultDocument *documentRef  `json:"defaultDocument"`
 	Version         string        `json:"version"`
@@ -83,47 +83,46 @@ type documentResponse struct {
 	TOC         []tocEntryResponse   `json:"toc"`
 }
 
-// previewHandler serves the unified React WebUI and its JSON API for every
-// preview shape. The previewWorkspace decides which Markdown files exist and
-// are addressable: one root behaves exactly like the historical single-input
-// preview, several roots address documents through virtual root-prefixed
+// documentHandler serves the unified React WebUI and its JSON API for every
+// workspace shape. The workspace decides which Markdown files exist and
+// are addressable: one root behaves exactly like the historical single-input// serving, several roots address documents through virtual root-prefixed
 // paths while each root keeps its own access boundary.
-type previewHandler struct {
-	workspace previewWorkspace
+type documentHandler struct {
+	workspace workspace
 	ui        fs.FS
 	version   string
 
-	discover func(context.Context, previewScope) (files.Discovery, error)
+	discover func(context.Context, rootScope) (files.Discovery, error)
 }
 
-func newPreviewHandler(
-	workspace previewWorkspace,
+func newDocumentHandler(
+	workspace workspace,
 	events *eventHub,
 	logger io.Writer,
 	ui fs.FS,
 ) http.Handler {
-	return newPreviewHandlerWithVersion(workspace, events, logger, ui, appversion.Development)
+	return newDocumentHandlerWithVersion(workspace, events, logger, ui, appversion.Development)
 }
 
-func newPreviewHandlerWithVersion(
-	workspace previewWorkspace,
+func newDocumentHandlerWithVersion(
+	workspace workspace,
 	events *eventHub,
 	logger io.Writer,
 	ui fs.FS,
 	buildVersion string,
 ) http.Handler {
-	handler := &previewHandler{
+	handler := &documentHandler{
 		workspace: workspace,
 		ui:        ui,
 		version:   buildVersion,
-		discover: func(ctx context.Context, scope previewScope) (files.Discovery, error) {
+		discover: func(ctx context.Context, scope rootScope) (files.Discovery, error) {
 			return scope.discover(ctx)
 		},
 	}
 	return handler.routes(events, logger)
 }
 
-func (handler *previewHandler) routes(events *eventHub, logger io.Writer) http.Handler {
+func (handler *documentHandler) routes(events *eventHub, logger io.Writer) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
@@ -139,7 +138,7 @@ func (handler *previewHandler) routes(events *eventHub, logger io.Writer) http.H
 	return requestLogger(mux, logger)
 }
 
-func (handler *previewHandler) serveFiles(response http.ResponseWriter, request *http.Request) {
+func (handler *documentHandler) serveFiles(response http.ResponseWriter, request *http.Request) {
 	if request.URL.RawQuery != "" {
 		writeJSONError(response, http.StatusBadRequest, "query parameters are not supported")
 		return
@@ -187,7 +186,7 @@ func (handler *previewHandler) serveFiles(response http.ResponseWriter, request 
 	})
 }
 
-func (handler *previewHandler) serveDocument(response http.ResponseWriter, request *http.Request) {
+func (handler *documentHandler) serveDocument(response http.ResponseWriter, request *http.Request) {
 	values, exists := request.URL.Query()["path"]
 	if !exists || len(values) != 1 || len(request.URL.Query()) != 1 {
 		writeJSONError(response, http.StatusBadRequest, "exactly one path query parameter is required")
@@ -245,17 +244,17 @@ func (handler *previewHandler) serveDocument(response http.ResponseWriter, reque
 // boundary shared by /api/document and /raw/ so both entrances can never drift
 // apart: unknown roots, filtered or non-Markdown files, traversal and symlink
 // escapes all fail here. Callers keep their own HTTP error shape and rendering.
-func (handler *previewHandler) resolveVisibleDocument(virtual string) (previewRoot, string, string, error) {
+func (handler *documentHandler) resolveVisibleDocument(virtual string) (workspaceRoot, string, string, error) {
 	root, relative, err := handler.workspace.locate(virtual)
 	if err != nil {
-		return previewRoot{}, "", "", err
+		return workspaceRoot{}, "", "", err
 	}
 	if !root.scope.allowsDocument(relative) {
-		return previewRoot{}, "", "", fmt.Errorf("document %q is not served by its root", virtual)
+		return workspaceRoot{}, "", "", fmt.Errorf("document %q is not served by its root", virtual)
 	}
 	target, err := resolveRequestFile(root.scope.root, relative)
 	if err != nil {
-		return previewRoot{}, "", "", err
+		return workspaceRoot{}, "", "", err
 	}
 	return root, relative, target, nil
 }
@@ -265,7 +264,7 @@ func (handler *previewHandler) resolveVisibleDocument(virtual string) (previewRo
 // sharing and future integrations (external editors, downloads), not just an
 // internal fetch helper. Resolution goes through resolveVisibleDocument, so
 // the whole /api/document access boundary applies unchanged.
-func (handler *previewHandler) serveRawMarkdown(response http.ResponseWriter, request *http.Request) {
+func (handler *documentHandler) serveRawMarkdown(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
 		response.Header().Set("Allow", "GET, HEAD")
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
@@ -299,7 +298,7 @@ func (handler *previewHandler) serveRawMarkdown(response http.ResponseWriter, re
 	_, _ = response.Write(contents)
 }
 
-func (handler *previewHandler) serveDirectoryIndex(response http.ResponseWriter, request *http.Request) {
+func (handler *documentHandler) serveDirectoryIndex(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
 		response.Header().Set("Allow", "GET, HEAD")
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
@@ -321,13 +320,13 @@ func (handler *previewHandler) serveDirectoryIndex(response http.ResponseWriter,
 	}
 }
 
-func (handler *previewHandler) serveMarkdownStyles(response http.ResponseWriter, request *http.Request) {
+func (handler *documentHandler) serveMarkdownStyles(response http.ResponseWriter, request *http.Request) {
 	if request.Method != http.MethodGet && request.Method != http.MethodHead {
 		response.Header().Set("Allow", "GET, HEAD")
 		http.Error(response, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	// The preview stylesheet is a single mode-independent resource: light and
+	// The WebUI stylesheet is a single mode-independent resource: light and
 	// dark palettes coexist, selected by the html.dark class the client already
 	// toggles. The URL never changes, so a theme switch triggers no new request.
 	// Reject any query to keep the resource address stable and cache-friendly.
@@ -382,7 +381,7 @@ func writeJSONError(response http.ResponseWriter, status int, message string) {
 // AbsolutePath already names the served file, a "directory" root's files join
 // onto AbsolutePath. The scope decides — not files.Input — so single-scope
 // call sites without a resolved input report the same value as production.
-func rootScopeKind(scope previewScope) string {
+func rootScopeKind(scope rootScope) string {
 	if scope.isSingleFile() {
 		return "file"
 	}
@@ -433,7 +432,7 @@ func defaultDocument(summaries []fileSummary) string {
 	return summaries[0].Path
 }
 
-// workspaceDefaultDocument picks the document the preview opens on: the first
+// workspaceDefaultDocument picks the document the server opens on: the first
 // root that has anything wins (README.md, then index.md, then its first
 // file), so the CLI's first input acts as the primary root and its default
 // beats every later root's README.
