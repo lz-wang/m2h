@@ -356,7 +356,7 @@ func (handler *documentHandler) serveMarkdownStyles(response http.ResponseWriter
 		http.Error(response, "query parameters are not supported", http.StatusBadRequest)
 		return
 	}
-	stylesheet := assets.PreviewStylesheet()
+	stylesheet := assets.WebStylesheet()
 	response.Header().Set("Content-Type", "text/css; charset=utf-8")
 	response.Header().Set("Cache-Control", "no-cache")
 	if request.Method == http.MethodGet {

@@ -51,14 +51,14 @@ func Stylesheet(mode string) (string, error) {
 	return strings.Join([]string{markdownCSS, syntaxCSS, layoutCSS}, "\n"), nil
 }
 
-// PreviewStylesheet returns a single, mode-independent stylesheet for the Web
-// preview. Both GitHub Markdown palettes are embedded at once, each scoped to
-// the resolved theme class the preview already toggles on <html>: light rules
+// WebStylesheet returns a single, mode-independent stylesheet for the WebUI.
+// Both GitHub Markdown palettes are embedded at once, each scoped to
+// the resolved theme class the WebUI already toggles on <html>: light rules
 // apply under html:not(.dark), dark rules under html.dark. Because the URL never
 // changes, switching theme swaps colors via the CSSOM only (no new request, no
-// full-body stylesheet reload) — convert output keeps using the mode-specific
-// Stylesheet above for standalone HTML files.
-func PreviewStylesheet() string {
+// full-body stylesheet reload) — exported HTML keeps using the mode-specific
+// Stylesheet above.
+func WebStylesheet() string {
 	light := scopeMarkdownCSS(githubMarkdownLight, "html:not(.dark)")
 	dark := scopeMarkdownCSS(githubMarkdownDark, "html.dark")
 	return strings.Join([]string{light, dark, syntaxCSS, layoutCSS}, "\n")

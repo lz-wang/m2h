@@ -64,10 +64,10 @@ func TestStylesheetContractSnapshot(t *testing.T) {
 	}
 }
 
-func TestPreviewStylesheetScopesBothPalettesToOneResource(t *testing.T) {
+func TestWebStylesheetScopesBothPalettesToOneResource(t *testing.T) {
 	t.Parallel()
 
-	stylesheet := PreviewStylesheet()
+	stylesheet := WebStylesheet()
 
 	// Both palettes are present, scoped to the class the client toggles on <html>
 	// so a theme switch never needs a new stylesheet request.
@@ -78,7 +78,7 @@ func TestPreviewStylesheetScopesBothPalettesToOneResource(t *testing.T) {
 		"color-scheme: dark",
 	} {
 		if !strings.Contains(stylesheet, want) {
-			t.Errorf("preview stylesheet missing %q", want)
+			t.Errorf("web stylesheet missing %q", want)
 		}
 	}
 
@@ -92,13 +92,13 @@ func TestPreviewStylesheetScopesBothPalettesToOneResource(t *testing.T) {
 		".m2h-code-copy",
 	} {
 		if !strings.Contains(stylesheet, want) {
-			t.Errorf("preview stylesheet missing shared layer %q", want)
+			t.Errorf("web stylesheet missing shared layer %q", want)
 		}
 	}
 
 	// The same stable bytes come back every call: there is no mode input.
-	if PreviewStylesheet() != stylesheet {
-		t.Error("PreviewStylesheet is not deterministic")
+	if WebStylesheet() != stylesheet {
+		t.Error("WebStylesheet is not deterministic")
 	}
 }
 

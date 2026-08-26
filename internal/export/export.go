@@ -1,4 +1,4 @@
-// Package export writes one Markdown file as a standalone HTML page. The CLI
+// Package export writes one Markdown file as an HTML page. The CLI
 // spells the command "convert"; the package name describes what it does —
 // export the current document to a single shareable HTML file.
 package export

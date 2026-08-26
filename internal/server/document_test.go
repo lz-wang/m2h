@@ -646,7 +646,7 @@ func TestDirectoryWebUIAssetsAndSharedMarkdownStyles(t *testing.T) {
 	if styles.Code != http.StatusOK {
 		t.Fatalf("GET Markdown CSS status = %d", styles.Code)
 	}
-	if styles.Body.String() != assets.PreviewStylesheet() {
+	if styles.Body.String() != assets.WebStylesheet() {
 		t.Errorf("Markdown CSS did not serve the stable WebUI stylesheet")
 	}
 	if !strings.HasPrefix(styles.Header().Get("Content-Type"), "text/css") || styles.Header().Get("Cache-Control") != "no-cache" {

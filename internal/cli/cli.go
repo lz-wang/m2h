@@ -163,7 +163,7 @@ func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buil
 func convertCommand() *urfavecli.Command {
 	return &urfavecli.Command{
 		Name:         "convert",
-		Usage:        "convert a Markdown file to a self-contained HTML page",
+		Usage:        "export a Markdown file to HTML",
 		ArgsUsage:    "<file>",
 		Flags:        conversionFlags(),
 		Action:       convertAction,

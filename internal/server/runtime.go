@@ -9,10 +9,11 @@ import (
 )
 
 // newRuntimeHandler serves the Mermaid and KaTeX runtime embedded in the Go
-// binary, so the WebUI reuses exactly the assets convert writes for standalone
-// HTML instead of bundling a second copy through Vite. Directory requests are
-// refused so the embedded file server never renders a listing; path traversal
-// is rejected by the embedded filesystem itself.
+// binary, so the WebUI renders rich content offline at the same pinned
+// releases convert loads from the CDN instead of bundling a second copy
+// through Vite. Directory requests are refused so the embedded file server
+// never renders a listing; path traversal is rejected by the embedded
+// filesystem itself.
 func newRuntimeHandler() http.Handler {
 	files := http.FileServer(http.FS(assets.RichFS()))
 	return http.StripPrefix("/runtime/", http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
