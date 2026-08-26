@@ -91,8 +91,8 @@ func TestSingleFileScopeDiscoverFailures(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, "subdir", "inside.md"), "# Inside")
 
 	missing := rootScope{root: root, file: "missing.md"}
-	if _, err := missing.discover(context.Background()); err == nil {
-		t.Fatal("missing target discovery succeeded")
+	if discovered, err := missing.discover(context.Background()); err != nil || len(discovered.Markdown) != 0 {
+		t.Fatalf("missing target discovery = %+v, %v; want empty success", discovered, err)
 	}
 
 	directory := rootScope{root: root, file: "subdir"}

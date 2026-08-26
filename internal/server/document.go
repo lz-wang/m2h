@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -143,14 +144,21 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 	for _, root := range handler.workspace.roots {
 		discovered, err := handler.discover(request.Context(), root.scope)
 		if err != nil {
-			writeJSONError(response, http.StatusInternalServerError, "discover Markdown files")
-			return
+			if errors.Is(err, fs.ErrNotExist) {
+				discovered = files.Discovery{}
+			} else {
+				writeJSONError(response, http.StatusInternalServerError, "discover Markdown files")
+				return
+			}
 		}
 
 		summaries := make([]fileSummary, 0, len(discovered.Markdown))
 		for _, entry := range discovered.Markdown {
 			contents, err := os.ReadFile(entry.AbsolutePath)
 			if err != nil {
+				if errors.Is(err, fs.ErrNotExist) {
+					continue
+				}
 				writeJSONError(response, http.StatusInternalServerError, "read Markdown file")
 				return
 			}
@@ -302,6 +310,16 @@ func (handler *documentHandler) serveDirectoryIndex(response http.ResponseWriter
 	}
 	response.Header().Set("Content-Type", "text/html; charset=utf-8")
 	response.Header().Set("Cache-Control", "no-cache")
+	if strings.HasPrefix(request.URL.Path, "/doc/") {
+		virtual, err := safeRelativePath(strings.TrimPrefix(request.URL.Path, "/doc/"))
+		if err != nil {
+			http.NotFound(response, request)
+			return
+		}
+		if _, _, _, err := handler.resolveVisibleDocument(virtual); err != nil {
+			response.WriteHeader(http.StatusNotFound)
+		}
+	}
 	if request.Method == http.MethodGet {
 		index, err := fs.ReadFile(handler.ui, "index.html")
 		if err != nil {

@@ -2,7 +2,9 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -65,6 +67,9 @@ func (scope rootScope) discover(ctx context.Context) (files.Discovery, error) {
 	target := filepath.Join(scope.root, filepath.FromSlash(scope.file))
 	info, err := os.Stat(target)
 	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return files.Discovery{}, nil
+		}
 		return files.Discovery{}, err
 	}
 	if !info.Mode().IsRegular() {

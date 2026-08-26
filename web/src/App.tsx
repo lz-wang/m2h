@@ -1172,6 +1172,14 @@ function PreviewContent({
       </section>
     );
   }
+  if (phase === "not-found") {
+    return (
+      <section className="state-panel" role="status">
+        <FileQuestion aria-hidden="true" />
+        <p>您浏览的文档不存在或已被删除</p>
+      </section>
+    );
+  }
   if (phase === "error") {
     return (
       <section className="state-panel error-panel" role="alert">

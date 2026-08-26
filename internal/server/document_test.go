@@ -256,7 +256,9 @@ func TestDirectoryFilesAPIEmptyAndFailures(t *testing.T) {
 		return files.Discovery{Markdown: []files.Entry{{AbsolutePath: filepath.Join(root, "missing.md"), RelativePath: "missing.md"}}}, nil
 	}
 	response = performRequest(handler, http.MethodGet, "/api/files")
-	assertJSONError(t, response, http.StatusInternalServerError)
+	if response.Code != http.StatusOK {
+		t.Fatalf("missing discovered file status = %d, want 200", response.Code)
+	}
 
 	valid := filepath.Join(root, "valid.md")
 	writeTestFile(t, valid, "# Valid")
@@ -538,14 +540,14 @@ func TestDirectoryAssetsSPAFallbackAndAPINotFound(t *testing.T) {
 
 	rootPage := performRequest(handler, http.MethodGet, "/")
 	deepPage := performRequest(handler, http.MethodGet, "/doc/design/architecture.md?mode=auto")
-	if rootPage.Code != http.StatusOK || deepPage.Code != http.StatusOK || rootPage.Body.String() != deepPage.Body.String() {
+	if rootPage.Code != http.StatusOK || deepPage.Code != http.StatusNotFound || rootPage.Body.String() != deepPage.Body.String() {
 		t.Fatalf("SPA responses root=%d deep=%d", rootPage.Code, deepPage.Code)
 	}
 	if !strings.Contains(deepPage.Body.String(), `id="root"`) {
 		t.Fatal("SPA fallback does not contain the root mount")
 	}
 	head := performRequest(handler, http.MethodHead, "/doc/design/architecture.md")
-	if head.Code != http.StatusOK || head.Body.Len() != 0 {
+	if head.Code != http.StatusNotFound || head.Body.Len() != 0 {
 		t.Fatalf("SPA HEAD response = %d %q", head.Code, head.Body.String())
 	}
 	if response := performRequest(handler, http.MethodPost, "/doc/design/architecture.md"); response.Code != http.StatusMethodNotAllowed {

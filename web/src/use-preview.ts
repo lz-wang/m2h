@@ -32,6 +32,7 @@ export type PreviewPhase =
   | "unselected"
   | "ready"
   | "empty"
+  | "not-found"
   | "error";
 
 export interface PreviewState {
@@ -151,6 +152,11 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
           return;
         }
         setDocumentResponse(null);
+        if (reason instanceof APIError && reason.status === 404) {
+          setError(null);
+          setPhase("not-found");
+          return;
+        }
         setError(documentError(reason));
         setPhase("error");
       }
@@ -198,11 +204,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         // auto-open picks a document here; directory and multi-root
         // workspaces start unselected — the server no longer has an opinion
         // about what the reader should open first.
-        const target =
-          requested !== null &&
-          flattened.some((file) => file.path === requested)
-            ? requested
-            : autoOpenDocument(flattened, loaded.kind);
+        const target = requested ?? autoOpenDocument(flattened, loaded.kind);
         if (target === null) {
           settleWithoutDocument();
           return;
@@ -242,10 +244,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
       setWidthState(route.width);
       setTOCState(route.toc);
       const target =
-        route.path !== null &&
-        filesRef.current.some((file) => file.path === route.path)
-          ? route.path
-          : autoOpenDocument(filesRef.current, kindRef.current);
+        route.path ?? autoOpenDocument(filesRef.current, kindRef.current);
       if (target === null) {
         settleWithoutDocument();
         return;
@@ -324,11 +323,6 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
 
   const select = useCallback(
     async (path: string, hash = "") => {
-      if (!filesRef.current.some((file) => file.path === path)) {
-        setError("所选文档已不在文件列表中，请重新加载后重试。");
-        setPhase("error");
-        return;
-      }
       const action: HistoryAction =
         path === selectedPathRef.current ? "replace" : "push";
       await loadDocument(path, action, hash);
