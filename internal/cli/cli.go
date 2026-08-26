@@ -35,13 +35,13 @@ func New(buildVersion string, ui fs.FS, stdin io.Reader, stdout, stderr io.Write
 
 	command := &urfavecli.Command{
 		Name:        "m2h",
-		Usage:       "convert Markdown to HTML",
-		UsageText:   "m2h [options] <file|directory>\n   m2h web [options] <file|directory>[,<file|directory>...]",
+		Usage:       "serve Markdown documents in a browser",
+		UsageText:   "m2h [options] <file|directory>...\n   m2h convert [options] <file|directory>",
 		HideVersion: true,
 		Writer:      stdout,
 		ErrWriter:   stderr,
 		Flags: append(
-			conversionFlags(),
+			serverFlags(),
 			&urfavecli.BoolFlag{
 				Name:    "version",
 				Aliases: []string{"v"},
@@ -50,7 +50,7 @@ func New(buildVersion string, ui fs.FS, stdin io.Reader, stdout, stderr io.Write
 			},
 		),
 		Commands: []*urfavecli.Command{
-			webCommand(ui, info.String()),
+			convertCommand(stdin),
 		},
 		OnUsageError: normalizeUsageError,
 	}
@@ -58,14 +58,123 @@ func New(buildVersion string, ui fs.FS, stdin io.Reader, stdout, stderr io.Write
 		if current.Bool("version") {
 			return info.Write(current.Writer)
 		}
-		return convertAction(ctx, current, stdin)
+		return serveAction(ctx, current, ui, info.String())
 	}
 
 	return command, nil
 }
 
-// conversionFlags returns the Markdown-to-HTML options for the default convert
-// action on the root command.
+// serverFlags returns the document-server options for the root command.
+func serverFlags() []urfavecli.Flag {
+	return []urfavecli.Flag{
+		&urfavecli.StringFlag{Name: "host", Value: defaultHost, Usage: "listen host", Local: true},
+		&urfavecli.IntFlag{
+			Name:    "port",
+			Aliases: []string{"p"},
+			Value:   defaultPort,
+			Usage:   "listen port",
+			Local:   true,
+			Validator: func(value int) error {
+				if value < 1 || value > 65535 {
+					return fmt.Errorf("Error: --port must be between 1 and 65535")
+				}
+				return nil
+			},
+		},
+		&urfavecli.BoolWithInverseFlag{Name: "open", Value: true, Usage: "open the default browser after listening", Local: true},
+		modeFlag(),
+		widthFlag(),
+		&urfavecli.BoolFlag{
+			Name:        "toc",
+			Value:       defaultTOC,
+			DefaultText: "true",
+			Usage:       "show the document table of contents",
+			Local:       true,
+		},
+		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
+		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
+	}
+}
+
+var runServer = server.Run
+
+// serverInputs expands the root command's arguments into individual server
+// inputs. Each argument may itself carry a comma-separated list — a
+// convenience for shell histories — so "a,b c" and "a b c" are equivalent.
+// Segments are trimmed, empty segments dropped, order preserved, and exact
+// textual duplicates removed; inputs that only collide after resolution
+// (trailing separators, symlink aliases) are rejected by the server.
+func serverInputs(args urfavecli.Args) ([]string, error) {
+	inputs := []string{}
+	seen := make(map[string]bool, args.Len())
+	for index := range args.Len() {
+		for segment := range strings.SplitSeq(args.Get(index), ",") {
+			trimmed := strings.TrimSpace(segment)
+			if trimmed == "" || seen[trimmed] {
+				continue
+			}
+			seen[trimmed] = true
+			inputs = append(inputs, trimmed)
+		}
+	}
+	if len(inputs) == 0 {
+		return nil, fmt.Errorf("Error: requires one or more files or directories")
+	}
+	return inputs, nil
+}
+
+func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buildVersion string) error {
+	if command.Args().Len() == 0 {
+		return urfavecli.ShowRootCommandHelp(command)
+	}
+	// "m2h web" served documents before the root command became the server
+	// itself. Callers migrating from that CLI get a pointed error instead of a
+	// confusing "input not found" failure.
+	if removed := command.Args().First(); removed == "web" {
+		return fmt.Errorf("Error: unknown command %q", removed)
+	}
+	inputs, err := serverInputs(command.Args())
+	if err != nil {
+		return err
+	}
+	err = runServer(ctx, server.Options{
+		Inputs:     inputs,
+		Host:       command.String("host"),
+		Port:       command.Int("port"),
+		Mode:       markdown.Mode(command.String("mode")),
+		Width:      markdown.Width(command.String("width")),
+		Browser:    command.Bool("open"),
+		TOC:        command.Bool("toc"),
+		Pattern:    command.String("glob"),
+		Depth:      command.Int("depth"),
+		PatternSet: command.IsSet("glob"),
+		DepthSet:   command.IsSet("depth"),
+		TOCSet:     command.IsSet("toc"),
+		Log:        command.Root().ErrWriter,
+		UI:         ui,
+		Version:    buildVersion,
+	})
+	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
+		return err
+	}
+	return fmt.Errorf("Error: %w", err)
+}
+
+func convertCommand(stdin io.Reader) *urfavecli.Command {
+	return &urfavecli.Command{
+		Name:      "convert",
+		Usage:     "convert Markdown to HTML",
+		ArgsUsage: "<file|directory>",
+		Flags:     conversionFlags(),
+		Action: func(ctx context.Context, command *urfavecli.Command) error {
+			return convertAction(ctx, command, stdin)
+		},
+		OnUsageError: normalizeUsageError,
+	}
+}
+
+// conversionFlags returns the Markdown-to-HTML options for the convert
+// subcommand.
 func conversionFlags() []urfavecli.Flag {
 	return []urfavecli.Flag{
 		&urfavecli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "write to an HTML file or output directory", Local: true},
@@ -98,7 +207,7 @@ var runConvert = convert.RunWithResult
 
 func convertAction(ctx context.Context, command *urfavecli.Command, stdin io.Reader) error {
 	if command.Args().Len() == 0 {
-		return urfavecli.ShowRootCommandHelp(command)
+		return urfavecli.ShowCommandHelp(ctx, command, "convert")
 	}
 	if command.Args().Len() != 1 {
 		return fmt.Errorf("Error: requires exactly one file or directory")
@@ -156,101 +265,6 @@ func confirmConversion(command *urfavecli.Command, stdin io.Reader) (bool, error
 		return false, nil
 	}
 	return true, nil
-}
-
-func webCommand(ui fs.FS, buildVersion string) *urfavecli.Command {
-	return &urfavecli.Command{
-		Name:      "web",
-		Usage:     "view Markdown in a browser",
-		ArgsUsage: "<file|directory>[,<file|directory>...]",
-		Flags: []urfavecli.Flag{
-			&urfavecli.StringFlag{Name: "host", Value: defaultHost, Usage: "listen host", Local: true},
-			&urfavecli.IntFlag{
-				Name:    "port",
-				Aliases: []string{"p"},
-				Value:   defaultPort,
-				Usage:   "listen port",
-				Local:   true,
-				Validator: func(value int) error {
-					if value < 1 || value > 65535 {
-						return fmt.Errorf("Error: --port must be between 1 and 65535")
-					}
-					return nil
-				},
-			},
-			&urfavecli.BoolWithInverseFlag{Name: "open", Value: true, Usage: "open the default browser after listening", Local: true},
-			modeFlag(),
-			widthFlag(),
-			&urfavecli.BoolFlag{
-				Name:        "toc",
-				Value:       defaultTOC,
-				DefaultText: "true",
-				Usage:       "show the document table of contents",
-				Local:       true,
-			},
-			&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
-			&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
-		},
-		Action: func(ctx context.Context, command *urfavecli.Command) error {
-			return webAction(ctx, command, ui, buildVersion)
-		},
-		OnUsageError: normalizeUsageError,
-	}
-}
-
-var runPreview = server.Run
-
-// previewInputs expands the web command's arguments into individual preview
-// inputs. Each argument may itself carry a comma-separated list — a
-// convenience for shell histories — so "a,b c" and "a b c" are equivalent.
-// Segments are trimmed, empty segments dropped, order preserved, and exact
-// textual duplicates removed; inputs that only collide after resolution
-// (trailing separators, symlink aliases) are rejected by the server.
-func previewInputs(args urfavecli.Args) ([]string, error) {
-	inputs := []string{}
-	seen := make(map[string]bool, args.Len())
-	for index := range args.Len() {
-		for segment := range strings.SplitSeq(args.Get(index), ",") {
-			trimmed := strings.TrimSpace(segment)
-			if trimmed == "" || seen[trimmed] {
-				continue
-			}
-			seen[trimmed] = true
-			inputs = append(inputs, trimmed)
-		}
-	}
-	if len(inputs) == 0 {
-		return nil, fmt.Errorf("Error: web requires one or more files or directories")
-	}
-	return inputs, nil
-}
-
-func webAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buildVersion string) error {
-	inputs, err := previewInputs(command.Args())
-	if err != nil {
-		return err
-	}
-	err = runPreview(ctx, server.Options{
-		Inputs:     inputs,
-		Host:       command.String("host"),
-		Port:       command.Int("port"),
-		Mode:       markdown.Mode(command.String("mode")),
-		Width:      markdown.Width(command.String("width")),
-		Browser:    command.Bool("open"),
-		TOC:        command.Bool("toc"),
-		Pattern:    command.String("glob"),
-		Depth:      command.Int("depth"),
-		PatternSet: command.IsSet("glob"),
-		DepthSet:   command.IsSet("depth"),
-		TOCSet:     command.IsSet("toc"),
-		Log:        command.Root().ErrWriter,
-		UI:         ui,
-		Version:    buildVersion,
-	})
-	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
-		return err
-	}
-	return fmt.Errorf("Error: %w", err)
 }
 
 func modeFlag() *urfavecli.StringFlag {

@@ -69,7 +69,7 @@ func TestRootHelpDocumentsCommands(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("root help wrote stderr %q", stderr)
 	}
-	for _, want := range []string{"web", "--version", "-v", "--output"} {
+	for _, want := range []string{"convert", "--version", "-v", "--host", "--port"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("root help does not contain %q:\n%s", want, stdout)
 		}
@@ -88,19 +88,19 @@ func TestHelpDocumentsContract(t *testing.T) {
 			name: "root",
 			args: []string{"--help"},
 			want: []string{
-				"--output", "-o", "--glob", "--depth", "-d", "(default: 4)",
-				"--mode", "(default: \"auto\")", "--width", "(default: \"standard\")",
-				"--standalone", "--copy-assets", "(default: true)", "--yes", "-y", "--version", "-v",
-			},
-		},
-		{
-			name: "web",
-			args: []string{"web", "--help"},
-			want: []string{
 				"--host", "(default: \"127.0.0.1\")", "--port", "-p", "(default: 8793)",
 				"--[no-]open", "(default: true)", "--mode", "(default: \"auto\")",
 				"--width", "(default: \"standard\")", "--toc", "(default: true)",
-				"--glob", "--depth", "-d", "(default: 4)",
+				"--glob", "--depth", "-d", "(default: 4)", "--version", "-v",
+			},
+		},
+		{
+			name: "convert",
+			args: []string{"convert", "--help"},
+			want: []string{
+				"--output", "-o", "--glob", "--depth", "-d", "(default: 4)",
+				"--mode", "(default: \"auto\")", "--width", "(default: \"standard\")",
+				"--standalone", "--copy-assets", "(default: true)", "--yes", "-y",
 			},
 		},
 	}
@@ -133,8 +133,7 @@ func TestUnknownFlagsReturnStableError(t *testing.T) {
 		{"--unknown"},
 		{"README.md", "--unknown"},
 		{"README.md", "--unsafe-html"},
-		{"README.md", "--toc"},
-		{"web", "README.md", "--unsafe-html"},
+		{"convert", "README.md", "--toc"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -150,13 +149,14 @@ func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
 	t.Parallel()
 
 	for _, args := range [][]string{
-		{"web", "README.md", "--output", "out.html"},
-		{"web", "README.md", "--copy-assets=false"},
-		{"README.md", "--port", "9000"},
-		{"README.md", "--host", "0.0.0.0"},
-		{"README.md", "--toc"},
-		{"README.md", "--open"},
-		{"web", "README.md", "--yes"},
+		{"README.md", "--output", "out.html"},
+		{"README.md", "--copy-assets=false"},
+		{"README.md", "--standalone"},
+		{"README.md", "--yes"},
+		{"convert", "README.md", "--port", "9000"},
+		{"convert", "README.md", "--host", "0.0.0.0"},
+		{"convert", "README.md", "--toc"},
+		{"convert", "README.md", "--open"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -168,110 +168,127 @@ func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
 	}
 }
 
-func TestWebForwardsOptions(t *testing.T) {
-	previous := runPreview
-	t.Cleanup(func() { runPreview = previous })
+func TestServeRejectsRemovedWebCommand(t *testing.T) {
+	t.Parallel()
+
+	for _, args := range [][]string{
+		{"web"},
+		{"web", "docs"},
+		{"web", "docs", "wiki"},
+	} {
+		_, _, err := runCommand(t, args...)
+		if err == nil {
+			t.Fatalf("m2h %v succeeded, want unknown command error", args)
+		}
+		if got, want := err.Error(), `Error: unknown command "web"`; got != want {
+			t.Fatalf("m2h %v error = %q, want %q", args, got, want)
+		}
+	}
+}
+
+func TestServeForwardsOptions(t *testing.T) {
+	previous := runServer
+	t.Cleanup(func() { runServer = previous })
 
 	var captured server.Options
-	runPreview = func(_ context.Context, options server.Options) error {
+	runServer = func(_ context.Context, options server.Options) error {
 		captured = options
 		return nil
 	}
 	stdout, stderr, err := runCommand(
 		t,
-		"web", "guide.md",
+		"guide.md",
 		"--host", "0.0.0.0",
 		"--port", "9142",
 		"--mode", "dark",
 	)
 	if err != nil || stdout != "" || stderr != "" {
-		t.Fatalf("web result stdout=%q stderr=%q err=%v", stdout, stderr, err)
+		t.Fatalf("serve result stdout=%q stderr=%q err=%v", stdout, stderr, err)
 	}
 	if len(captured.Inputs) != 1 || captured.Inputs[0] != "guide.md" ||
 		captured.Host != "0.0.0.0" || captured.Port != 9142 ||
 		captured.Mode != markdown.ModeDark || captured.Depth != defaultDepth || captured.DepthSet ||
 		!captured.Browser || captured.Log == nil || captured.Version != "dev-20260809-fe65804" ||
 		captured.UI == nil {
-		t.Fatalf("web options = %+v", captured)
+		t.Fatalf("serve options = %+v", captured)
 	}
 	// --open and --toc default to true but neither flag is set explicitly.
 	if !captured.TOC || captured.TOCSet {
-		t.Fatalf("web toc = %+v, want TOC=true TOCSet=false", captured)
+		t.Fatalf("serve toc = %+v, want TOC=true TOCSet=false", captured)
 	}
 }
 
-func TestWebOpensBrowserByDefault(t *testing.T) {
-	previous := runPreview
-	t.Cleanup(func() { runPreview = previous })
+func TestServeOpensBrowserByDefault(t *testing.T) {
+	previous := runServer
+	t.Cleanup(func() { runServer = previous })
 
 	var captured server.Options
-	runPreview = func(_ context.Context, options server.Options) error {
+	runServer = func(_ context.Context, options server.Options) error {
 		captured = options
 		return nil
 	}
-	if _, _, err := runCommand(t, "web", "guide.md"); err != nil {
-		t.Fatalf("web returned error: %v", err)
+	if _, _, err := runCommand(t, "guide.md"); err != nil {
+		t.Fatalf("serve returned error: %v", err)
 	}
 	if !captured.Browser {
-		t.Fatalf("web Browser = false, want true by default")
+		t.Fatalf("serve Browser = false, want true by default")
 	}
 }
 
-func TestWebNoOpen(t *testing.T) {
-	previous := runPreview
-	t.Cleanup(func() { runPreview = previous })
+func TestServeNoOpen(t *testing.T) {
+	previous := runServer
+	t.Cleanup(func() { runServer = previous })
 
 	var captured server.Options
-	runPreview = func(_ context.Context, options server.Options) error {
+	runServer = func(_ context.Context, options server.Options) error {
 		captured = options
 		return nil
 	}
-	if _, _, err := runCommand(t, "web", "guide.md", "--no-open"); err != nil {
-		t.Fatalf("web --no-open returned error: %v", err)
+	if _, _, err := runCommand(t, "guide.md", "--no-open"); err != nil {
+		t.Fatalf("serve --no-open returned error: %v", err)
 	}
 	if captured.Browser {
-		t.Fatalf("web Browser = true, want false with --no-open")
+		t.Fatalf("serve Browser = true, want false with --no-open")
 	}
 }
 
-func TestWebForwardsTOCFlag(t *testing.T) {
-	previous := runPreview
-	t.Cleanup(func() { runPreview = previous })
+func TestServeForwardsTOCFlag(t *testing.T) {
+	previous := runServer
+	t.Cleanup(func() { runServer = previous })
 
 	var captured server.Options
-	runPreview = func(_ context.Context, options server.Options) error {
+	runServer = func(_ context.Context, options server.Options) error {
 		captured = options
 		return nil
 	}
-	_, _, err := runCommand(t, "web", "guide.md", "--toc=false")
+	_, _, err := runCommand(t, "guide.md", "--toc=false")
 	if err != nil {
-		t.Fatalf("web --toc=false returned error: %v", err)
+		t.Fatalf("serve --toc=false returned error: %v", err)
 	}
 	if captured.TOC || !captured.TOCSet {
-		t.Fatalf("web toc = %+v, want TOC=false TOCSet=true", captured)
+		t.Fatalf("serve toc = %+v, want TOC=false TOCSet=true", captured)
 	}
 
-	_, _, err = runCommand(t, "web", "guide.md", "--toc=true")
+	_, _, err = runCommand(t, "guide.md", "--toc=true")
 	if err != nil {
-		t.Fatalf("web --toc=true returned error: %v", err)
+		t.Fatalf("serve --toc=true returned error: %v", err)
 	}
 	if !captured.TOC || !captured.TOCSet {
-		t.Fatalf("web toc = %+v, want TOC=true TOCSet=true", captured)
+		t.Fatalf("serve toc = %+v, want TOC=true TOCSet=true", captured)
 	}
 }
 
-func TestWebValidatesArgumentsAndPort(t *testing.T) {
+func TestServeValidatesArgumentsAndPort(t *testing.T) {
 	t.Parallel()
 
 	for _, test := range []struct {
 		args []string
 		want string
 	}{
-		{args: []string{"web"}, want: "Error: web requires one or more files or directories"},
-		{args: []string{"web", ","}, want: "Error: web requires one or more files or directories"},
-		{args: []string{"web", " , , "}, want: "Error: web requires one or more files or directories"},
-		{args: []string{"web", "missing.md", "--port", "0"}, want: "Error: --port must be between 1 and 65535"},
-		{args: []string{"web", "missing.md", "--port", "65536"}, want: "Error: --port must be between 1 and 65535"},
+		{args: []string{","}, want: "Error: requires one or more files or directories"},
+		{args: []string{" , , "}, want: "Error: requires one or more files or directories"},
+		{args: []string{"missing.md", "--port", "0"}, want: "Error: --port must be between 1 and 65535"},
+		{args: []string{"missing.md", "--port", "65536"}, want: "Error: --port must be between 1 and 65535"},
 	} {
 		_, _, err := runCommand(t, test.args...)
 		if err == nil || err.Error() != test.want {
@@ -280,12 +297,12 @@ func TestWebValidatesArgumentsAndPort(t *testing.T) {
 	}
 }
 
-func TestWebExpandsMultipleAndCommaSeparatedInputs(t *testing.T) {
-	previous := runPreview
-	t.Cleanup(func() { runPreview = previous })
+func TestServeExpandsMultipleAndCommaSeparatedInputs(t *testing.T) {
+	previous := runServer
+	t.Cleanup(func() { runServer = previous })
 
 	var captured server.Options
-	runPreview = func(_ context.Context, options server.Options) error {
+	runServer = func(_ context.Context, options server.Options) error {
 		captured = options
 		return nil
 	}
@@ -294,16 +311,16 @@ func TestWebExpandsMultipleAndCommaSeparatedInputs(t *testing.T) {
 		args []string
 		want []string
 	}{
-		{name: "single input", args: []string{"web", "/a"}, want: []string{"/a"}},
-		{name: "space separated", args: []string{"web", "/a", "/b", "/c"}, want: []string{"/a", "/b", "/c"}},
-		{name: "comma separated", args: []string{"web", "/a,/b,/c"}, want: []string{"/a", "/b", "/c"}},
-		{name: "mixed separators", args: []string{"web", "/a,/b", "/c"}, want: []string{"/a", "/b", "/c"}},
-		{name: "segments are trimmed", args: []string{"web", "/a, /b"}, want: []string{"/a", "/b"}},
-		{name: "empty segments dropped", args: []string{"web", "/a,,/b"}, want: []string{"/a", "/b"}},
-		{name: "exact duplicates removed", args: []string{"web", "/a,/a", "/a"}, want: []string{"/a"}},
+		{name: "single input", args: []string{"/a"}, want: []string{"/a"}},
+		{name: "space separated", args: []string{"/a", "/b", "/c"}, want: []string{"/a", "/b", "/c"}},
+		{name: "comma separated", args: []string{"/a,/b,/c"}, want: []string{"/a", "/b", "/c"}},
+		{name: "mixed separators", args: []string{"/a,/b", "/c"}, want: []string{"/a", "/b", "/c"}},
+		{name: "segments are trimmed", args: []string{"/a, /b"}, want: []string{"/a", "/b"}},
+		{name: "empty segments dropped", args: []string{"/a,,/b"}, want: []string{"/a", "/b"}},
+		{name: "exact duplicates removed", args: []string{"/a,/a", "/a"}, want: []string{"/a"}},
 	} {
 		if _, _, err := runCommand(t, test.args...); err != nil {
-			t.Fatalf("%s: web returned error: %v", test.name, err)
+			t.Fatalf("%s: serve returned error: %v", test.name, err)
 		}
 		if got := captured.Inputs; !slices.Equal(got, test.want) {
 			t.Errorf("%s: inputs = %v, want %v", test.name, got, test.want)
@@ -311,7 +328,7 @@ func TestWebExpandsMultipleAndCommaSeparatedInputs(t *testing.T) {
 	}
 }
 
-func TestWebRejectsInvalidMultiRootInputs(t *testing.T) {
+func TestServeRejectsInvalidMultiRootInputs(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -329,17 +346,17 @@ func TestWebRejectsInvalidMultiRootInputs(t *testing.T) {
 	}{
 		{
 			name: "missing root",
-			args: []string{"web", filepath.Join(root, "missing"), root},
+			args: []string{filepath.Join(root, "missing"), root},
 			want: "inspect input",
 		},
 		{
 			name: "non-markdown file root",
-			args: []string{"web", filepath.Join(root, "guide.txt"), root},
+			args: []string{filepath.Join(root, "guide.txt"), root},
 			want: "expected a Markdown file",
 		},
 		{
 			name: "duplicate canonical root",
-			args: []string{"web", root, root + string(os.PathSeparator)},
+			args: []string{root, root + string(os.PathSeparator)},
 			want: "duplicate preview root",
 		},
 	} {
@@ -358,7 +375,7 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 	}
 	output := filepath.Join(root, "public", "index.html")
 
-	stdout, stderr, err := runCommand(t, source, "--yes", "--output", output, "--mode", "dark", "--width", "wide")
+	stdout, stderr, err := runCommand(t, "convert", source, "--yes", "--output", output, "--mode", "dark", "--width", "wide")
 	if err != nil {
 		t.Fatalf("convert returned error: %v", err)
 	}
@@ -390,7 +407,7 @@ func TestConvertCommandWritesDirectoryResult(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, err := runCommand(t, source, "--yes", "--output", output)
+	stdout, stderr, err := runCommand(t, "convert", source, "--yes", "--output", output)
 	if err != nil {
 		t.Fatalf("convert returned error: %v", err)
 	}
@@ -415,11 +432,11 @@ func TestConvertCommandValidatesArgumentsAndDirectoryOnlyFlags(t *testing.T) {
 		args []string
 		want string
 	}{
-		{args: []string{source, source}, want: "Error: requires exactly one file or directory"},
-		{args: []string{source, "--yes", "--glob", "*.md"}, want: "Error: --glob can only be used when converting a directory"},
-		{args: []string{source, "--yes", "--depth", "2"}, want: "Error: --depth can only be used when converting a directory"},
-		{args: []string{source, "--yes", "--copy-assets=false"}, want: "Error: --copy-assets can only be used when converting a directory"},
-		{args: []string{source, "--yes", "--standalone"}, want: "Error: --standalone can only be used when converting a directory"},
+		{args: []string{"convert", source, source}, want: "Error: requires exactly one file or directory"},
+		{args: []string{"convert", source, "--yes", "--glob", "*.md"}, want: "Error: --glob can only be used when converting a directory"},
+		{args: []string{"convert", source, "--yes", "--depth", "2"}, want: "Error: --depth can only be used when converting a directory"},
+		{args: []string{"convert", source, "--yes", "--copy-assets=false"}, want: "Error: --copy-assets can only be used when converting a directory"},
+		{args: []string{"convert", source, "--yes", "--standalone"}, want: "Error: --standalone can only be used when converting a directory"},
 	}
 	for _, test := range tests {
 		_, _, err := runCommand(t, test.args...)
@@ -431,7 +448,7 @@ func TestConvertCommandValidatesArgumentsAndDirectoryOnlyFlags(t *testing.T) {
 
 func TestConvertCommandValidatesGlobBeforeInput(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
-	_, _, err := runCommand(t, missing, "--glob", "[")
+	_, _, err := runCommand(t, "convert", missing, "--glob", "[")
 	if err == nil || !strings.Contains(err.Error(), "invalid glob") || strings.Contains(err.Error(), "missing") {
 		t.Fatalf("convert error = %v, want invalid glob before input error", err)
 	}
@@ -442,7 +459,7 @@ func TestModeValidationRunsBeforeFeatureHandlers(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"README.md", "--mode", "sepia"},
-		{"web", "README.md", "--mode", "sepia"},
+		{"convert", "README.md", "--mode", "sepia"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -459,7 +476,7 @@ func TestWidthValidationRunsBeforeFeatureHandlers(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"README.md", "--width", "narrow"},
-		{"web", "README.md", "--width", "narrow"},
+		{"convert", "README.md", "--width", "narrow"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -474,9 +491,9 @@ func TestWidthValidationRunsBeforeFeatureHandlers(t *testing.T) {
 func TestInvalidFlagValueGetsStablePrefix(t *testing.T) {
 	t.Parallel()
 
-	_, _, err := runCommand(t, "web", "README.md", "--port", "many")
+	_, _, err := runCommand(t, "README.md", "--port", "many")
 	if err == nil {
-		t.Fatal("preview accepted a non-integer port")
+		t.Fatal("serve accepted a non-integer port")
 	}
 	if !strings.HasPrefix(err.Error(), "Error: ") {
 		t.Fatalf("error = %q, want stable Error prefix", err)
@@ -500,7 +517,7 @@ func TestConvertRequiresYesWithoutInteractiveStdin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, err := runCommand(t, source)
+	stdout, stderr, err := runCommand(t, "convert", source)
 	if err == nil || err.Error() != "Error: conversion requires confirmation; rerun with --yes" {
 		t.Fatalf("convert error = %v, want confirmation requirement error", err)
 	}
@@ -521,7 +538,7 @@ func TestConvertYesRunsConversionDirectly(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, err := runCommand(t, source, "--yes")
+	stdout, stderr, err := runCommand(t, "convert", source, "--yes")
 	if err != nil {
 		t.Fatalf("convert --yes returned error: %v", err)
 	}
@@ -567,7 +584,7 @@ func TestConvertInteractiveAnswerControlsExecution(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			source := newSource(t)
 			target := strings.TrimSuffix(source, filepath.Ext(source)) + ".html"
-			stdout, stderr, err := runCommandInput(t, strings.NewReader(test.answer), source)
+			stdout, stderr, err := runCommandInput(t, strings.NewReader(test.answer), "convert", source)
 			if err != nil {
 				t.Fatalf("convert returned error: %v", err)
 			}

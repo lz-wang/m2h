@@ -8,8 +8,8 @@ import { expect, test } from "@playwright/test";
 test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 
 // Real-browser coverage for a multi-root workspace. The config's shared
-// preview server serves the single-root fixture tree; this spec starts a
-// second `m2h web root-a,root-b` process on its own port once that build
+// document server serves the single-root fixture tree; this spec starts a
+// second `m2h root-a,root-b` process on its own port once that build
 // exists and tears it down afterwards — same binary, comma-separated roots,
 // exactly the CLI shape multi-root users type.
 
@@ -22,7 +22,6 @@ test.beforeAll(async () => {
   server = spawn(
     "./build/e2e/m2h",
     [
-      "web",
       "--no-open",
       "--host",
       "127.0.0.1",
