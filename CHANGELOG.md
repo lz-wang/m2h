@@ -17,11 +17,13 @@
 ### 新增
 
 - 根命令默认启动 Markdown 文档服务：`m2h <file|directory>...` 直接在浏览器中打开文档 WebUI，支持逗号分隔与空格分隔的多输入，保留原 `web` 子命令的全部选项（`--host`、`--port`、`--open/--no-open`、`--mode`、`--width`、`--toc`、`--glob`、`--depth`）。
+- `m2h convert` 新增 `--force` 选项：输出文件已存在时覆盖写入，替代原有的交互式确认机制，脚本与 CI 调用可预测。
 
 ### 移除
 
 - 移除 `m2h web` 子命令，不提供兼容别名：文档服务由根命令直接承担，输入 `m2h web docs` 会得到明确的 `unknown command "web"` 错误。
-- HTML 转换从根命令移至 `m2h convert <file|directory>` 子命令，转换行为本身不变。
+- HTML 转换从根命令移至 `m2h convert` 子命令，并收缩为单 Markdown 文件导出：目录输入、`--glob`、`--depth`、`--standalone`、`--copy-assets` 与共享 `.m2h/` 输出目录全部移除，目录输入会得到 `convert requires a Markdown file` 错误；转换成功输出简化为一行 `Wrote <HTML 绝对路径>`。
+- 移除转换前的 `[y/N]` 交互式确认与 `--yes`/`-y` 选项：输出已存在且未加 `--force` 时直接报错退出。
 
 ## [0.11.0] - 2026-08-23
 

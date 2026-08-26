@@ -27,7 +27,7 @@ const (
 )
 
 // New constructs the root command after validating the injected build version.
-func New(buildVersion string, ui fs.FS, stdin io.Reader, stdout, stderr io.Writer) (*urfavecli.Command, error) {
+func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Command, error) {
 	info, err := version.Parse(buildVersion)
 	if err != nil {
 		return nil, fmt.Errorf("configure CLI: %w", err)
@@ -36,7 +36,7 @@ func New(buildVersion string, ui fs.FS, stdin io.Reader, stdout, stderr io.Write
 	command := &urfavecli.Command{
 		Name:        "m2h",
 		Usage:       "serve Markdown documents in a browser",
-		UsageText:   "m2h [options] <file|directory>...\n   m2h convert [options] <file|directory>",
+		UsageText:   "m2h [options] <file|directory>...\n   m2h convert [options] <file>",
 		HideVersion: true,
 		Writer:      stdout,
 		ErrWriter:   stderr,
@@ -50,7 +50,7 @@ func New(buildVersion string, ui fs.FS, stdin io.Reader, stdout, stderr io.Write
 			},
 		),
 		Commands: []*urfavecli.Command{
-			convertCommand(stdin),
+			convertCommand(),
 		},
 		OnUsageError: normalizeUsageError,
 	}
@@ -160,15 +160,13 @@ func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buil
 	return fmt.Errorf("Error: %w", err)
 }
 
-func convertCommand(stdin io.Reader) *urfavecli.Command {
+func convertCommand() *urfavecli.Command {
 	return &urfavecli.Command{
-		Name:      "convert",
-		Usage:     "convert Markdown to HTML",
-		ArgsUsage: "<file|directory>",
-		Flags:     conversionFlags(),
-		Action: func(ctx context.Context, command *urfavecli.Command) error {
-			return convertAction(ctx, command, stdin)
-		},
+		Name:         "convert",
+		Usage:        "convert a Markdown file to a self-contained HTML page",
+		ArgsUsage:    "<file>",
+		Flags:        conversionFlags(),
+		Action:       convertAction,
 		OnUsageError: normalizeUsageError,
 	}
 }
@@ -177,94 +175,43 @@ func convertCommand(stdin io.Reader) *urfavecli.Command {
 // subcommand.
 func conversionFlags() []urfavecli.Flag {
 	return []urfavecli.Flag{
-		&urfavecli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "write to an HTML file or output directory", Local: true},
-		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
-		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
+		&urfavecli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "write to an HTML file", Local: true},
 		modeFlag(),
 		widthFlag(),
 		&urfavecli.BoolFlag{
-			Name:  "standalone",
-			Usage: "embed runtime assets and local images into each HTML file (directory mode)",
+			Name:  "force",
+			Usage: "overwrite the output file if it already exists",
 			Local: true,
-		},
-		&urfavecli.BoolFlag{
-			Name:        "copy-assets",
-			Value:       true,
-			DefaultText: "true",
-			Usage:       "copy non-Markdown assets in directory mode",
-			Local:       true,
-		},
-		&urfavecli.BoolFlag{
-			Name:    "yes",
-			Aliases: []string{"y"},
-			Usage:   "skip the conversion confirmation prompt",
-			Local:   true,
 		},
 	}
 }
 
-var runConvert = convert.RunWithResult
+var runConvert = convert.Run
 
-func convertAction(ctx context.Context, command *urfavecli.Command, stdin io.Reader) error {
+func convertAction(ctx context.Context, command *urfavecli.Command) error {
 	if command.Args().Len() == 0 {
 		return urfavecli.ShowCommandHelp(ctx, command, "convert")
 	}
 	if command.Args().Len() != 1 {
-		return fmt.Errorf("Error: requires exactly one file or directory")
-	}
-	proceed, err := confirmConversion(command, stdin)
-	if err != nil {
-		return err
-	}
-	if !proceed {
-		return nil
+		return fmt.Errorf("Error: requires exactly one Markdown file")
 	}
 	result, err := runConvert(ctx, convert.Options{
-		Input:         command.Args().First(),
-		Output:        command.String("output"),
-		Pattern:       command.String("glob"),
-		Depth:         command.Int("depth"),
-		Mode:          markdown.Mode(command.String("mode")),
-		Width:         markdown.Width(command.String("width")),
-		CopyAssets:    command.Bool("copy-assets"),
-		Standalone:    command.Bool("standalone"),
-		PatternSet:    command.IsSet("glob"),
-		DepthSet:      command.IsSet("depth"),
-		CopyAssetsSet: command.IsSet("copy-assets"),
-		StandaloneSet: command.IsSet("standalone"),
-		Log:           command.Root().ErrWriter,
+		Input:  command.Args().First(),
+		Output: command.String("output"),
+		Mode:   markdown.Mode(command.String("mode")),
+		Width:  markdown.Width(command.String("width")),
+		Force:  command.Bool("force"),
 	})
 	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
 		if err != nil {
 			return err
 		}
-		if err := result.WriteSummary(command.Root().Writer); err != nil {
+		if _, err := fmt.Fprintf(command.Root().Writer, "Wrote %s\n", result.Output); err != nil {
 			return fmt.Errorf("Error: write conversion result: %w", err)
 		}
 		return nil
 	}
 	return fmt.Errorf("Error: %w", err)
-}
-
-// confirmConversion asks the user to confirm the conversion unless --yes was
-// given. Non-interactive stdin without --yes is an error; a declined answer
-// prints "Aborted." and stops the command without failing it.
-func confirmConversion(command *urfavecli.Command, stdin io.Reader) (bool, error) {
-	if command.Bool("yes") {
-		return true, nil
-	}
-	prompt := convertPrompt(command.Args().First(), command.String("output"))
-	if prompt == "" {
-		return true, nil
-	}
-	if !interactiveStdin(stdin) {
-		return false, fmt.Errorf("Error: conversion requires confirmation; rerun with --yes")
-	}
-	if !confirm(stdin, command.Root().ErrWriter, prompt) {
-		_, _ = fmt.Fprintln(command.Root().ErrWriter, "Aborted.")
-		return false, nil
-	}
-	return true, nil
 }
 
 func modeFlag() *urfavecli.StringFlag {

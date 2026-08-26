@@ -6,7 +6,6 @@ import (
 	"encoding/base64"
 	"os"
 	"path/filepath"
-	"reflect"
 	"runtime"
 	"strings"
 	"testing"
@@ -29,82 +28,10 @@ func writeFixture(t *testing.T, root, relative, contents string) string {
 
 func defaultOptions(input string) Options {
 	return Options{
-		Input:      input,
-		Depth:      2,
-		Mode:       markdown.ModeAuto,
-		CopyAssets: true,
+		Input: input,
+		Mode:  markdown.ModeAuto,
+		Width: markdown.WidthStandard,
 	}
-}
-
-func TestResultWriteSummary(t *testing.T) {
-	t.Parallel()
-
-	tests := []struct {
-		name   string
-		result Result
-		want   string
-	}{
-		{
-			name: "no Markdown files",
-			want: "Converted 0 Markdown files.\nOutput HTML files: none.\n",
-		},
-		{
-			name:   "one Markdown file",
-			result: Result{HTMLFiles: []string{"/tmp/guide.html"}},
-			want:   "Converted 1 Markdown file.\nOutput HTML files:\n- /tmp/guide.html\n",
-		},
-		{
-			name:   "multiple files and copied assets",
-			result: Result{HTMLFiles: []string{"/tmp/a.html", "/tmp/b.html"}, CopiedAssets: 2},
-			want:   "Converted 2 Markdown files; copied 2 assets.\nOutput HTML files:\n- /tmp/a.html\n- /tmp/b.html\n",
-		},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			t.Parallel()
-
-			var output bytes.Buffer
-			if err := test.result.WriteSummary(&output); err != nil {
-				t.Fatalf("WriteSummary() returned error: %v", err)
-			}
-			if got := output.String(); got != test.want {
-				t.Fatalf("WriteSummary() output = %q, want %q", got, test.want)
-			}
-		})
-	}
-
-	if err := (Result{}).WriteSummary(nil); err == nil {
-		t.Fatal("WriteSummary(nil) succeeded")
-	}
-}
-
-func snapshotDirectory(t *testing.T, root string) map[string]string {
-	t.Helper()
-	snapshot := map[string]string{}
-	err := filepath.WalkDir(root, func(current string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		relative, err := filepath.Rel(root, current)
-		if err != nil {
-			return err
-		}
-		contents, err := os.ReadFile(current)
-		if err != nil {
-			return err
-		}
-		snapshot[filepath.ToSlash(relative)] = string(contents)
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return snapshot
 }
 
 func TestRunConvertsSingleFileToDefaultAndExplicitOutput(t *testing.T) {
@@ -112,8 +39,16 @@ func TestRunConvertsSingleFileToDefaultAndExplicitOutput(t *testing.T) {
 	source := writeFixture(t, root, "guide.md", "# Guide\n\n[Next](next.md)")
 	writeFixture(t, root, "next.md", "# Next")
 
-	if err := Run(context.Background(), defaultOptions(source)); err != nil {
+	result, err := Run(context.Background(), defaultOptions(source))
+	if err != nil {
 		t.Fatal(err)
+	}
+	resolvedRoot, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := result.Output, filepath.Join(resolvedRoot, "guide.html"); got != want {
+		t.Fatalf("default output = %q, want %q", got, want)
 	}
 	defaultHTML, err := os.ReadFile(filepath.Join(root, "guide.html"))
 	if err != nil {
@@ -129,7 +64,7 @@ func TestRunConvertsSingleFileToDefaultAndExplicitOutput(t *testing.T) {
 	options := defaultOptions(source)
 	options.Output = explicit
 	options.Mode = markdown.ModeDark
-	if err := Run(context.Background(), options); err != nil {
+	if _, err := Run(context.Background(), options); err != nil {
 		t.Fatal(err)
 	}
 	explicitHTML, err := os.ReadFile(explicit)
@@ -141,190 +76,50 @@ func TestRunConvertsSingleFileToDefaultAndExplicitOutput(t *testing.T) {
 	}
 }
 
-func TestRunWithResultReportsGeneratedHTMLAndCopiedAssets(t *testing.T) {
+func TestRunRejectsDirectoryInput(t *testing.T) {
 	source := t.TempDir()
-	output := filepath.Join(t.TempDir(), "public")
 	writeFixture(t, source, "guide.md", "# Guide")
-	writeFixture(t, source, "images/logo.svg", "svg")
 
-	options := defaultOptions(source)
-	options.Output = output
-	result, err := RunWithResult(context.Background(), options)
+	_, err := Run(context.Background(), defaultOptions(source))
+	if err == nil || !strings.Contains(err.Error(), "convert requires a Markdown file") {
+		t.Fatalf("Run() error = %v, want Markdown-file requirement", err)
+	}
+	if _, err := os.Stat(filepath.Join(source, "guide.html")); !os.IsNotExist(err) {
+		t.Fatal("directory input produced output")
+	}
+}
+
+func TestRunRequiresForceToOverwrite(t *testing.T) {
+	root := t.TempDir()
+	source := writeFixture(t, root, "guide.md", "# Guide")
+	target := filepath.Join(root, "guide.html")
+
+	if err := os.WriteFile(target, []byte("existing"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Run(context.Background(), defaultOptions(source))
+	if err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("Run() error = %v, want already-exists error", err)
+	}
+	contents, err := os.ReadFile(target)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resolvedOutput, err := filepath.EvalSymlinks(output)
+	if string(contents) != "existing" {
+		t.Fatalf("rejected run overwrote output: %q", contents)
+	}
+
+	options := defaultOptions(source)
+	options.Force = true
+	if _, err := Run(context.Background(), options); err != nil {
+		t.Fatalf("Run(--force) returned error: %v", err)
+	}
+	contents, err = os.ReadFile(target)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := result.HTMLFiles, []string{filepath.Join(resolvedOutput, "guide.html")}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("HTML files = %v, want %v", got, want)
-	}
-	if got, want := result.CopiedAssets, 1; got != want {
-		t.Fatalf("copied assets = %d, want %d", got, want)
-	}
-}
-
-func TestRunDirectoryDepthGlobAssetsAndTrailingSlash(t *testing.T) {
-	source := t.TempDir()
-	writeFixture(t, source, "root.md", "# Root")
-	writeFixture(t, source, "a/keep.md", "# Keep\n\n![asset](asset.png)")
-	writeFixture(t, source, "a/skip.md", "# Skip")
-	writeFixture(t, source, "a/asset.png", "png")
-	writeFixture(t, source, "a/b/deep.md", "# Deep")
-
-	outputs := []string{filepath.Join(t.TempDir(), "plain"), filepath.Join(t.TempDir(), "slash")}
-	inputs := []string{source, source + string(os.PathSeparator)}
-	for index, input := range inputs {
-		options := defaultOptions(input)
-		options.Output = outputs[index]
-		options.Depth = 1
-		options.Pattern = "**/{root,keep}.md"
-		if err := Run(context.Background(), options); err != nil {
-			t.Fatal(err)
-		}
-	}
-
-	for _, output := range outputs {
-		for _, relative := range []string{"root.html", "a/keep.html", "a/asset.png"} {
-			if _, err := os.Stat(filepath.Join(output, filepath.FromSlash(relative))); err != nil {
-				t.Errorf("missing %s: %v", relative, err)
-			}
-		}
-		for _, relative := range []string{"a/skip.html", "a/b/deep.html"} {
-			if _, err := os.Stat(filepath.Join(output, filepath.FromSlash(relative))); !os.IsNotExist(err) {
-				t.Errorf("unexpected %s", relative)
-			}
-		}
-	}
-	if first, second := snapshotDirectory(t, outputs[0]), snapshotDirectory(t, outputs[1]); !reflect.DeepEqual(first, second) {
-		t.Fatalf("directory output differs with trailing slash:\nplain=%v\nslash=%v", first, second)
-	}
-}
-
-func TestRunDirectoryCanDisableAssetCopy(t *testing.T) {
-	source := t.TempDir()
-	output := t.TempDir()
-	writeFixture(t, source, "guide.md", "# Guide")
-	writeFixture(t, source, "image.png", "png")
-
-	options := defaultOptions(source)
-	options.Output = output
-	options.CopyAssets = false
-	if err := Run(context.Background(), options); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(output, "guide.html")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(output, "image.png")); !os.IsNotExist(err) {
-		t.Fatalf("asset exists with copy disabled: %v", err)
-	}
-}
-
-func TestRunDirectoryAllowsEmptyMarkdownMatch(t *testing.T) {
-	source := t.TempDir()
-	output := t.TempDir()
-	writeFixture(t, source, "guide.md", "# Guide")
-	options := defaultOptions(source)
-	options.Output = output
-	options.Pattern = "**/missing-*.md"
-	if err := Run(context.Background(), options); err != nil {
-		t.Fatal(err)
-	}
-	entries, err := os.ReadDir(output)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(entries) != 0 {
-		t.Fatalf("empty match produced output: %v", entries)
-	}
-}
-
-func TestRunExcludesOutputInsideSource(t *testing.T) {
-	source := t.TempDir()
-	output := filepath.Join(source, "public")
-	writeFixture(t, source, "guide.md", "# Guide")
-	writeFixture(t, output, "stale.md", "# Stale")
-
-	options := defaultOptions(source)
-	options.Output = output
-	if err := Run(context.Background(), options); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(output, "guide.html")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(output, "stale.html")); !os.IsNotExist(err) {
-		t.Fatalf("output subtree was converted recursively: %v", err)
-	}
-}
-
-func TestRunDetectsDestinationConflictsBeforeWriting(t *testing.T) {
-	tests := []struct {
-		name    string
-		fixture map[string]string
-	}{
-		{
-			name: "two Markdown names",
-			fixture: map[string]string{
-				"same.md":       "md",
-				"same.markdown": "markdown",
-			},
-		},
-		{
-			name: "HTML asset",
-			fixture: map[string]string{
-				"same.md":   "md",
-				"same.html": "asset",
-			},
-		},
-	}
-
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			source := t.TempDir()
-			output := t.TempDir()
-			for relative, contents := range test.fixture {
-				writeFixture(t, source, relative, contents)
-			}
-			options := defaultOptions(source)
-			options.Output = output
-			if err := Run(context.Background(), options); err == nil || !strings.Contains(err.Error(), "conflict") {
-				t.Fatalf("Run() error = %v, want conflict", err)
-			}
-			entries, err := os.ReadDir(output)
-			if err != nil {
-				t.Fatal(err)
-			}
-			if len(entries) != 0 {
-				t.Fatalf("wrote output before reporting conflict: %v", entries)
-			}
-		})
-	}
-}
-
-func TestRunSingleFileRejectsDirectoryOnlyOptions(t *testing.T) {
-	source := writeFixture(t, t.TempDir(), "guide.md", "# Guide")
-	tests := []struct {
-		name   string
-		mutate func(*Options)
-		want   string
-	}{
-		{name: "glob", mutate: func(options *Options) { options.Pattern = "*.md"; options.PatternSet = true }, want: "--glob can only be used when converting a directory"},
-		{name: "depth", mutate: func(options *Options) { options.DepthSet = true }, want: "--depth can only be used when converting a directory"},
-		{name: "copy assets", mutate: func(options *Options) { options.CopyAssetsSet = true }, want: "--copy-assets can only be used when converting a directory"},
-	}
-	for _, test := range tests {
-		test := test
-		t.Run(test.name, func(t *testing.T) {
-			options := defaultOptions(source)
-			test.mutate(&options)
-			if err := Run(context.Background(), options); err == nil || err.Error() != test.want {
-				t.Fatalf("Run() error = %v, want %q", err, test.want)
-			}
-		})
+	if !bytes.Contains(contents, []byte("<title>Guide</title>")) {
+		t.Fatal("--force did not replace the output HTML")
 	}
 }
 
@@ -338,126 +133,71 @@ func TestRunRejectsInvalidInputAndOutputTypes(t *testing.T) {
 		options Options
 		want    string
 	}{
-		{name: "missing input option", options: Options{Depth: 2, Mode: markdown.ModeAuto}, want: "input path is required"},
-		{name: "non Markdown file", options: defaultOptions(textFile), want: "expected a Markdown file"},
+		{name: "missing input option", options: Options{Mode: markdown.ModeAuto}, want: "input path is required"},
+		{name: "non Markdown file", options: defaultOptions(textFile), want: "convert requires a Markdown file"},
 		{name: "same output", options: func() Options { options := defaultOptions(markdownFile); options.Output = markdownFile; return options }(), want: "output conflicts with input"},
 		{name: "file output is directory", options: func() Options { options := defaultOptions(markdownFile); options.Output = t.TempDir(); return options }(), want: "is a directory"},
-		{name: "directory output is file", options: func() Options { options := defaultOptions(root); options.Output = textFile; return options }(), want: "is not a directory"},
 	}
 
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
-			if err := Run(context.Background(), test.options); err == nil || !strings.Contains(err.Error(), test.want) {
+			t.Parallel()
+
+			if _, err := Run(context.Background(), test.options); err == nil || !strings.Contains(err.Error(), test.want) {
 				t.Fatalf("Run() error = %v, want %q", err, test.want)
 			}
 		})
 	}
 }
 
-func TestRunDirectoryDefaultsToInPlaceOutput(t *testing.T) {
-	source := t.TempDir()
-	writeFixture(t, source, "guide.md", "# Guide")
-	writeFixture(t, source, "asset.png", "asset")
-
-	if err := Run(context.Background(), defaultOptions(source)); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := os.Stat(filepath.Join(source, "guide.html")); err != nil {
-		t.Fatal(err)
-	}
-	asset, err := os.ReadFile(filepath.Join(source, "asset.png"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if string(asset) != "asset" {
-		t.Fatalf("in-place conversion changed asset: %q", asset)
-	}
-}
-
 func TestRunValidatesOptionsBeforeInputAccess(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
 	for _, options := range []Options{
-		{Input: missing, Depth: -1, Mode: markdown.ModeAuto},
-		{Input: missing, Depth: 2, Pattern: "[", Mode: markdown.ModeAuto},
-		{Input: missing, Depth: 2, Mode: "sepia"},
+		{Input: missing, Mode: "sepia"},
+		{Input: missing, Mode: markdown.ModeAuto, Width: "narrow"},
 	} {
-		if err := Run(context.Background(), options); err == nil || strings.Contains(err.Error(), "missing") {
+		if _, err := Run(context.Background(), options); err == nil || strings.Contains(err.Error(), "missing") {
 			t.Fatalf("Run() error = %v, want option error before input error", err)
 		}
 	}
 }
 
-func TestRunSupportsRootAndInternalSafeSymlinkFiles(t *testing.T) {
+func TestRunResolvesSymlinkedInput(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("symlink permissions vary on Windows")
 	}
 	source := t.TempDir()
 	writeFixture(t, source, "real.md", "# Real")
-	if err := os.Symlink(filepath.Join(source, "real.md"), filepath.Join(source, "alias.md")); err != nil {
+	alias := filepath.Join(source, "alias.md")
+	if err := os.Symlink(filepath.Join(source, "real.md"), alias); err != nil {
 		t.Fatal(err)
 	}
-	rootLink := filepath.Join(t.TempDir(), "source-link")
-	if err := os.Symlink(source, rootLink); err != nil {
+	if _, err := Run(context.Background(), defaultOptions(alias)); err != nil {
 		t.Fatal(err)
 	}
-	output := t.TempDir()
-	options := defaultOptions(rootLink)
-	options.Output = output
-	if err := Run(context.Background(), options); err != nil {
-		t.Fatal(err)
-	}
-	for _, name := range []string{"alias.html", "real.html"} {
-		if _, err := os.Stat(filepath.Join(output, name)); err != nil {
-			t.Errorf("missing %s: %v", name, err)
-		}
+	// The input symlink is resolved to its target, so the HTML lands beside
+	// the real file, not the alias.
+	if _, err := os.Stat(filepath.Join(source, "real.html")); err != nil {
+		t.Fatalf("real.html missing: %v", err)
 	}
 }
 
 func TestRunHonorsCancellation(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	if err := Run(ctx, defaultOptions(t.TempDir())); err == nil {
+	source := writeFixture(t, t.TempDir(), "guide.md", "# Guide")
+	if _, err := Run(ctx, defaultOptions(source)); err == nil {
 		t.Fatal("Run() ignored cancellation")
 	}
 }
 
-func TestChangeExtensionUsesNormalizedRelativePaths(t *testing.T) {
-	t.Parallel()
-
-	tests := map[string]string{
-		"guide.md":                "guide.html",
-		"design/guide.markdown":   "design/guide.html",
-		`design\windows\guide.MD`: "design/windows/guide.html",
-	}
-	for input, want := range tests {
-		if got := changeExtension(input); got != want {
-			t.Errorf("changeExtension(%q) = %q, want %q", input, got, want)
-		}
-	}
-}
-
-func TestPlannedDestinationsAreStable(t *testing.T) {
-	t.Parallel()
-
-	plans := []plannedFile{{destination: "z"}, {destination: "a"}}
-	sortPlans(plans)
-	if got, want := []string{plans[0].destination, plans[1].destination}, []string{"a", "z"}; !reflect.DeepEqual(got, want) {
-		t.Fatalf("sorted plans = %#v, want %#v", got, want)
-	}
-	if samePath(string([]byte{0}), "valid") {
-		t.Fatal("samePath() accepted an invalid path")
-	}
-}
-
-func TestAtomicHelpersReturnErrorsAndCleanTemporaryFiles(t *testing.T) {
+func TestWriteAtomicReturnsErrorsAndCleansTemporaryFiles(t *testing.T) {
 	root := t.TempDir()
 	blocker := writeFixture(t, root, "blocker", "file")
 	existingDirectory := filepath.Join(root, "existing")
 	if err := os.Mkdir(existingDirectory, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	source := writeFixture(t, root, "asset.txt", "asset")
 
 	tests := []struct {
 		name string
@@ -465,14 +205,11 @@ func TestAtomicHelpersReturnErrorsAndCleanTemporaryFiles(t *testing.T) {
 	}{
 		{name: "write parent is file", run: func() error { return writeAtomic(filepath.Join(blocker, "child"), []byte("data"), 0o644) }},
 		{name: "write destination is directory", run: func() error { return writeAtomic(existingDirectory, []byte("data"), 0o644) }},
-		{name: "copy source missing", run: func() error { return copyAtomic(filepath.Join(root, "missing"), filepath.Join(root, "out"), 0o644) }},
-		{name: "copy source is directory", run: func() error { return copyAtomic(root, filepath.Join(root, "directory-copy"), 0o644) }},
-		{name: "copy parent is file", run: func() error { return copyAtomic(source, filepath.Join(blocker, "child"), 0o644) }},
-		{name: "copy destination is directory", run: func() error { return copyAtomic(source, existingDirectory, 0o644) }},
 	}
 	for _, test := range tests {
-		test := test
 		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
 			if err := test.run(); err == nil {
 				t.Fatal("helper succeeded, want error")
 			}
@@ -499,7 +236,7 @@ func TestConversionReportsReadAndWritePermissionErrors(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = os.Chmod(source, 0o644) })
-		if err := Run(context.Background(), defaultOptions(source)); err == nil || !strings.Contains(err.Error(), "read Markdown") {
+		if _, err := Run(context.Background(), defaultOptions(source)); err == nil || !strings.Contains(err.Error(), "read Markdown") {
 			t.Fatalf("Run() error = %v, want read error", err)
 		}
 	})
@@ -517,7 +254,7 @@ func TestConversionReportsReadAndWritePermissionErrors(t *testing.T) {
 		t.Cleanup(func() { _ = os.Chmod(outputDirectory, 0o755) })
 		options := defaultOptions(source)
 		options.Output = filepath.Join(outputDirectory, "guide.html")
-		if err := Run(context.Background(), options); err == nil || !strings.Contains(err.Error(), "write HTML") {
+		if _, err := Run(context.Background(), options); err == nil || !strings.Contains(err.Error(), "write HTML") {
 			t.Fatalf("Run() error = %v, want write error", err)
 		}
 	})
@@ -528,54 +265,16 @@ func TestConversionReportsReadAndWritePermissionErrors(t *testing.T) {
 		blocker := writeFixture(t, root, "blocker", "file")
 		options := defaultOptions(source)
 		options.Output = filepath.Join(blocker, "guide.html")
-		if err := Run(context.Background(), options); err == nil || !strings.Contains(err.Error(), "output") {
+		if _, err := Run(context.Background(), options); err == nil || !strings.Contains(err.Error(), "output") {
 			t.Fatalf("Run() error = %v, want output error", err)
-		}
-	})
-
-	t.Run("directory source unreadable", func(t *testing.T) {
-		source := t.TempDir()
-		markdownFile := writeFixture(t, source, "guide.md", "# Guide")
-		if err := os.Chmod(markdownFile, 0); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = os.Chmod(markdownFile, 0o644) })
-		options := defaultOptions(source)
-		options.Output = t.TempDir()
-		if err := Run(context.Background(), options); err == nil || !strings.Contains(err.Error(), "read Markdown") {
-			t.Fatalf("Run() error = %v, want directory read error", err)
-		}
-	})
-
-	t.Run("directory output unwritable", func(t *testing.T) {
-		source := t.TempDir()
-		writeFixture(t, source, "guide.md", "# Guide")
-		output := t.TempDir()
-		if err := os.Chmod(output, 0o500); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = os.Chmod(output, 0o755) })
-		options := defaultOptions(source)
-		options.Output = output
-		if err := Run(context.Background(), options); err == nil || !strings.Contains(err.Error(), "write") {
-			t.Fatalf("Run() error = %v, want directory write error", err)
 		}
 	})
 }
 
-func TestRunReportsMissingInputAndInvalidOutputParent(t *testing.T) {
+func TestRunReportsMissingInput(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "missing")
-	if err := Run(context.Background(), defaultOptions(missing)); err == nil || !strings.Contains(err.Error(), "input") {
+	if _, err := Run(context.Background(), defaultOptions(missing)); err == nil || !strings.Contains(err.Error(), "input") {
 		t.Fatalf("Run() error = %v, want missing input error", err)
-	}
-
-	source := t.TempDir()
-	writeFixture(t, source, "guide.md", "# Guide")
-	blocker := writeFixture(t, t.TempDir(), "blocker", "file")
-	options := defaultOptions(source)
-	options.Output = filepath.Join(blocker, "output")
-	if err := Run(context.Background(), options); err == nil || !strings.Contains(err.Error(), "output") {
-		t.Fatalf("Run() error = %v, want invalid output parent", err)
 	}
 }
 
@@ -601,7 +300,7 @@ func TestRunConvertPreservesRichContent(t *testing.T) {
 	root := t.TempDir()
 	source := writeFixture(t, root, "guide.md",
 		"# Guide\n\nInline $E = mc^2$ here.\n\n```mermaid\nflowchart LR\n    A-->B\n```\n")
-	if err := Run(context.Background(), defaultOptions(source)); err != nil {
+	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -637,12 +336,12 @@ func TestRunConvertPreservesRichContent(t *testing.T) {
 	}
 }
 
-func TestRunConvertSingleFileWithoutRichContentStaysLean(t *testing.T) {
+func TestRunConvertWithoutRichContentStaysLean(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	source := writeFixture(t, root, "guide.md", "# Guide\n\nPlain paragraph.\n\n```go\nfmt.Println(1)\n```\n")
-	if err := Run(context.Background(), defaultOptions(source)); err != nil {
+	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -666,12 +365,12 @@ func TestRunConvertSingleFileWithoutRichContentStaysLean(t *testing.T) {
 	}
 }
 
-func TestRunConvertSingleFileWritesNoAssetDirectory(t *testing.T) {
+func TestRunConvertWritesNoAssetDirectory(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	source := writeFixture(t, root, "guide.md", "# Guide\n\n$E=mc^2$")
-	if err := Run(context.Background(), defaultOptions(source)); err != nil {
+	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -680,13 +379,13 @@ func TestRunConvertSingleFileWritesNoAssetDirectory(t *testing.T) {
 	}
 }
 
-func TestRunConvertSingleFileInlinesLocalImages(t *testing.T) {
+func TestRunConvertInlinesLocalImages(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	writeFixture(t, root, "img/diagram.png", "\x89PNG\r\n\x1a\nfake-image-bytes")
 	source := writeFixture(t, root, "guide.md", "# Guide\n\n![Diagram](img/diagram.png)\n\n![Remote](https://example.com/x.png)\n\n![Missing](img/nope.png)\n")
-	if err := Run(context.Background(), defaultOptions(source)); err != nil {
+	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -707,68 +406,7 @@ func TestRunConvertSingleFileInlinesLocalImages(t *testing.T) {
 	}
 }
 
-func TestRunConvertDirectoryStandaloneEmbedsRuntime(t *testing.T) {
-	t.Parallel()
-
-	source := t.TempDir()
-	output := t.TempDir()
-	writeFixture(t, source, "index.md", "# Index\n\n$E=mc^2$")
-	writeFixture(t, source, "a/deep.md", "# Deep\n\n```mermaid\nflowchart LR\n    A-->B\n```\n")
-
-	options := defaultOptions(source)
-	options.Output = output
-	options.Standalone = true
-	if err := Run(context.Background(), options); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := os.Stat(filepath.Join(output, assets.RichAssetDir)); !os.IsNotExist(err) {
-		t.Fatalf("standalone directory convert wrote %s: %v", assets.RichAssetDir, err)
-	}
-
-	index, err := os.ReadFile(filepath.Join(output, "index.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Math only: KaTeX core and fonts, no Mermaid bundle.
-	if !strings.Contains(string(index), "data:font/woff2;base64,") {
-		t.Errorf("standalone index.html missing inlined KaTeX fonts")
-	}
-	if !strings.Contains(string(index), embeddedAssetSnippet(t, "katex.min.js", 60)) {
-		t.Errorf("standalone index.html missing the KaTeX runtime")
-	}
-	if strings.Contains(string(index), embeddedAssetSnippet(t, "mermaid.min.js", 60)) {
-		t.Errorf("standalone index.html unexpectedly embeds Mermaid")
-	}
-
-	deep, err := os.ReadFile(filepath.Join(output, "a", "deep.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Diagram only: Mermaid bundle, no KaTeX runtime.
-	if !strings.Contains(string(deep), embeddedAssetSnippet(t, "mermaid.min.js", 60)) {
-		t.Errorf("standalone deep.html missing the Mermaid runtime")
-	}
-	if strings.Contains(string(deep), "data:font/woff2") {
-		t.Errorf("standalone deep.html unexpectedly embeds KaTeX fonts")
-	}
-}
-
-func TestRunConvertRejectsStandaloneFlagForSingleFile(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	source := writeFixture(t, root, "guide.md", "# Guide")
-	options := defaultOptions(source)
-	options.Standalone = true
-	options.StandaloneSet = true
-	err := Run(context.Background(), options)
-	if err == nil || !strings.Contains(err.Error(), "--standalone can only be used when converting a directory") {
-		t.Fatalf("Run() error = %v, want standalone single-file rejection", err)
-	}
-}
-
-func TestRunConvertSingleFileSkipsSymlinkedImageEscape(t *testing.T) {
+func TestRunConvertSkipsSymlinkedImageEscape(t *testing.T) {
 	t.Parallel()
 
 	outside := t.TempDir()
@@ -778,7 +416,7 @@ func TestRunConvertSingleFileSkipsSymlinkedImageEscape(t *testing.T) {
 		t.Skipf("symlinks unavailable: %v", err)
 	}
 	source := writeFixture(t, root, "guide.md", "# Guide\n\n![Secret](linked.png)\n")
-	if err := Run(context.Background(), defaultOptions(source)); err != nil {
+	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
 		t.Fatal(err)
 	}
 
@@ -792,78 +430,5 @@ func TestRunConvertSingleFileSkipsSymlinkedImageEscape(t *testing.T) {
 	}
 	if strings.Contains(body, "base64") {
 		t.Errorf("symlinked image should keep its relative reference: %s", body)
-	}
-}
-
-func TestRunDirectoryWritesSharedRichAssetsWithDepthAwareBase(t *testing.T) {
-	t.Parallel()
-
-	source := t.TempDir()
-	output := t.TempDir()
-	writeFixture(t, source, "index.md", "# Index")
-	writeFixture(t, source, "a/b/deep.md", "# Deep")
-
-	options := defaultOptions(source)
-	options.Output = output
-	if err := Run(context.Background(), options); err != nil {
-		t.Fatal(err)
-	}
-
-	if _, err := os.Stat(filepath.Join(output, ".m2h", "katex.min.css")); err != nil {
-		t.Fatalf("directory convert did not write shared .m2h/: %v", err)
-	}
-	if _, err := os.Stat(filepath.Join(output, "a", "b", assets.RichAssetDir)); !os.IsNotExist(err) {
-		t.Fatalf("nested %s should not exist, got %v", assets.RichAssetDir, err)
-	}
-
-	root, err := os.ReadFile(filepath.Join(output, "index.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(root), `href=".m2h/katex.min.css"`) {
-		t.Errorf("root HTML missing .m2h base: %s", root)
-	}
-
-	nested, err := os.ReadFile(filepath.Join(output, "a", "b", "deep.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(nested), `href="../../.m2h/katex.min.css"`) {
-		t.Errorf("nested HTML missing depth-aware base: %s", nested)
-	}
-}
-
-func TestRunDirectoryRichRuntimeStableAcrossRuns(t *testing.T) {
-	t.Parallel()
-
-	source := t.TempDir()
-	writeFixture(t, source, "index.md", "# Index")
-	writeFixture(t, source, "image.png", "png")
-	options := defaultOptions(source) // output == source
-
-	if err := Run(context.Background(), options); err != nil {
-		t.Fatalf("first run failed: %v", err)
-	}
-	// Re-running into the same source must stay stable: the previously written
-	// .m2h/ runtime is excluded from discovery rather than reprocessed.
-	if err := Run(context.Background(), options); err != nil {
-		t.Fatalf("second run failed: %v", err)
-	}
-
-	richDirs := 0
-	err := filepath.WalkDir(source, func(_ string, entry os.DirEntry, walkErr error) error {
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() && entry.Name() == assets.RichAssetDir {
-			richDirs++
-		}
-		return nil
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if richDirs != 1 {
-		t.Fatalf("expected exactly one %s directory after rerun, got %d", assets.RichAssetDir, richDirs)
 	}
 }

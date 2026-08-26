@@ -20,15 +20,15 @@ var M2HVersion = version.Development
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	os.Exit(runContext(ctx, os.Args, webui.Content(), os.Stdin, os.Stdout, os.Stderr))
+	os.Exit(runContext(ctx, os.Args, webui.Content(), os.Stdout, os.Stderr))
 }
 
-func run(args []string, ui fs.FS, stdin io.Reader, stdout, stderr io.Writer) int {
-	return runContext(context.Background(), args, ui, stdin, stdout, stderr)
+func run(args []string, ui fs.FS, stdout, stderr io.Writer) int {
+	return runContext(context.Background(), args, ui, stdout, stderr)
 }
 
-func runContext(ctx context.Context, args []string, ui fs.FS, stdin io.Reader, stdout, stderr io.Writer) int {
-	command, err := appcli.New(M2HVersion, ui, stdin, stdout, stderr)
+func runContext(ctx context.Context, args []string, ui fs.FS, stdout, stderr io.Writer) int {
+	command, err := appcli.New(M2HVersion, ui, stdout, stderr)
 	if err == nil {
 		err = command.Run(ctx, args)
 	}

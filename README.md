@@ -53,36 +53,28 @@ m2h convert README.md
 
 # 指定输出文件
 m2h convert README.md --output public/index.html
-
-# 转换目录中的 Markdown，并保留目录结构
-m2h convert docs --output public/docs --depth 3 --glob '**/plan_*.md'
-
-# 目录转换时让每个 HTML 也自包含
-m2h convert docs --standalone
 ```
 
-单文件转换默认生成完全自包含的 HTML：页面样式、数学公式与 Mermaid 运行时、字体以及本地图片全部内嵌，输出旁不再生成 `.m2h/` 目录，文件可独立离线打开与分享；文档没有公式或图表时不会内嵌对应运行时。目录转换会在输出根部生成共享的 `.m2h/` 运行时目录，并默认复制非 Markdown 资源（`--copy-assets=false` 关闭）；使用 `--standalone` 可让目录中每个 HTML 也自包含。相对 Markdown 链接会改为对应的 `.html` 链接。
+单文件转换生成完全自包含的 HTML：页面样式、数学公式与 Mermaid 运行时、字体以及本地图片全部内嵌，输出旁不生成 `.m2h/` 目录，文件可独立离线打开与分享；文档没有公式或图表时不会内嵌对应运行时。相对 Markdown 链接会改为对应的 `.html` 链接。
 
-执行转换前，`m2h` 会在终端显示写入目标并要求确认（`[y/N]`，直接回车取消，仅 `y`/`yes` 继续）；加 `--yes` 或 `-y` 跳过确认。标准输入不是终端时（脚本、CI、管道）不加 `--yes` 会直接报错退出。`m2h` 文档服务不受影响。
+输出文件已存在时转换会报错退出；加 `--force` 覆盖已有输出，适合脚本与 CI：
 
-转换成功后，m2h 会向标准输出打印转换数量、复制资源数量（如有）与每个生成 HTML 的绝对路径：
+```console
+m2h convert README.md --force
+```
+
+转换成功后，m2h 会向标准输出打印生成的 HTML 绝对路径：
 
 ```text
-Converted 1 Markdown file.
-Output HTML files:
-- /work/project/README.html
+Wrote /work/project/README.html
 ```
 
 | 选项 | 说明 |
 | --- | --- |
-| `--output`, `-o` | 单文件的目标 HTML，或目录转换的目标目录。 |
-| `--glob` | 按相对输入目录的路径筛选 Markdown，例如 `'**/guide_*.md'`。仅目录可用。 |
-| `--depth`, `-d` | 最大递归深度；默认 `4`。 |
-| `--standalone` | 目录模式下把运行时与本地图片内嵌进每个 HTML；单文件转换默认已自包含。仅目录可用。 |
-| `--copy-assets` | 是否复制非 Markdown 资源；默认 `true`。 |
+| `--output`, `-o` | 目标 HTML 文件路径；默认写入输入旁的同名 `.html`。 |
 | `--mode` | 页面主题：`light`、`dark` 或 `auto`；默认 `auto`。 |
 | `--width` | 正文宽度：`standard`（980px）、`wide`（1280px）或 `full`；默认 `standard`。 |
-| `--yes`, `-y` | 跳过转换前的确认提示；非交互环境（脚本、CI、管道）必须加此选项。 |
+| `--force` | 输出文件已存在时覆盖，而不是报错退出。 |
 
 ## 在浏览器中预览
 
