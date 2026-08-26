@@ -66,9 +66,6 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	if !reflect.DeepEqual(gotPaths, wantPaths) {
 		t.Fatalf("API paths = %v, shared discovery paths = %v", gotPaths, wantPaths)
 	}
-	if payload.DefaultDocument == nil || payload.DefaultDocument.Root != "r0" || payload.DefaultDocument.Path != "README.md" {
-		t.Fatalf("defaultDocument = %+v, want r0 README.md", payload.DefaultDocument)
-	}
 	if titleFor(files, "design/architecture.md") != "Architecture" {
 		t.Fatalf("architecture title = %q", titleFor(files, "design/architecture.md"))
 	}
@@ -80,7 +77,7 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	}
 }
 
-func TestDirectoryFilesAPIDepthGlobRefreshAndDefaultSelection(t *testing.T) {
+func TestDirectoryFilesAPIDepthGlobRefresh(t *testing.T) {
 	root := directoryFixture(t)
 	canonical := canonicalDirectory(t, root)
 	handlerState := &documentHandler{
@@ -120,19 +117,6 @@ func TestDirectoryFilesAPIDepthGlobRefreshAndDefaultSelection(t *testing.T) {
 	document := performRequest(handler, http.MethodGet, "/api/document?path=added.md")
 	if document.Code != http.StatusOK || requests != 2 {
 		t.Fatalf("document request status=%d scans=%d, want status 200 without tree scan", document.Code, requests)
-	}
-
-	if got := defaultDocument([]fileSummary{{Path: "z.md"}, {Path: "index.md"}, {Path: "README.md"}}); got != "README.md" {
-		t.Fatalf("README priority = %q", got)
-	}
-	if got := defaultDocument([]fileSummary{{Path: "z.md"}, {Path: "index.md"}}); got != "index.md" {
-		t.Fatalf("index priority = %q", got)
-	}
-	if got := defaultDocument([]fileSummary{{Path: "a.md"}, {Path: "z.md"}}); got != "a.md" {
-		t.Fatalf("sorted fallback = %q", got)
-	}
-	if got := defaultDocument(nil); got != "" {
-		t.Fatalf("empty fallback = %q", got)
 	}
 }
 
@@ -185,6 +169,22 @@ func TestFilesAPIRootSummariesCarryNoServerPaths(t *testing.T) {
 			if err := json.Unmarshal(response.Body.Bytes(), &envelope); err != nil {
 				t.Fatal(err)
 			}
+			// The top-level envelope carries exactly kind/roots/version: the
+			// server no longer picks a "default document" for the browser —
+			// which document to open is the reader's decision, expressed by
+			// the /doc/... address.
+			var keys map[string]json.RawMessage
+			if err := json.Unmarshal(response.Body.Bytes(), &keys); err != nil {
+				t.Fatal(err)
+			}
+			if len(keys) != 3 {
+				t.Fatalf("envelope keys = %v, want exactly kind/roots/version: %s", mapKeys(keys), response.Body.String())
+			}
+			for _, key := range []string{"kind", "roots", "version"} {
+				if _, exists := keys[key]; !exists {
+					t.Fatalf("envelope is missing the %q key: %s", key, response.Body.String())
+				}
+			}
 			if len(envelope.Roots) == 0 {
 				t.Fatalf("response carried no roots: %s", response.Body.String())
 			}
@@ -228,7 +228,7 @@ func TestDirectoryFilesAPIEmptyAndFailures(t *testing.T) {
 	response := performRequest(handler, http.MethodGet, "/api/files")
 	var payload fileListResponse
 	decodeJSON(t, response, &payload)
-	if len(payload.Roots) != 1 || payload.Roots[0].Files == nil || len(payload.Roots[0].Files) != 0 || payload.DefaultDocument != nil {
+	if len(payload.Roots) != 1 || payload.Roots[0].Files == nil || len(payload.Roots[0].Files) != 0 {
 		t.Fatalf("empty payload = %+v", payload)
 	}
 
@@ -779,9 +779,6 @@ func TestWorkspaceFilesAPILabelsRootsAndPrefersThePrimaryRoot(t *testing.T) {
 	// Files stay root-relative inside their root summary.
 	if len(payload.Roots[0].Files) != 1 || payload.Roots[0].Files[0].Path != "zeta.md" {
 		t.Fatalf("alpha files = %+v", payload.Roots[0].Files)
-	}
-	if payload.DefaultDocument == nil || payload.DefaultDocument.Root != "r0" || payload.DefaultDocument.Path != "zeta.md" {
-		t.Fatalf("defaultDocument = %+v, want r0 zeta.md", payload.DefaultDocument)
 	}
 }
 

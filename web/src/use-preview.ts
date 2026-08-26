@@ -16,13 +16,12 @@ import {
   type RootSummary,
 } from "./api";
 import {
-  chooseDocument,
+  autoOpenDocument,
   type DocumentWidth,
   encodeHeadingHash,
   type Mode,
   type ResolvedMode,
   readRoute,
-  rootDocumentKey,
   rootFiles,
   routeURL,
 } from "./model";
@@ -30,6 +29,7 @@ import {
 export type PreviewPhase =
   | "loading-files"
   | "loading-document"
+  | "unselected"
   | "ready"
   | "empty"
   | "error";
@@ -91,7 +91,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   const [error, setError] = useState<string | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
   const filesRef = useRef<FileSummary[]>([]);
-  const defaultPathRef = useRef("");
+  const kindRef = useRef<PreviewKind>("directory");
   const selectedPathRef = useRef<string | null>(null);
   const modeRef = useRef<Mode>(initialRoute.current.mode);
   const widthRef = useRef<DocumentWidth>(initialRoute.current.width);
@@ -159,6 +159,17 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     [api, writeRoute],
   );
 
+  // Leaving every document closed converges here: the URL returns to the
+  // workspace root and the phase distinguishes "nothing to select" (empty)
+  // from "documents exist, none chosen yet" (unselected).
+  const settleWithoutDocument = useCallback(() => {
+    selectedPathRef.current = null;
+    setSelectedPath(null);
+    setDocumentResponse(null);
+    setPhase(filesRef.current.length === 0 ? "empty" : "unselected");
+    writeRoute(null, "replace");
+  }, [writeRoute]);
+
   const loadFiles = useCallback(
     async (requested: string | null, requestedHash = "") => {
       listController.current?.abort();
@@ -177,22 +188,24 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         // Documents are addressed by their virtual key: a multi-root workspace
         // prefixes each root's files with the root id, a single root keeps
         // bare relative paths (see model.ts rootFiles).
-        const multiRoot = loaded.roots.length > 1;
         const flattened = rootFiles(loaded.roots);
-        const defaultPath = rootDocumentKey(loaded.defaultDocument, multiRoot);
         filesRef.current = flattened;
-        defaultPathRef.current = defaultPath;
+        kindRef.current = loaded.kind;
         setFiles(flattened);
         setRoots(loaded.roots);
         setKind(loaded.kind);
         setVersion(loaded.version);
-        const target = chooseDocument(flattened, requested, defaultPath);
+        // Only an explicit /doc/... address or the single-file preview's one
+        // auto-open picks a document here; directory and multi-root
+        // workspaces start unselected — the server no longer has an opinion
+        // about what the reader should open first.
+        const target =
+          requested !== null &&
+          flattened.some((file) => file.path === requested)
+            ? requested
+            : autoOpenDocument(flattened, loaded.kind);
         if (target === null) {
-          selectedPathRef.current = null;
-          setSelectedPath(null);
-          setDocumentResponse(null);
-          setPhase("empty");
-          writeRoute(null, "replace");
+          settleWithoutDocument();
           return;
         }
         const targetHash = target === requested ? requestedHash : "";
@@ -205,7 +218,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         setPhase("error");
       }
     },
-    [api, loadDocument, writeRoute],
+    [api, loadDocument, settleWithoutDocument],
   );
 
   useEffect(() => {
@@ -229,17 +242,13 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
       setModeState(route.mode);
       setWidthState(route.width);
       setTOCState(route.toc);
-      const target = chooseDocument(
-        filesRef.current,
-        route.path,
-        defaultPathRef.current,
-      );
+      const target =
+        route.path !== null &&
+        filesRef.current.some((file) => file.path === route.path)
+          ? route.path
+          : autoOpenDocument(filesRef.current, kindRef.current);
       if (target === null) {
-        selectedPathRef.current = null;
-        setSelectedPath(null);
-        setDocumentResponse(null);
-        setPhase("empty");
-        writeRoute(null, "replace");
+        settleWithoutDocument();
         return;
       }
       const targetHash = target === route.path ? route.hash : "";
@@ -260,7 +269,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [loadDocument, writeRoute]);
+  }, [loadDocument, settleWithoutDocument]);
 
   useEffect(() => {
     const media =

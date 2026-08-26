@@ -20,11 +20,6 @@ export interface RootSummary {
   files: FileSummary[];
 }
 
-export interface DocumentRef {
-  root: string;
-  path: string;
-}
-
 // PreviewKind reports what the server is previewing, so the WebUI can hide
 // file navigation when there is nothing to navigate: one file, one directory,
 // or a workspace of several roots.
@@ -33,7 +28,6 @@ export type PreviewKind = "single" | "directory" | "workspace";
 export interface FileListResponse {
   kind: PreviewKind;
   roots: RootSummary[];
-  defaultDocument: DocumentRef | null;
   version: string;
 }
 
@@ -143,7 +137,6 @@ function parseFileList(payload: unknown): FileListResponse {
   return {
     kind: parsePreviewKind(payload.kind),
     roots,
-    defaultDocument: parseDocumentRef(payload.defaultDocument),
     version: payload.version,
   };
 }
@@ -167,20 +160,6 @@ function parsePreviewKind(value: unknown): PreviewKind {
     return value;
   }
   return "directory";
-}
-
-function parseDocumentRef(payload: unknown): DocumentRef | null {
-  if (payload === undefined || payload === null) {
-    return null;
-  }
-  if (
-    !isRecord(payload) ||
-    typeof payload.root !== "string" ||
-    typeof payload.path !== "string"
-  ) {
-    throw new Error("文件列表响应格式无效");
-  }
-  return { root: payload.root, path: payload.path };
 }
 
 function parseFrontMatter(payload: unknown): FrontMatter | null {

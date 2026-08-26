@@ -1,4 +1,4 @@
-import type { DocumentRef, FileSummary, RootSummary } from "./api";
+import type { FileSummary, PreviewKind, RootSummary } from "./api";
 
 export type Mode = "light" | "dark" | "auto";
 // ResolvedMode is the concrete light/dark the UI settles on after resolving
@@ -143,30 +143,19 @@ export function rootFiles(roots: RootSummary[]): FileSummary[] {
   );
 }
 
-// Compose the virtual key of the server's default document; "" when the
-// workspace has no documents at all.
-export function rootDocumentKey(
-  ref: DocumentRef | null,
-  multiRoot: boolean,
-): string {
-  if (ref === null) {
-    return "";
-  }
-  return multiRoot ? `${ref.root}/${ref.path}` : ref.path;
-}
-
-export function chooseDocument(
+// The one document a workspace opens by itself: the single file of a
+// single-file preview. Its sidebar is hidden, so without the auto-open there
+// would be no way to reach the document at all. Directory and multi-root
+// workspaces open nothing — which document to read is the user's decision,
+// expressed by a click or an explicit /doc/... address; the URL stays "/".
+export function autoOpenDocument(
   files: FileSummary[],
-  requested: string | null,
-  defaultPath: string,
+  kind: PreviewKind,
 ): string | null {
-  if (requested !== null && files.some((file) => file.path === requested)) {
-    return requested;
+  if (kind === "single" && files.length > 0) {
+    return files[0]?.path ?? null;
   }
-  if (defaultPath !== "" && files.some((file) => file.path === defaultPath)) {
-    return defaultPath;
-  }
-  return files[0]?.path ?? null;
+  return null;
 }
 
 export function buildTree(files: FileSummary[]): TreeNode[] {

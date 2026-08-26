@@ -25,13 +25,14 @@ const initialFiles: FileListResponse = {
       ],
     },
   ],
-  defaultDocument: { root: "r0", path: "README.md" },
 };
 
 beforeEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
-  window.history.replaceState(null, "", "/");
+  // Directory workspaces no longer auto-open a document: the default URL for
+  // these tests is an explicit /doc deep link, which still opens directly.
+  window.history.replaceState(null, "", "/doc/README.md");
   document.documentElement.className = "";
   delete document.documentElement.dataset.mode;
   // index.html loads the Markdown stylesheet once as a stable /ui/markdown.css;
@@ -45,7 +46,24 @@ beforeEach(() => {
 });
 
 describe("App directory preview", () => {
-  it("selects the server default and uses API title metadata", async () => {
+  it("starts a directory preview unselected at the workspace root", async () => {
+    window.history.replaceState(null, "", "/");
+    const api = createAPI();
+    render(<App api={api} />);
+
+    // Documents exist but none was chosen: the tree renders and no document
+    // is ever fetched. The URL keeps meaning "the workspace", not a document.
+    await screen.findByText("请选择要查看的文件");
+    expect(api.listFiles).toHaveBeenCalledTimes(1);
+    expect(api.getDocument).not.toHaveBeenCalled();
+    expect(window.location.pathname + window.location.search).toBe("/");
+    expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Readme API Title，README.md" }),
+    ).toBeTruthy();
+  });
+
+  it("opens an explicit deep link and uses API title metadata", async () => {
     const api = createAPI();
     render(<App api={api} />);
 
@@ -148,7 +166,7 @@ describe("App directory preview", () => {
     expect(getDocument).toHaveBeenCalledTimes(2);
   });
 
-  it("opens the default document when a workspace-changed refresh drops the open file", async () => {
+  it("returns to the unselected state when a refresh drops the open file", async () => {
     const withoutSetup: FileListResponse = {
       ...initialFiles,
       roots: [
@@ -176,15 +194,19 @@ describe("App directory preview", () => {
     expect(listFiles).toHaveBeenCalledTimes(1);
 
     // The watcher saw the file disappear; the refreshed tree no longer lists
-    // it, so the workspace falls back to its default document.
+    // it, so the reader lands back in the unselected state — not on some
+    // other document and not in the "no Markdown" empty state.
     await act(async () => {
       events.dispatch("workspace-changed");
     });
-    await screen.findByText("Body for README.md");
+    await screen.findByText("请选择要查看的文件");
+    expect(screen.queryByText("目录中没有 Markdown 文件")).toBeNull();
+    expect(window.location.pathname).toBe("/");
     expect(listFiles).toHaveBeenCalledTimes(2);
   });
 
-  it("hides file navigation for a single-file preview", async () => {
+  it("hides file navigation for a single-file preview and opens its only document", async () => {
+    window.history.replaceState(null, "", "/");
     const api = createAPI({
       listFiles: vi.fn().mockResolvedValue({
         kind: "single",
@@ -202,12 +224,17 @@ describe("App directory preview", () => {
             ],
           },
         ],
-        defaultDocument: { root: "r0", path: "README.md" },
       }),
     });
     render(<App api={api} />);
 
+    // A single-file preview has no sidebar to pick from, so its only
+    // document opens by itself even from the workspace root.
     await screen.findByText("Body for README.md");
+    expect(api.getDocument).toHaveBeenCalledWith(
+      "README.md",
+      expect.any(AbortSignal),
+    );
     expect(screen.queryByRole("button", { name: "切换文件导航" })).toBeNull();
     expect(screen.queryByRole("searchbox", { name: "搜索文档" })).toBeNull();
     // Shared toolbar controls remain available in single-file mode.
@@ -218,6 +245,7 @@ describe("App directory preview", () => {
   });
 
   it("groups a multi-root workspace into labeled, expanded root trees", async () => {
+    window.history.replaceState(null, "", "/doc/r0/README.md");
     const getDocument = vi.fn().mockImplementation(async (path: string) => ({
       path,
       title: path.includes("r1/") ? "Beta Readme" : "Alpha Readme",
@@ -250,14 +278,13 @@ describe("App directory preview", () => {
             ],
           },
         ],
-        defaultDocument: { root: "r0", path: "README.md" },
       }),
       getDocument,
     });
     render(<App api={api} />);
 
-    // The workspace default opens the primary root's document under its
-    // virtual key and the URL carries the key unchanged.
+    // The deep link opens the primary root's document under its virtual key
+    // and the URL carries the key unchanged.
     await screen.findByRole("heading", { level: 1, name: "Alpha" });
     expect(getDocument).toHaveBeenCalledWith(
       "r0/README.md",
@@ -355,6 +382,7 @@ describe("App directory preview", () => {
     const path = "internal/markdown/testdata/gfm.md";
     const title = "GFM Fixture";
     const file = { path, name: "gfm.md", title };
+    window.history.replaceState(null, "", `/doc/${path}`);
     const api = createAPI({
       listFiles: vi.fn().mockResolvedValue({
         kind: "directory",
@@ -366,7 +394,6 @@ describe("App directory preview", () => {
             files: [file],
           },
         ],
-        defaultDocument: { root: "r0", path },
       }),
       getDocument: vi.fn().mockResolvedValue({
         path,
@@ -828,6 +855,7 @@ describe("App directory preview", () => {
   });
 
   it("opens root-prefixed file menus in a workspace", async () => {
+    window.history.replaceState(null, "", "/doc/r0/README.md");
     const user = userEvent.setup();
     const copied: string[] = [];
     Object.defineProperty(document, "execCommand", {
@@ -857,7 +885,6 @@ describe("App directory preview", () => {
             ],
           },
         ],
-        defaultDocument: { root: "r0", path: "README.md" },
       }),
       getDocument: vi.fn().mockImplementation(async (path: string) => ({
         path,
@@ -958,7 +985,6 @@ describe("App directory preview", () => {
                 files: [],
               },
             ],
-            defaultDocument: null,
           }),
         })}
       />,
@@ -980,6 +1006,9 @@ describe("App directory preview", () => {
     expect(listAlert.textContent).toContain("无法读取 Markdown 文件列表");
     view.unmount();
 
+    // The URL drifted to "/" in the empty sub-test above; the deleted-document
+    // error needs an explicit document request.
+    window.history.replaceState(null, "", "/doc/README.md");
     view = render(
       <App
         api={createAPI({
@@ -1775,7 +1804,6 @@ describe("App directory preview", () => {
             ],
           },
         ],
-        defaultDocument: { root: "r0", path: "README.md" },
       }),
       getDocument,
     });
@@ -1842,7 +1870,6 @@ describe("App directory preview", () => {
             ],
           },
         ],
-        defaultDocument: { root: "r0", path: "README.md" },
       }),
       getDocument,
     });

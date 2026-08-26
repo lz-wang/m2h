@@ -82,9 +82,6 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 	if len(list.Roots) != 1 || len(list.Roots[0].Files) != 1 || list.Roots[0].Files[0].Path != "guide.md" {
 		t.Fatalf("single-file list = %+v", list)
 	}
-	if list.DefaultDocument == nil || list.DefaultDocument.Root != "r0" || list.DefaultDocument.Path != "guide.md" {
-		t.Fatalf("single-file default = %+v", list.DefaultDocument)
-	}
 	if list.Kind != workspaceSingle {
 		t.Fatalf("single-file kind = %q, want %q", list.Kind, workspaceSingle)
 	}

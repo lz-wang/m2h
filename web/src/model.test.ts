@@ -4,15 +4,14 @@ import type { FileSummary, RootSummary } from "./api";
 import {
   absoluteURL,
   ancestorDirectories,
+  autoOpenDocument,
   buildTree,
-  chooseDocument,
   decodeHeadingHash,
   documentURL,
   encodeHeadingHash,
   encodeVirtualPath,
   markdownURL,
   readRoute,
-  rootDocumentKey,
   rootFiles,
   routeURL,
 } from "./model";
@@ -95,13 +94,18 @@ describe("route model", () => {
     );
   });
 
-  it("chooses the requested, default, first, or empty document", () => {
-    expect(chooseDocument(files, "z.md", "guide/part2.md")).toBe("z.md");
-    expect(chooseDocument(files, "missing.md", "guide/part2.md")).toBe(
-      "guide/part2.md",
+  it("auto-opens only the single-file preview's one document", () => {
+    // A single-file preview has no sidebar to pick from: its only document
+    // opens by itself.
+    expect(autoOpenDocument(files, "single")).toBe("z.md");
+    expect(autoOpenDocument([files[1] ?? files[0]], "single")).toBe(
+      "guide/part10.md",
     );
-    expect(chooseDocument(files, null, "missing.md")).toBe("z.md");
-    expect(chooseDocument([], null, "")).toBeNull();
+    // Directory and multi-root workspaces never pick for the reader, and an
+    // empty workspace has nothing to open.
+    expect(autoOpenDocument(files, "directory")).toBeNull();
+    expect(autoOpenDocument(files, "workspace")).toBeNull();
+    expect(autoOpenDocument([], "single")).toBeNull();
   });
 });
 
@@ -167,16 +171,6 @@ describe("workspace model", () => {
       { path: "r1/README.md", name: "README.md", title: "Beta Readme" },
       { path: "r1/guide/part.md", name: "part.md", title: "Part" },
     ]);
-  });
-
-  it("composes the default document key per workspace shape", () => {
-    expect(rootDocumentKey(null, false)).toBe("");
-    expect(rootDocumentKey({ root: "r0", path: "README.md" }, false)).toBe(
-      "README.md",
-    );
-    expect(rootDocumentKey({ root: "r0", path: "README.md" }, true)).toBe(
-      "r0/README.md",
-    );
   });
 });
 

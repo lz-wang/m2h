@@ -1156,6 +1156,17 @@ function PreviewContent({
       </section>
     );
   }
+  // Deliberately not the "empty" panel: documents exist, the reader just has
+  // not picked one yet. Conflating the two would make "no Markdown" and
+  // "nothing selected" indistinguishable again.
+  if (phase === "unselected") {
+    return (
+      <section className="state-panel" role="status">
+        <FileQuestion aria-hidden="true" />
+        <p>请选择要查看的文件</p>
+      </section>
+    );
+  }
   if (phase === "empty") {
     return (
       <section className="state-panel" aria-live="polite">

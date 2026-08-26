@@ -40,17 +40,10 @@ type rootSummary struct {
 	Files []fileSummary `json:"files"`
 }
 
-// documentRef names one document by its root and root-relative path.
-type documentRef struct {
-	Root string `json:"root"`
-	Path string `json:"path"`
-}
-
 type fileListResponse struct {
-	Kind            workspaceKind `json:"kind"`
-	Roots           []rootSummary `json:"roots"`
-	DefaultDocument *documentRef  `json:"defaultDocument"`
-	Version         string        `json:"version"`
+	Kind    workspaceKind `json:"kind"`
+	Roots   []rootSummary `json:"roots"`
+	Version string        `json:"version"`
 }
 
 type frontMatterEntryResponse struct {
@@ -171,10 +164,9 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 		})
 	}
 	writeJSON(response, http.StatusOK, fileListResponse{
-		Kind:            handler.workspace.kind(),
-		Roots:           roots,
-		DefaultDocument: workspaceDefaultDocument(roots),
-		Version:         handler.version,
+		Kind:    handler.workspace.kind(),
+		Roots:   roots,
+		Version: handler.version,
 	})
 }
 
@@ -397,33 +389,6 @@ func frontMatterResponseFrom(frontMatter *markdown.FrontMatter) *frontMatterResp
 		Date:    frontMatter.Date,
 		Tags:    frontMatter.Tags,
 	}
-}
-
-func defaultDocument(summaries []fileSummary) string {
-	for _, preferred := range []string{"README.md", "index.md"} {
-		for _, summary := range summaries {
-			if summary.Path == preferred {
-				return preferred
-			}
-		}
-	}
-	if len(summaries) == 0 {
-		return ""
-	}
-	return summaries[0].Path
-}
-
-// workspaceDefaultDocument picks the document the server opens on: the first
-// root that has anything wins (README.md, then index.md, then its first
-// file), so the CLI's first input acts as the primary root and its default
-// beats every later root's README.
-func workspaceDefaultDocument(roots []rootSummary) *documentRef {
-	for _, root := range roots {
-		if path := defaultDocument(root.Files); path != "" {
-			return &documentRef{Root: root.ID, Path: path}
-		}
-	}
-	return nil
 }
 
 func safeRelativePath(value string) (string, error) {

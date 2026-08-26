@@ -59,7 +59,7 @@ test.afterAll(() => {
 
 async function openWorkspace(
   page: import("@playwright/test").Page,
-  target = "/",
+  target = "/doc/r0/README.md",
 ) {
   await page.goto(baseURL + target);
   await page.waitForFunction(
@@ -73,7 +73,7 @@ test("lists both roots side by side and opens each same-named README", async ({
   await openWorkspace(page);
 
   // Both roots render as labeled top-level rows, expanded by default; the
-  // workspace default opens the primary root's document.
+  // deep link opens the primary root's document.
   await expect(page.getByRole("button", { name: "root-a" })).toHaveAttribute(
     "aria-expanded",
     "true",

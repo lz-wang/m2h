@@ -26,7 +26,6 @@ describe("browser API", () => {
                 ],
               },
             ],
-            defaultDocument: { root: "r0", path: "README.md" },
           }),
           { status: 200, headers: { "Content-Type": "application/json" } },
         ),
@@ -64,7 +63,6 @@ describe("browser API", () => {
           files: [{ path: "README.md", name: "README.md", title: "Readme" }],
         },
       ],
-      defaultDocument: { root: "r0", path: "README.md" },
     });
     await expect(browserAPI.getDocument("space name.md")).resolves.toEqual({
       path: "space name.md",
@@ -100,7 +98,6 @@ describe("browser API", () => {
               ],
             },
           ],
-          defaultDocument: { root: "r0", path: "README.md" },
         }),
         { status: 200 },
       ),
@@ -128,7 +125,6 @@ describe("browser API", () => {
               files: [],
             },
           ],
-          defaultDocument: { root: "r0", path: "README.md" },
         }),
         { status: 200 },
       ),
@@ -153,14 +149,12 @@ describe("browser API", () => {
               ],
             },
           ],
-          defaultDocument: null,
         }),
         { status: 200 },
       ),
     );
     await expect(browserAPI.listFiles()).resolves.toMatchObject({
       kind: "directory",
-      defaultDocument: null,
     });
   });
 
@@ -189,8 +183,8 @@ describe("browser API", () => {
       "文件列表响应格式无效",
     );
 
-    // Root summaries and the default document reference are validated to the
-    // same strictness as the files themselves.
+    // Root summaries are validated to the same strictness as the files
+    // themselves.
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -208,20 +202,6 @@ describe("browser API", () => {
     );
     await expect(browserAPI.listFiles()).rejects.toThrow(
       "文件条目响应格式无效",
-    );
-
-    fetchMock.mockResolvedValueOnce(
-      new Response(
-        JSON.stringify({
-          version: "1",
-          roots: [{ id: "r0", name: "docs", files: [] }],
-          defaultDocument: { root: "r0" },
-        }),
-        { status: 200 },
-      ),
-    );
-    await expect(browserAPI.listFiles()).rejects.toThrow(
-      "文件列表响应格式无效",
     );
 
     // id, name and files are each required strings/array: a root missing any
