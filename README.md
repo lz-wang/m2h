@@ -104,7 +104,7 @@ m2h convert README.md
 m2h convert README.md -o index.html
 ```
 
-导出输出为单个 HTML 文件：m2h 的 Markdown 页面样式直接内联；KaTeX、Mermaid 与表格排序运行时按需从 jsDelivr CDN 加载固定版本（与 WebUI 内嵌运行时一致），没有公式、图表或表格的文档不会加载任何大型脚本，查看公式与图表需要网络连接。本地图片与相对 Markdown 链接保留原始相对路径，输出 HTML 与 Markdown 源文件放在同一目录即可正常引用图片与相互链接。
+导出输出为单个 HTML 文件：m2h 的 Markdown 页面样式直接内联；KaTeX、Mermaid 与表格排序运行时按需从 jsDelivr CDN 加载固定版本（与 WebUI 内嵌运行时一致；表格排序仅加载核心脚本，类型化比较器只在 WebUI 提供），没有公式、图表或表格的文档不会加载任何大型脚本，查看公式与图表需要网络连接。本地图片与相对 Markdown 链接保留原始相对路径，输出 HTML 与 Markdown 源文件放在同一目录即可正常引用图片与相互链接。
 
 输出文件已存在时导出会报错退出；加 `--force` 覆盖已有输出，适合脚本与 CI：
 
@@ -172,7 +172,7 @@ m2h 在 Markdown 渲染基础上提供以下增强能力。
 | 文档目录        | WebUI 可根据标题生成 TOC              |
 | 图片大图查看     | WebUI 正文图片右上角放大按钮进入全屏查看，支持切换、缩放、旋转 |
 
-数学公式、Mermaid 图表与表格排序的运行时在 WebUI 中内嵌于二进制、离线可用；HTML 导出按需从 jsDelivr CDN 加载固定版本的同一组运行时。
+数学公式、Mermaid 图表与表格排序的运行时在 WebUI 中内嵌于二进制、离线可用；HTML 导出按需从 jsDelivr CDN 加载固定版本的同一组运行时，其中表格排序仅加载核心脚本（按核心默认规则比较），日期、文件大小等类型化比较器只在 WebUI 提供。
 
 扩展行内标记借鉴 [PyMdown Extensions](https://facelessuser.github.io/pymdown-extensions/) 的语义：`==文本==` 渲染为 `<mark>`，`^^文本^^` 渲染为 `<ins>`，`++ctrl+alt+del++` 渲染为带样式的键盘按键。按键数据库与 PyMdown 的 English US 键盘一致（字母、数字、标点、导航、编辑、数字小键盘、修饰键、F1–F24、媒体、浏览器与鼠标按键），别名（如 `ctrl`、`cmd`、`pg-up`、`pipe`）统一归一化为标准键名并输出同一 CSS class，修饰键与导航键在键帽上显示对应符号，未知按键保留原文。Critic 协作标记用 `{ ... }` 包裹，支持高亮、删除、新增、备注与替换（`{~~旧~>新~~}` 渲染为 `<del>` 加 `<ins>`）；把 `{==`、`{++` 或 `{--` 单独写在一行，再用 `==}`、`++}` 或 `--}` 结束，即可标注整段内容，段内仍按正常 Markdown 解析。
 

@@ -312,6 +312,16 @@ func TestRunConvertPreservesRichContent(t *testing.T) {
 		"data:font/woff2",
 		`src="data:`,
 		`.m2h/`,
+		// Export loads only the Tablesort core from the CDN; the typed
+		// comparators the WebUI embeds stay Web-only, so no comparator URL
+		// (the pre-simplification dist/tablesort.date.js was invalid anyway —
+		// upstream ships comparators under dist/sorts/) may appear.
+		"tablesort.date",
+		"tablesort.dotsep",
+		"tablesort.filesize",
+		"tablesort.monthname",
+		"tablesort.number",
+		"dist/sorts",
 	} {
 		if strings.Contains(body, unwanted) {
 			t.Errorf("CDN output unexpectedly embeds %q", unwanted)

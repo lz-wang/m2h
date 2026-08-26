@@ -20,7 +20,10 @@ var exportBootstrapScript = "\n  <script>\n" + runtimeJS + "\n</script>\n"
 
 // Rich-content runtime versions are pinned to the same releases vendored under
 // internal/assets/rich for the WebUI, so exported pages and the WebUI render
-// identical rich content.
+// identical rich content. Tablesort is the one exception in shape: export
+// loads only the core from the CDN — sorting falls back to its default
+// comparison — while the WebUI additionally embeds the five typed
+// comparators, whose upstream location (dist/sorts/) differs from the core's.
 const (
 	katexVersion     = "0.18.4"
 	mermaidVersion   = "11.16.1"
@@ -87,20 +90,16 @@ type runtimeURLs struct {
 	KatexJS         string
 	KatexAutoRender string
 	MermaidJS       string
-	TablesortJS     []string
+	TablesortJS     string
 }
 
 func newRuntimeURLs() runtimeURLs {
-	tablesort := make([]string, 0, len(tablesortScripts))
-	for _, name := range tablesortScripts {
-		tablesort = append(tablesort, fmt.Sprintf("%s/tablesort@%s/dist/%s", cdnBase, tablesortVersion, name))
-	}
 	return runtimeURLs{
 		KatexCSS:        fmt.Sprintf("%s/katex@%s/dist/katex.min.css", cdnBase, katexVersion),
 		KatexJS:         fmt.Sprintf("%s/katex@%s/dist/katex.min.js", cdnBase, katexVersion),
 		KatexAutoRender: fmt.Sprintf("%s/katex@%s/dist/contrib/auto-render.min.js", cdnBase, katexVersion),
 		MermaidJS:       fmt.Sprintf("%s/mermaid@%s/dist/mermaid.min.js", cdnBase, mermaidVersion),
-		TablesortJS:     tablesort,
+		TablesortJS:     fmt.Sprintf("%s/tablesort@%s/dist/tablesort.min.js", cdnBase, tablesortVersion),
 	}
 }
 
@@ -121,25 +120,10 @@ func runtimeFragments(body string) (template.HTML, template.HTML) {
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.MermaidJS)
 	}
 	if containsSortableTable(body) {
-		for _, url := range urls.TablesortJS {
-			fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", url)
-		}
+		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.TablesortJS)
 	}
 	scripts.WriteString(exportBootstrapScript)
 	return template.HTML(head.String()), template.HTML(scripts.String())
-}
-
-// tablesortScripts lists the client-side table sorter and its comparator
-// extensions in load order: the core defines window.Tablesort, the extensions
-// only register comparators through Tablesort.extend, and the bootstrap that
-// instantiates tables must run after all of them.
-var tablesortScripts = []string{
-	"tablesort.min.js",
-	"tablesort.date.js",
-	"tablesort.dotsep.js",
-	"tablesort.filesize.js",
-	"tablesort.monthname.js",
-	"tablesort.number.js",
 }
 
 // containsSortableTable reports whether the rendered body contains a plain GFM
