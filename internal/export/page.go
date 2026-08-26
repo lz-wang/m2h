@@ -1,13 +1,14 @@
 package export
 
 import (
-	_ "embed"
 	"fmt"
 	"html/template"
 	"strings"
 
 	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/markdown"
+
+	_ "embed"
 )
 
 //go:embed runtime.js
