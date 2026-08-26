@@ -23,6 +23,7 @@
 
 - 移除 `m2h web` 子命令，不提供兼容别名：文档服务由根命令直接承担，输入 `m2h web docs` 会得到明确的 `unknown command "web"` 错误。
 - HTML 转换从根命令移至 `m2h convert` 子命令，并收缩为单 Markdown 文件导出：目录输入、`--glob`、`--depth`、`--standalone`、`--copy-assets` 与共享 `.m2h/` 输出目录全部移除，目录输入会得到 `convert requires a Markdown file` 错误；转换成功输出简化为一行 `Wrote <HTML 绝对路径>`。
+- 移除转换输出的自包含资源内嵌：KaTeX/Mermaid/表格排序运行时不再写入 HTML（共享 `.m2h/` 目录、内嵌脚本、字体 base64 与本地图片 data URI 全部移除），改为按需从 jsDelivr CDN 加载与 WebUI 内嵌运行时相同的固定版本（KaTeX 0.18.4、Mermaid 11.16.1、Tablesort 5.3.0），页面 Markdown 样式仍然内联，本地图片保留原始相对路径；查看导出文件中的公式与图表需要网络连接。
 - 移除转换前的 `[y/N]` 交互式确认与 `--yes`/`-y` 选项：输出已存在且未加 `--force` 时直接报错退出。
 
 ## [0.11.0] - 2026-08-23

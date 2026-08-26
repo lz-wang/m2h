@@ -3,14 +3,13 @@ package convert
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"strings"
 	"testing"
 
-	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/markdown"
 )
 
@@ -278,28 +277,12 @@ func TestRunReportsMissingInput(t *testing.T) {
 	}
 }
 
-// embeddedAssetSnippet returns the opening bytes of one embedded runtime
-// script, a fingerprint precise enough to tell which bundles a generated page
-// actually carries (the enhancer references the other runtimes by name, so
-// plain substring checks on those names are ambiguous).
-func embeddedAssetSnippet(t *testing.T, name string, length int) string {
-	t.Helper()
-	contents, err := assets.RichAssetText(name)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(contents) < length {
-		length = len(contents)
-	}
-	return contents[:length]
-}
-
 func TestRunConvertPreservesRichContent(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	source := writeFixture(t, root, "guide.md",
-		"# Guide\n\nInline $E = mc^2$ here.\n\n```mermaid\nflowchart LR\n    A-->B\n```\n")
+		"# Guide\n\nInline $E = mc^2$ here.\n\n```mermaid\nflowchart LR\n    A-->B\n```\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n")
 	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
 		t.Fatal(err)
 	}
@@ -312,26 +295,24 @@ func TestRunConvertPreservesRichContent(t *testing.T) {
 	for _, want := range []string{
 		`class="language-mermaid"`,
 		"$E = mc^2$",
-		// Math pulls in the inline KaTeX stylesheet (fonts as data URIs);
-		// the diagram pulls in the Mermaid bundle.
-		"data:font/woff2;base64,",
-		"m2h-code-copy",
-		embeddedAssetSnippet(t, "katex.min.js", 60),
-		embeddedAssetSnippet(t, "auto-render.min.js", 60),
-		embeddedAssetSnippet(t, "mermaid.min.js", 60),
-		embeddedAssetSnippet(t, "rich-content.js", 60),
+		`<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/katex.min.css">`,
+		`<script src="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/katex.min.js"></script>`,
+		`<script src="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/contrib/auto-render.min.js"></script>`,
+		`<script src="https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.min.js"></script>`,
+		`<script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/tablesort.min.js"></script>`,
+		"renderMathInElement",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("convert output missing %q", want)
 		}
 	}
 	for _, unwanted := range []string{
+		"data:font/woff2",
+		`src="data:`,
 		`.m2h/`,
-		"<script src=",
-		"url(fonts/",
 	} {
 		if strings.Contains(body, unwanted) {
-			t.Errorf("self-contained output unexpectedly contains %q", unwanted)
+			t.Errorf("CDN output unexpectedly embeds %q", unwanted)
 		}
 	}
 }
@@ -350,22 +331,15 @@ func TestRunConvertWithoutRichContentStaysLean(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(html)
-	// Only the rich-content enhancer; no KaTeX and no Mermaid bundle.
-	if !strings.Contains(body, embeddedAssetSnippet(t, "rich-content.js", 60)) {
-		t.Errorf("plain document missing the rich-content enhancer")
+	if !strings.Contains(body, "renderMathInElement") {
+		t.Errorf("plain document missing the bootstrap enhancer")
 	}
-	for _, unwanted := range []string{
-		embeddedAssetSnippet(t, "katex.min.js", 60),
-		embeddedAssetSnippet(t, "mermaid.min.js", 60),
-		"data:font/woff2",
-	} {
-		if strings.Contains(body, unwanted) {
-			t.Errorf("plain document unexpectedly embeds %q", unwanted)
-		}
+	if strings.Contains(body, "cdn.jsdelivr.net") {
+		t.Errorf("plain document unexpectedly loads CDN runtimes")
 	}
 }
 
-func TestRunConvertWritesNoAssetDirectory(t *testing.T) {
+func TestRunConvertWritesOnlyTheHTMLFile(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -374,12 +348,22 @@ func TestRunConvertWritesNoAssetDirectory(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := os.Stat(filepath.Join(root, assets.RichAssetDir)); !os.IsNotExist(err) {
-		t.Fatalf("single-file convert wrote %s: %v", assets.RichAssetDir, err)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := []string{}
+	for _, entry := range entries {
+		if entry.Name() != "guide.md" {
+			names = append(names, entry.Name())
+		}
+	}
+	if !reflect.DeepEqual(names, []string{"guide.html"}) {
+		t.Fatalf("convert wrote extra files: %v", names)
 	}
 }
 
-func TestRunConvertInlinesLocalImages(t *testing.T) {
+func TestRunConvertKeepsImageReferences(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -394,41 +378,14 @@ func TestRunConvertInlinesLocalImages(t *testing.T) {
 		t.Fatal(err)
 	}
 	body := string(html)
-	want := "data:image/png;base64," + base64.StdEncoding.EncodeToString([]byte("\x89PNG\r\n\x1a\nfake-image-bytes"))
-	if !strings.Contains(body, want) {
-		t.Errorf("local image was not inlined as %q", want)
-	}
-	// Remote URLs and unreadable images keep their original references.
-	for _, keep := range []string{"https://example.com/x.png", "img/nope.png"} {
+	// Local, remote, and missing images all keep their original references —
+	// the HTML relies on the files staying where the Markdown found them.
+	for _, keep := range []string{`src="img/diagram.png"`, `src="https://example.com/x.png"`, `src="img/nope.png"`} {
 		if !strings.Contains(body, keep) {
 			t.Errorf("output missing preserved reference %q", keep)
 		}
 	}
-}
-
-func TestRunConvertSkipsSymlinkedImageEscape(t *testing.T) {
-	t.Parallel()
-
-	outside := t.TempDir()
-	secret := writeFixture(t, outside, "secret.png", "outside-root-image-bytes")
-	root := t.TempDir()
-	if err := os.Symlink(secret, filepath.Join(root, "linked.png")); err != nil {
-		t.Skipf("symlinks unavailable: %v", err)
-	}
-	source := writeFixture(t, root, "guide.md", "# Guide\n\n![Secret](linked.png)\n")
-	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
-		t.Fatal(err)
-	}
-
-	html, err := os.ReadFile(filepath.Join(root, "guide.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := string(html)
-	if strings.Contains(body, "outside-root-image-bytes") {
-		t.Error("image escaping the input root was inlined into the HTML")
-	}
 	if strings.Contains(body, "base64") {
-		t.Errorf("symlinked image should keep its relative reference: %s", body)
+		t.Errorf("images should not be embedded: %s", body)
 	}
 }

@@ -2,9 +2,6 @@ package assets
 
 import (
 	"io/fs"
-	"os"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 )
@@ -352,7 +349,6 @@ func TestRichAssetsEmbedded(t *testing.T) {
 		"katex.min.js",
 		"auto-render.min.js",
 		"mermaid.min.js",
-		"rich-content.js",
 		"tablesort.min.js",
 		"tablesort.number.js",
 		"tablesort.date.js",
@@ -398,145 +394,13 @@ func TestRichFontsAreWoff2Only(t *testing.T) {
 		t.Errorf("non-woff2 font files embedded: %v", offenders)
 	}
 
-	stylesheet, err := RichAssetText("katex.min.css")
+	stylesheet, err := fs.ReadFile(RichFS(), "katex.min.css")
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, unwanted := range []string{`format("woff")`, `format("truetype")`} {
-		if strings.Contains(stylesheet, unwanted) {
+		if strings.Contains(string(stylesheet), unwanted) {
 			t.Errorf("katex.min.css still references %q", unwanted)
 		}
-	}
-}
-
-func TestRichContentRuntimeAddsCodeCopyButtons(t *testing.T) {
-	t.Parallel()
-
-	runtime, err := fs.ReadFile(RichFS(), "rich-content.js")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, want := range []string{
-		"m2h-code-copy",
-		"m2h-code-frame",
-		"window.isSecureContext",
-		`document.execCommand("copy")`,
-	} {
-		if !strings.Contains(string(runtime), want) {
-			t.Errorf("rich-content runtime does not contain %q", want)
-		}
-	}
-}
-
-func TestWriteRichAssets(t *testing.T) {
-	t.Parallel()
-
-	target := t.TempDir()
-	if err := WriteRichAssets(target); err != nil {
-		t.Fatalf("WriteRichAssets returned error: %v", err)
-	}
-
-	for _, rel := range []string{
-		"katex.min.css",
-		"katex.min.js",
-		"auto-render.min.js",
-		"mermaid.min.js",
-		"rich-content.js",
-		"tablesort.min.js",
-		"tablesort.number.js",
-		"tablesort.date.js",
-		"tablesort.filesize.js",
-		"tablesort.dotsep.js",
-		"tablesort.monthname.js",
-		"LICENSE.tablesort",
-		"fonts/KaTeX_AMS-Regular.woff2",
-	} {
-		info, err := os.Stat(filepath.Join(target, filepath.FromSlash(rel)))
-		if err != nil {
-			t.Errorf("WriteRichAssets did not write %q: %v", rel, err)
-			continue
-		}
-		if info.Size() == 0 {
-			t.Errorf("WriteRichAssets wrote empty %q", rel)
-		}
-	}
-
-	// Re-running must refresh the directory without error (idempotent overwrite).
-	if err := WriteRichAssets(target); err != nil {
-		t.Fatalf("WriteRichAssets second run returned error: %v", err)
-	}
-}
-
-func TestWriteRichAssetsReportsUnwritableTarget(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("permission semantics differ on Windows")
-	}
-	parent := t.TempDir()
-	locked := filepath.Join(parent, "locked")
-	if err := os.Mkdir(locked, 0o500); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.Chmod(locked, 0o755) })
-
-	if err := WriteRichAssets(filepath.Join(locked, RichAssetDir)); err == nil {
-		t.Fatal("WriteRichAssets succeeded against an unwritable target")
-	}
-}
-
-func TestInlineKatexCSSEmbedsFonts(t *testing.T) {
-	t.Parallel()
-
-	stylesheet, err := InlineKatexCSS()
-	if err != nil {
-		t.Fatalf("InlineKatexCSS() returned error: %v", err)
-	}
-	if !strings.Contains(stylesheet, "data:font/woff2;base64,") {
-		t.Fatal("inline stylesheet does not embed any WOFF2 data URI")
-	}
-	for _, unwanted := range []string{
-		"url(fonts/",
-		`format("woff")`,
-		`format("truetype")`,
-	} {
-		if strings.Contains(stylesheet, unwanted) {
-			t.Errorf("inline stylesheet still references external fallback %q", unwanted)
-		}
-	}
-
-	// Every vendored woff2 font must be reachable; a missing file is an error
-	// rather than a silently dropped font.
-	raw, err := fs.ReadFile(RichFS(), "katex.min.css")
-	if err != nil {
-		t.Fatal(err)
-	}
-	references := strings.Count(string(raw), ".woff2")
-	if references == 0 {
-		t.Fatal("vendored katex.min.css references no woff2 fonts")
-	}
-	if got := strings.Count(stylesheet, "data:font/woff2;base64,"); got != references {
-		t.Errorf("embedded %d fonts, want %d", got, references)
-	}
-
-	cached, err := InlineKatexCSS()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if cached != stylesheet {
-		t.Error("InlineKatexCSS() returned a different stylesheet on the second call")
-	}
-}
-
-func TestRichAssetText(t *testing.T) {
-	t.Parallel()
-
-	contents, err := RichAssetText("rich-content.js")
-	if err != nil {
-		t.Fatalf("RichAssetText() returned error: %v", err)
-	}
-	if !strings.Contains(contents, "m2h-code-copy") {
-		t.Error("RichAssetText returned the wrong file contents")
-	}
-	if _, err := RichAssetText("missing.js"); err == nil {
-		t.Error("RichAssetText() accepted a missing asset name")
 	}
 }

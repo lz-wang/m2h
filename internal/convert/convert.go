@@ -79,16 +79,14 @@ func Run(ctx context.Context, options Options) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("read Markdown %q: %w", source, err)
 	}
-	// Single files render fully self-contained: styles, the rich-content
-	// runtime, fonts, and local images are embedded so the HTML shares and
-	// opens offline on its own, with no .m2h/ directory beside it.
+	// The page inlines m2h's own Markdown CSS; large third-party runtimes
+	// (KaTeX, Mermaid, Tablesort) load from a pinned CDN only when the
+	// document actually uses them.
 	rendered, err := markdown.Render(contents, markdown.RenderOptions{
-		Mode:        options.Mode,
-		Width:       options.Width,
-		Target:      markdown.TargetConvert,
-		SourcePath:  filepath.Base(source),
-		Assets:      markdown.AssetInline,
-		InlineImage: newInlineImageResolver(filepath.Dir(source)),
+		Mode:       options.Mode,
+		Width:      options.Width,
+		Target:     markdown.TargetConvert,
+		SourcePath: filepath.Base(source),
 	})
 	if err != nil {
 		return Result{}, fmt.Errorf("render Markdown %q: %w", source, err)

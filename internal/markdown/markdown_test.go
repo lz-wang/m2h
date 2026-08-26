@@ -314,51 +314,56 @@ func TestRenderBackslashMathDelimitersAreConsumed(t *testing.T) {
 	}
 }
 
-func TestRenderInjectsRichContentAssets(t *testing.T) {
+func TestRenderInjectsCDNRuntimeOnlyWhenUsed(t *testing.T) {
 	t.Parallel()
 
-	source := []byte("# Title\n\nbody")
+	plain := []byte("# Title\n\nbody and a ``` fenced block without math or diagrams.")
+	result, err := Render(plain, RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "guide.md",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A plain document loads no CDN runtime; only the inline bootstrap
+	// enhancer ships with every exported page.
+	if strings.Contains(result.HTML, "cdn.jsdelivr.net") {
+		t.Errorf("plain document unexpectedly loads CDN runtimes")
+	}
+	if !strings.Contains(result.HTML, "renderMathInElement") {
+		t.Errorf("exported page missing the bootstrap enhancer")
+	}
 
-	withAssets, err := Render(source, RenderOptions{
-		Mode: ModeAuto, Target: TargetPreview, SourcePath: "guide.md",
-		AssetBase: "/m2h-assets/",
+	rich := []byte("# Title\n\nInline $E = mc^2$.\n\n```mermaid\nflowchart LR\n    A-->B\n```\n\n| a | b |\n| --- | --- |\n| 1 | 2 |\n")
+	result, err = Render(rich, RenderOptions{
+		Mode: ModeAuto, Target: TargetConvert, SourcePath: "guide.md",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	for _, want := range []string{
-		`<link rel="stylesheet" href="/m2h-assets/katex.min.css">`,
-		`<script src="/m2h-assets/katex.min.js"></script>`,
-		`<script src="/m2h-assets/auto-render.min.js"></script>`,
-		`<script src="/m2h-assets/mermaid.min.js"></script>`,
-		`<script src="/m2h-assets/rich-content.js"></script>`,
+		`<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/katex.min.css">`,
+		`<script src="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/katex.min.js"></script>`,
+		`<script src="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/contrib/auto-render.min.js"></script>`,
+		`<script src="https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.min.js"></script>`,
+		`<script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/tablesort.min.js"></script>`,
+		`<script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/tablesort.number.js"></script>`,
+		"renderMathInElement",
 	} {
-		if !strings.Contains(withAssets.HTML, want) {
-			t.Errorf("HTML with AssetBase missing %q", want)
+		if !strings.Contains(result.HTML, want) {
+			t.Errorf("rich document missing %q", want)
 		}
 	}
 
-	withoutAssets, err := Render(source, RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "guide.md",
+	preview, err := Render(rich, RenderOptions{
+		Mode: ModeAuto, Target: TargetPreview, SourcePath: "guide.md",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, unwanted := range []string{"katex.min.css", "mermaid.min.js", "rich-content.js"} {
-		if strings.Contains(withoutAssets.HTML, unwanted) {
-			t.Errorf("HTML without AssetBase unexpectedly contains %q", unwanted)
+	for _, unwanted := range []string{"cdn.jsdelivr.net", "renderMathInElement"} {
+		if strings.Contains(preview.HTML, unwanted) {
+			t.Errorf("preview unexpectedly carries export runtime %q", unwanted)
 		}
-	}
-
-	nested, err := Render(source, RenderOptions{
-		Mode: ModeAuto, Target: TargetConvert, SourcePath: "guide.md",
-		AssetBase: "../../.m2h/",
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(nested.HTML, `href="../../.m2h/katex.min.css"`) {
-		t.Errorf("relative asset base not preserved: %s", nested.HTML)
 	}
 }
 
