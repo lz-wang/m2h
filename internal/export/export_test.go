@@ -1,4 +1,4 @@
-package convert
+package export
 
 import (
 	"bytes"
@@ -59,19 +59,24 @@ func TestRunConvertsSingleFileToDefaultAndExplicitOutput(t *testing.T) {
 		}
 	}
 
-	explicit := filepath.Join(root, "public", "index.html")
+	// Output is a filename in the source directory — the exported HTML keeps
+	// referencing the source tree's images and links.
 	options := defaultOptions(source)
-	options.Output = explicit
+	options.Output = "index.html"
 	options.Mode = markdown.ModeDark
-	if _, err := Run(context.Background(), options); err != nil {
-		t.Fatal(err)
-	}
-	explicitHTML, err := os.ReadFile(explicit)
+	named, err := Run(context.Background(), options)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Contains(explicitHTML, []byte(`class="m2h-mode-dark"`)) {
-		t.Fatal("explicit output did not use dark mode")
+	if got, want := named.Output, filepath.Join(resolvedRoot, "index.html"); got != want {
+		t.Fatalf("named output = %q, want %q", got, want)
+	}
+	namedHTML, err := os.ReadFile(filepath.Join(root, "index.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(namedHTML, []byte(`class="m2h-mode-dark"`)) {
+		t.Fatal("named output did not use dark mode")
 	}
 }
 
@@ -134,8 +139,22 @@ func TestRunRejectsInvalidInputAndOutputTypes(t *testing.T) {
 	}{
 		{name: "missing input option", options: Options{Mode: markdown.ModeAuto}, want: "input path is required"},
 		{name: "non Markdown file", options: defaultOptions(textFile), want: "convert requires a Markdown file"},
-		{name: "same output", options: func() Options { options := defaultOptions(markdownFile); options.Output = markdownFile; return options }(), want: "output conflicts with input"},
-		{name: "file output is directory", options: func() Options { options := defaultOptions(markdownFile); options.Output = t.TempDir(); return options }(), want: "is a directory"},
+		{name: "same output", options: func() Options { options := defaultOptions(markdownFile); options.Output = "guide.md"; return options }(), want: "output conflicts with input"},
+		{name: "output subdirectory", options: func() Options {
+			options := defaultOptions(markdownFile)
+			options.Output = "public/index.html"
+			return options
+		}(), want: "must be a plain filename, not a path"},
+		{name: "output escapes directory", options: func() Options {
+			options := defaultOptions(markdownFile)
+			options.Output = "../guide.html"
+			return options
+		}(), want: "must be a plain filename, not a path"},
+		{name: "absolute output", options: func() Options {
+			options := defaultOptions(markdownFile)
+			options.Output = "/tmp/guide.html"
+			return options
+		}(), want: "must be a plain filename, not a path"},
 	}
 
 	for _, test := range tests {
@@ -240,32 +259,15 @@ func TestConversionReportsReadAndWritePermissionErrors(t *testing.T) {
 		}
 	})
 
-	t.Run("output directory unwritable", func(t *testing.T) {
+	t.Run("source directory unwritable", func(t *testing.T) {
 		root := t.TempDir()
 		source := writeFixture(t, root, "guide.md", "# Guide")
-		outputDirectory := filepath.Join(root, "locked")
-		if err := os.Mkdir(outputDirectory, 0o755); err != nil {
+		if err := os.Chmod(root, 0o500); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Chmod(outputDirectory, 0o500); err != nil {
-			t.Fatal(err)
-		}
-		t.Cleanup(func() { _ = os.Chmod(outputDirectory, 0o755) })
-		options := defaultOptions(source)
-		options.Output = filepath.Join(outputDirectory, "guide.html")
-		if _, err := Run(context.Background(), options); err == nil || !strings.Contains(err.Error(), "write HTML") {
+		t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
+		if _, err := Run(context.Background(), defaultOptions(source)); err == nil || !strings.Contains(err.Error(), "write HTML") {
 			t.Fatalf("Run() error = %v, want write error", err)
-		}
-	})
-
-	t.Run("output parent is file", func(t *testing.T) {
-		root := t.TempDir()
-		source := writeFixture(t, root, "guide.md", "# Guide")
-		blocker := writeFixture(t, root, "blocker", "file")
-		options := defaultOptions(source)
-		options.Output = filepath.Join(blocker, "guide.html")
-		if _, err := Run(context.Background(), options); err == nil || !strings.Contains(err.Error(), "output") {
-			t.Fatalf("Run() error = %v, want output error", err)
 		}
 	})
 }

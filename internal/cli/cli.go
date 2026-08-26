@@ -11,7 +11,7 @@ import (
 
 	urfavecli "github.com/urfave/cli/v3"
 
-	"github.com/lz-wang/m2h/internal/convert"
+	"github.com/lz-wang/m2h/internal/export"
 	"github.com/lz-wang/m2h/internal/markdown"
 	"github.com/lz-wang/m2h/internal/server"
 	"github.com/lz-wang/m2h/internal/version"
@@ -186,7 +186,7 @@ func conversionFlags() []urfavecli.Flag {
 	}
 }
 
-var runConvert = convert.Run
+var runExport = export.Run
 
 func convertAction(ctx context.Context, command *urfavecli.Command) error {
 	if command.Args().Len() == 0 {
@@ -195,7 +195,7 @@ func convertAction(ctx context.Context, command *urfavecli.Command) error {
 	if command.Args().Len() != 1 {
 		return fmt.Errorf("Error: requires exactly one Markdown file")
 	}
-	result, err := runConvert(ctx, convert.Options{
+	result, err := runExport(ctx, export.Options{
 		Input:  command.Args().First(),
 		Output: command.String("output"),
 		Mode:   markdown.Mode(command.String("mode")),

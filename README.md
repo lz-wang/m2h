@@ -48,11 +48,11 @@ m2h convert README.md
 ## 转换为 HTML
 
 ```console
-# 转换单个文件，生成完全自包含的 README.html
+# 转换单个文件，在源文件旁生成 README.html
 m2h convert README.md
 
-# 指定输出文件
-m2h convert README.md --output public/index.html
+# 指定输出文件名（只接受文件名，始终写入源文件所在目录）
+m2h convert README.md -o index.html
 ```
 
 转换输出为单个 HTML 文件：m2h 的 Markdown 页面样式直接内联；KaTeX、Mermaid 与表格排序运行时按需从 jsDelivr CDN 加载固定版本（与 WebUI 内嵌运行时一致），没有公式、图表或表格的文档不会加载任何大型脚本，查看公式与图表需要网络连接。本地图片与相对 Markdown 链接保留原始相对路径，输出 HTML 与 Markdown 源文件放在同一目录即可正常引用图片与相互链接。
@@ -71,7 +71,7 @@ Wrote /work/project/README.html
 
 | 选项 | 说明 |
 | --- | --- |
-| `--output`, `-o` | 目标 HTML 文件路径；默认写入输入旁的同名 `.html`。 |
+| `--output`, `-o` | 输出 HTML 文件名（不含目录），写入 Markdown 源文件所在目录；默认同名 `.html`。 |
 | `--mode` | 页面主题：`light`、`dark` 或 `auto`；默认 `auto`。 |
 | `--width` | 正文宽度：`standard`（980px）、`wide`（1280px）或 `full`；默认 `standard`。 |
 | `--force` | 输出文件已存在时覆盖，而不是报错退出。 |

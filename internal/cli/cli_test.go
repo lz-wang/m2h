@@ -369,17 +369,17 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 	if err := os.WriteFile(source, []byte("# Guide\n\n[Next](next.md)\n\n<details>raw HTML</details>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	output := filepath.Join(root, "public", "index.html")
 
-	stdout, stderr, err := runCommand(t, "convert", source, "--output", output, "--mode", "dark", "--width", "wide")
+	stdout, stderr, err := runCommand(t, "convert", source, "--output", "index.html", "--mode", "dark", "--width", "wide")
 	if err != nil {
 		t.Fatalf("convert returned error: %v", err)
 	}
-	resolvedOutput, err := filepath.EvalSymlinks(output)
+	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "Wrote " + resolvedOutput + "\n"; stdout != want || stderr != "" {
+	output := filepath.Join(root, "index.html")
+	if want := "Wrote " + filepath.Join(resolvedRoot, "index.html") + "\n"; stdout != want || stderr != "" {
 		t.Fatalf("convert output stdout=%q stderr=%q", stdout, stderr)
 	}
 	html, err := os.ReadFile(output)
@@ -390,6 +390,19 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 		if !bytes.Contains(html, []byte(want)) {
 			t.Errorf("HTML does not contain %q", want)
 		}
+	}
+}
+
+func TestConvertCommandRejectsPathOutput(t *testing.T) {
+	root := t.TempDir()
+	source := filepath.Join(root, "guide.md")
+	if err := os.WriteFile(source, []byte("# Guide"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := runCommand(t, "convert", source, "--output", "../escape.html")
+	if err == nil || !strings.Contains(err.Error(), "must be a plain filename, not a path") {
+		t.Fatalf("convert error = %v, want plain-filename requirement", err)
 	}
 }
 

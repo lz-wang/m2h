@@ -1,5 +1,7 @@
-// Package convert exports a single Markdown file as a self-contained HTML page.
-package convert
+// Package export writes one Markdown file as a standalone HTML page. The CLI
+// spells the command "convert"; the package name describes what it does —
+// export the current document to a single shareable HTML file.
+package export
 
 import (
 	"context"
@@ -31,6 +33,9 @@ type Result struct {
 }
 
 // Run validates options, renders one Markdown file, and writes the HTML page.
+// The output always lands in the Markdown file's own directory — local images
+// and relative links keep their original references, so the whole asset model
+// needs no copying, rewriting, or conflict detection.
 func Run(ctx context.Context, options Options) (Result, error) {
 	if options.Width == "" {
 		options.Width = markdown.WidthStandard
@@ -51,15 +56,9 @@ func Run(ctx context.Context, options Options) (Result, error) {
 	}
 	source := input.Path
 
-	destination := options.Output
-	if destination == "" {
-		destination = strings.TrimSuffix(source, filepath.Ext(source)) + ".html"
-	} else {
-		absolute, err := files.CanonicalPath(destination)
-		if err != nil {
-			return Result{}, fmt.Errorf("resolve output %q: %w", destination, err)
-		}
-		destination = absolute
+	destination := strings.TrimSuffix(source, filepath.Ext(source)) + ".html"
+	if options.Output != "" {
+		destination = filepath.Join(filepath.Dir(source), options.Output)
 	}
 	if samePath(source, destination) {
 		return Result{}, fmt.Errorf("convert %q: output conflicts with input", source)
@@ -100,6 +99,11 @@ func Run(ctx context.Context, options Options) (Result, error) {
 func validateOptions(options Options) error {
 	if strings.TrimSpace(options.Input) == "" {
 		return fmt.Errorf("input path is required")
+	}
+	// Output is a filename, not a path: the HTML must sit next to its source
+	// or every relative image and link in the document stops resolving.
+	if options.Output != "" && options.Output != filepath.Base(options.Output) {
+		return fmt.Errorf("output %q must be a plain filename, not a path", options.Output)
 	}
 	switch options.Mode {
 	case markdown.ModeLight, markdown.ModeDark, markdown.ModeAuto:
