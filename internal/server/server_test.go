@@ -1,7 +1,6 @@
 package server
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -11,14 +10,11 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
-	"github.com/lz-wang/m2h/internal/watcher"
 )
 
 func TestRunBindsServesAndGracefullyStops(t *testing.T) {
@@ -116,53 +112,6 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 	}
 }
 
-func TestRunStopsWithActiveEventStream(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	writeTestFile(t, filepath.Join(root, "README.md"), "# Events")
-	ctx, cancel := context.WithCancel(context.Background())
-	t.Cleanup(cancel)
-	listening := make(chan string, 1)
-	deps := testDependencies()
-	deps.listen = func(string, string) (net.Listener, error) {
-		return net.Listen("tcp", "127.0.0.1:0")
-	}
-	done := make(chan error, 1)
-	go func() {
-		done <- run(ctx, Options{
-			Inputs: []string{root},
-			Mode:   markdown.ModeAuto,
-			UI:     directoryTestUI(),
-			OnListening: func(address string) {
-				listening <- address
-			},
-		}, deps)
-	}()
-
-	response, err := http.Get(<-listening + "api/events")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = response.Body.Close()
-	})
-	line, err := bufio.NewReader(response.Body).ReadString('\n')
-	if err != nil || line != ": connected\n" {
-		t.Fatalf("initial SSE line = %q, %v", line, err)
-	}
-
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("run() after cancellation returned %v", err)
-		}
-	case <-time.After(time.Second):
-		t.Fatal("run() waited for the active SSE request during shutdown")
-	}
-}
-
 func TestRunUsesCustomBindAndLogsBrowserFailure(t *testing.T) {
 	t.Parallel()
 
@@ -208,7 +157,7 @@ func TestRunUsesCustomBindAndLogsBrowserFailure(t *testing.T) {
 	}
 }
 
-func TestRunReturnsListenWatcherAndServeErrors(t *testing.T) {
+func TestRunReturnsListenAndServeErrors(t *testing.T) {
 	t.Parallel()
 
 	source := filepath.Join(t.TempDir(), "guide.md")
@@ -221,14 +170,6 @@ func TestRunReturnsListenWatcherAndServeErrors(t *testing.T) {
 	}
 	if err := run(context.Background(), base, listenFailure); err == nil || !strings.Contains(err.Error(), "address unavailable") {
 		t.Fatalf("listen failure = %v", err)
-	}
-
-	watchFailure := testDependencies()
-	watchFailure.watch = func(context.Context, string, time.Duration, func(), io.Writer) error {
-		return errors.New("watch failed")
-	}
-	if err := run(context.Background(), base, watchFailure); err == nil || !strings.Contains(err.Error(), "watch failed") {
-		t.Fatalf("watch failure = %v", err)
 	}
 
 	serveFailure := testDependencies()
@@ -329,68 +270,6 @@ func TestRunValidatesInputKindsAndDirectoryFlags(t *testing.T) {
 	}
 }
 
-func TestRunAcceptsMultipleInputsAndWatchesEachSingleFile(t *testing.T) {
-	t.Parallel()
-
-	base := t.TempDir()
-	first := filepath.Join(base, "one.md")
-	second := filepath.Join(base, "two.md")
-	writeTestFile(t, first, "# One")
-	writeTestFile(t, second, "# Two")
-	watched := make(chan string, 2)
-	deps := testDependencies()
-	deps.listen = func(string, string) (net.Listener, error) {
-		return net.Listen("tcp", "127.0.0.1:0")
-	}
-	deps.watch = func(ctx context.Context, target string, _ time.Duration, _ func(), _ io.Writer) error {
-		watched <- target
-		<-ctx.Done()
-		return nil
-	}
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan error, 1)
-	go func() {
-		done <- run(ctx, Options{
-			Inputs: []string{first, second},
-			Mode:   markdown.ModeAuto,
-		}, deps)
-	}()
-
-	seen := map[string]bool{}
-	for range 2 {
-		select {
-		case target := <-watched:
-			seen[target] = true
-		case <-time.After(2 * time.Second):
-			t.Fatal("a single-file root did not get its own watcher")
-		}
-	}
-	// files.Resolve canonicalizes inputs (macOS /var aliases to /private/var),
-	// so the watcher targets are compared through the same normalization.
-	firstCanonical, err := files.CanonicalPath(first)
-	if err != nil {
-		t.Fatal(err)
-	}
-	secondCanonical, err := files.CanonicalPath(second)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !seen[firstCanonical] || !seen[secondCanonical] {
-		t.Fatalf("watched targets = %v, want both %q and %q", seen, firstCanonical, secondCanonical)
-	}
-
-	cancel()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("multi-input run error = %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("multi-input run did not shut down after cancellation")
-	}
-}
-
 func TestRunAllowsDepthAndGlobWithMixedFileAndDirectoryRoots(t *testing.T) {
 	t.Parallel()
 
@@ -439,60 +318,6 @@ func TestRunRejectsDuplicateInputs(t *testing.T) {
 	}
 }
 
-func TestRunDirectoryRootGetsTreeWatcher(t *testing.T) {
-	t.Parallel()
-
-	root := t.TempDir()
-	writeTestFile(t, filepath.Join(root, "README.md"), "# Directory")
-	ctx, cancel := context.WithCancel(context.Background())
-	watchCalled := false
-	treeWatched := make(chan string, 1)
-	listeningAddress := ""
-	deps := testDependencies()
-	deps.listen = func(string, string) (net.Listener, error) {
-		return net.Listen("tcp", "127.0.0.1:0")
-	}
-	deps.watch = func(context.Context, string, time.Duration, func(), io.Writer) error {
-		watchCalled = true
-		return errors.New("directory workspace must not get a single-file watcher")
-	}
-	deps.watchTree = func(ctx context.Context, target string, _ time.Duration, onChange func(), _ io.Writer) error {
-		treeWatched <- target
-		onChange()
-		<-ctx.Done()
-		return nil
-	}
-	err := run(ctx, Options{
-		Inputs: []string{root + string(os.PathSeparator)},
-		Mode:   markdown.ModeDark,
-		OnListening: func(address string) {
-			listeningAddress = address
-			cancel()
-		},
-	}, deps)
-	if err != nil {
-		t.Fatalf("directory run error = %v", err)
-	}
-	if watchCalled {
-		t.Fatal("directory workspace created a single-file watcher")
-	}
-	rootCanonical, err := files.CanonicalPath(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	select {
-	case target := <-treeWatched:
-		if target != rootCanonical {
-			t.Fatalf("tree watcher target = %q, want %q", target, rootCanonical)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("directory workspace never started its tree watcher")
-	}
-	if !strings.HasSuffix(listeningAddress, "/?mode=dark") {
-		t.Fatalf("directory workspace address = %q, want non-default mode query", listeningAddress)
-	}
-}
-
 func TestRunDirectoryServerURLRespectsTOCFlag(t *testing.T) {
 	t.Parallel()
 
@@ -503,9 +328,6 @@ func TestRunDirectoryServerURLRespectsTOCFlag(t *testing.T) {
 	deps := testDependencies()
 	deps.listen = func(string, string) (net.Listener, error) {
 		return net.Listen("tcp", "127.0.0.1:0")
-	}
-	deps.watch = func(context.Context, string, time.Duration, func(), io.Writer) error {
-		return errors.New("directory watcher must not run")
 	}
 	err := run(ctx, Options{
 		Inputs: []string{root + string(os.PathSeparator)},
@@ -573,80 +395,9 @@ func (address stringAddress) Network() string { return "tcp" }
 func (address stringAddress) String() string { return string(address) }
 
 func testDependencies() dependencies {
-	idle := func(ctx context.Context, _ string, _ time.Duration, _ func(), _ io.Writer) error {
-		<-ctx.Done()
-		return nil
-	}
 	return dependencies{
-		listen: net.Listen,
-		watch: func(ctx context.Context, target string, debounce time.Duration, onChange func(), log io.Writer) error {
-			return idle(ctx, target, debounce, onChange, log)
-		},
-		watchTree: func(ctx context.Context, target string, debounce time.Duration, onChange func(), log io.Writer) error {
-			return idle(ctx, target, debounce, onChange, log)
-		},
+		listen:      net.Listen,
 		openBrowser: func(string) error { return nil },
 		keepAlive:   time.Second,
-		debounce:    time.Millisecond,
-	}
-}
-
-// TestRunDirectoryWatcherStreamsWorkspaceChanged covers the resident-service
-// experience end to end with the real tree watcher: editing a Markdown file
-// inside a served directory publishes the workspace-changed SSE event the
-// WebUI answers by refetching /api/files.
-func TestRunDirectoryWatcherStreamsWorkspaceChanged(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("file-event timing varies on Windows CI")
-	}
-	root := t.TempDir()
-	writeTestFile(t, filepath.Join(root, "README.md"), "# v1")
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	address := make(chan string, 1)
-	deps := testDependencies()
-	deps.listen = func(string, string) (net.Listener, error) {
-		return net.Listen("tcp", "127.0.0.1:0")
-	}
-	deps.watchTree = watcher.WatchTree
-	done := make(chan error, 1)
-	go func() {
-		done <- run(ctx, Options{
-			Inputs:      []string{root},
-			Mode:        markdown.ModeAuto,
-			OnListening: func(url string) { address <- url },
-		}, deps)
-	}()
-
-	listening := <-address
-	// The URL is the document root with options; the event stream lives on the
-	// server itself.
-	streamURL := strings.TrimSuffix(listening, "/") + "/api/events"
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, streamURL, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	response, err := http.DefaultClient.Do(request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = response.Body.Close() }()
-	reader := bufio.NewReader(response.Body)
-	if line, err := reader.ReadString('\n'); err != nil || line != ": connected\n" {
-		t.Fatalf("initial SSE line = %q, %v", line, err)
-	}
-
-	// The recursive registration needs a moment before the first write.
-	time.Sleep(150 * time.Millisecond)
-	writeTestFile(t, filepath.Join(root, "README.md"), "# v2")
-	stream := readUntil(t, reader, "data: {}", 3*time.Second)
-	if !strings.Contains(stream, "event: workspace-changed") {
-		t.Fatalf("directory change did not stream workspace-changed: %q", stream)
-	}
-
-	cancel()
-	if err := <-done; err != nil {
-		t.Fatalf("run error = %v", err)
 	}
 }

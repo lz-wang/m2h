@@ -18,7 +18,6 @@ import (
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
 	appversion "github.com/lz-wang/m2h/internal/version"
-	"github.com/lz-wang/m2h/internal/watcher"
 )
 
 const (
@@ -54,22 +53,16 @@ type Options struct {
 
 type dependencies struct {
 	listen      func(string, string) (net.Listener, error)
-	watch       func(context.Context, string, time.Duration, func(), io.Writer) error
-	watchTree   func(context.Context, string, time.Duration, func(), io.Writer) error
 	openBrowser func(string) error
 	keepAlive   time.Duration
-	debounce    time.Duration
 }
 
 // Run validates, starts, and gracefully shuts down one document server.
 func Run(ctx context.Context, options Options) error {
 	return run(ctx, options, dependencies{
 		listen:      net.Listen,
-		watch:       watcher.Watch,
-		watchTree:   watcher.WatchTree,
 		openBrowser: openBrowser,
 		keepAlive:   defaultKeepAlive,
-		debounce:    watcher.DefaultDebounce,
 	})
 }
 
@@ -141,35 +134,9 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	}
 
 	serveDone := make(chan error, 1)
-	var watchDone <-chan error
 	go func() {
 		serveDone <- httpServer.Serve(listener)
 	}()
-	// Every root is watched — single-file roots through their file, directory
-	// roots recursively — and every change publishes the same workspace event,
-	// so the WebUI refetches the file tree and reloads (or replaces) the open
-	// document.
-	watchTargets := append(workspace.singleFilePaths(), workspace.directoryPaths()...)
-	if len(watchTargets) > 0 {
-		watchResults := make(chan error, len(watchTargets))
-		watchDone = watchResults
-		for _, root := range workspace.roots {
-			switch root.input.Kind {
-			case files.KindFile:
-				go func(target string) {
-					watchResults <- deps.watch(runContext, target, deps.debounce, func() {
-						hub.publish(workspaceChanged)
-					}, logger)
-				}(root.input.Path)
-			case files.KindDirectory:
-				go func(target string) {
-					watchResults <- deps.watchTree(runContext, target, deps.debounce, func() {
-						hub.publish(workspaceChanged)
-					}, logger)
-				}(root.input.Path)
-			}
-		}
-	}
 
 	address := serverOptionsURL(serverURL(normalized.Host, listener.Addr()), normalized.Mode, normalized.Width, normalized.TOC)
 	_, _ = fmt.Fprintf(logger, "m2h: serving %s at %s\n", strings.Join(workspace.inputPaths(), ", "), address)
@@ -185,10 +152,6 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	var runErr error
 	select {
 	case <-ctx.Done():
-	case err := <-watchDone:
-		if err != nil {
-			runErr = err
-		}
 	case err := <-serveDone:
 		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			runErr = fmt.Errorf("serve documents: %w", err)

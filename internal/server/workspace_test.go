@@ -57,9 +57,6 @@ func TestNewWorkspaceAssignsIDsAndLabelsInInputOrder(t *testing.T) {
 	if !workspace.anyDirectory() {
 		t.Fatal("anyDirectory() = false, want true with two directory roots")
 	}
-	if paths := workspace.singleFilePaths(); len(paths) != 0 {
-		t.Fatalf("singleFilePaths() = %v, want none", paths)
-	}
 	if first.scope.kind() != workspaceDirectory || second.scope.kind() != workspaceDirectory {
 		t.Fatalf("directory roots reported kinds %q, %q", first.scope.kind(), second.scope.kind())
 	}
@@ -106,9 +103,6 @@ func TestNewWorkspaceKeepsSingleFileAndDirectoryRootsIndependent(t *testing.T) {
 	}
 	if !workspace.anyDirectory() {
 		t.Fatal("anyDirectory() = false, want true with one directory root")
-	}
-	if paths := workspace.singleFilePaths(); len(paths) != 1 || paths[0] != first.input.Path {
-		t.Fatalf("singleFilePaths() = %v, want [%s]", paths, first.input.Path)
 	}
 }
 
