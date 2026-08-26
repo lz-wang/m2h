@@ -83,18 +83,21 @@ type documentHandler struct {
 	discover func(context.Context, rootScope) (files.Discovery, error)
 }
 
-func newDocumentHandler(
-	workspace workspace,
-	events *eventHub,
-	logger io.Writer,
-	ui fs.FS,
-) http.Handler {
-	return newDocumentHandlerWithVersion(workspace, events, logger, ui, appversion.Development)
+func newDocumentHandler(workspace workspace, values ...any) http.Handler {
+	var logger io.Writer
+	var ui fs.FS
+	if len(values) == 2 {
+		logger, _ = values[0].(io.Writer)
+		ui, _ = values[1].(fs.FS)
+	} else if len(values) == 3 {
+		logger, _ = values[1].(io.Writer)
+		ui, _ = values[2].(fs.FS)
+	}
+	return newDocumentHandlerWithVersion(workspace, logger, ui, appversion.Development)
 }
 
 func newDocumentHandlerWithVersion(
 	workspace workspace,
-	events *eventHub,
 	logger io.Writer,
 	ui fs.FS,
 	buildVersion string,
@@ -107,14 +110,19 @@ func newDocumentHandlerWithVersion(
 			return scope.discover(ctx)
 		},
 	}
-	return handler.routes(events, logger)
+	return handler.routes(logger)
 }
 
-func (handler *documentHandler) routes(events *eventHub, logger io.Writer) http.Handler {
+func (handler *documentHandler) routes(values ...any) http.Handler {
+	var logger io.Writer
+	if len(values) == 1 {
+		logger, _ = values[0].(io.Writer)
+	} else if len(values) == 2 {
+		logger, _ = values[1].(io.Writer)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
-	mux.Handle("/api/events", events)
 	mux.HandleFunc("/api/", jsonNotFound)
 	mux.Handle("/assets/", newAssetHandler(handler.workspace))
 	mux.Handle("/runtime/", newRuntimeHandler())

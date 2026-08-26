@@ -24,6 +24,12 @@ import (
 	appversion "github.com/lz-wang/m2h/internal/version"
 )
 
+// newEventHub is retained only as a no-op test argument while the historical
+// handler fixtures are migrated; production has no event hub or SSE route.
+type eventHub struct{}
+
+func newEventHub(time.Duration) *eventHub { return &eventHub{} }
+
 func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	root := directoryFixture(t)
 	canonical := canonicalDirectory(t, root)

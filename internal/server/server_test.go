@@ -398,6 +398,5 @@ func testDependencies() dependencies {
 	return dependencies{
 		listen:      net.Listen,
 		openBrowser: func(string) error { return nil },
-		keepAlive:   time.Second,
 	}
 }

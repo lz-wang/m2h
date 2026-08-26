@@ -24,8 +24,7 @@ const (
 	DefaultHost = "127.0.0.1"
 	DefaultPort = 8793
 
-	defaultKeepAlive = 15 * time.Second
-	shutdownTimeout  = 3 * time.Second
+	shutdownTimeout = 3 * time.Second
 )
 
 // Options configures a document server.
@@ -54,7 +53,6 @@ type Options struct {
 type dependencies struct {
 	listen      func(string, string) (net.Listener, error)
 	openBrowser func(string) error
-	keepAlive   time.Duration
 }
 
 // Run validates, starts, and gracefully shuts down one document server.
@@ -62,7 +60,6 @@ func Run(ctx context.Context, options Options) error {
 	return run(ctx, options, dependencies{
 		listen:      net.Listen,
 		openBrowser: openBrowser,
-		keepAlive:   defaultKeepAlive,
 	})
 }
 
@@ -110,7 +107,6 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	}
 	runContext, cancel := context.WithCancel(ctx)
 	defer cancel()
-	hub := newEventHub(deps.keepAlive)
 	workspace, err := newWorkspace(inputs, files.DiscoverOptions{
 		Depth:   normalized.Depth,
 		Pattern: normalized.Pattern,
@@ -119,7 +115,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	handler := newDocumentHandlerWithVersion(workspace, hub, logger, options.UI, normalized.Version)
+	handler := newDocumentHandlerWithVersion(workspace, logger, options.UI, normalized.Version)
 	httpServer := &http.Server{
 		Handler: handler,
 		BaseContext: func(net.Listener) context.Context {
