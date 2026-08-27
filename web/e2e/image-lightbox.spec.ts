@@ -240,6 +240,50 @@ test("keeps a rotated landscape image clear of the bottom toolbar", async ({
   await expectInvariantsUnchanged(page, before);
 });
 
+test("keeps the close control above a maximally zoomed image", async ({
+  page,
+}) => {
+  await openDocument(page);
+  const before = await captureInvariants(page);
+
+  await openLightbox(page, 0);
+
+  // Zoom to the 5x cap: the transformed image paints far past its layout
+  // box and covers the whole viewport — including the close button's spot.
+  const zoomIn = page.getByRole("button", { name: "放大图片" });
+  while (await zoomIn.isEnabled()) {
+    await zoomIn.click();
+  }
+
+  const close = page.getByRole("button", { name: "关闭图片预览" });
+  const box = await close.boundingBox();
+  if (box === null) {
+    throw new Error("close button was not rendered");
+  }
+
+  // elementFromPoint verifies what the user actually experiences: the close
+  // button must be the topmost hit target at its own center, not merely carry
+  // a higher z-index — a zoomed image painting (or hit-testing) over it fails
+  // here even if the styles look right.
+  const closeIsTopmost = await page.evaluate(
+    ({ x, y }) => {
+      const element = document.elementFromPoint(x, y);
+      return element?.closest(".image-lightbox-close") !== null;
+    },
+    {
+      x: box.x + box.width / 2,
+      y: box.y + box.height / 2,
+    },
+  );
+
+  expect(closeIsTopmost).toBe(true);
+
+  // The button is not just visible above the image — it still closes.
+  await close.click();
+  await expect(page.locator(".image-lightbox")).toBeHidden();
+  await expectInvariantsUnchanged(page, before);
+});
+
 test("clamps pointer pans to the fitted stage after zooming", async ({
   page,
 }) => {
