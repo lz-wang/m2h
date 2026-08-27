@@ -56,8 +56,8 @@ html[data-width="full"] .markdown-body {
  * Goldmark's Footnote extension emits class="footnote-ref" anchors and a
  * leading <hr> inside the footnotes section, while github-markdown-css styles
  * the equivalent [data-footnote-ref] markers and draws its own top border.
- * Mirror the bracket decorations and drop the redundant rule so convert and
- * preview share one footnote look.
+ * Mirror the bracket decorations and drop the redundant rule so export
+ * output and the WebUI share one footnote look.
  */
 .markdown-body .footnote-ref::before {
   content: "[";
@@ -207,7 +207,7 @@ html.m2h-mode-dark {
  * is invisible at rest. :focus-within covers keyboard users Tabbing to the
  * copy control — which now lives on the frame, outside the <pre>, so the
  * frame-scoped selectors below keep the focus reveal working. Shared by
- * convert output and the WebUI, so it lives here rather than the app
+ * export output and the WebUI, so it lives here rather than the app
  * stylesheet.
  */
 .markdown-body pre {
@@ -241,7 +241,7 @@ html.m2h-mode-dark {
  * GitHub alert titles pair the octicon with the uppercase variant name. The
  * gap is CSS, not an HTML space: whitespace collapsing is not a reliable
  * spacing mechanism and the two glyphs must keep a stable distance in both
- * convert output and the WebUI.
+ * export output and the WebUI.
  */
 .markdown-body .markdown-alert-title > .octicon {
   margin-right: 0.375rem;
@@ -364,7 +364,7 @@ html.m2h-mode-dark {
 /*
  * GitHub-style heading permalinks. The anchor is prepended at runtime in both
  * the standalone rich-content script and the WebUI, so its styles live with the
- * shared Markdown stylesheet and apply to convert output and preview alike.
+ * shared Markdown stylesheet and apply to export output and the WebUI alike.
  *
  * The anchor is absolutely positioned in the heading's left gutter and revealed
  * only on hover/focus, so appearing and disappearing never reflows the heading
@@ -422,8 +422,8 @@ html.m2h-mode-dark {
 
 /*
  * Extended markup styles for m2h's ==mark==, ^^insert^^, Critic and ++keys++.
- * These are document semantics shared by convert output and Web preview, so
- * they live with the Markdown stylesheet rather than the React WebUI.
+ * These are document semantics shared by export output and the WebUI, so
+ * they live with the Markdown stylesheet rather than the React app stylesheet.
  *
  * The mark, Critic and keycap colors are theme-aware CSS variables. The light
  * values are tuned for the white page; in dark mode the same low-alpha washes
@@ -490,8 +490,8 @@ html.m2h-mode-dark {
  * html.dark .markdown-body kbd (specificity 0,2,2), so a plain
  * .markdown-body .keys > kbd (0,2,1) would lose there. Matching that
  * specificity and winning by source order (layout.css is appended last in
- * both Stylesheet and PreviewStylesheet) keeps one rule for convert output
- * and preview alike.
+ * both Stylesheet and PreviewStylesheet) keeps one rule for export output
+ * and the WebUI alike.
  */
 .markdown-body .keys {
   display: inline-flex;

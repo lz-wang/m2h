@@ -69,7 +69,7 @@ const TABLESORT_BUNDLE = [
 
 // Evaluating the bundles in the shared global context attaches
 // window.Tablesort exactly as a <script> tag would, so the sorting assertions
-// below run against the same code the preview serves and convert embeds.
+// below run against the same runtime the document server serves the WebUI.
 function installTablesortRuntime(): void {
   runInThisContext(TABLESORT_BUNDLE, { filename: "tablesort-bundle.js" });
 }

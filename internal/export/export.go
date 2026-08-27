@@ -1,6 +1,4 @@
-// Package export writes one Markdown file as an HTML page. The CLI
-// spells the command "convert"; the package name describes what it does —
-// export the current document to a single shareable HTML file.
+// Package export writes one Markdown file as an HTML page.
 package export
 
 import (
@@ -44,7 +42,7 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		return Result{}, err
 	}
 	if err := ctx.Err(); err != nil {
-		return Result{}, fmt.Errorf("convert: %w", err)
+		return Result{}, fmt.Errorf("export: %w", err)
 	}
 
 	input, err := files.Resolve(options.Input)
@@ -52,7 +50,7 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		return Result{}, err
 	}
 	if input.Kind != files.KindFile || !files.IsMarkdown(input.Path) {
-		return Result{}, fmt.Errorf("convert requires a Markdown file: %q", options.Input)
+		return Result{}, fmt.Errorf("export requires a Markdown file: %q", options.Input)
 	}
 	source := input.Path
 
@@ -61,14 +59,14 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		destination = filepath.Join(filepath.Dir(source), options.Output)
 	}
 	if samePath(source, destination) {
-		return Result{}, fmt.Errorf("convert %q: output conflicts with input", source)
+		return Result{}, fmt.Errorf("export %q: output conflicts with input", source)
 	}
 	if info, err := os.Stat(destination); err == nil {
 		if info.IsDir() {
-			return Result{}, fmt.Errorf("convert %q: output %q is a directory", source, destination)
+			return Result{}, fmt.Errorf("export %q: output %q is a directory", source, destination)
 		}
 		if !options.Force {
-			return Result{}, fmt.Errorf("convert %q: output %q already exists; rerun with --force to overwrite", source, destination)
+			return Result{}, fmt.Errorf("export %q: output %q already exists; rerun with --force to overwrite", source, destination)
 		}
 	} else if !os.IsNotExist(err) {
 		return Result{}, fmt.Errorf("inspect output %q: %w", destination, err)

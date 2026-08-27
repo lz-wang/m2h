@@ -10,9 +10,8 @@
 // Tables sort last so the caller's scroll restore lands on the fully enhanced
 // DOM; the sortable-header geometry itself is reserved statically in the
 // stylesheet, so the enhancement never shifts layout. All runtimes are the
-// shared /runtime/* assets the preview server embeds (the same copy convert
-// writes into .m2h/), loaded through the runtime loader only when the
-// document actually uses them.
+// shared /runtime/* assets the document server embeds, loaded through the
+// runtime loader only when the document actually uses them.
 
 import type { ResolvedMode } from "../model";
 import { copyText } from "./clipboard";

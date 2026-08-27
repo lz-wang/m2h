@@ -36,7 +36,7 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 	command := &urfavecli.Command{
 		Name:        "m2h",
 		Usage:       "serve Markdown documents in a browser",
-		UsageText:   "m2h [options] <file|directory>...\n   m2h convert [options] <file>",
+		UsageText:   "m2h [options] <file|directory>...\n   m2h export [options] <file>",
 		HideVersion: true,
 		Writer:      stdout,
 		ErrWriter:   stderr,
@@ -50,7 +50,7 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 			},
 		),
 		Commands: []*urfavecli.Command{
-			convertCommand(),
+			exportCommand(),
 		},
 		OnUsageError: normalizeUsageError,
 	}
@@ -154,20 +154,19 @@ func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buil
 	return fmt.Errorf("Error: %w", err)
 }
 
-func convertCommand() *urfavecli.Command {
+func exportCommand() *urfavecli.Command {
 	return &urfavecli.Command{
-		Name:         "convert",
+		Name:         "export",
 		Usage:        "export a Markdown file to HTML",
 		ArgsUsage:    "<file>",
-		Flags:        conversionFlags(),
-		Action:       convertAction,
+		Flags:        exportFlags(),
+		Action:       exportAction,
 		OnUsageError: normalizeUsageError,
 	}
 }
 
-// conversionFlags returns the Markdown-to-HTML options for the convert
-// subcommand.
-func conversionFlags() []urfavecli.Flag {
+// exportFlags returns the Markdown-to-HTML options for the export subcommand.
+func exportFlags() []urfavecli.Flag {
 	return []urfavecli.Flag{
 		&urfavecli.StringFlag{Name: "output", Aliases: []string{"o"}, Usage: "write to an HTML file", Local: true},
 		modeFlag(),
@@ -182,9 +181,9 @@ func conversionFlags() []urfavecli.Flag {
 
 var runExport = export.Run
 
-func convertAction(ctx context.Context, command *urfavecli.Command) error {
+func exportAction(ctx context.Context, command *urfavecli.Command) error {
 	if command.Args().Len() == 0 {
-		return urfavecli.ShowCommandHelp(ctx, command, "convert")
+		return urfavecli.ShowCommandHelp(ctx, command, "export")
 	}
 	if command.Args().Len() != 1 {
 		return fmt.Errorf("Error: requires exactly one Markdown file")
@@ -201,7 +200,7 @@ func convertAction(ctx context.Context, command *urfavecli.Command) error {
 			return err
 		}
 		if _, err := fmt.Fprintf(command.Root().Writer, "Wrote %s\n", result.Output); err != nil {
-			return fmt.Errorf("Error: write conversion result: %w", err)
+			return fmt.Errorf("Error: write export result: %w", err)
 		}
 		return nil
 	}

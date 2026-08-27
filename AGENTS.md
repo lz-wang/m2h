@@ -17,7 +17,7 @@
 ## 架构边界
 
 - `internal/markdown` 是标准 GFM 解析、链接重写和 HTML 渲染的唯一核心。
-- `convert` 与 `preview` 必须复用该核心，不得维护两套渲染规则。
+- HTML export 与 Web 文档服务必须复用 `internal/markdown`，不得维护两套 Markdown 渲染规则。
 - CLI 参数校验在执行文件或网络操作前完成；未知参数和非法组合必须返回错误。
 - Go 后端负责文件系统、Markdown 渲染和 HTTP API；React 只负责目录预览 UI。
 - Web 构建产物由 Go 嵌入；前后端 API 契约变更必须同时更新两端实现与测试。

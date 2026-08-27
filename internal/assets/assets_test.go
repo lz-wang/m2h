@@ -138,7 +138,7 @@ func TestStylesheetIncludesExtendedMarkup(t *testing.T) {
 // TestStylesheetIncludesKeycapStyles guards the Material-style keycap: the
 // theme variables, the keycap plate and the canonical-class glyph rules must
 // all stay in the shared stylesheet so a CSS cleanup cannot silently strip
-// them from convert output and Web preview at once.
+// them from export output and the WebUI at once.
 func TestStylesheetIncludesKeycapStyles(t *testing.T) {
 	t.Parallel()
 

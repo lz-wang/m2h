@@ -77,10 +77,10 @@ func TestRuntimeHandlerRefusesNonGETAndDirectories(t *testing.T) {
 	}
 }
 
-// TestRuntimeAssetsCoverConvertOutput guards the sharing contract: every
-// non-font asset convert writes into .m2h/ must also be reachable under
-// /runtime/ so the WebUI and converted HTML run the same runtime.
-func TestRuntimeAssetsCoverConvertOutput(t *testing.T) {
+// TestRuntimeAssetsCoverExportOutput guards the sharing contract: every
+// non-font asset embedded for the WebUI must also be reachable under
+// /runtime/, so the WebUI and exported HTML run the same pinned releases.
+func TestRuntimeAssetsCoverExportOutput(t *testing.T) {
 	t.Parallel()
 
 	handler := newRuntimeHandler()

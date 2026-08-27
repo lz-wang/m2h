@@ -12,7 +12,7 @@ import (
 )
 
 // The Keys extension implements PyMdown Extensions' ++key+key++ syntax on top
-// of the shared GFM engine, so convert output and Web preview stay identical.
+// of the shared GFM engine, so export output and the WebUI stay identical.
 //
 // keyMap and keyAliases follow PyMdown Extensions' English US key database.
 // Canonical key names are also used as CSS class suffixes:

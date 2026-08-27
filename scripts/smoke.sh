@@ -45,10 +45,10 @@ if [[ "${actual_version}" != "${expected_version}" ]]; then
 fi
 echo "[smoke] version ${actual_version}"
 
-"${binary}" convert smoke.md --output smoke.html --mode dark
+"${binary}" export smoke.md --output smoke.html --mode dark
 grep -F '<title>Smoke</title>' smoke.html >/dev/null
 grep -F 'href="next.md"' smoke.html >/dev/null
-echo "[smoke] convert"
+echo "[smoke] export"
 
 port=${M2H_SMOKE_PORT:-18793}
 "${binary}" smoke.md --host 127.0.0.1 --port "${port}" --no-open > preview.log 2>&1 &

@@ -77,7 +77,7 @@ func TestRenderRewritesPreviewRawHTMLURLs(t *testing.T) {
 		}
 	}
 
-	convert, err := Render(source, RenderOptions{
+	exported, err := Render(source, RenderOptions{
 		SourcePath: "README.md",
 	})
 	if err != nil {
@@ -87,8 +87,8 @@ func TestRenderRewritesPreviewRawHTMLURLs(t *testing.T) {
 		`src="web/public/favicon.svg?raw=1#icon"`,
 		`href="docs/guide.md#install"`,
 	} {
-		if !strings.Contains(convert.Body, want) {
-			t.Errorf("convert raw HTML changed URL %q: %s", want, convert.Body)
+		if !strings.Contains(exported.Body, want) {
+			t.Errorf("export raw HTML changed URL %q: %s", want, exported.Body)
 		}
 	}
 }
@@ -147,12 +147,12 @@ func TestRenderRewritesPreviewAssetsAndPreservesConvertAssets(t *testing.T) {
 		t.Fatalf("preview image was not rewritten: %s", preview.Body)
 	}
 
-	convert, err := Render(source, RenderOptions{SourcePath: "design/current.md"})
+	exported, err := Render(source, RenderOptions{SourcePath: "design/current.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(convert.Body, `src="../images/diagram.png?raw=1#preview"`) {
-		t.Fatalf("convert image URL changed: %s", convert.Body)
+	if !strings.Contains(exported.Body, `src="../images/diagram.png?raw=1#preview"`) {
+		t.Fatalf("export image URL changed: %s", exported.Body)
 	}
 }
 
@@ -572,7 +572,7 @@ func TestRenderGitHubExtensionsFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	convert, err := Render(source, RenderOptions{SourcePath: "github-extensions.md"})
+	exported, err := Render(source, RenderOptions{SourcePath: "github-extensions.md"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -581,8 +581,8 @@ func TestRenderGitHubExtensionsFixture(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// All four GitHub extensions render identically across convert and preview.
-	for _, result := range []Result{convert, preview} {
+	// All four GitHub extensions render identically across export and preview.
+	for _, result := range []Result{exported, preview} {
 		for _, want := range []string{
 			`<h2 id="7-代码">7. 代码</h2>`,
 			`class="footnotes"`,
@@ -604,7 +604,7 @@ func TestRenderGitHubExtensionsFixture(t *testing.T) {
 	}
 
 	// Fragment links stay in-page and are not rewritten to .html/.md.
-	if !strings.Contains(convert.Body, `href="#7-`) {
-		t.Errorf("fragment link missing or rewritten in convert:\n%s", convert.Body)
+	if !strings.Contains(exported.Body, `href="#7-`) {
+		t.Errorf("fragment link missing or rewritten in export:\n%s", exported.Body)
 	}
 }

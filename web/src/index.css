@@ -690,7 +690,7 @@ body,
 
 /*
  * Line-number gutter, prepended by render-rich-content.ts. WebUI-only: the
- * convert output keeps its compact fences, so these rules live in the app
+ * export output keeps its compact fences, so these rules live in the app
  * stylesheet rather than the shared Markdown stylesheet.
  *
  * The pre becomes a flex row whose gutter sticks to the scrollport's left
@@ -758,7 +758,7 @@ body,
  * the image's external geometry so the absolutely-positioned magnifier stays
  * pinned to the image's top-right corner; line-height 0 keeps a wrapped inline
  * frame from growing a stray text baseline. WebUI-only, like the gutter: the
- * convert output keeps its bare images.
+ * export output keeps its bare images.
  */
 .markdown-body .m2h-image-frame {
   position: relative;

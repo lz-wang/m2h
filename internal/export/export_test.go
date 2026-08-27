@@ -33,7 +33,7 @@ func defaultOptions(input string) Options {
 	}
 }
 
-func TestRunConvertsSingleFileToDefaultAndExplicitOutput(t *testing.T) {
+func TestRunExportsSingleFileToDefaultAndExplicitOutput(t *testing.T) {
 	root := t.TempDir()
 	source := writeFixture(t, root, "guide.md", "# Guide\n\n[Next](next.md)")
 	writeFixture(t, root, "next.md", "# Next")
@@ -85,7 +85,7 @@ func TestRunRejectsDirectoryInput(t *testing.T) {
 	writeFixture(t, source, "guide.md", "# Guide")
 
 	_, err := Run(context.Background(), defaultOptions(source))
-	if err == nil || !strings.Contains(err.Error(), "convert requires a Markdown file") {
+	if err == nil || !strings.Contains(err.Error(), "export requires a Markdown file") {
 		t.Fatalf("Run() error = %v, want Markdown-file requirement", err)
 	}
 	if _, err := os.Stat(filepath.Join(source, "guide.html")); !os.IsNotExist(err) {
@@ -138,7 +138,7 @@ func TestRunRejectsInvalidInputAndOutputTypes(t *testing.T) {
 		want    string
 	}{
 		{name: "missing input option", options: Options{Mode: markdown.ModeAuto}, want: "input path is required"},
-		{name: "non Markdown file", options: defaultOptions(textFile), want: "convert requires a Markdown file"},
+		{name: "non Markdown file", options: defaultOptions(textFile), want: "export requires a Markdown file"},
 		{name: "same output", options: func() Options { options := defaultOptions(markdownFile); options.Output = "guide.md"; return options }(), want: "output conflicts with input"},
 		{name: "output subdirectory", options: func() Options {
 			options := defaultOptions(markdownFile)
@@ -243,7 +243,7 @@ func TestWriteAtomicReturnsErrorsAndCleansTemporaryFiles(t *testing.T) {
 	}
 }
 
-func TestConversionReportsReadAndWritePermissionErrors(t *testing.T) {
+func TestExportReportsReadAndWritePermissionErrors(t *testing.T) {
 	if runtime.GOOS == "windows" {
 		t.Skip("permission semantics differ on Windows")
 	}
@@ -279,7 +279,7 @@ func TestRunReportsMissingInput(t *testing.T) {
 	}
 }
 
-func TestRunConvertPreservesRichContent(t *testing.T) {
+func TestRunExportPreservesRichContent(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -305,7 +305,7 @@ func TestRunConvertPreservesRichContent(t *testing.T) {
 		"renderMathInElement",
 	} {
 		if !strings.Contains(body, want) {
-			t.Errorf("convert output missing %q", want)
+			t.Errorf("export output missing %q", want)
 		}
 	}
 	for _, unwanted := range []string{
@@ -329,7 +329,7 @@ func TestRunConvertPreservesRichContent(t *testing.T) {
 	}
 }
 
-func TestRunConvertWithoutRichContentStaysLean(t *testing.T) {
+func TestRunExportWithoutRichContentStaysLean(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -351,7 +351,7 @@ func TestRunConvertWithoutRichContentStaysLean(t *testing.T) {
 	}
 }
 
-func TestRunConvertWritesOnlyTheHTMLFile(t *testing.T) {
+func TestRunExportWritesOnlyTheHTMLFile(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -371,11 +371,11 @@ func TestRunConvertWritesOnlyTheHTMLFile(t *testing.T) {
 		}
 	}
 	if !reflect.DeepEqual(names, []string{"guide.html"}) {
-		t.Fatalf("convert wrote extra files: %v", names)
+		t.Fatalf("export wrote extra files: %v", names)
 	}
 }
 
-func TestRunConvertKeepsImageReferences(t *testing.T) {
+func TestRunExportKeepsImageReferences(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()

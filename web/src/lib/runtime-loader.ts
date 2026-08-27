@@ -1,7 +1,7 @@
-// Loader for the rich-content runtime the Go binary embeds and the preview
-// server exposes under /runtime/*. Sharing those assets with convert output
-// keeps a single Mermaid/KaTeX runtime in the binary; the WebUI loads them on
-// demand instead of bundling a second copy through Vite.
+// Loader for the rich-content runtime the Go binary embeds and the document
+// server exposes under /runtime/*. The WebUI loads them on demand instead of
+// bundling a second copy through Vite; export output loads the same pinned
+// releases from the CDN.
 
 export interface MermaidInitializeOptions {
   startOnLoad?: boolean;

@@ -63,7 +63,7 @@ func TestRootHelpDocumentsCommands(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("root help wrote stderr %q", stderr)
 	}
-	for _, want := range []string{"convert", "--version", "-v", "--host", "--port"} {
+	for _, want := range []string{"export", "--version", "-v", "--host", "--port"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("root help does not contain %q:\n%s", want, stdout)
 		}
@@ -90,8 +90,8 @@ func TestHelpDocumentsContract(t *testing.T) {
 			},
 		},
 		{
-			name: "convert",
-			args: []string{"convert", "--help"},
+			name: "export",
+			args: []string{"export", "--help"},
 			want: []string{
 				"--output", "-o", "--mode", "(default: \"auto\")",
 				"--width", "(default: \"standard\")", "--force",
@@ -127,7 +127,7 @@ func TestUnknownFlagsReturnStableError(t *testing.T) {
 		{"--unknown"},
 		{"README.md", "--unknown"},
 		{"README.md", "--unsafe-html"},
-		{"convert", "README.md", "--toc"},
+		{"export", "README.md", "--toc"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -145,16 +145,16 @@ func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
 	for _, args := range [][]string{
 		{"README.md", "--output", "out.html"},
 		{"README.md", "--force"},
-		{"convert", "README.md", "--port", "9000"},
-		{"convert", "README.md", "--host", "0.0.0.0"},
-		{"convert", "README.md", "--toc"},
-		{"convert", "README.md", "--open"},
-		{"convert", "README.md", "--glob", "*.md"},
-		{"convert", "README.md", "--depth", "2"},
-		{"convert", "README.md", "--no-local-paths"},
-		{"convert", "README.md", "--standalone"},
-		{"convert", "README.md", "--copy-assets=false"},
-		{"convert", "README.md", "--yes"},
+		{"export", "README.md", "--port", "9000"},
+		{"export", "README.md", "--host", "0.0.0.0"},
+		{"export", "README.md", "--toc"},
+		{"export", "README.md", "--open"},
+		{"export", "README.md", "--glob", "*.md"},
+		{"export", "README.md", "--depth", "2"},
+		{"export", "README.md", "--no-local-paths"},
+		{"export", "README.md", "--standalone"},
+		{"export", "README.md", "--copy-assets=false"},
+		{"export", "README.md", "--yes"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -179,6 +179,41 @@ func TestServeAcceptsWebAsInput(t *testing.T) {
 		{name: "single", args: []string{"web"}, input: []string{"web"}},
 		{name: "among others", args: []string{"web", "docs"}, input: []string{"web", "docs"}},
 		{name: "after options", args: []string{"--no-open", "web"}, input: []string{"web"}},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			previous := runServer
+			t.Cleanup(func() { runServer = previous })
+
+			var captured server.Options
+			runServer = func(_ context.Context, options server.Options) error {
+				captured = options
+				return nil
+			}
+			if _, _, err := runCommand(t, test.args...); err != nil {
+				t.Fatalf("m2h %v returned error: %v", test.args, err)
+			}
+			if !slices.Equal(captured.Inputs, test.input) {
+				t.Fatalf("m2h %v inputs = %v, want %v", test.args, captured.Inputs, test.input)
+			}
+		})
+	}
+}
+
+// The HTML export subcommand is spelled "export", so the retired "convert"
+// name must reach the server as an ordinary input path — like any file or
+// directory a project happens to call "convert" — instead of being rejected
+// as a reserved word.
+func TestServeAcceptsConvertAsInput(t *testing.T) {
+	tests := []struct {
+		name  string
+		args  []string
+		input []string
+	}{
+		{name: "single", args: []string{"convert"}, input: []string{"convert"}},
+		{name: "among others", args: []string{"convert", "docs"}, input: []string{"convert", "docs"}},
+		{name: "after options", args: []string{"--no-open", "convert"}, input: []string{"convert"}},
 	}
 
 	for _, test := range tests {
@@ -382,16 +417,16 @@ func TestServeRejectsInvalidMultiRootInputs(t *testing.T) {
 	}
 }
 
-func TestConvertCommandWritesHTML(t *testing.T) {
+func TestExportCommandWritesHTML(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "guide.md")
 	if err := os.WriteFile(source, []byte("# Guide\n\n[Next](next.md)\n\n<details>raw HTML</details>"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	stdout, stderr, err := runCommand(t, "convert", source, "--output", "index.html", "--mode", "dark", "--width", "wide")
+	stdout, stderr, err := runCommand(t, "export", source, "--output", "index.html", "--mode", "dark", "--width", "wide")
 	if err != nil {
-		t.Fatalf("convert returned error: %v", err)
+		t.Fatalf("export returned error: %v", err)
 	}
 	resolvedRoot, err := filepath.EvalSymlinks(root)
 	if err != nil {
@@ -399,7 +434,7 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 	}
 	output := filepath.Join(root, "index.html")
 	if want := "Wrote " + filepath.Join(resolvedRoot, "index.html") + "\n"; stdout != want || stderr != "" {
-		t.Fatalf("convert output stdout=%q stderr=%q", stdout, stderr)
+		t.Fatalf("export output stdout=%q stderr=%q", stdout, stderr)
 	}
 	html, err := os.ReadFile(output)
 	if err != nil {
@@ -412,48 +447,48 @@ func TestConvertCommandWritesHTML(t *testing.T) {
 	}
 }
 
-func TestConvertCommandRejectsPathOutput(t *testing.T) {
+func TestExportCommandRejectsPathOutput(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "guide.md")
 	if err := os.WriteFile(source, []byte("# Guide"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, err := runCommand(t, "convert", source, "--output", "../escape.html")
+	_, _, err := runCommand(t, "export", source, "--output", "../escape.html")
 	if err == nil || !strings.Contains(err.Error(), "must be a plain filename, not a path") {
-		t.Fatalf("convert error = %v, want plain-filename requirement", err)
+		t.Fatalf("export error = %v, want plain-filename requirement", err)
 	}
 }
 
-func TestConvertCommandRejectsDirectoryInput(t *testing.T) {
+func TestExportCommandRejectsDirectoryInput(t *testing.T) {
 	source := t.TempDir()
 	if err := os.WriteFile(filepath.Join(source, "guide.md"), []byte("# Guide"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, err := runCommand(t, "convert", source)
-	if err == nil || err.Error() != "Error: convert requires a Markdown file: \""+source+"\"" {
-		t.Fatalf("convert directory error = %v, want Markdown-file requirement", err)
+	_, _, err := runCommand(t, "export", source)
+	if err == nil || err.Error() != "Error: export requires a Markdown file: \""+source+"\"" {
+		t.Fatalf("export directory error = %v, want Markdown-file requirement", err)
 	}
 	if _, err := os.Stat(filepath.Join(source, "guide.html")); !os.IsNotExist(err) {
 		t.Fatal("directory input produced output")
 	}
 }
 
-func TestConvertCommandValidatesArgumentCount(t *testing.T) {
+func TestExportCommandValidatesArgumentCount(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "guide.md")
 	if err := os.WriteFile(source, []byte("# Guide"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	_, _, err := runCommand(t, "convert", source, source)
+	_, _, err := runCommand(t, "export", source, source)
 	if err == nil || err.Error() != "Error: requires exactly one Markdown file" {
-		t.Fatalf("convert error = %v, want argument count error", err)
+		t.Fatalf("export error = %v, want argument count error", err)
 	}
 }
 
-func TestConvertCommandOverwriteRequiresForce(t *testing.T) {
+func TestExportCommandOverwriteRequiresForce(t *testing.T) {
 	root := t.TempDir()
 	source := filepath.Join(root, "guide.md")
 	if err := os.WriteFile(source, []byte("# Guide"), 0o644); err != nil {
@@ -464,20 +499,20 @@ func TestConvertCommandOverwriteRequiresForce(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	stdout, _, err := runCommand(t, "convert", source)
+	stdout, _, err := runCommand(t, "export", source)
 	if err == nil || !strings.Contains(err.Error(), "already exists; rerun with --force") {
-		t.Fatalf("convert error = %v, want already-exists error", err)
+		t.Fatalf("export error = %v, want already-exists error", err)
 	}
 	if stdout != "" {
-		t.Fatalf("rejected convert wrote stdout %q", stdout)
+		t.Fatalf("rejected export wrote stdout %q", stdout)
 	}
 
-	stdout, stderr, err := runCommand(t, "convert", source, "--force")
+	stdout, stderr, err := runCommand(t, "export", source, "--force")
 	if err != nil {
-		t.Fatalf("convert --force returned error: %v", err)
+		t.Fatalf("export --force returned error: %v", err)
 	}
 	if stderr != "" || !strings.HasPrefix(stdout, "Wrote ") {
-		t.Fatalf("convert --force stdout=%q stderr=%q", stdout, stderr)
+		t.Fatalf("export --force stdout=%q stderr=%q", stdout, stderr)
 	}
 	html, err := os.ReadFile(target)
 	if err != nil {
@@ -493,7 +528,7 @@ func TestModeValidationRunsBeforeFeatureHandlers(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"README.md", "--mode", "sepia"},
-		{"convert", "README.md", "--mode", "sepia"},
+		{"export", "README.md", "--mode", "sepia"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -510,7 +545,7 @@ func TestWidthValidationRunsBeforeFeatureHandlers(t *testing.T) {
 
 	for _, args := range [][]string{
 		{"README.md", "--width", "narrow"},
-		{"convert", "README.md", "--width", "narrow"},
+		{"export", "README.md", "--width", "narrow"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {

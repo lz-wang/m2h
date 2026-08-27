@@ -10,8 +10,8 @@ import (
 
 // newRuntimeHandler serves the Mermaid and KaTeX runtime embedded in the Go
 // binary, so the WebUI renders rich content offline at the same pinned
-// releases convert loads from the CDN instead of bundling a second copy
-// through Vite. Directory requests are refused so the embedded file server
+// releases the export command loads from the CDN instead of bundling a
+// second copy through Vite. Directory requests are refused so the embedded file server
 // never renders a listing; path traversal is rejected by the embedded
 // filesystem itself.
 func newRuntimeHandler() http.Handler {

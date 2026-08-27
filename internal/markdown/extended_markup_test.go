@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// renderBody is a small helper that renders source as convert output and
+// renderBody is a small helper that renders source as export output and
 // returns only the document body, failing the test on render errors.
 func renderBody(t *testing.T, source string) string {
 	t.Helper()
