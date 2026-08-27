@@ -133,6 +133,34 @@ test("centers the capped document inside a wide canvas", async ({ page }) => {
   expect(Math.abs(gaps.left - gaps.right)).toBeLessThanOrEqual(1);
 });
 
+test("does not create page-level horizontal overflow in full width without TOC", async ({
+  page,
+}) => {
+  // The fixture pairs a frontmatter panel (width:100% in its base rule) with
+  // an H2 (so the TOC rail renders): full width + frontmatter + TOC hidden +
+  // sidebar visible is the combination where a width contract that adds
+  // margins on top of 100% spills past the canvas into a window-level
+  // scrollbar.
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await waitForBody(page, "/doc/layout-frontmatter.md");
+
+  await page.getByRole("button", { name: /文档宽度：/ }).click();
+  await page.getByRole("menuitemradio", { name: "全屏" }).click();
+
+  await expect(page.locator(".reader-toc")).toBeVisible();
+
+  await page.getByRole("button", { name: "隐藏文档目录" }).click();
+
+  await expect(page.locator(".reader-toc")).toHaveCount(0);
+
+  const geometry = await page.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+
+  expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
+});
+
 test("opens the workspace root unselected without fetching a document", async ({
   page,
 }) => {

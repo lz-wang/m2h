@@ -552,6 +552,18 @@ body,
     margin 160ms ease;
 }
 
+/* The frontmatter panel above the article joins the reader's width ladder:
+ * its base rule is a full-width bordered box centered by margin auto, and the
+ * width modes below then cap it exactly like the document. Declared here —
+ * before every .reader-canvas-* variant — so the plain (0,1,0) selector
+ * always precedes its more specific descendants (noDescendingSpecificity). */
+.reader-frontmatter {
+  box-sizing: border-box;
+  width: 100%;
+  margin: 0 auto;
+  padding: 45px 45px 0;
+}
+
 /* Capped widths center inside the canvas: without margin-inline the block
  * sticks to the left edge whenever the canvas is wider than the cap. The
  * extra .reader-canvas outspecifies github-markdown-css's theme blocks
@@ -563,14 +575,31 @@ body,
   margin-inline: auto;
 }
 
+.reader-canvas.reader-canvas-standard .reader-frontmatter {
+  max-width: 980px;
+}
+
 .reader-canvas.reader-canvas-wide .reader-document,
 .reader-canvas.reader-canvas-wide .asset-warning {
   max-width: 1280px;
   margin-inline: auto;
 }
 
+.reader-canvas.reader-canvas-wide .reader-frontmatter {
+  max-width: 1280px;
+}
+
+/* Full width spans the canvas minus a 1rem gutter each side, and the three
+ * reader content blocks share one width contract: element width = canvas −
+ * margins. width:auto is the load-bearing part — .reader-frontmatter declares
+ * width:100% with border-box (which excludes margin), so full mode must reset
+ * it or the frontmatter's outer box becomes canvas + 2rem and, once the TOC
+ * rail is hidden (no buffer column beside the canvas), spills into a
+ * page-level horizontal scrollbar. */
 .reader-canvas-full .reader-document,
-.reader-canvas-full .asset-warning {
+.reader-canvas-full .asset-warning,
+.reader-canvas-full .reader-frontmatter {
+  width: auto;
   max-width: none;
   margin-right: 1rem;
   margin-left: 1rem;
@@ -958,27 +987,6 @@ body,
 .image-lightbox-close svg {
   width: 1rem;
   height: 1rem;
-}
-
-.reader-frontmatter {
-  box-sizing: border-box;
-  width: 100%;
-  margin: 0 auto;
-  padding: 45px 45px 0;
-}
-
-.reader-canvas-standard .reader-frontmatter {
-  max-width: 980px;
-}
-
-.reader-canvas-wide .reader-frontmatter {
-  max-width: 1280px;
-}
-
-.reader-canvas-full .reader-frontmatter {
-  max-width: none;
-  margin-right: 1rem;
-  margin-left: 1rem;
 }
 
 /*
