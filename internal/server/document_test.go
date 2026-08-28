@@ -435,6 +435,73 @@ func TestDirectoryDocumentAPIExposesFrontMatter(t *testing.T) {
 	}
 }
 
+func TestDocumentAPITitlePrefersFrontMatter(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "both.md"), "---\ntitle: 使用指南\n---\n# Markdown to HTML\n")
+	writeTestFile(t, filepath.Join(root, "no-h1.md"), "---\ntitle: 无标题正文\n---\nbody text\n")
+	writeTestFile(t, filepath.Join(root, "empty-title.md"), "---\ntitle: \"\"\n---\n# Heading\n")
+	writeTestFile(t, filepath.Join(root, "h1-only.md"), "# Heading\n")
+	writeTestFile(t, filepath.Join(root, "no-title.md"), "正文没有标题\n")
+	writeTestFile(t, filepath.Join(root, "sequence-title.md"), "---\ntitle:\n  - foo\n  - bar\n---\n# Sequence\n")
+	writeTestFile(t, filepath.Join(root, "broken.md"), "---\ntags: [\n---\n# Broken\n")
+	canonical := canonicalDirectory(t, root)
+	handler := newDocumentHandler(
+		singleRootWorkspace(rootScope{root: canonical, discovery: files.DiscoverOptions{Depth: 2}}),
+		nil,
+		directoryTestUI(),
+	)
+
+	// /api/files keeps its tolerance: every document is listed, the invalid
+	// frontmatter one included, with the shared title priority applied.
+	response := performRequest(handler, http.MethodGet, "/api/files")
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /api/files status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload fileListResponse
+	decodeJSON(t, response, &payload)
+	summaries := payload.Roots[0].Files
+	wantTitles := map[string]string{
+		"both.md":           "使用指南",
+		"no-h1.md":          "无标题正文",
+		"empty-title.md":    "Heading",
+		"h1-only.md":        "Heading",
+		"no-title.md":       "no-title.md",
+		"sequence-title.md": "Sequence",
+		"broken.md":         "Broken",
+	}
+	for path, want := range wantTitles {
+		if got := titleFor(summaries, path); got != want {
+			t.Errorf("files title for %q = %q, want %q", path, got, want)
+		}
+	}
+
+	// /api/document reports the same priority: the two APIs can never
+	// disagree about a document's display title.
+	for path, want := range wantTitles {
+		if path == "broken.md" {
+			continue
+		}
+		document := performRequest(handler, http.MethodGet, "/api/document?path="+path)
+		if document.Code != http.StatusOK {
+			t.Fatalf("document %q status = %d, body = %s", path, document.Code, document.Body.String())
+		}
+		var doc documentResponse
+		decodeJSON(t, document, &doc)
+		if doc.Title != want {
+			t.Errorf("document title for %q = %q, want %q", path, doc.Title, want)
+		}
+	}
+
+	// The invalid frontmatter boundary is unchanged: opening the document
+	// stays a strict 422 even though the listing tolerated it.
+	broken := performRequest(handler, http.MethodGet, "/api/document?path=broken.md")
+	if broken.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("broken document status = %d, want 422", broken.Code)
+	}
+}
+
 func TestDirectoryDocumentAPIExposesTableOfContents(t *testing.T) {
 	t.Parallel()
 

@@ -147,7 +147,7 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 				writeJSONError(response, http.StatusInternalServerError, "read Markdown file")
 				return
 			}
-			title, err := markdown.Title(contents, entry.RelativePath)
+			title, err := fileDisplayTitle(contents, entry.RelativePath)
 			if err != nil {
 				writeJSONError(response, http.StatusInternalServerError, "extract Markdown title")
 				return
@@ -217,11 +217,28 @@ func (handler *documentHandler) serveDocument(response http.ResponseWriter, requ
 	}
 	writeJSON(response, http.StatusOK, documentResponse{
 		Path:        handler.workspace.publicPath(root.id, relative),
-		Title:       rendered.Title,
+		Title:       markdown.PreferredTitle(frontMatter, rendered.Title),
 		HTML:        rendered.Body,
 		FrontMatter: frontMatterResponseFrom(frontMatter),
 		TOC:         tocEntriesFrom(rendered.Headings),
 	})
+}
+
+// fileDisplayTitle resolves one file-list entry's display title: a valid
+// frontmatter title outranks the first H1. An invalid frontmatter block must
+// not fail the whole listing — opening that document surfaces the 422, the
+// sidebar should still list it — so the invalid block falls back to plain
+// first-H1/filename extraction over the full source.
+func fileDisplayTitle(contents []byte, relativePath string) (string, error) {
+	body, frontMatter, err := markdown.ParseFrontMatter(contents)
+	if err != nil {
+		return markdown.Title(contents, relativePath)
+	}
+	fallback, err := markdown.Title(body, relativePath)
+	if err != nil {
+		return "", err
+	}
+	return markdown.PreferredTitle(frontMatter, fallback), nil
 }
 
 // resolveVisibleDocument maps an addressable (virtual) document path onto its

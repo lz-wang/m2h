@@ -208,6 +208,109 @@ func TestParseFrontMatterNestedAndArbitraryValues(t *testing.T) {
 	}
 }
 
+func TestParseFrontMatterTitle(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{
+			name:   "scalar title",
+			source: "---\ntitle: m2h 使用指南\n---\n# Markdown to HTML\n",
+			want:   "m2h 使用指南",
+		},
+		{
+			name:   "quoted empty title",
+			source: "---\ntitle: \"\"\n---\n# Heading\n",
+			want:   "",
+		},
+		{
+			name:   "blank title",
+			source: "---\ntitle:\n---\n# Heading\n",
+			want:   "",
+		},
+		{
+			name:   "surrounding whitespace trimmed",
+			source: "---\ntitle: '  padded  '\n---\n",
+			want:   "padded",
+		},
+		{
+			name:   "sequence title ignored",
+			source: "---\ntitle:\n  - foo\n  - bar\n---\n",
+			want:   "",
+		},
+		{
+			name:   "mapping title ignored",
+			source: "---\ntitle:\n  main: foo\n---\n",
+			want:   "",
+		},
+	}
+
+	for _, tc := range cases {
+		_, frontMatter, err := ParseFrontMatter([]byte(tc.source))
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", tc.name, err)
+			continue
+		}
+		if frontMatter.Title != tc.want {
+			t.Errorf("%s: Title = %q, want %q", tc.name, frontMatter.Title, tc.want)
+		}
+	}
+}
+
+func TestParseFrontMatterTitleStillListedAsEntry(t *testing.T) {
+	t.Parallel()
+
+	// A sequence title is rejected as the display title but must stay in the
+	// full frontmatter table, exactly like an invalid date.
+	source := []byte("---\ntitle:\n  - foo\n  - bar\n---\nbody\n")
+	_, frontMatter, err := ParseFrontMatter(source)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(frontMatter.Entries) != 1 || frontMatter.Entries[0].Key != "title" {
+		t.Fatalf("Entries = %+v, want the title entry kept", frontMatter.Entries)
+	}
+}
+
+func TestPreferredTitle(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name        string
+		frontMatter *FrontMatter
+		fallback    string
+		want        string
+	}{
+		{
+			name:        "nil frontmatter falls back",
+			frontMatter: nil,
+			fallback:    "Heading",
+			want:        "Heading",
+		},
+		{
+			name:        "empty title falls back",
+			frontMatter: &FrontMatter{},
+			fallback:    "Heading",
+			want:        "Heading",
+		},
+		{
+			name:        "title wins over fallback",
+			frontMatter: &FrontMatter{Title: "使用指南"},
+			fallback:    "Heading",
+			want:        "使用指南",
+		},
+	}
+
+	for _, tc := range cases {
+		if got := PreferredTitle(tc.frontMatter, tc.fallback); got != tc.want {
+			t.Errorf("%s: PreferredTitle = %q, want %q", tc.name, got, tc.want)
+		}
+	}
+}
+
 func TestParseFrontMatterInvalidYAML(t *testing.T) {
 	t.Parallel()
 

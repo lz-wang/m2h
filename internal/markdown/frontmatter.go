@@ -10,10 +10,12 @@ import (
 )
 
 // FrontMatter is the structured metadata extracted from a document's YAML
-// frontmatter. Entries preserves the original source order; Date and Tags are
-// normalized derivations that the preview UI surfaces in the toolbar summary.
+// frontmatter. Entries preserves the original source order; Title, Date and
+// Tags are normalized derivations the preview UI surfaces as the document's
+// display title and the toolbar summary.
 type FrontMatter struct {
 	Entries []FrontMatterEntry
+	Title   string
 	Date    string
 	Tags    []string
 }
@@ -127,6 +129,8 @@ func parseFrontMatterYAML(raw []byte) (*FrontMatter, error) {
 		})
 
 		switch key {
+		case "title":
+			meta.Title = normalizeFrontMatterTitle(valueNode)
 		case "date":
 			meta.Date = normalizeFrontMatterDate(valueNode)
 		case "tags":
@@ -148,6 +152,28 @@ func formatFrontMatterValue(node *yaml.Node) (string, error) {
 		return "", err
 	}
 	return strings.TrimSpace(string(data)), nil
+}
+
+// normalizeFrontMatterTitle accepts only a scalar title. Sequence or mapping
+// titles stay visible in the full frontmatter table but never become the
+// document's display title, which would otherwise surface re-serialized YAML
+// as a heading.
+func normalizeFrontMatterTitle(node *yaml.Node) string {
+	if node.Kind != yaml.ScalarNode {
+		return ""
+	}
+	return strings.TrimSpace(node.Value)
+}
+
+// PreferredTitle resolves a document's display title: a non-empty frontmatter
+// title wins, anything else falls back to the caller's derived title (the
+// first H1 with a filename fallback). Centralizing the preference keeps the
+// file list and the document view from ever disagreeing about the rule.
+func PreferredTitle(frontMatter *FrontMatter, fallback string) string {
+	if frontMatter != nil && frontMatter.Title != "" {
+		return frontMatter.Title
+	}
+	return fallback
 }
 
 // normalizeFrontMatterDate accepts only ISO-style dates and returns the
