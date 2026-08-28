@@ -13,7 +13,11 @@
 // pan-clamp algorithms are built around — and the SVG stays vector-sharp at
 // any zoom level.
 
-export interface LightboxImage {
+// One browsable visual item. `kind` records what the snapshot came from so
+// callers (and tests) can distinguish a bitmap image from a diagram without
+// sniffing the src scheme.
+export interface LightboxItem {
+  kind: "image" | "mermaid";
   src: string;
   srcSet: string | null;
   sizes: string | null;
@@ -23,7 +27,7 @@ export interface LightboxImage {
 
 // The opened Lightbox: the body's item snapshots plus the item being viewed.
 export interface LightboxState {
-  images: LightboxImage[];
+  items: LightboxItem[];
   index: number;
 }
 
@@ -52,38 +56,39 @@ export function collectLightboxState(
   root: HTMLElement,
   selectedItem: HTMLElement,
 ): LightboxState | null {
-  const items = Array.from(
+  const elements = Array.from(
     root.querySelectorAll<HTMLElement>(LIGHTBOX_ITEM_SELECTOR),
   );
-  if (items.indexOf(selectedItem) === -1) {
+  if (elements.indexOf(selectedItem) === -1) {
     return null;
   }
-  const images: LightboxImage[] = [];
+  const items: LightboxItem[] = [];
   let index = -1;
-  for (const item of items) {
-    const snapshot = snapshotLightboxItem(item);
+  for (const element of elements) {
+    const snapshot = snapshotLightboxItem(element);
     if (snapshot === null) {
       continue;
     }
-    if (item === selectedItem) {
-      index = images.length;
+    if (element === selectedItem) {
+      index = items.length;
     }
-    images.push(snapshot);
+    items.push(snapshot);
   }
-  return index === -1 ? null : { images, index };
+  return index === -1 ? null : { items, index };
 }
 
-function snapshotLightboxItem(item: HTMLElement): LightboxImage | null {
-  if (item instanceof HTMLImageElement) {
+function snapshotLightboxItem(element: HTMLElement): LightboxItem | null {
+  if (element instanceof HTMLImageElement) {
     return {
-      src: item.currentSrc || item.src,
-      srcSet: item.getAttribute("srcset"),
-      sizes: item.getAttribute("sizes"),
-      alt: item.alt,
-      title: item.title || null,
+      kind: "image",
+      src: element.currentSrc || element.src,
+      srcSet: element.getAttribute("srcset"),
+      sizes: element.getAttribute("sizes"),
+      alt: element.alt,
+      title: element.title || null,
     };
   }
-  return snapshotMermaidDiagram(item);
+  return snapshotMermaidDiagram(element);
 }
 
 // Serialize a rendered Mermaid diagram into a self-contained SVG data URL.
@@ -93,7 +98,7 @@ function snapshotLightboxItem(item: HTMLElement): LightboxImage | null {
 // intrinsic size once the SVG stands alone as an <img>; the viewBox carries
 // the diagram's true geometry, so the clone is pinned to its pixel
 // dimensions instead.
-function snapshotMermaidDiagram(container: HTMLElement): LightboxImage | null {
+function snapshotMermaidDiagram(container: HTMLElement): LightboxItem | null {
   const svg = container.querySelector("svg");
   if (svg === null) {
     return null;
@@ -112,6 +117,7 @@ function snapshotMermaidDiagram(container: HTMLElement): LightboxImage | null {
   // truncating or breaking the data URL.
   const markup = new XMLSerializer().serializeToString(clone);
   return {
+    kind: "mermaid",
     src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`,
     srcSet: null,
     sizes: null,

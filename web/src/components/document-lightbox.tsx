@@ -1,11 +1,19 @@
-// Full-viewport image viewer for the Markdown body's enhanced images.
+// Full-viewport viewer for the Markdown body's visual items — enhanced images
+// and rendered Mermaid diagrams.
 //
 // Opened through the article's event delegation (see PreviewContent), it owns
-// only data snapshots of the body images — never body DOM references — so a
-// document hot swap can simply drop it. The dialog is modal on purpose: Base UI
-// locks the page scroll while open, which is exactly the reading-position
+// only data snapshots of the body items — never body DOM references — so a
+// document hot swap can simply drop it. The dialog is modal on purpose: Base
+// UI locks the page scroll while open, which is exactly the reading-position
 // contract this feature must keep (open, navigate, zoom, rotate, close — the
 // window's scrollY and hash never move).
+//
+// Lifecycle: the parent keeps the snapshot state and the open flag apart.
+// Closing requests only flip `open` to false; the popup stays mounted while
+// Base UI runs its exit transition (data-ending-style), and the parent drops
+// the snapshot once `onClosed` reports the transition finished — so the exit
+// animation is a first-class part of the component, not a race between a CSS
+// duration and a JS timer.
 //
 // Zoom is expressed relative to the fitted baseline, not the natural pixels:
 // zoom 1 means "fit the current rotation into the viewport". The base fit is
@@ -32,7 +40,7 @@ import {
   useState,
 } from "react";
 
-import type { LightboxImage } from "../lib/image-lightbox";
+import type { LightboxItem } from "../lib/document-lightbox";
 
 // zoom 1 is the fitted size; each step scales by 1.25 up to 5x. Dividing and
 // multiplying by the same factor makes the zoom-out path retrace the zoom-in
@@ -60,20 +68,36 @@ function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
 }
 
-export interface ImageLightboxProps {
-  images: LightboxImage[];
+export interface DocumentLightboxProps {
+  items: LightboxItem[];
   index: number;
+  open: boolean;
   onIndexChange(index: number): void;
   onClose(): void;
+  onClosed(): void;
 }
 
-export function ImageLightbox({
-  images,
+export function DocumentLightbox({
+  items,
   index,
+  open,
   onIndexChange,
   onClose,
-}: ImageLightboxProps) {
-  const image = images[index];
+  onClosed,
+}: DocumentLightboxProps) {
+  const item = items[index];
+
+  // Base UI applies data-starting-style only when `open` flips false→true on
+  // an already-mounted Root — a Root that first-mounts with open=true renders
+  // its popup straight into the final state and skips the enter transition.
+  // The parent mounts this component and flips `open` in the same commit, so
+  // the Root is primed one commit behind: it mounts closed and the first
+  // effect flips the internal flag, making the popup enter through its
+  // starting style exactly like every later open of the same Root.
+  const [primed, setPrimed] = useState(false);
+  useEffect(() => {
+    setPrimed(true);
+  }, []);
 
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [rotation, setRotation] = useState<Rotation>(0);
@@ -150,13 +174,13 @@ export function ImageLightbox({
     [],
   );
 
-  // Every image starts from the fitted baseline: zoom, rotation, and pan are
-  // per-image viewing state, not document-wide state. The reset runs as a
-  // layout effect so it lands before the browser paints — the new image never
-  // shows a frame carrying the previous image's transform — and an in-flight
+  // Every item starts from the fitted baseline: zoom, rotation, and pan are
+  // per-item viewing state, not document-wide state. The reset runs as a
+  // layout effect so it lands before the browser paints — the new item never
+  // shows a frame carrying the previous item's transform — and an in-flight
   // drag dies with the switch (dragRef and the panning flag reset too) instead
-  // of leaking pointer moves into the new image's pan.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: index is the deliberate re-run trigger — switching images must reset the viewing state even though the body never reads it.
+  // of leaking pointer moves into the new item's pan.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: index is the deliberate re-run trigger — switching items must reset the viewing state even though the body never reads it.
   useLayoutEffect(() => {
     dragRef.current = null;
     setPanning(false);
@@ -220,7 +244,7 @@ export function ImageLightbox({
   }, [clampPan]);
 
   const hasPrevious = index > 0;
-  const hasNext = index < images.length - 1;
+  const hasNext = index < items.length - 1;
 
   const goToPrevious = useCallback(() => {
     if (index > 0) {
@@ -228,10 +252,10 @@ export function ImageLightbox({
     }
   }, [index, onIndexChange]);
   const goToNext = useCallback(() => {
-    if (index < images.length - 1) {
+    if (index < items.length - 1) {
       onIndexChange(index + 1);
     }
-  }, [index, images.length, onIndexChange]);
+  }, [index, items.length, onIndexChange]);
 
   const zoomIn = () => {
     setZoom((value) => Math.min(MAX_ZOOM, value * ZOOM_STEP));
@@ -303,7 +327,7 @@ export function ImageLightbox({
     }
   };
 
-  // Arrow keys switch images; panning stays a pointer gesture so one input
+  // Arrow keys switch items; panning stays a pointer gesture so one input
   // never carries two meanings. Escape is handled by the Dialog itself.
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key === "ArrowLeft") {
@@ -319,16 +343,25 @@ export function ImageLightbox({
     }
   };
 
-  if (image === undefined) {
+  if (item === undefined) {
     return null;
   }
 
   return (
+    // Every closing entrance — Dialog.Close, Escape, a blank-area press —
+    // funnels through onOpenChange(false); the popup then stays mounted for
+    // its exit transition, and onOpenChangeComplete(false) is the one signal
+    // the parent waits for before dropping the snapshot state.
     <Dialog.Root
-      open
-      onOpenChange={(open) => {
-        if (!open) {
+      open={open && primed}
+      onOpenChange={(next) => {
+        if (!next) {
           onClose();
+        }
+      }}
+      onOpenChangeComplete={(next) => {
+        if (!next) {
+          onClosed();
         }
       }}
     >
@@ -339,26 +372,29 @@ export function ImageLightbox({
           onPointerDown={handlePopupPointerDown}
           onKeyDown={handleKeyDown}
         >
-          <Dialog.Title className="sr-only">图片预览</Dialog.Title>
+          <Dialog.Title className="sr-only">视觉内容预览</Dialog.Title>
           <Dialog.Close
             className="image-lightbox-close"
-            aria-label="关闭图片预览"
+            aria-label="关闭视觉内容预览"
           >
             <X aria-hidden="true" />
           </Dialog.Close>
           {/* The stage is the one coordinate system for layout, rotation fit,
            * and pan clamping: the stylesheet reserves the toolbar zone here,
            * and the transform math measures this same box. It is
-           * pointer-transparent so blank-area presses still reach the popup. */}
+           * pointer-transparent so blank-area presses still reach the popup.
+           * The enter/exit fade and scale ride on the stage (never on the
+           * image below, whose transform carries live zoom/rotate/pan and
+           * must never transition). */}
           <div className="image-lightbox-stage" ref={handleStageRef}>
             <img
               ref={handleImageRef}
               className="image-lightbox-image"
-              src={image.src}
-              srcSet={image.srcSet ?? undefined}
-              sizes={image.sizes ?? undefined}
-              alt={image.alt}
-              title={image.title ?? undefined}
+              src={item.src}
+              srcSet={item.srcSet ?? undefined}
+              sizes={item.sizes ?? undefined}
+              alt={item.alt}
+              title={item.title ?? undefined}
               draggable={false}
               style={{
                 transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg) scale(${scale})`,
@@ -375,7 +411,7 @@ export function ImageLightbox({
             <button
               type="button"
               className="image-lightbox-control"
-              aria-label="上一张图片"
+              aria-label="上一项"
               disabled={!hasPrevious}
               onClick={goToPrevious}
             >
@@ -418,7 +454,7 @@ export function ImageLightbox({
             <button
               type="button"
               className="image-lightbox-control"
-              aria-label="下一张图片"
+              aria-label="下一项"
               disabled={!hasNext}
               onClick={goToNext}
             >
@@ -426,10 +462,10 @@ export function ImageLightbox({
             </button>
             <span className="image-lightbox-counter">
               <span aria-hidden="true">
-                {index + 1} / {images.length}
+                {index + 1} / {items.length}
               </span>
               <span className="sr-only">
-                第 {index + 1} 张，共 {images.length} 张
+                第 {index + 1} 项，共 {items.length} 项
               </span>
             </span>
           </div>

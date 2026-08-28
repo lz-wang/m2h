@@ -939,6 +939,12 @@ body,
  * Full-viewport lightbox. Portaled to <body>, so these selectors live outside
  * .markdown-body. The near-black scrim (not pure #000) matches the GitHub/
  * shadcn neutral palette; the popup covers the viewport.
+ *
+ * Enter/exit motion: the backdrop fades on its own while the stage does a
+ * subtle scale+fade, both keyed off Base UI's data-starting-style /
+ * data-ending-style lifecycle — never off the image itself, whose transform
+ * carries live zoom/rotate/pan and must never transition (a transition there
+ * would lag pointer pans and blur the zoom/pan clamp).
  */
 .image-lightbox-backdrop {
   position: fixed;
@@ -946,6 +952,14 @@ body,
   z-index: 100;
 
   background: rgb(0 0 0 / 86%);
+
+  opacity: 1;
+  transition: opacity 160ms ease;
+}
+
+.image-lightbox-backdrop[data-starting-style],
+.image-lightbox-backdrop[data-ending-style] {
+  opacity: 0;
 }
 
 .image-lightbox {
@@ -965,7 +979,8 @@ body,
  * popup's explicit layering contract: the zoom transform lets the image
  * paint far past its layout box (and form its own stacking context), so the
  * controls below carry a higher z-index instead of relying on the close
- * button's DOM position, which precedes the stage. */
+ * button's DOM position, which precedes the stage. The enter/exit motion
+ * rides here (96% + transparent → 100% + opaque), not on the image. */
 .image-lightbox-stage {
   position: absolute;
   inset: 1rem 1rem 6rem;
@@ -976,6 +991,19 @@ body,
   justify-content: center;
 
   pointer-events: none;
+
+  opacity: 1;
+  transform: scale(1);
+
+  transition:
+    opacity 180ms ease,
+    transform 180ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+.image-lightbox[data-starting-style] .image-lightbox-stage,
+.image-lightbox[data-ending-style] .image-lightbox-stage {
+  opacity: 0;
+  transform: scale(0.96);
 }
 
 /* The fitted baseline the zoom transform scales from: the image contains into
@@ -1454,10 +1482,13 @@ body,
   /* The layout movers — sidebar gap/container, TOC slot/rail, floating
    * navigation — are restated with `none` so the panels snap between their
    * states. These rules are unlayered, so they outrank the sidebar's layered
-   * Tailwind transition utilities without !important. */
+   * Tailwind transition utilities without !important. The lightbox layers
+   * join them: the dialog then appears and disappears without motion. */
   .reader-toc-slot,
   .reader-toc,
-  .reader-navigation {
+  .reader-navigation,
+  .image-lightbox-backdrop,
+  .image-lightbox-stage {
     transition: none;
   }
 

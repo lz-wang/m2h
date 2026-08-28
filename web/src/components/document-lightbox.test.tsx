@@ -1,17 +1,19 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { LightboxImage } from "../lib/image-lightbox";
-import { ImageLightbox } from "./image-lightbox";
+import type { LightboxItem } from "../lib/document-lightbox";
+import { DocumentLightbox } from "./document-lightbox";
 
 // jsdom runs no layout: the ResizeObserver stub never reports sizes, so the
 // component's geometry stays unknown and the transform math falls back to its
 // neutral baseline (fitScale 1, free pan). The zoom sequence below is exact in
 // binary floating point (powers of 5/4), so the transform-string assertions
 // are stable.
-function makeImages(count: number): LightboxImage[] {
+function makeItems(count: number): LightboxItem[] {
   return Array.from({ length: count }, (_, index) => ({
+    kind: "image" as const,
     src: `/img-${index}.png`,
     srcSet: null,
     sizes: null,
@@ -21,24 +23,55 @@ function makeImages(count: number): LightboxImage[] {
 }
 
 function renderLightbox(
-  images: LightboxImage[],
+  items: LightboxItem[],
   index: number,
   handlers?: { onIndexChange?: (index: number) => void; onClose?: () => void },
 ) {
   const onIndexChange = handlers?.onIndexChange ?? vi.fn();
   const onClose = handlers?.onClose ?? vi.fn();
   render(
-    <ImageLightbox
-      images={images}
+    <DocumentLightbox
+      items={items}
       index={index}
+      open
       onIndexChange={onIndexChange}
       onClose={onClose}
+      onClosed={vi.fn()}
     />,
   );
   return { onIndexChange, onClose };
 }
 
-function currentImage(): HTMLImageElement {
+// The parent's actual shape: closing flips `open`, and the snapshot state is
+// dropped only when the dialog reports its exit transition finished.
+function ControlledLightbox({
+  items,
+  index,
+  onClose,
+  onClosed,
+}: {
+  items: LightboxItem[];
+  index: number;
+  onClose(): void;
+  onClosed(): void;
+}) {
+  const [open, setOpen] = useState(true);
+  return (
+    <DocumentLightbox
+      items={items}
+      index={index}
+      open={open}
+      onIndexChange={() => {}}
+      onClose={() => {
+        onClose();
+        setOpen(false);
+      }}
+      onClosed={onClosed}
+    />
+  );
+}
+
+function currentItem(): HTMLImageElement {
   const dialog = screen.getByRole("dialog");
   const image = dialog.querySelector<HTMLImageElement>("img");
   if (image === null) {
@@ -47,32 +80,32 @@ function currentImage(): HTMLImageElement {
   return image;
 }
 
-describe("ImageLightbox", () => {
-  it("shows the image at the given index", () => {
-    const images = makeImages(3);
-    renderLightbox(images, 1);
+describe("DocumentLightbox", () => {
+  it("shows the item at the given index", () => {
+    const items = makeItems(3);
+    renderLightbox(items, 1);
 
-    expect(currentImage().getAttribute("src")).toBe("/img-1.png");
+    expect(currentItem().getAttribute("src")).toBe("/img-1.png");
     expect(screen.getByText("2 / 3")).toBeTruthy();
     // An accessible name for the dialog and the position for screen readers.
-    expect(screen.getByRole("dialog", { name: "图片预览" })).toBeTruthy();
-    expect(screen.getByText("第 2 张，共 3 张")).toBeTruthy();
+    expect(screen.getByRole("dialog", { name: "视觉内容预览" })).toBeTruthy();
+    expect(screen.getByText("第 2 项，共 3 项")).toBeTruthy();
   });
 
-  it("navigates to the previous and next image through the toolbar", async () => {
-    const images = makeImages(3);
-    const { onIndexChange } = renderLightbox(images, 1);
+  it("navigates to the previous and next item through the toolbar", async () => {
+    const items = makeItems(3);
+    const { onIndexChange } = renderLightbox(items, 1);
 
-    await userEvent.click(screen.getByRole("button", { name: "上一张图片" }));
+    await userEvent.click(screen.getByRole("button", { name: "上一项" }));
     expect(onIndexChange).toHaveBeenCalledWith(0);
 
-    await userEvent.click(screen.getByRole("button", { name: "下一张图片" }));
+    await userEvent.click(screen.getByRole("button", { name: "下一项" }));
     expect(onIndexChange).toHaveBeenCalledWith(2);
   });
 
   it("navigates with the arrow keys", () => {
-    const images = makeImages(3);
-    const { onIndexChange } = renderLightbox(images, 1);
+    const items = makeItems(3);
+    const { onIndexChange } = renderLightbox(items, 1);
 
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "ArrowLeft" });
     expect(onIndexChange).toHaveBeenCalledWith(0);
@@ -81,42 +114,42 @@ describe("ImageLightbox", () => {
     expect(onIndexChange).toHaveBeenCalledWith(2);
   });
 
-  it("disables previous on the first image and next on the last", () => {
-    const images = makeImages(3);
-    renderLightbox(images, 0);
+  it("disables previous on the first item and next on the last", () => {
+    const items = makeItems(3);
+    renderLightbox(items, 0);
     expect(
-      (screen.getByRole("button", { name: "上一张图片" }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: "上一项" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
     expect(
-      (screen.getByRole("button", { name: "下一张图片" }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: "下一项" }) as HTMLButtonElement)
         .disabled,
     ).toBe(false);
 
-    renderLightbox(images, 2);
+    renderLightbox(items, 2);
     expect(
-      (screen.getByRole("button", { name: "上一张图片" }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: "上一项" }) as HTMLButtonElement)
         .disabled,
     ).toBe(false);
     expect(
-      (screen.getByRole("button", { name: "下一张图片" }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: "下一项" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
   });
 
   it("zooms in to the cap and back out to the floor", async () => {
-    renderLightbox(makeImages(1), 0);
+    renderLightbox(makeItems(1), 0);
 
     const zoomIn = screen.getByRole("button", { name: "放大图片" });
     await userEvent.click(zoomIn);
-    expect(currentImage().style.transform).toContain("scale(1.25)");
+    expect(currentItem().style.transform).toContain("scale(1.25)");
     await userEvent.click(zoomIn);
-    expect(currentImage().style.transform).toContain("scale(1.5625)");
+    expect(currentItem().style.transform).toContain("scale(1.5625)");
 
     for (let click = 0; click < 12; click += 1) {
       await userEvent.click(zoomIn);
     }
-    const peaked = currentImage().style.transform;
+    const peaked = currentItem().style.transform;
     expect(peaked).toContain("scale(5)");
     expect(
       (screen.getByRole("button", { name: "放大图片" }) as HTMLButtonElement)
@@ -127,7 +160,7 @@ describe("ImageLightbox", () => {
     for (let click = 0; click < 12; click += 1) {
       await userEvent.click(zoomOut);
     }
-    expect(currentImage().style.transform).toContain("scale(1)");
+    expect(currentItem().style.transform).toContain("scale(1)");
     expect(
       (screen.getByRole("button", { name: "缩小图片" }) as HTMLButtonElement)
         .disabled,
@@ -135,29 +168,29 @@ describe("ImageLightbox", () => {
   });
 
   it("rotates in quarter turns in both directions", async () => {
-    renderLightbox(makeImages(1), 0);
+    renderLightbox(makeItems(1), 0);
 
     const clockwise = screen.getByRole("button", { name: "顺时针旋转" });
     await userEvent.click(clockwise);
-    expect(currentImage().style.transform).toContain("rotate(90deg)");
+    expect(currentItem().style.transform).toContain("rotate(90deg)");
     await userEvent.click(clockwise);
-    expect(currentImage().style.transform).toContain("rotate(180deg)");
+    expect(currentItem().style.transform).toContain("rotate(180deg)");
     await userEvent.click(clockwise);
-    expect(currentImage().style.transform).toContain("rotate(270deg)");
+    expect(currentItem().style.transform).toContain("rotate(270deg)");
     await userEvent.click(clockwise);
-    expect(currentImage().style.transform).toContain("rotate(0deg)");
+    expect(currentItem().style.transform).toContain("rotate(0deg)");
 
     const counterClockwise = screen.getByRole("button", { name: "逆时针旋转" });
     await userEvent.click(counterClockwise);
-    expect(currentImage().style.transform).toContain("rotate(270deg)");
+    expect(currentItem().style.transform).toContain("rotate(270deg)");
     await userEvent.click(counterClockwise);
-    expect(currentImage().style.transform).toContain("rotate(180deg)");
+    expect(currentItem().style.transform).toContain("rotate(180deg)");
   });
 
   it("pans the image with pointer drags", () => {
-    renderLightbox(makeImages(1), 0);
+    renderLightbox(makeItems(1), 0);
 
-    const image = currentImage();
+    const image = currentItem();
     fireEvent.pointerDown(image, { pointerId: 1, clientX: 100, clientY: 80 });
     fireEvent.pointerMove(image, { pointerId: 1, clientX: 200, clientY: 130 });
     fireEvent.pointerUp(image, { pointerId: 1, clientX: 200, clientY: 130 });
@@ -167,9 +200,9 @@ describe("ImageLightbox", () => {
   });
 
   it("ignores pointer moves from other pointers during a drag", () => {
-    renderLightbox(makeImages(1), 0);
+    renderLightbox(makeItems(1), 0);
 
-    const image = currentImage();
+    const image = currentItem();
     fireEvent.pointerDown(image, { pointerId: 1, clientX: 0, clientY: 0 });
     fireEvent.pointerMove(image, { pointerId: 2, clientX: 500, clientY: 500 });
     fireEvent.pointerUp(image, { pointerId: 1, clientX: 0, clientY: 0 });
@@ -177,25 +210,27 @@ describe("ImageLightbox", () => {
     expect(image.style.transform).toContain("translate3d(0px, 0px, 0)");
   });
 
-  it("resets zoom, rotation, and pan when the image changes", async () => {
-    const images = makeImages(2);
+  it("resets zoom, rotation, and pan when the item changes", async () => {
+    const items = makeItems(2);
     const onIndexChange = vi.fn();
     const onClose = vi.fn();
     const view = render(
-      <ImageLightbox
-        images={images}
+      <DocumentLightbox
+        items={items}
         index={0}
+        open
         onIndexChange={onIndexChange}
         onClose={onClose}
+        onClosed={vi.fn()}
       />,
     );
 
-    // Build up non-default viewing state on the first image, ending mid-drag.
+    // Build up non-default viewing state on the first item, ending mid-drag.
     const zoomIn = screen.getByRole("button", { name: "放大图片" });
     await userEvent.click(zoomIn);
     await userEvent.click(zoomIn);
     await userEvent.click(screen.getByRole("button", { name: "顺时针旋转" }));
-    const image = currentImage();
+    const image = currentItem();
     fireEvent.pointerDown(image, { pointerId: 1, clientX: 0, clientY: 0 });
     fireEvent.pointerMove(image, { pointerId: 1, clientX: 100, clientY: 50 });
     expect(image.style.transform).toContain("translate3d(100px, 50px, 0)");
@@ -206,61 +241,87 @@ describe("ImageLightbox", () => {
     // The parent feeds the switched index back as a rerender, exactly like
     // App.tsx does — the reset must land in that same commit, before paint.
     view.rerender(
-      <ImageLightbox
-        images={images}
+      <DocumentLightbox
+        items={items}
         index={1}
+        open
         onIndexChange={onIndexChange}
         onClose={onClose}
+        onClosed={vi.fn()}
       />,
     );
 
-    const nextImage = currentImage();
-    expect(nextImage.getAttribute("src")).toBe("/img-1.png");
-    expect(nextImage.style.transform).toContain("translate3d(0px, 0px, 0)");
-    expect(nextImage.style.transform).toContain("rotate(0deg)");
-    expect(nextImage.style.transform).toContain("scale(1)");
+    const nextItem = currentItem();
+    expect(nextItem.getAttribute("src")).toBe("/img-1.png");
+    expect(nextItem.style.transform).toContain("translate3d(0px, 0px, 0)");
+    expect(nextItem.style.transform).toContain("rotate(0deg)");
+    expect(nextItem.style.transform).toContain("scale(1)");
     // The in-flight drag died with the switch: no panning flag, and later
     // moves from the same pointer land nowhere.
-    expect(nextImage.dataset.panning).toBeUndefined();
-    fireEvent.pointerMove(nextImage, {
+    expect(nextItem.dataset.panning).toBeUndefined();
+    fireEvent.pointerMove(nextItem, {
       pointerId: 1,
       clientX: 500,
       clientY: 500,
     });
-    expect(nextImage.style.transform).toContain("translate3d(0px, 0px, 0)");
+    expect(nextItem.style.transform).toContain("translate3d(0px, 0px, 0)");
   });
 
   it("closes through the close button, blank area, and Escape", async () => {
     // Close button.
-    const first = renderLightbox(makeImages(2), 0);
-    await userEvent.click(screen.getByRole("button", { name: "关闭图片预览" }));
+    const first = renderLightbox(makeItems(2), 0);
+    await userEvent.click(
+      screen.getByRole("button", { name: "关闭视觉内容预览" }),
+    );
     expect(first.onClose).toHaveBeenCalledTimes(1);
 
     // Blank popup area (the press target is the popup itself, not the image,
     // toolbar, or close button).
-    const second = renderLightbox(makeImages(2), 0);
+    const second = renderLightbox(makeItems(2), 0);
     fireEvent.pointerDown(screen.getByRole("dialog"));
     expect(second.onClose).toHaveBeenCalledTimes(1);
 
     // Escape goes through the Dialog's own close handling (floating-ui listens
     // with focus inside the popup, so a toolbar button is focused first).
-    const third = renderLightbox(makeImages(2), 0);
+    const third = renderLightbox(makeItems(2), 0);
     await userEvent.click(screen.getByRole("button", { name: "放大图片" }));
     await userEvent.keyboard("{Escape}");
     expect(third.onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("does not close on a press over the image or the toolbar", () => {
-    const { onClose } = renderLightbox(makeImages(2), 0);
+  it("reports the finished exit transition so the parent can drop the state", async () => {
+    const onClose = vi.fn();
+    const onClosed = vi.fn();
+    render(
+      <ControlledLightbox
+        items={makeItems(2)}
+        index={0}
+        onClose={onClose}
+        onClosed={onClosed}
+      />,
+    );
 
-    fireEvent.pointerDown(currentImage());
+    await userEvent.click(
+      screen.getByRole("button", { name: "关闭视觉内容预览" }),
+    );
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    // jsdom computes no transitions, so the completion fires promptly; in a
+    // real browser this is what waits out the 160/180ms exit animation.
+    await waitFor(() => expect(onClosed).toHaveBeenCalledTimes(1));
+  });
+
+  it("does not close on a press over the image or the toolbar", () => {
+    const { onClose } = renderLightbox(makeItems(2), 0);
+
+    fireEvent.pointerDown(currentItem());
     fireEvent.pointerDown(screen.getByRole("button", { name: "放大图片" }));
 
     expect(onClose).not.toHaveBeenCalled();
   });
 
   it("renders nothing for an out-of-range index", () => {
-    renderLightbox(makeImages(1), 5);
+    renderLightbox(makeItems(1), 5);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

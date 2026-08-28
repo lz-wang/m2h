@@ -1172,7 +1172,7 @@ describe("image lightbox triggers", () => {
       return Tablesort;
     });
     const { renderRichContent } = await import("./render-rich-content");
-    const { collectLightboxState } = await import("./image-lightbox");
+    const { collectLightboxState } = await import("./document-lightbox");
     const root = document.createElement("div");
     root.innerHTML = `<table><thead><tr><th>Name</th><th>Image</th></tr></thead>
       <tbody>
@@ -1204,7 +1204,7 @@ describe("image lightbox triggers", () => {
         : collectLightboxState(root, selected);
     expect(state?.index).toBe(0);
     expect(
-      (state?.images ?? []).map((image) => new URL(image.src).pathname),
+      (state?.items ?? []).map((item) => new URL(item.src).pathname),
     ).toEqual(["/b.png", "/a.png"]);
   });
 });

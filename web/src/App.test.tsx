@@ -2056,7 +2056,7 @@ describe("image lightbox integration", () => {
     // The lightbox carries the clicked image's snapshot (document-order index
     // 1) and the whole document's image list. The snapshot src is the browser-
     // resolved URL (currentSrc), not the raw attribute.
-    const dialog = await screen.findByRole("dialog", { name: "图片预览" });
+    const dialog = await screen.findByRole("dialog", { name: "视觉内容预览" });
     const image = dialog.querySelector("img");
     expect(image?.getAttribute("src")).toContain("/logo.png");
     expect(screen.getByText("2 / 2")).toBeTruthy();
@@ -2115,7 +2115,7 @@ describe("image lightbox integration", () => {
       )[0] as HTMLButtonElement,
     );
 
-    const dialog = await screen.findByRole("dialog", { name: "图片预览" });
+    const dialog = await screen.findByRole("dialog", { name: "视觉内容预览" });
     expect(dialog.querySelector("img")?.getAttribute("src")).toContain(
       "/banner.png",
     );
@@ -2138,7 +2138,7 @@ describe("image lightbox integration", () => {
         await screen.findAllByRole("button", { name: "查看大图" })
       )[0] as HTMLButtonElement,
     );
-    await screen.findByRole("dialog", { name: "图片预览" });
+    await screen.findByRole("dialog", { name: "视觉内容预览" });
 
     // Switching the resolved theme re-renders Mermaid only; the article — and
     // the lightbox riding beside it — must survive.
@@ -2147,7 +2147,7 @@ describe("image lightbox integration", () => {
     });
     expect(document.documentElement.classList).toContain("dark");
     expect(
-      await screen.findByRole("dialog", { name: "图片预览" }),
+      await screen.findByRole("dialog", { name: "视觉内容预览" }),
     ).toBeTruthy();
     // The body was not re-enhanced either: still exactly one trigger. (The
     // modal dialog inerts the article, so this is a DOM query, not a role
@@ -2185,7 +2185,7 @@ describe("image lightbox integration", () => {
       )[0] as HTMLButtonElement,
     );
 
-    const dialog = await screen.findByRole("dialog", { name: "图片预览" });
+    const dialog = await screen.findByRole("dialog", { name: "视觉内容预览" });
     expect(dialog.querySelector("img")?.getAttribute("src")).toContain(
       "/b.png",
     );

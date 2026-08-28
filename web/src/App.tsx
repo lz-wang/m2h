@@ -36,9 +36,9 @@ import {
 } from "react";
 
 import type { FrontMatter, PreviewAPI, TocItem } from "./api";
+import { DocumentLightbox } from "./components/document-lightbox";
 import { DocumentTree } from "./components/document-tree";
 import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
-import { ImageLightbox } from "./components/image-lightbox";
 import { ReaderNavigation } from "./components/reader-navigation";
 import {
   TableOfContentsPanel,
@@ -68,7 +68,10 @@ import {
   TooltipTrigger,
 } from "./components/ui/tooltip";
 import { copyText } from "./lib/clipboard";
-import { collectLightboxState, type LightboxState } from "./lib/image-lightbox";
+import {
+  collectLightboxState,
+  type LightboxState,
+} from "./lib/document-lightbox";
 import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 import {
@@ -1028,7 +1031,13 @@ function PreviewContent({
 }: PreviewContentProps) {
   const contentRef = useRef<HTMLElement>(null);
   const renderGenerationRef = useRef(0);
+  // The lightbox snapshot and its open flag are deliberately separate states:
+  // closing only flips the flag, the popup stays mounted through its exit
+  // transition, and the snapshot is dropped once the dialog reports the
+  // transition finished. A whole-state drop (below, on a body swap) skips the
+  // exit animation on purpose — the body the snapshots belong to is gone.
   const [lightbox, setLightbox] = useState<LightboxState | null>(null);
+  const [lightboxOpen, setLightboxOpen] = useState(false);
   // The resolved theme is read through a ref so the body render effect can
   // depend on [html, phase] only and a theme switch never rebuilds the
   // article. renderedModeRef records which theme the current body — and its
@@ -1065,8 +1074,10 @@ function PreviewContent({
     if (root === null || html === null) {
       return;
     }
-    // The body below is wholesale replaced, so any open Lightbox is dropped:
-    // its image snapshots belong to the outgoing document.
+    // The body below is wholesale replaced, so any open Lightbox is dropped
+    // immediately (no exit animation): its snapshots belong to the outgoing
+    // document.
+    setLightboxOpen(false);
     setLightbox(null);
     const generation = ++renderGenerationRef.current;
     const mode = resolvedModeRef.current;
@@ -1143,6 +1154,7 @@ function PreviewContent({
         const state = collectLightboxState(root, selectedItem);
         if (state !== null) {
           setLightbox(state);
+          setLightboxOpen(true);
         }
       }
       return;
@@ -1234,15 +1246,17 @@ function PreviewContent({
         />
       )}
       {lightbox !== null ? (
-        <ImageLightbox
-          images={lightbox.images}
+        <DocumentLightbox
+          items={lightbox.items}
           index={lightbox.index}
+          open={lightboxOpen}
           onIndexChange={(index) =>
             setLightbox((previous) =>
               previous === null ? previous : { ...previous, index },
             )
           }
-          onClose={() => setLightbox(null)}
+          onClose={() => setLightboxOpen(false)}
+          onClosed={() => setLightbox(null)}
         />
       ) : null}
     </>

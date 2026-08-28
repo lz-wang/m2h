@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { collectLightboxState, type LightboxImage } from "./image-lightbox";
+import { collectLightboxState, type LightboxItem } from "./document-lightbox";
 
 // Two enhanced images plus one plain image, in document order.
 function enhancedRoot(): HTMLElement {
@@ -32,9 +32,9 @@ function mixedRoot(): HTMLElement {
 
 // The snapshot src is the browser-resolved URL (currentSrc || src), so tests
 // compare paths rather than raw attribute strings.
-function srcPaths(images: LightboxImage[]): string[] {
-  return images.map((image) =>
-    image.src.startsWith("data:") ? "mermaid" : new URL(image.src).pathname,
+function srcPaths(items: LightboxItem[]): string[] {
+  return items.map((item) =>
+    item.src.startsWith("data:") ? "mermaid" : new URL(item.src).pathname,
   );
 }
 
@@ -47,13 +47,14 @@ describe("collectLightboxState", () => {
 
     expect(state).not.toBeNull();
     expect(state?.index).toBe(1);
-    expect(state?.images).toHaveLength(2);
-    expect(srcPaths(state?.images ?? [])).toEqual(["/one.png", "/two.png"]);
-    expect(state?.images[1]?.src).toContain("/two.png");
-    expect(state?.images[1]?.srcSet).toBeNull();
-    expect(state?.images[1]?.sizes).toBeNull();
-    expect(state?.images[1]?.alt).toBe("Two");
-    expect(state?.images[1]?.title).toBeNull();
+    expect(state?.items).toHaveLength(2);
+    expect(srcPaths(state?.items ?? [])).toEqual(["/one.png", "/two.png"]);
+    expect(state?.items[1]?.kind).toBe("image");
+    expect(state?.items[1]?.src).toContain("/two.png");
+    expect(state?.items[1]?.srcSet).toBeNull();
+    expect(state?.items[1]?.sizes).toBeNull();
+    expect(state?.items[1]?.alt).toBe("Two");
+    expect(state?.items[1]?.title).toBeNull();
   });
 
   it("interleaves images and mermaid diagrams in document order", () => {
@@ -67,15 +68,21 @@ describe("collectLightboxState", () => {
 
     expect(state).not.toBeNull();
     expect(state?.index).toBe(1);
-    expect(srcPaths(state?.images ?? [])).toEqual([
+    expect(srcPaths(state?.items ?? [])).toEqual([
       "/a.png",
       "mermaid",
       "/c.png",
     ]);
+    // The kinds follow the sources: bitmap, diagram, bitmap.
+    expect(state?.items.map((item) => item.kind)).toEqual([
+      "image",
+      "mermaid",
+      "image",
+    ]);
     // The diagram snapshot is a serialized SVG data URL with the viewBox's
     // pixel dimensions pinned onto the clone — percentages have no intrinsic
     // size once the SVG stands alone as an <img>.
-    const snapshot = state?.images[1];
+    const snapshot = state?.items[1];
     expect(snapshot?.src).toMatch(/^data:image\/svg\+xml;charset=utf-8,/);
     expect(snapshot?.src).toContain(encodeURIComponent('width="800"'));
     expect(snapshot?.src).toContain(encodeURIComponent('height="400"'));
@@ -96,8 +103,8 @@ describe("collectLightboxState", () => {
     const state = collectLightboxState(root, moved);
 
     expect(state?.index).toBe(0);
-    expect(state?.images[0]?.src).toContain("/two.png");
-    expect(state?.images[1]?.src).toContain("/one.png");
+    expect(state?.items[0]?.src).toContain("/two.png");
+    expect(state?.items[1]?.src).toContain("/one.png");
   });
 
   it("skips mermaid containers whose diagram never rendered", () => {
@@ -109,13 +116,13 @@ describe("collectLightboxState", () => {
       </div>
       <p><img src="/c.png" alt="C" data-m2h-lightbox-item="true"></p>
     `;
-    const selected = root.querySelector<HTMLElement>("img");
+    const selected = root.querySelector("img");
 
-    // The failed diagram is skipped by the collection, so the images still
+    // The failed diagram is skipped by the collection, so the items still
     // number 1–2 with no hole.
     const state =
       selected === null ? null : collectLightboxState(root, selected);
-    expect(srcPaths(state?.images ?? [])).toEqual(["/a.png", "/c.png"]);
+    expect(srcPaths(state?.items ?? [])).toEqual(["/a.png", "/c.png"]);
     expect(state?.index).toBe(0);
   });
 

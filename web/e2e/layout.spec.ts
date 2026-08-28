@@ -300,7 +300,9 @@ test("keeps the floating navigation beside the reader canvas, clear of the TOC r
         if (nav === null) {
           throw new Error("reader navigation was not rendered");
         }
-        return Math.round(window.innerWidth - nav.getBoundingClientRect().right);
+        return Math.round(
+          window.innerWidth - nav.getBoundingClientRect().right,
+        );
       }),
     )
     .toBe(24);

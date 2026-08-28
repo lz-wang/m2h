@@ -112,13 +112,13 @@ test("keeps scrollY and hash invariant across a full lightbox session", async ({
   await expect(displayed).toHaveAttribute("src", /landscape\.png$/);
 
   // Navigate, rotate, zoom — the whole toolbar round.
-  await page.getByRole("button", { name: "下一张图片" }).click();
+  await page.getByRole("button", { name: "下一项" }).click();
   await expect(counter).toHaveText("2 / 3");
   await expect(displayed).toHaveAttribute("src", /portrait\.png$/);
   // The portrait fixture (480×1200) fits the stage height-first.
   const portraitBox = await waitForFittedImage(page, 700);
   expect(portraitBox.height).toBeGreaterThan(portraitBox.width);
-  await page.getByRole("button", { name: "下一张图片" }).click();
+  await page.getByRole("button", { name: "下一项" }).click();
   await expect(counter).toHaveText("3 / 3");
   await expect(displayed).toHaveAttribute("src", /square\.png$/);
   await page.getByRole("button", { name: "顺时针旋转" }).click();
@@ -139,7 +139,7 @@ test("keeps scrollY and hash invariant across a full lightbox session", async ({
   expect(transform).not.toContain("scale(1)");
 
   // Close through the X button; the lightbox is gone and nothing moved.
-  await page.getByRole("button", { name: "关闭图片预览" }).click();
+  await page.getByRole("button", { name: "关闭视觉内容预览" }).click();
   await expect(page.locator(".image-lightbox")).toBeHidden();
   await expectInvariantsUnchanged(page, before);
 });
@@ -149,7 +149,7 @@ test("closes through Escape without moving the document", async ({ page }) => {
   const before = await captureInvariants(page);
 
   await openLightbox(page, 0);
-  await page.getByRole("button", { name: "下一张图片" }).click();
+  await page.getByRole("button", { name: "下一项" }).click();
   await expect(
     page.locator('.image-lightbox-counter > span[aria-hidden="true"]'),
   ).toHaveText("2 / 3");
@@ -166,7 +166,7 @@ test("closes through a blank-area press without moving the document", async ({
   const before = await captureInvariants(page);
 
   await openLightbox(page, 0);
-  await page.getByRole("button", { name: "下一张图片" }).click();
+  await page.getByRole("button", { name: "下一项" }).click();
 
   // A press on the overlay's top-left corner: empty scrim, away from both the
   // centered image and the top-right close button.
@@ -196,10 +196,10 @@ test("disables previous on the first image and next on the last", async ({
   await captureInvariants(page);
 
   await openLightbox(page, 0);
-  const previous = page.getByRole("button", { name: "上一张图片" });
+  const previous = page.getByRole("button", { name: "上一项" });
   await expect(previous).toBeDisabled();
 
-  const next = page.getByRole("button", { name: "下一张图片" });
+  const next = page.getByRole("button", { name: "下一项" });
   await next.click();
   await next.click();
   await expect(
@@ -252,7 +252,7 @@ test("keeps the close control above a maximally zoomed image", async ({
     await zoomIn.click();
   }
 
-  const close = page.getByRole("button", { name: "关闭图片预览" });
+  const close = page.getByRole("button", { name: "关闭视觉内容预览" });
   const box = await close.boundingBox();
   if (box === null) {
     throw new Error("close button was not rendered");
@@ -404,15 +404,15 @@ test("opens a mermaid diagram inside the shared image sequence", async ({
 
   // Both neighbors are real images; the sequence is shared, not split into
   // per-kind galleries.
-  await page.getByRole("button", { name: "下一张图片" }).click();
+  await page.getByRole("button", { name: "下一项" }).click();
   await expect(counter).toHaveText("3 / 3");
   await expect(displayed).toHaveAttribute("src", /square\.png$/);
-  await page.getByRole("button", { name: "上一张图片" }).click();
-  await page.getByRole("button", { name: "上一张图片" }).click();
+  await page.getByRole("button", { name: "上一项" }).click();
+  await page.getByRole("button", { name: "上一项" }).click();
   await expect(counter).toHaveText("1 / 3");
   await expect(displayed).toHaveAttribute("src", /landscape\.png$/);
 
-  await page.getByRole("button", { name: "关闭图片预览" }).click();
+  await page.getByRole("button", { name: "关闭视觉内容预览" }).click();
   await expect(page.locator(".image-lightbox")).toBeHidden();
   await expectInvariantsUnchanged(page, before);
 });
@@ -473,7 +473,7 @@ test("rotates, zooms, pans and closes a mermaid diagram without moving the docum
   expect(pan.y).toBeGreaterThanOrEqual(-bound);
 
   // Still closable at max zoom: the close button stays on top and works.
-  const close = page.getByRole("button", { name: "关闭图片预览" });
+  const close = page.getByRole("button", { name: "关闭视觉内容预览" });
   const closeBox = await close.boundingBox();
   if (closeBox === null) {
     throw new Error("close button was not rendered");
@@ -552,4 +552,185 @@ test("hides the magnifier of a diagram that never rendered", async ({
   await expect(valid.locator('[data-m2h-lightbox-item="true"]')).toHaveCount(1);
   await expect(valid.locator(".m2h-lightbox-trigger")).toBeVisible();
   await expect(valid.locator(".mermaid svg")).toHaveCount(1);
+});
+
+// --- Enter / exit transitions ------------------------------------------------
+//
+// The popup's lifecycle is split: closing only starts the exit transition
+// (data-ending-style) and the snapshot state — with the popup — is dropped
+// once Base UI reports the animation finished. These tests sample every
+// animation frame from before the action, so a regression that unmounts the
+// popup immediately (or never enters the transition states) fails here.
+
+// Sample each frame until the element exists without data-starting-style;
+// resolves whether the starting state was ever observed.
+function observeEnterStyle(page: Page, selector: string) {
+  return page.evaluate(
+    ({ selector }) =>
+      new Promise<boolean>((resolve) => {
+        let seen = false;
+        let frames = 0;
+        const tick = () => {
+          const element = document.querySelector(selector);
+          if (element !== null) {
+            if (element.hasAttribute("data-starting-style")) {
+              seen = true;
+            } else {
+              resolve(seen);
+              return;
+            }
+          }
+          frames += 1;
+          if (frames > 300) {
+            resolve(seen);
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+    { selector },
+  );
+}
+
+// Sample each frame until the popup is detached; resolves whether the ending
+// state was observed while it was still mounted.
+function observeExitStyle(page: Page) {
+  return page.evaluate(
+    () =>
+      new Promise<boolean>((resolve) => {
+        let seen = false;
+        let frames = 0;
+        const tick = () => {
+          const popup = document.querySelector(".image-lightbox");
+          if (popup === null) {
+            resolve(seen);
+            return;
+          }
+          if (popup.hasAttribute("data-ending-style")) {
+            seen = true;
+          }
+          frames += 1;
+          if (frames > 300) {
+            resolve(seen);
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }),
+  );
+}
+
+test("plays the enter and exit transitions around a plain image", async ({
+  page,
+}) => {
+  await openDocument(page);
+  const before = await captureInvariants(page);
+
+  await page.locator(".m2h-image-frame").first().hover();
+  const enterStage = observeEnterStyle(page, ".image-lightbox");
+  const enterBackdrop = observeEnterStyle(page, ".image-lightbox-backdrop");
+  await page.locator(".m2h-lightbox-trigger").first().click();
+
+  // Both presentation layers really entered through their starting states…
+  expect(await enterStage).toBe(true);
+  expect(await enterBackdrop).toBe(true);
+  // …and settle fully opaque while the popup stays up.
+  const popup = page.locator(".image-lightbox");
+  await expect(popup).toBeVisible();
+  await expect(popup.locator(".image-lightbox-stage")).toHaveCSS(
+    "opacity",
+    "1",
+  );
+  await expect(page.locator(".image-lightbox-backdrop")).toHaveCSS(
+    "opacity",
+    "1",
+  );
+
+  // Closing runs the exit transition before the popup leaves the DOM.
+  const exitSeen = observeExitStyle(page);
+  await page.getByRole("button", { name: "关闭视觉内容预览" }).click();
+  expect(await exitSeen).toBe(true);
+  await expect(page.locator(".image-lightbox")).toHaveCount(0);
+  await expectInvariantsUnchanged(page, before);
+});
+
+test("plays the enter and exit transitions around a mermaid diagram", async ({
+  page,
+}) => {
+  await openMermaidDocument(page);
+  const before = await captureMermaidInvariants(page);
+
+  await page.locator(".m2h-mermaid-frame").hover();
+  const enterStage = observeEnterStyle(page, ".image-lightbox");
+  const enterBackdrop = observeEnterStyle(page, ".image-lightbox-backdrop");
+  await page.locator(".m2h-mermaid-frame .m2h-lightbox-trigger").click();
+
+  expect(await enterStage).toBe(true);
+  expect(await enterBackdrop).toBe(true);
+  await expect(page.locator(".image-lightbox-image")).toHaveAttribute(
+    "src",
+    /^data:image\/svg\+xml/,
+  );
+
+  const exitSeen = observeExitStyle(page);
+  await page.keyboard.press("Escape");
+  expect(await exitSeen).toBe(true);
+  await expect(page.locator(".image-lightbox")).toHaveCount(0);
+  await expectInvariantsUnchanged(page, before);
+});
+
+test("animates the presentation layers but never the image transform", async ({
+  page,
+}) => {
+  await openDocument(page);
+  await openLightbox(page, 0);
+
+  const contracts = await page.evaluate(() => {
+    const read = (selector: string) => {
+      const element = document.querySelector(selector);
+      if (element === null) {
+        throw new Error(`${selector} was not rendered`);
+      }
+      const style = getComputedStyle(element);
+      return {
+        duration: style.transitionDuration,
+        property: style.transitionProperty,
+      };
+    };
+    return {
+      image: read(".image-lightbox-image"),
+      stage: read(".image-lightbox-stage"),
+      backdrop: read(".image-lightbox-backdrop"),
+    };
+  });
+
+  // The image's live transform (pan / zoom / rotate) must never transition —
+  // a transition there would lag pointer pans and blur the clamp math.
+  expect(contracts.image.duration).toBe("0s");
+  // The enter/exit motion rides on the stage and the backdrop instead.
+  expect(contracts.stage.duration).toContain("0.18s");
+  expect(contracts.stage.property).toContain("transform");
+  expect(contracts.backdrop.duration).toBe("0.16s");
+});
+
+test("opens and closes without motion under prefers-reduced-motion", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await openDocument(page);
+  const before = await captureInvariants(page);
+
+  await openLightbox(page, 0);
+  const stage = page.locator(".image-lightbox-stage");
+  await expect(stage).toHaveCSS("transition-duration", "0s");
+  await expect(page.locator(".image-lightbox-backdrop")).toHaveCSS(
+    "transition-duration",
+    "0s",
+  );
+
+  await page.getByRole("button", { name: "关闭视觉内容预览" }).click();
+  await expect(page.locator(".image-lightbox")).toHaveCount(0);
+  await expectInvariantsUnchanged(page, before);
 });
