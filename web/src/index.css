@@ -338,16 +338,37 @@ body,
   white-space: nowrap;
 }
 
+/*
+ * Hover states for tree rows. The directory row needs an explicit :hover rule
+ * (not SidebarMenuButton's Tailwind hover utility): the sticky-row rule below
+ * keeps an unlayered `background: var(--sidebar)` on every directory row, and
+ * an unlayered rule always outranks the layered utility. Declaring hover here
+ * gives files, directories and multi-root root rows — all SidebarMenuButtons —
+ * one shared resting < hover < selected ladder. Active files are excluded via
+ * :not() so hovering the open document never swaps its selected style for the
+ * lighter hover one.
+ */
+.document-tree-file:not([data-active="true"]):hover,
+.document-tree-directory:hover {
+  background: var(--sidebar-accent);
+
+  box-shadow:
+    inset 0 0 0 1px color-mix(in oklch, var(--sidebar-border) 80%, transparent),
+    0 1px 2px color-mix(in oklch, var(--sidebar-foreground) 10%, transparent);
+
+  color: var(--sidebar-accent-foreground);
+}
+
 .document-tree-file[data-active="true"] {
   background: color-mix(
     in oklch,
-    var(--sidebar-accent) 78%,
-    var(--sidebar-foreground) 12%
+    var(--sidebar-accent) 88%,
+    var(--sidebar-foreground) 16%
   );
   box-shadow:
     inset 3px 0 0
-    color-mix(in oklch, var(--sidebar-foreground) 58%, transparent),
-    inset 0 0 0 1px color-mix(in oklch, var(--sidebar-border) 72%, transparent);
+    color-mix(in oklch, var(--sidebar-foreground) 72%, transparent),
+    inset 0 0 0 1px color-mix(in oklch, var(--sidebar-border) 92%, transparent);
   color: var(--sidebar-accent-foreground);
   font-weight: 600;
 }
