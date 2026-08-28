@@ -823,7 +823,10 @@ body,
  * image still gets a readable label, and the ellipsis handles long names. It
  * is aria-hidden in the DOM (the <img> alt already carries the accessible
  * name) and never takes pointer events, so it cannot block the image or its
- * links.
+ * links. width:max-content decouples the label's shrink-to-fit width from the
+ * frame — the containing block of an absolutely-positioned element caps its
+ * available width, so without it an icon-sized frame would squeeze the label
+ * to the image's own width instead of the ellipsis handling the overflow.
  */
 .markdown-body .m2h-image-name-tooltip {
   position: absolute;
@@ -831,6 +834,7 @@ body,
   left: 50%;
   z-index: 2;
 
+  width: max-content;
   max-width: min(20rem, calc(100vw - 2rem));
   padding: 0.3rem 0.5rem;
 
@@ -892,6 +896,14 @@ body,
   transition:
     opacity 120ms ease,
     background-color 120ms ease;
+}
+
+/* A diagram whose render never produced an SVG keeps its trigger in the DOM
+ * (the frame is stable across repaints) but hides it via the hidden attribute:
+ * the explicit display above would otherwise override the UA's [hidden]
+ * rule, so the opt-out is restated at the same specificity plus one. */
+.markdown-body .m2h-lightbox-trigger[hidden] {
+  display: none;
 }
 
 .markdown-body .m2h-image-frame:hover .m2h-lightbox-trigger,

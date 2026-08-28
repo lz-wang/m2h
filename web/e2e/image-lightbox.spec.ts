@@ -493,3 +493,63 @@ test("rotates, zooms, pans and closes a mermaid diagram without moving the docum
   await expect(page.locator(".image-lightbox")).toBeHidden();
   await expectInvariantsUnchanged(page, before);
 });
+
+// --- Diagrams whose render never produced an SVG -----------------------------
+//
+// Lightbox availability is a function of the SVG's real presence, not of the
+// frame's existence: an invalid diagram keeps its frame (and source text) but
+// must offer no magnifier — neither clickable nor keyboard-reachable — while
+// a valid diagram in the same document behaves exactly as before.
+
+const invalidMermaidDocumentPath = "/doc/mermaid-invalid.md";
+
+async function openInvalidMermaidDocument(page: Page) {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(invalidMermaidDocumentPath);
+  // Both frames are created synchronously; the paints run in document order,
+  // so once the valid (second) diagram's trigger unhides, the invalid first
+  // diagram's paint attempt has settled too.
+  await page.waitForFunction(
+    () =>
+      document.querySelectorAll(".m2h-mermaid-frame").length === 2 &&
+      // Scope to the container: the trigger's magnifier icon is an SVG too.
+      document.querySelectorAll(".m2h-mermaid-frame > .mermaid svg").length ===
+        1,
+  );
+  await page.waitForFunction(() => {
+    const frames = document.querySelectorAll<HTMLElement>(".m2h-mermaid-frame");
+    const valid = frames[1];
+    return valid
+      ? valid.querySelector<HTMLButtonElement>(":scope > .m2h-lightbox-trigger")
+          ?.hidden === false
+      : false;
+  });
+}
+
+test("hides the magnifier of a diagram that never rendered", async ({
+  page,
+}) => {
+  await openInvalidMermaidDocument(page);
+
+  const invalid = page.locator(".m2h-mermaid-frame").first();
+  const valid = page.locator(".m2h-mermaid-frame").nth(1);
+
+  // The invalid container kept its source text and never gained an SVG, the
+  // lightbox marker, or an operable trigger. (svg assertions scope to the
+  // container: the trigger's magnifier icon is an SVG too.)
+  await expect(invalid.locator(".mermaid svg")).toHaveCount(0);
+  await expect(invalid.locator('[data-m2h-lightbox-item="true"]')).toHaveCount(
+    0,
+  );
+  const trigger = invalid.locator(".m2h-lightbox-trigger");
+  await expect(trigger).toBeHidden();
+  // The hidden attribute must actually apply: the trigger's own display rule
+  // (inline-flex) would otherwise override the UA's [hidden] style and leave
+  // an invisible-but-clickable dead button.
+  await expect(trigger).toHaveCSS("display", "none");
+
+  // The valid diagram in the same document is unaffected.
+  await expect(valid.locator('[data-m2h-lightbox-item="true"]')).toHaveCount(1);
+  await expect(valid.locator(".m2h-lightbox-trigger")).toBeVisible();
+  await expect(valid.locator(".mermaid svg")).toHaveCount(1);
+});

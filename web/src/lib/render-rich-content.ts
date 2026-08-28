@@ -580,6 +580,8 @@ function ensureMermaidInitialized(
 // palette resolves. Returns false when the render is no longer current, telling
 // the caller to abort the remaining targets; a render that throws leaves any
 // existing SVG in place so one broken diagram never breaks the document.
+// Whether the Lightbox is offered is decided by the SVG's real presence after
+// every paint attempt (see syncMermaidLightboxAvailability).
 async function paintMermaidTarget(
   mermaid: MermaidRuntime,
   target: HTMLElement,
@@ -599,7 +601,34 @@ async function paintMermaidTarget(
   } catch {
     // Leave the existing content in place; a single bad diagram is isolated.
   }
+  syncMermaidLightboxAvailability(target);
   return true;
+}
+
+// Whether a diagram may open the Lightbox is a function of its rendered SVG,
+// never of the frame's existence. After every paint attempt — success or
+// failure — the marker and the trigger are brought in line with the SVG's
+// presence: a diagram that never rendered offers no magnifier (a click would
+// snapshot nothing), while a failed theme repaint keeps the previous SVG and
+// with it a still-working Lightbox. This is deliberately more correct than
+// deleting the trigger on failure: it covers the first-render and re-render
+// cases with one rule.
+function syncMermaidLightboxAvailability(target: HTMLElement): void {
+  const available = target.querySelector("svg") !== null;
+
+  if (available) {
+    target.dataset.m2hLightboxItem = "true";
+  } else {
+    delete target.dataset.m2hLightboxItem;
+  }
+
+  const trigger = target
+    .closest(".m2h-mermaid-frame")
+    ?.querySelector<HTMLButtonElement>(":scope > .m2h-lightbox-trigger");
+
+  if (trigger) {
+    trigger.hidden = !available;
+  }
 }
 
 async function renderMermaid(
@@ -619,20 +648,23 @@ async function renderMermaid(
     const container = document.createElement("div");
     container.className = "mermaid";
     container.textContent = source;
-    // The Lightbox marker rides on the container, never on the SVG inside:
-    // paintMermaidTarget rewrites the container's innerHTML on every theme
-    // switch, so the marker — like the frame below — survives each repaint.
-    container.dataset.m2hLightboxItem = "true";
+    // No Lightbox marker here: the container starts with nothing to show, and
+    // syncMermaidLightboxAvailability stamps the marker — on the container,
+    // never the SVG inside, whose markup every repaint rewrites — only once a
+    // paint has really produced an SVG.
     mermaidSources.set(container, source);
 
     // A stable frame around the diagram. The container's content is owned by
     // mermaid.render (and replaced wholesale on theme switches), so the
     // Lightbox trigger can never live inside it; the frame keeps the trigger
-    // — and any focus on it — alive across every repaint.
+    // — and any focus on it — alive across every repaint. The trigger starts
+    // hidden: until the first paint succeeds there is nothing to enlarge.
+    const trigger = createLightboxTrigger("查看 Mermaid 图表");
+    trigger.hidden = true;
     const frame = document.createElement("div");
     frame.className = "m2h-mermaid-frame";
     pre.replaceWith(frame);
-    frame.append(container, createLightboxTrigger("查看 Mermaid 图表"));
+    frame.append(container, trigger);
     targets.push(container);
   }
 

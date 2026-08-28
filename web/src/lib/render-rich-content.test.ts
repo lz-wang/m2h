@@ -1027,11 +1027,93 @@ describe("image lightbox triggers", () => {
     expect(button?.type).toBe("button");
     expect(button?.getAttribute("aria-label")).toBe("查看 Mermaid 图表");
     expect(button?.title).toBe("查看 Mermaid 图表");
+    // The successful paint is what unhides the trigger: availability follows
+    // the SVG's presence, never the frame's existence.
+    expect(button?.hidden).toBe(false);
     expect(button?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
     // The image pass must not have added a second trigger: mermaid never
     // appears as an <img>, so exactly one button lives in the frame.
     expect(root.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(1);
     expect(root.querySelectorAll("img")).toHaveLength(0);
+  });
+
+  it("withholds the lightbox marker and trigger while a diagram has no SVG", async () => {
+    // The paint never resolves: the frame exists, but no SVG ever lands.
+    mermaidMock.render.mockImplementation(
+      () => new Promise(() => {}) as Promise<MermaidRenderResult>,
+    );
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+
+    const pending = renderRichContent(root, "light");
+    await waitFor(() => {
+      expect(root.querySelector(".m2h-mermaid-frame")).not.toBeNull();
+    });
+    const frame = root.querySelector<HTMLElement>(".m2h-mermaid-frame");
+    const container = root.querySelector<HTMLElement>("div.mermaid");
+    const button = root.querySelector<HTMLButtonElement>(
+      ".m2h-mermaid-frame > .m2h-lightbox-trigger",
+    );
+    // Initial state: the frame and source text are there, but there is
+    // nothing to enlarge yet — no marker, trigger hidden. The pending paint
+    // can never settle this state, so the assertions stay stable.
+    expect(frame).not.toBeNull();
+    expect(container?.textContent).toContain("graph TD");
+    expect(container?.dataset.m2hLightboxItem).toBeUndefined();
+    expect(button?.hidden).toBe(true);
+    void pending;
+  });
+
+  it("keeps the trigger hidden and marker absent after a failed first render", async () => {
+    mermaidMock.render.mockRejectedValue(new Error("invalid syntax"));
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">not a diagram [[</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    // The failure is isolated to this diagram: the frame stays with its
+    // source text, but the lightbox is not offered.
+    const container = root.querySelector<HTMLElement>("div.mermaid");
+    const button = root.querySelector<HTMLButtonElement>(
+      ".m2h-mermaid-frame > .m2h-lightbox-trigger",
+    );
+    expect(container?.querySelector("svg")).toBeNull();
+    expect(container?.textContent).toContain("not a diagram");
+    expect(container?.dataset.m2hLightboxItem).toBeUndefined();
+    expect(button?.hidden).toBe(true);
+  });
+
+  it("keeps the lightbox available when a theme repaint fails on an existing SVG", async () => {
+    const { renderRichContent, rerenderMermaid } = await import(
+      "./render-rich-content"
+    );
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+
+    await renderRichContent(root, "light");
+    const container = root.querySelector<HTMLElement>("div.mermaid");
+    const button = root.querySelector<HTMLButtonElement>(
+      ".m2h-mermaid-frame > .m2h-lightbox-trigger",
+    );
+    if (container === null || button === null) {
+      throw new Error("mermaid frame was not created");
+    }
+    expect(container.dataset.m2hLightboxItem).toBe("true");
+    expect(button.hidden).toBe(false);
+
+    // The dark repaint throws: the old SVG stays in place, so the lightbox
+    // keeps working — availability follows the SVG that is still there.
+    mermaidMock.render.mockRejectedValue(new Error("dark render failed"));
+    await rerenderMermaid(root, "dark");
+
+    expect(container.innerHTML).toContain('data-mock="mermaid"');
+    expect(container.dataset.m2hLightboxItem).toBe("true");
+    expect(button.hidden).toBe(false);
   });
 
   it("keeps the mermaid frame, marker and trigger across a theme re-render", async () => {
