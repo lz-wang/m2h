@@ -625,9 +625,15 @@ function ProjectFooter({ version }: { version: string }) {
         rel="noreferrer"
         aria-label="在新页面打开 m2h GitHub 仓库"
         title="GitHub"
-        className="flex size-8 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+        className="group flex size-8 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
       >
-        <GitHubIcon />
+        <img
+          src="/ui/github-invertocat.svg"
+          alt=""
+          aria-hidden="true"
+          className="h-4 w-auto opacity-60 transition-opacity group-hover:opacity-100 dark:invert"
+        />
+        <span className="sr-only">在新页面打开 m2h GitHub 仓库</span>
       </a>
       {version !== "" ? (
         <a
@@ -642,19 +648,6 @@ function ProjectFooter({ version }: { version: string }) {
         </a>
       ) : null}
     </SidebarFooter>
-  );
-}
-
-function GitHubIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      className="size-4"
-      viewBox="0 0 24 24"
-      fill="currentColor"
-    >
-      <path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2.3c-3.3.7-4-1.4-4-1.4-.5-1.4-1.3-1.8-1.3-1.8-1.1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1.1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-5.9 0-1.3.5-2.4 1.2-3.2-.1-.3-.5-1.5.1-3.2 0 0 1-.3 3.3 1.2a11.4 11.4 0 0 1 6 0C17.5 5.9 18.5 6.2 18.5 6.2c.7 1.7.3 2.9.1 3.2.8.8 1.2 1.9 1.2 3.2 0 4.6-2.8 5.6-5.5 5.9.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3Z" />
-    </svg>
   );
 }
 

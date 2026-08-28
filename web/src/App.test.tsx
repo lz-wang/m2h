@@ -221,6 +221,10 @@ describe("App directory preview", () => {
     );
     expect(repository.getAttribute("target")).toBe("_blank");
     expect(repository.getAttribute("rel")).toContain("noreferrer");
+    const icon = repository.querySelector("img");
+    expect(icon?.getAttribute("src")).toBe("/ui/github-invertocat.svg");
+    expect(icon?.getAttribute("alt")).toBe("");
+    expect(icon?.getAttribute("aria-hidden")).toBe("true");
 
     const release = screen.getByRole("link", {
       name: "在新页面打开 m2h v0.9.1 发布信息",
