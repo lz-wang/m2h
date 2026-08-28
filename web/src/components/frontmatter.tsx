@@ -1,11 +1,19 @@
-import { CalendarDays, ChevronRight, Tag } from "lucide-react";
+import {
+  CalendarDays,
+  CalendarPlus,
+  CalendarSync,
+  ChevronRight,
+  Tag,
+} from "lucide-react";
 
 import type { FrontMatter } from "../api";
 
 /**
  * Renders the compact date + tags summary that follows the document title in
- * the toolbar. Returns null when there is nothing to summarize so the toolbar
- * collapses to a single line for documents without metadata.
+ * the toolbar. The server-normalized created/updated dates are preferred;
+ * the generic `date` is a fallback that surfaces only when neither exists.
+ * Returns null when there is nothing to summarize so the toolbar collapses
+ * to a single line for documents without metadata.
  */
 export function FrontMatterSummary({
   frontmatter,
@@ -16,18 +24,35 @@ export function FrontMatterSummary({
     return null;
   }
 
+  const created = frontmatter.created;
+  const updated = frontmatter.updated;
+  const fallbackDate = !created && !updated ? frontmatter.date : undefined;
   const tags = frontmatter.tags ?? [];
 
-  if (!frontmatter.date && tags.length === 0) {
+  if (!created && !updated && !fallbackDate && tags.length === 0) {
     return null;
   }
 
   return (
     <div className="document-meta">
-      {frontmatter.date ? (
+      {created ? (
+        <span className="document-meta-item">
+          <CalendarPlus aria-hidden="true" />
+          <span>{created}</span>
+        </span>
+      ) : null}
+
+      {updated ? (
+        <span className="document-meta-item">
+          <CalendarSync aria-hidden="true" />
+          <span>{updated}</span>
+        </span>
+      ) : null}
+
+      {fallbackDate ? (
         <span className="document-meta-item">
           <CalendarDays aria-hidden="true" />
-          <span>{frontmatter.date}</span>
+          <span>{fallbackDate}</span>
         </span>
       ) : null}
 

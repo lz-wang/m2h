@@ -49,7 +49,8 @@ func TestParseFrontMatterEmptyBlock(t *testing.T) {
 	if frontMatter == nil {
 		t.Fatal("frontmatter = nil, want empty FrontMatter")
 	}
-	if len(frontMatter.Entries) != 0 || frontMatter.Date != "" || frontMatter.Tags != nil {
+	if len(frontMatter.Entries) != 0 || frontMatter.Date != "" || frontMatter.Tags != nil ||
+		frontMatter.CreatedDate != "" || frontMatter.UpdatedDate != "" {
 		t.Fatalf("frontmatter = %+v, want empty", frontMatter)
 	}
 	if string(body) != "# Hello\n" {
@@ -308,6 +309,142 @@ func TestPreferredTitle(t *testing.T) {
 		if got := PreferredTitle(tc.frontMatter, tc.fallback); got != tc.want {
 			t.Errorf("%s: PreferredTitle = %q, want %q", tc.name, got, tc.want)
 		}
+	}
+}
+
+func TestParseFrontMatterCreatedUpdatedAliases(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name    string
+		source  string
+		created string
+		updated string
+		date    string
+	}{
+		{
+			name:    "create_date outranks create_at and create_time",
+			source:  "---\ncreate_date: 2026-08-18\ncreate_at: 2026-08-20\ncreate_time: 2026-08-22\n---\nbody\n",
+			created: "2026-08-18",
+		},
+		{
+			name:    "create alias priority is independent of YAML order",
+			source:  "---\ncreate_time: 2026-08-22\ncreate_date: 2026-08-18\ncreate_at: 2026-08-20\n---\nbody\n",
+			created: "2026-08-18",
+		},
+		{
+			name:    "create_at outranks create_time when create_date is absent",
+			source:  "---\ncreate_time: 2026-08-22\ncreate_at: 2026-08-20\n---\nbody\n",
+			created: "2026-08-20",
+		},
+		{
+			name:    "update_date outranks update_at and update_time",
+			source:  "---\nupdate_date: 2026-08-18\nupdate_at: 2026-08-20\nupdate_time: 2026-08-22\n---\nbody\n",
+			updated: "2026-08-18",
+		},
+		{
+			name:    "update alias priority is independent of YAML order",
+			source:  "---\nupdate_time: 2026-08-22\nupdate_date: 2026-08-18\nupdate_at: 2026-08-20\n---\nbody\n",
+			updated: "2026-08-18",
+		},
+		{
+			name:    "update_at outranks update_time when update_date is absent",
+			source:  "---\nupdate_time: 2026-08-22\nupdate_at: 2026-08-20\n---\nbody\n",
+			updated: "2026-08-20",
+		},
+		{
+			name:    "create and update and date all normalize independently",
+			source:  "---\ncreate_at: 2026-08-20T11:20:00+08:00\nupdate_at: 2026-08-28T19:20:00+08:00\ndate: 2026-08-15\n---\nbody\n",
+			created: "2026-08-20",
+			updated: "2026-08-28",
+			date:    "2026-08-15",
+		},
+		{
+			name:    "create with date",
+			source:  "---\ncreate_date: 2026-08-20\ndate: 2026-08-15\n---\nbody\n",
+			created: "2026-08-20",
+			date:    "2026-08-15",
+		},
+		{
+			name:    "update with date",
+			source:  "---\nupdate_date: 2026-08-28\ndate: 2026-08-15\n---\nbody\n",
+			updated: "2026-08-28",
+			date:    "2026-08-15",
+		},
+		{
+			name:   "date only",
+			source: "---\ndate: 2026-08-15\n---\nbody\n",
+			date:   "2026-08-15",
+		},
+		{
+			name:   "no date fields at all",
+			source: "---\ntitle: m2h\n---\nbody\n",
+		},
+		{
+			name:    "ISO datetime normalizes to the calendar day",
+			source:  "---\ncreate_at: 2026-08-28T18:30:22+08:00\n---\nbody\n",
+			created: "2026-08-28",
+		},
+		{
+			name:   "time-only value has no date information",
+			source: "---\ncreate_time: \"18:30:22\"\n---\nbody\n",
+		},
+		{
+			name:   "sequence and mapping values never reach the summary",
+			source: "---\ncreate_date:\n  - 2026-08-01\nupdate_at:\n  when: 2026-08-02\n---\nbody\n",
+		},
+		{
+			name:    "invalid higher-priority alias does not block a valid lower one",
+			source:  "---\ncreate_date: not-a-date\ncreate_at: 2026-08-20\n---\nbody\n",
+			created: "2026-08-20",
+		},
+	}
+
+	for _, tc := range cases {
+		_, frontMatter, err := ParseFrontMatter([]byte(tc.source))
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", tc.name, err)
+			continue
+		}
+		if frontMatter.CreatedDate != tc.created {
+			t.Errorf("%s: CreatedDate = %q, want %q", tc.name, frontMatter.CreatedDate, tc.created)
+		}
+		if frontMatter.UpdatedDate != tc.updated {
+			t.Errorf("%s: UpdatedDate = %q, want %q", tc.name, frontMatter.UpdatedDate, tc.updated)
+		}
+		if frontMatter.Date != tc.date {
+			t.Errorf("%s: Date = %q, want %q", tc.name, frontMatter.Date, tc.date)
+		}
+	}
+}
+
+func TestParseFrontMatterAliasKeysStillListedAsEntries(t *testing.T) {
+	t.Parallel()
+
+	// The alias keys are derivations, not replacements: the full frontmatter
+	// table keeps every raw key/value pair exactly as authored.
+	source := []byte("---\ncreate_time: \"18:30:22\"\nupdate_at: 2026-08-28\n---\nbody\n")
+	_, frontMatter, err := ParseFrontMatter(source)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	wantKeys := []string{"create_time", "update_at"}
+	if len(frontMatter.Entries) != len(wantKeys) {
+		t.Fatalf("Entries = %+v, want %d entries", frontMatter.Entries, len(wantKeys))
+	}
+	for i, want := range wantKeys {
+		if frontMatter.Entries[i].Key != want {
+			t.Errorf("entry %d key = %q, want %q", i, frontMatter.Entries[i].Key, want)
+		}
+	}
+	if frontMatter.Entries[0].Value != "18:30:22" {
+		t.Errorf("create_time value = %q, want the raw source value", frontMatter.Entries[0].Value)
+	}
+	if frontMatter.CreatedDate != "" {
+		t.Errorf("CreatedDate = %q, want empty for a time-only value", frontMatter.CreatedDate)
+	}
+	if frontMatter.UpdatedDate != "2026-08-28" {
+		t.Errorf("UpdatedDate = %q, want %q", frontMatter.UpdatedDate, "2026-08-28")
 	}
 }
 

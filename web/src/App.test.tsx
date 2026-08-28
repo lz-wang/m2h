@@ -1205,6 +1205,71 @@ describe("App directory preview", () => {
     expect(panel.hasAttribute("open")).toBe(true);
   });
 
+  it("prefers created and updated dates over the generic date in the summary", async () => {
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h1 id="top">Readme</h1>',
+        frontmatter: {
+          entries: [
+            { key: "create_at", value: "2026-08-20T11:20:00+08:00" },
+            { key: "update_at", value: "2026-08-28T19:20:00+08:00" },
+            { key: "date", value: "2026-08-15" },
+          ],
+          created: "2026-08-20",
+          updated: "2026-08-28",
+          date: "2026-08-15",
+        },
+      }),
+    });
+    render(<App api={api} />);
+
+    await screen.findByRole("heading", { name: "Readme", level: 1 });
+
+    // Created and updated both surface; the generic date does not — it is
+    // only the fallback when neither alias-normalized date exists.
+    const titleRegion = screen.getByRole("region", { name: "当前文档标题" });
+    expect(within(titleRegion).getByText("2026-08-20")).toBeTruthy();
+    expect(within(titleRegion).getByText("2026-08-28")).toBeTruthy();
+    expect(within(titleRegion).queryByText("2026-08-15")).toBeNull();
+
+    const icons = Array.from(
+      titleRegion.querySelectorAll(".document-meta svg"),
+    ).map((svg) => svg.getAttribute("class") ?? "");
+    expect(icons.some((cls) => cls.includes("lucide-calendar-plus"))).toBe(
+      true,
+    );
+    expect(icons.some((cls) => cls.includes("lucide-calendar-sync"))).toBe(
+      true,
+    );
+    expect(icons.some((cls) => cls.includes("lucide-calendar-days"))).toBe(
+      false,
+    );
+  });
+
+  it("shows the created date alone when only it exists", async () => {
+    const api = createAPI({
+      getDocument: vi.fn().mockResolvedValue({
+        path: "README.md",
+        title: "Readme API Title",
+        html: '<h1 id="top">Readme</h1>',
+        frontmatter: {
+          entries: [{ key: "create_date", value: "2026-08-20" }],
+          created: "2026-08-20",
+          date: "2026-08-15",
+        },
+      }),
+    });
+    render(<App api={api} />);
+
+    await screen.findByRole("heading", { name: "Readme", level: 1 });
+
+    const titleRegion = screen.getByRole("region", { name: "当前文档标题" });
+    expect(within(titleRegion).getByText("2026-08-20")).toBeTruthy();
+    expect(within(titleRegion).queryByText("2026-08-15")).toBeNull();
+  });
+
   it("keeps the panel but hides the summary without date or tags", async () => {
     const api = createAPI({
       getDocument: vi.fn().mockResolvedValue({

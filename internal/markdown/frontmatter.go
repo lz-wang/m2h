@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
@@ -10,14 +11,18 @@ import (
 )
 
 // FrontMatter is the structured metadata extracted from a document's YAML
-// frontmatter. Entries preserves the original source order; Title, Date and
-// Tags are normalized derivations the preview UI surfaces as the document's
-// display title and the toolbar summary.
+// frontmatter. Entries preserves the original source order; Title, the three
+// date derivations and Tags are normalized fields the preview UI surfaces as
+// the document's display title and the toolbar summary. CreatedDate and
+// UpdatedDate are alias-normalized (see the priority tables below) so the WebUI
+// never has to reinterpret raw frontmatter keys.
 type FrontMatter struct {
-	Entries []FrontMatterEntry
-	Title   string
-	Date    string
-	Tags    []string
+	Entries     []FrontMatterEntry
+	Title       string
+	CreatedDate string
+	UpdatedDate string
+	Date        string
+	Tags        []string
 }
 
 // FrontMatterEntry is a single frontmatter key/value pair rendered as a table
@@ -114,6 +119,8 @@ func parseFrontMatterYAML(raw []byte) (*FrontMatter, error) {
 	}
 
 	meta := &FrontMatter{}
+	createdPriority := math.MaxInt
+	updatedPriority := math.MaxInt
 	for i := 0; i+1 < len(root.Content); i += 2 {
 		keyNode := root.Content[i]
 		valueNode := root.Content[i+1]
@@ -136,8 +143,53 @@ func parseFrontMatterYAML(raw []byte) (*FrontMatter, error) {
 		case "tags":
 			meta.Tags = normalizeFrontMatterTags(valueNode)
 		}
+		// The alias families resolve by fixed priority, never by YAML key
+		// order: whichever alias appears first or last, create_date always
+		// outranks create_at and create_time (and likewise for update_*).
+		if priority, aliased := createDatePriorities[key]; aliased {
+			meta.CreatedDate, createdPriority = preferDateAlias(
+				meta.CreatedDate,
+				createdPriority,
+				priority,
+				normalizeFrontMatterDate(valueNode),
+			)
+		}
+		if priority, aliased := updateDatePriorities[key]; aliased {
+			meta.UpdatedDate, updatedPriority = preferDateAlias(
+				meta.UpdatedDate,
+				updatedPriority,
+				priority,
+				normalizeFrontMatterDate(valueNode),
+			)
+		}
 	}
 	return meta, nil
+}
+
+// Alias priority tables for the created/updated date derivations. Lower wins.
+// Deliberately only these exact keys: no guessing at created_at/modified_at
+// style names, which would make the summary rules grow without bound.
+var createDatePriorities = map[string]int{
+	"create_date": 0,
+	"create_at":   1,
+	"create_time": 2,
+}
+
+var updateDatePriorities = map[string]int{
+	"update_date": 0,
+	"update_at":   1,
+	"update_time": 2,
+}
+
+// preferDateAlias keeps the better of the current and the candidate date
+// within one alias family. A candidate that does not normalize to an ISO date
+// contributes nothing (the raw value stays visible in the entries table), and
+// an empty higher-priority alias never blocks a valid lower-priority one.
+func preferDateAlias(current string, currentPriority, candidatePriority int, candidate string) (string, int) {
+	if candidate == "" || candidatePriority >= currentPriority {
+		return current, currentPriority
+	}
+	return candidate, candidatePriority
 }
 
 // formatFrontMatterValue renders a frontmatter value for the full table view.

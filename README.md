@@ -12,7 +12,7 @@
 - 文件树、搜索、文档目录、主题和正文宽度切换
 - 支持分享文档链接、Markdown 链接和 Markdown 全文
 - 支持 GFM、语法高亮、数学公式、Mermaid、脚注、Emoji 和 GitHub Alerts
-- 支持 Frontmatter（`title` 字段作为文档展示标题）、可排序表格、代码行号与长代码块折叠
+- 支持 Frontmatter（`title` 字段作为文档展示标题，`create_date`/`create_at`/`create_time` 与 `update_date`/`update_at`/`update_time` 别名按优先级归一为创建/更新时间摘要，`date` 为兜底）、可排序表格、代码行号与长代码块折叠
 - 图片与 Mermaid 图表支持 Lightbox 查看，可切换、缩放、拖动和旋转
 - 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
 - 可将单个 Markdown 文件导出为 HTML

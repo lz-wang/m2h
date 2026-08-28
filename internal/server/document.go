@@ -54,6 +54,8 @@ type frontMatterEntryResponse struct {
 
 type frontMatterResponse struct {
 	Entries []frontMatterEntryResponse `json:"entries"`
+	Created string                     `json:"created,omitempty"`
+	Updated string                     `json:"updated,omitempty"`
 	Date    string                     `json:"date,omitempty"`
 	Tags    []string                   `json:"tags,omitempty"`
 }
@@ -417,6 +419,8 @@ func frontMatterResponseFrom(frontMatter *markdown.FrontMatter) *frontMatterResp
 	}
 	return &frontMatterResponse{
 		Entries: entries,
+		Created: frontMatter.CreatedDate,
+		Updated: frontMatter.UpdatedDate,
 		Date:    frontMatter.Date,
 		Tags:    frontMatter.Tags,
 	}

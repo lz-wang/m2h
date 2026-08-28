@@ -36,8 +36,13 @@ export interface FrontMatterEntry {
   value: string;
 }
 
+// The normalized metadata derivations the server computed from the raw
+// frontmatter: entries stay the verbatim table, while created/updated/date/tags
+// are the only fields the WebUI is allowed to interpret (never raw keys).
 export interface FrontMatter {
   entries: FrontMatterEntry[];
+  created?: string;
+  updated?: string;
   date?: string;
   tags?: string[];
 }
@@ -180,11 +185,17 @@ function parseFrontMatter(payload: unknown): FrontMatter | null {
     return { key: entry.key, value: entry.value };
   });
   const result: FrontMatter = { entries };
-  if (payload.date !== undefined && payload.date !== null) {
-    if (typeof payload.date !== "string") {
-      throw new Error("文档响应格式无效");
-    }
-    result.date = payload.date;
+  const created = optionalString(payload, "created");
+  if (created !== undefined) {
+    result.created = created;
+  }
+  const updated = optionalString(payload, "updated");
+  if (updated !== undefined) {
+    result.updated = updated;
+  }
+  const date = optionalString(payload, "date");
+  if (date !== undefined) {
+    result.date = date;
   }
   if (payload.tags !== undefined && payload.tags !== null) {
     if (
@@ -196,6 +207,22 @@ function parseFrontMatter(payload: unknown): FrontMatter | null {
     result.tags = payload.tags;
   }
   return result;
+}
+
+// A missing or null optional string field is accepted as absent; anything but
+// a string is a malformed response.
+function optionalString(
+  payload: Record<string, unknown>,
+  key: string,
+): string | undefined {
+  const value = payload[key];
+  if (value === undefined || value === null) {
+    return undefined;
+  }
+  if (typeof value !== "string") {
+    throw new Error("文档响应格式无效");
+  }
+  return value;
 }
 
 function parseTOC(payload: unknown): TocItem[] {

@@ -37,7 +37,13 @@ describe("browser API", () => {
             title: "Space",
             html: "<p>Body</p>",
             frontmatter: {
-              entries: [{ key: "date", value: "2026-07-11" }],
+              entries: [
+                { key: "create_at", value: "2026-07-10T09:30:00+08:00" },
+                { key: "update_date", value: "2026-07-12" },
+                { key: "date", value: "2026-07-11" },
+              ],
+              created: "2026-07-10",
+              updated: "2026-07-12",
               date: "2026-07-11",
               tags: ["Go"],
             },
@@ -69,7 +75,13 @@ describe("browser API", () => {
       title: "Space",
       html: "<p>Body</p>",
       frontmatter: {
-        entries: [{ key: "date", value: "2026-07-11" }],
+        entries: [
+          { key: "create_at", value: "2026-07-10T09:30:00+08:00" },
+          { key: "update_date", value: "2026-07-12" },
+          { key: "date", value: "2026-07-11" },
+        ],
+        created: "2026-07-10",
+        updated: "2026-07-12",
         date: "2026-07-11",
         tags: ["Go"],
       },
@@ -313,6 +325,21 @@ describe("browser API", () => {
       ),
     );
     await expect(browserAPI.getDocument("bad.md")).rejects.toThrow(
+      "文档响应格式无效",
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          path: "baddate.md",
+          title: "BadDate",
+          html: "",
+          frontmatter: { entries: [], created: 20260710 },
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.getDocument("baddate.md")).rejects.toThrow(
       "文档响应格式无效",
     );
   });

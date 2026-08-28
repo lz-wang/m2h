@@ -372,7 +372,7 @@ func TestDirectoryDocumentAPIExposesFrontMatter(t *testing.T) {
 	writeTestFile(
 		t,
 		filepath.Join(root, "design.md"),
-		"---\ndate: 2026-07-11\ntags:\n  - Go\n  - Markdown\nauthor: lzwang\ndraft: false\n---\n# Design\n\nbody text\n",
+		"---\ndate: 2026-07-11\ncreate_at: 2026-07-10T09:30:00+08:00\nupdate_date: 2026-07-12\ntags:\n  - Go\n  - Markdown\nauthor: lzwang\ndraft: false\n---\n# Design\n\nbody text\n",
 	)
 	writeTestFile(t, filepath.Join(root, "plain.md"), "# Plain\n\nno metadata\n")
 	canonical := canonicalDirectory(t, root)
@@ -394,19 +394,31 @@ func TestDirectoryDocumentAPIExposesFrontMatter(t *testing.T) {
 	if document.FrontMatter == nil {
 		t.Fatal("frontmatter = nil, want metadata")
 	}
+	if document.FrontMatter.Created != "2026-07-10" {
+		t.Errorf("created = %q", document.FrontMatter.Created)
+	}
+	if document.FrontMatter.Updated != "2026-07-12" {
+		t.Errorf("updated = %q", document.FrontMatter.Updated)
+	}
 	if document.FrontMatter.Date != "2026-07-11" {
 		t.Errorf("date = %q", document.FrontMatter.Date)
 	}
 	if !reflect.DeepEqual(document.FrontMatter.Tags, []string{"Go", "Markdown"}) {
 		t.Errorf("tags = %v", document.FrontMatter.Tags)
 	}
-	wantKeys := []string{"date", "tags", "author", "draft"}
+	wantKeys := []string{"date", "create_at", "update_date", "tags", "author", "draft"}
 	if len(document.FrontMatter.Entries) != len(wantKeys) {
 		t.Fatalf("entries = %+v", document.FrontMatter.Entries)
 	}
 	for i, want := range wantKeys {
 		if document.FrontMatter.Entries[i].Key != want {
 			t.Errorf("entry %d = %q, want %q", i, document.FrontMatter.Entries[i].Key, want)
+		}
+	}
+	// The normalized alias derivations ride along in the JSON payload.
+	for _, fragment := range []string{`"created":"2026-07-10"`, `"updated":"2026-07-12"`} {
+		if !strings.Contains(response.Body.String(), fragment) {
+			t.Errorf("response missing %s: %s", fragment, response.Body.String())
 		}
 	}
 	for _, fragment := range []string{"---", "date: 2026-07-11", "author: lzwang", "draft: false"} {
