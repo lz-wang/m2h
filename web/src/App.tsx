@@ -577,8 +577,13 @@ export function App({ api }: AppProps) {
                 onErrorCapture={handleAssetError}
               />
             </div>
-            {tocVisible ? (
+            {/* The desktop rail stays mounted whenever the document has a TOC
+             * (only the sheet handles narrow screens); `visible` drives its
+             * expand/collapse animation, mirroring the sidebar's persistent
+             * gap + container pair instead of mounting and unmounting. */}
+            {tocItems.length > 0 ? (
               <TableOfContentsPanel
+                visible={preview.toc}
                 items={tocItems}
                 activeID={activeTocID}
                 onNavigate={(id) =>

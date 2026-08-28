@@ -44,16 +44,17 @@ export function TOCToggle({ enabled, available, onChange }: TOCToggleProps) {
   );
 }
 
-export interface TableOfContentsPanelProps {
+interface TOCLinksProps {
   items: TocItem[];
   activeID: string | null;
   onNavigate(id: string): void;
 }
 
-interface TOCLinksProps {
-  items: TocItem[];
-  activeID: string | null;
-  onNavigate(id: string): void;
+// The desktop rail's entries plus its visibility. The rail stays mounted
+// whenever the document has a TOC; `visible` only drives the expand/collapse
+// transition, exactly like the sidebar's persistent DOM.
+export interface TableOfContentsPanelProps extends TOCLinksProps {
+  visible: boolean;
 }
 
 // The link list shared by the desktop rail and the narrow-screen sheet. A
@@ -87,21 +88,41 @@ function TOCLinks({ items, activeID, onNavigate }: TOCLinksProps) {
 }
 
 export function TableOfContentsPanel({
+  visible,
   items,
   activeID,
   onNavigate,
 }: TableOfContentsPanelProps) {
   return (
-    <nav className="reader-toc" aria-label="文档目录">
-      {/* The same transient-scrollbar ScrollArea the sidebar uses, so both
-       * scrollable rails share one scrollbar behavior. */}
-      <ScrollArea className="reader-toc-scroll" scrollbarVisibility="scrolling">
-        <div className="reader-toc-content">
-          <p className="reader-toc-title">本页目录</p>
-          <TOCLinks items={items} activeID={activeID} onNavigate={onNavigate} />
-        </div>
-      </ScrollArea>
-    </nav>
+    // The two layers mirror the sidebar's gap + container split: the slot owns
+    // the layout width the body text flows around (and clips the sliding
+    // rail), while the rail itself slides in and out without reflowing its
+    // text. aria-hidden + inert retire the collapsed rail from the
+    // accessibility tree and the tab order together.
+    <div
+      className="reader-toc-slot"
+      data-state={visible ? "expanded" : "collapsed"}
+      aria-hidden={!visible}
+      inert={!visible}
+    >
+      <nav className="reader-toc" aria-label="文档目录">
+        {/* The same transient-scrollbar ScrollArea the sidebar uses, so both
+         * scrollable rails share one scrollbar behavior. */}
+        <ScrollArea
+          className="reader-toc-scroll"
+          scrollbarVisibility="scrolling"
+        >
+          <div className="reader-toc-content">
+            <p className="reader-toc-title">本页目录</p>
+            <TOCLinks
+              items={items}
+              activeID={activeID}
+              onNavigate={onNavigate}
+            />
+          </div>
+        </ScrollArea>
+      </nav>
+    </div>
   );
 }
 
@@ -112,7 +133,7 @@ export function TableOfContentsSheet({
   items,
   activeID,
   onNavigate,
-}: TableOfContentsPanelProps) {
+}: TOCLinksProps) {
   const [open, setOpen] = useState(false);
 
   const navigate = (id: string) => {

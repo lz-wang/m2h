@@ -151,7 +151,17 @@ test("does not create page-level horizontal overflow in full width without TOC",
 
   await page.getByRole("button", { name: "隐藏文档目录" }).click();
 
-  await expect(page.locator(".reader-toc")).toHaveCount(0);
+  // The rail is no longer unmounted — the slot collapses to zero width (and
+  // clips the sliding rail), which is what reclaims the canvas width.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () =>
+          document.querySelector(".reader-toc-slot")?.getBoundingClientRect()
+            .width ?? -1,
+      ),
+    )
+    .toBe(0);
 
   const geometry = await page.evaluate(() => ({
     scrollWidth: document.documentElement.scrollWidth,
@@ -261,30 +271,39 @@ test("keeps the floating navigation beside the reader canvas, clear of the TOC r
   await waitForBody(page, "/doc/scroll.md");
   await expect(page.locator(".reader-toc")).toBeVisible();
 
-  const beside = await page.evaluate(() => {
-    const nav = document.querySelector(".reader-navigation");
-    const toc = document.querySelector(".reader-toc");
-    if (nav === null || toc === null) {
-      throw new Error("navigation or TOC rail was not rendered");
-    }
-    return {
-      gap: toc.getBoundingClientRect().left - nav.getBoundingClientRect().right,
-    };
-  });
-  // The pair sits fully left of the rail with the standard 1.5rem gap.
-  expect(Math.round(beside.gap)).toBe(24);
+  // The navigation offset now animates with the rail (200ms linear), so the
+  // geometry is polled until the pair settles fully left of the rail with
+  // the standard 1.5rem gap.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const nav = document.querySelector(".reader-navigation");
+        const toc = document.querySelector(".reader-toc");
+        if (nav === null || toc === null) {
+          throw new Error("navigation or TOC rail was not rendered");
+        }
+        return Math.round(
+          toc.getBoundingClientRect().left - nav.getBoundingClientRect().right,
+        );
+      }),
+    )
+    .toBe(24);
 
-  // Below 1200px the rail hides and the pair returns to the viewport edge.
+  // Below 1200px the rail hides and the pair returns to the viewport edge
+  // once the offset transition settles.
   await page.setViewportSize({ width: 1100, height: 800 });
   await expect(page.locator(".reader-toc")).toBeHidden();
-  const narrow = await page.evaluate(() => {
-    const nav = document.querySelector(".reader-navigation");
-    if (nav === null) {
-      throw new Error("reader navigation was not rendered");
-    }
-    return Math.round(window.innerWidth - nav.getBoundingClientRect().right);
-  });
-  expect(narrow).toBe(24);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const nav = document.querySelector(".reader-navigation");
+        if (nav === null) {
+          throw new Error("reader navigation was not rendered");
+        }
+        return Math.round(window.innerWidth - nav.getBoundingClientRect().right);
+      }),
+    )
+    .toBe(24);
 });
 
 test("fades the sidebar scrollbar in while scrolling and out after it stops", async ({

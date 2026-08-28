@@ -512,9 +512,12 @@ body,
  * rather than two floating buttons.
  *
  * With the TOC rail up, the pair shifts left by the rail's width so it sits
- * beside the reader canvas instead of over the rail. Sidebar toggle/resize
- * need no part in this: they only move the canvas's left edge. Below 1200px
- * the rail is hidden (see the breakpoint below) and the offset resets.
+ * beside the reader canvas instead of over the rail. The shift animates with
+ * the same 200ms linear as the rail itself, so the pair, the rail, and the
+ * body width move as one instead of the pair teleporting. Sidebar
+ * toggle/resize need no part in this: they only move the canvas's left edge.
+ * Below 1200px the rail is hidden (see the breakpoint below) and the offset
+ * resets.
  */
 .reader-navigation {
   position: fixed;
@@ -528,6 +531,8 @@ body,
   border-radius: calc(var(--radius) * 1.2);
   background: var(--background);
   box-shadow: 0 4px 14px oklch(0 0 0 / 14%);
+
+  transition: right 200ms linear;
 }
 
 .reader-navigation[data-toc-visible="true"] {
@@ -1110,20 +1115,51 @@ body,
   color: var(--accent-foreground);
 }
 
-/* The TOC rail stays pinned beside the document as the window scrolls: it
- * sticks below the toolbar and spans the remaining viewport height, with its
- * own inner scroll for long outlines. */
-.reader-toc {
+/*
+ * The desktop TOC uses the same two-layer split as the sidebar's gap +
+ * container pair. The slot is the sticky layout box the body text flows
+ * around: it owns the rail's width, collapses that width to zero when hidden,
+ * and clips the sliding rail so the collapse never spills a scrollbar. The
+ * rail inside keeps its full width and only transforms, so its text never
+ * reflows mid-animation. Durations and easing deliberately match the sidebar
+ * (200ms linear): rail, body width, and the floating navigation all move as
+ * one.
+ */
+.reader-toc-slot {
   position: sticky;
   top: 3rem;
-  display: flex;
   width: var(--reader-toc-width);
   flex: 0 0 var(--reader-toc-width);
   align-self: flex-start;
   height: calc(100svh - 3rem);
+  overflow: clip;
+
+  transition:
+    width 200ms linear,
+    flex-basis 200ms linear;
+}
+
+.reader-toc-slot[data-state="collapsed"] {
+  width: 0;
+  flex-basis: 0;
+}
+
+/* The rail stays pinned beside the document as the window scrolls (via the
+ * sticky slot) and spans the remaining viewport height, with its own inner
+ * scroll for long outlines. */
+.reader-toc {
+  display: flex;
+  width: var(--reader-toc-width);
+  height: 100%;
   flex-direction: column;
   border-left: 1px solid var(--border);
   background: var(--background);
+
+  transition: transform 200ms linear;
+}
+
+.reader-toc-slot[data-state="collapsed"] .reader-toc {
+  transform: translateX(100%);
 }
 
 /* The rail scrolls through the same ScrollArea component as the sidebar
@@ -1358,7 +1394,9 @@ body,
  * (TableOfContentsSheet), which opens the outline on demand.
  */
 @media (max-width: 1199px) {
-  .reader-toc {
+  /* The whole two-layer rail goes: hiding the slot also drops its sticky
+   * layout box, so the canvas reclaims the full width. */
+  .reader-toc-slot {
     display: none;
   }
 
@@ -1411,5 +1449,20 @@ body,
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
     transition-duration: 0.01ms;
+  }
+
+  /* The layout movers — sidebar gap/container, TOC slot/rail, floating
+   * navigation — are restated with `none` so the panels snap between their
+   * states. These rules are unlayered, so they outrank the sidebar's layered
+   * Tailwind transition utilities without !important. */
+  .reader-toc-slot,
+  .reader-toc,
+  .reader-navigation {
+    transition: none;
+  }
+
+  [data-slot="sidebar-gap"],
+  [data-slot="sidebar-container"] {
+    transition: none;
   }
 }
