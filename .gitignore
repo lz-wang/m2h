@@ -35,3 +35,4 @@ logs/
 __debug_bin
 .playwright-cli
 .superpowers/
+docs/superpowers/
