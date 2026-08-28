@@ -796,6 +796,50 @@ body,
   max-width: 100%;
 }
 
+/*
+ * Image name tooltip, injected by render-rich-content.ts from the image's alt
+ * text. It floats at the image's bottom edge on frame hover — and on keyboard
+ * focus inside the frame, so Tabbing to the magnifier reveals the name too —
+ * using the popover tokens so it reads like the rest of the UI's floating
+ * layers. The width is capped by the viewport, not the image: an icon-sized
+ * image still gets a readable label, and the ellipsis handles long names. It
+ * is aria-hidden in the DOM (the <img> alt already carries the accessible
+ * name) and never takes pointer events, so it cannot block the image or its
+ * links.
+ */
+.markdown-body .m2h-image-name-tooltip {
+  position: absolute;
+  bottom: 0.5rem;
+  left: 50%;
+  z-index: 2;
+
+  max-width: min(20rem, calc(100vw - 2rem));
+  padding: 0.3rem 0.5rem;
+
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+
+  background: var(--popover);
+  color: var(--popover-foreground);
+
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+
+  opacity: 0;
+  pointer-events: none;
+
+  transform: translateX(-50%);
+  transition: opacity 120ms ease;
+}
+
+.markdown-body .m2h-image-frame:hover .m2h-image-name-tooltip,
+.markdown-body .m2h-image-frame:focus-within .m2h-image-name-tooltip {
+  opacity: 1;
+}
+
 /* A quiet icon-sized affordance, not a toolbar button: it floats over the
  * image's corner with a translucent dark plate that reads on any image, and
  * darkens slightly on hover/focus. It stays invisible until the frame is

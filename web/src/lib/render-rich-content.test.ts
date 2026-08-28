@@ -795,6 +795,52 @@ describe("image lightbox triggers", () => {
     expect(button?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
   });
 
+  it("adds an alt-text name tooltip to a framed image", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><img src="/a.png" alt="architecture"></p>';
+
+    await renderRichContent(root, "light");
+
+    // The Markdown image name rides on the frame as a hover tooltip, hidden
+    // from the accessibility tree: the <img> alt already carries the name.
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    const tooltip = frame?.querySelector<HTMLElement>(
+      ":scope > .m2h-image-name-tooltip",
+    );
+    expect(tooltip).not.toBeNull();
+    expect(tooltip?.textContent).toBe("architecture");
+    expect(tooltip?.getAttribute("aria-hidden")).toBe("true");
+    // The tooltip sits between the image and the trigger, all frame children.
+    expect(tooltip?.previousElementSibling?.tagName).toBe("IMG");
+    expect(tooltip?.nextElementSibling?.classList).toContain(
+      "m2h-image-lightbox-trigger",
+    );
+  });
+
+  it("omits the name tooltip when the image has no alt text", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p><img src="/a.png" alt=""></p><p><img src="/b.png"></p>';
+
+    await renderRichContent(root, "light");
+
+    expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(2);
+    expect(root.querySelectorAll(".m2h-image-name-tooltip")).toHaveLength(0);
+  });
+
+  it("does not stack a second tooltip on repeated enhancement", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><img src="/a.png" alt="A"></p>';
+
+    await renderRichContent(root, "light");
+    await renderRichContent(root, "light");
+
+    expect(root.querySelectorAll(".m2h-image-name-tooltip")).toHaveLength(1);
+  });
+
   it("frames images in document order without baking in position indexes", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");

@@ -462,16 +462,18 @@ function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
 
 // Give every plain <img> in the body a Lightbox trigger: a magnifier button
 // pinned to the top-right of a wrapper frame, plus the marker the React layer
-// keys its click-time image lookup on. No position index is recorded here:
+// keys its click-time image lookup on. The frame also carries a hover tooltip
+// with the image's alt text, so a sighted reader sees the Markdown image name
+// without opening the Lightbox. No position index is recorded here:
 // DOM order at click time is the only source of truth, so another enhancement
 // that reorders the body (a sortable table moving <tr> rows) cannot desync
 // the Lightbox. Mermaid never appears here as an <img> — its pass turns the
 // source pre into a div.mermaid holding an SVG — so plain img scanning
 // excludes it for free, and raw-HTML <img> tags are covered by the same
 // query. Idempotent like every enhancement: an image already carrying the
-// marker is skipped, so re-running on the same body stacks no second frame
-// or button. An anchor holding several images is left entirely alone (see
-// imageVisualRoot): raw-HTML semantics win over the enhancement.
+// marker is skipped, so re-running on the same body stacks no second frame,
+// button or tooltip. An anchor holding several images is left entirely alone
+// (see imageVisualRoot): raw-HTML semantics win over the enhancement.
 function addImageLightboxTriggers(root: HTMLElement): void {
   for (const image of root.querySelectorAll<HTMLImageElement>("img")) {
     if (image.dataset.m2hLightboxImage === "true") {
@@ -494,7 +496,19 @@ function addImageLightboxTriggers(root: HTMLElement): void {
     button.title = "查看大图";
     button.innerHTML = IMAGE_ZOOM_ICON;
 
-    frame.append(target, button);
+    frame.append(target);
+    // The tooltip repeats the alt text for sighted readers. aria-hidden: the
+    // <img> alt already provides the name to assistive technology, so a
+    // second accessible copy adds nothing.
+    const name = image.alt.trim();
+    if (name !== "") {
+      const tooltip = document.createElement("span");
+      tooltip.className = "m2h-image-name-tooltip";
+      tooltip.textContent = name;
+      tooltip.setAttribute("aria-hidden", "true");
+      frame.append(tooltip);
+    }
+    frame.append(button);
   }
 }
 
