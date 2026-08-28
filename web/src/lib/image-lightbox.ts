@@ -1,11 +1,17 @@
-// Snapshot collection for the image Lightbox.
+// Snapshot collection for the document Lightbox.
 //
-// The Lightbox must never hold references to the article's <img> elements: the
-// body DOM is wholesale replaced on every document load and hot swap
-// (root.innerHTML = html), so a live element reference would go stale the
-// moment the server sends new HTML. Instead, opening the Lightbox snapshots
-// each enhanced image's display-relevant attributes; the component then works
+// The Lightbox browses the document's visual items — enhanced images and
+// rendered Mermaid diagrams — and must never hold references to the article's
+// live elements: the body DOM is wholesale replaced on every document load and
+// hot swap (root.innerHTML = html), so a live element reference would go stale
+// the moment the server sends new HTML. Instead, opening the Lightbox
+// snapshots each item's display-relevant data; the component then works
 // purely from data, which also keeps a body refresh free to close it.
+//
+// Mermaid diagrams are snapshotted as a serialized SVG data URL: the Lightbox
+// renders everything through <img> — the element type its fit, rotation, and
+// pan-clamp algorithms are built around — and the SVG stays vector-sharp at
+// any zoom level.
 
 export interface LightboxImage {
   src: string;
@@ -15,48 +21,101 @@ export interface LightboxImage {
   title: string | null;
 }
 
-// The opened Lightbox: the body's image snapshots plus the image being viewed.
+// The opened Lightbox: the body's item snapshots plus the item being viewed.
 export interface LightboxState {
   images: LightboxImage[];
   index: number;
 }
 
-// Snapshot the body's Lightbox-enhanced images in *current* DOM order and
-// locate the pressed trigger's image among them.
+// The marker the enhancement layer stamps on every Lightbox-eligible element
+// (an <img> or a rendered .mermaid container). One marker for both kinds keeps
+// the click-time collection a single query in DOM order.
+const LIGHTBOX_ITEM_SELECTOR = '[data-m2h-lightbox-item="true"]';
+
+// Snapshot the body's Lightbox items in *current* DOM order and locate the
+// pressed trigger's item among them.
 //
 // The index is deliberately resolved here rather than baked into the DOM at
 // enhancement time: a sortable table really moves <tr> elements around, so any
 // position recorded when the triggers were injected can go stale and address
-// the wrong image. Querying at click time keeps the Lightbox decoupled from
+// the wrong item. Querying at click time keeps the Lightbox decoupled from
 // every other enhancement that may reorder the body.
 //
-// Returns null when the selected image is not one of the root's enhanced
-// images (or has left the tree); the caller then simply does not open.
+// Returns null when the selected item is not one of the root's enhanced items
+// (or has left the tree), or when it has nothing to show — a Mermaid container
+// whose diagram never rendered; the caller then simply does not open.
 //
 // currentSrc (resolved against the document URL, and the srcset winner when
 // one applies) is preferred over the raw attribute so the Lightbox reuses
 // exactly the resource the browser already loaded for the body.
 export function collectLightboxState(
   root: HTMLElement,
-  selectedImage: HTMLImageElement,
+  selectedItem: HTMLElement,
 ): LightboxState | null {
-  const elements = Array.from(
-    root.querySelectorAll<HTMLImageElement>(
-      'img[data-m2h-lightbox-image="true"]',
-    ),
+  const items = Array.from(
+    root.querySelectorAll<HTMLElement>(LIGHTBOX_ITEM_SELECTOR),
   );
-  const index = elements.indexOf(selectedImage);
-  if (index === -1) {
+  if (items.indexOf(selectedItem) === -1) {
     return null;
   }
+  const images: LightboxImage[] = [];
+  let index = -1;
+  for (const item of items) {
+    const snapshot = snapshotLightboxItem(item);
+    if (snapshot === null) {
+      continue;
+    }
+    if (item === selectedItem) {
+      index = images.length;
+    }
+    images.push(snapshot);
+  }
+  return index === -1 ? null : { images, index };
+}
+
+function snapshotLightboxItem(item: HTMLElement): LightboxImage | null {
+  if (item instanceof HTMLImageElement) {
+    return {
+      src: item.currentSrc || item.src,
+      srcSet: item.getAttribute("srcset"),
+      sizes: item.getAttribute("sizes"),
+      alt: item.alt,
+      title: item.title || null,
+    };
+  }
+  return snapshotMermaidDiagram(item);
+}
+
+// Serialize a rendered Mermaid diagram into a self-contained SVG data URL.
+// Mermaid bakes its theme palette into the markup at render time, so the
+// snapshot keeps the exact colors the reader is looking at. Mermaid also
+// commonly sizes the SVG with percentages ("width=100%"), which has no
+// intrinsic size once the SVG stands alone as an <img>; the viewBox carries
+// the diagram's true geometry, so the clone is pinned to its pixel
+// dimensions instead.
+function snapshotMermaidDiagram(container: HTMLElement): LightboxImage | null {
+  const svg = container.querySelector("svg");
+  if (svg === null) {
+    return null;
+  }
+  const clone = svg.cloneNode(true);
+  const viewBox = (svg.getAttribute("viewBox") ?? "").trim().split(/[\s,]+/);
+  if (
+    clone instanceof SVGElement &&
+    viewBox.length === 4 &&
+    viewBox.every((value) => Number.isFinite(Number(value)))
+  ) {
+    clone.setAttribute("width", viewBox[2]);
+    clone.setAttribute("height", viewBox[3]);
+  }
+  // encodeURIComponent keeps '#' (every theme color) and '<'/'>' from
+  // truncating or breaking the data URL.
+  const markup = new XMLSerializer().serializeToString(clone);
   return {
-    index,
-    images: elements.map((image) => ({
-      src: image.currentSrc || image.src,
-      srcSet: image.getAttribute("srcset"),
-      sizes: image.getAttribute("sizes"),
-      alt: image.alt,
-      title: image.title || null,
-    })),
+    src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`,
+    srcSet: null,
+    sizes: null,
+    alt: "Mermaid 图表",
+    title: null,
   };
 }

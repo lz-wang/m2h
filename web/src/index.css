@@ -630,10 +630,28 @@ body,
  * Rich-content presentation for KaTeX math and Mermaid diagrams. These only
  * take effect after render-rich-content.ts enhances the rendered Markdown.
  */
+/*
+ * Mermaid frame, injected by render-rich-content.ts around every rendered
+ * diagram. The frame owns the block's external geometry — the margin moves
+ * here from the .mermaid container — and is the stable positioning context
+ * for the shared Lightbox trigger: theme switches replace only the SVG inside
+ * the container, so the frame, its trigger, and any focus on it survive every
+ * repaint. Block-level like the code frame, so the trigger pins to the
+ * content column's top-right regardless of the diagram's own width.
+ */
+.markdown-body .m2h-mermaid-frame {
+  position: relative;
+  margin: 1rem 0;
+}
+
 .markdown-body .mermaid {
   margin: 1rem 0;
   overflow-x: auto;
   text-align: center;
+}
+
+.markdown-body .m2h-mermaid-frame > .mermaid {
+  margin: 0;
 }
 
 .markdown-body .mermaid svg {
@@ -841,14 +859,16 @@ body,
 }
 
 /* A quiet icon-sized affordance, not a toolbar button: it floats over the
- * image's corner with a translucent dark plate that reads on any image, and
- * darkens slightly on hover/focus. It stays invisible until the frame is
- * hovered (or the trigger itself is keyboard-focused — :focus-visible must
- * remain, otherwise a Tab reaches an invisible button); touch devices have
- * no stable hover, so there the trigger is always shown. The button is
- * injected once and only ever faded — never mounted/unmounted — keeping the
- * lightbox state collection and the table-sort DOM order untouched. */
-.markdown-body .m2h-image-lightbox-trigger {
+ * item's corner with a translucent dark plate that reads on any background,
+ * and darkens slightly on hover/focus. One shared class serves both Lightbox
+ * frames — images and Mermaid diagrams — so the two affordances can never
+ * drift apart. It stays invisible until the frame is hovered (or the trigger
+ * itself is keyboard-focused — :focus-visible must remain, otherwise a Tab
+ * reaches an invisible button); touch devices have no stable hover, so there
+ * the trigger is always shown. The button is injected once and only ever
+ * faded — never mounted/unmounted — keeping the lightbox state collection
+ * and the table-sort DOM order untouched. */
+.markdown-body .m2h-lightbox-trigger {
   position: absolute;
   top: 0.375rem;
   right: 0.375rem;
@@ -874,25 +894,26 @@ body,
     background-color 120ms ease;
 }
 
-.markdown-body .m2h-image-frame:hover .m2h-image-lightbox-trigger,
-.markdown-body .m2h-image-lightbox-trigger:focus-visible {
+.markdown-body .m2h-image-frame:hover .m2h-lightbox-trigger,
+.markdown-body .m2h-mermaid-frame:hover .m2h-lightbox-trigger,
+.markdown-body .m2h-lightbox-trigger:focus-visible {
   opacity: 1;
   pointer-events: auto;
 }
 
 @media (hover: none) {
-  .markdown-body .m2h-image-lightbox-trigger {
+  .markdown-body .m2h-lightbox-trigger {
     opacity: 1;
     pointer-events: auto;
   }
 }
 
-.markdown-body .m2h-image-lightbox-trigger:hover,
-.markdown-body .m2h-image-lightbox-trigger:focus-visible {
+.markdown-body .m2h-lightbox-trigger:hover,
+.markdown-body .m2h-lightbox-trigger:focus-visible {
   background: rgb(0 0 0 / 68%);
 }
 
-.markdown-body .m2h-image-lightbox-trigger svg {
+.markdown-body .m2h-lightbox-trigger svg {
   width: 0.875rem;
   height: 0.875rem;
 }

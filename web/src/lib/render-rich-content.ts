@@ -462,13 +462,13 @@ function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
 
 // Give every plain <img> in the body a Lightbox trigger: a magnifier button
 // pinned to the top-right of a wrapper frame, plus the marker the React layer
-// keys its click-time image lookup on. The frame also carries a hover tooltip
+// keys its click-time item lookup on. The frame also carries a hover tooltip
 // with the image's alt text, so a sighted reader sees the Markdown image name
 // without opening the Lightbox. No position index is recorded here:
 // DOM order at click time is the only source of truth, so another enhancement
 // that reorders the body (a sortable table moving <tr> rows) cannot desync
 // the Lightbox. Mermaid never appears here as an <img> — its pass turns the
-// source pre into a div.mermaid holding an SVG — so plain img scanning
+// source pre into a framed div.mermaid holding an SVG — so plain img scanning
 // excludes it for free, and raw-HTML <img> tags are covered by the same
 // query. Idempotent like every enhancement: an image already carrying the
 // marker is skipped, so re-running on the same body stacks no second frame,
@@ -476,25 +476,18 @@ function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
 // (see imageVisualRoot): raw-HTML semantics win over the enhancement.
 function addImageLightboxTriggers(root: HTMLElement): void {
   for (const image of root.querySelectorAll<HTMLImageElement>("img")) {
-    if (image.dataset.m2hLightboxImage === "true") {
+    if (image.dataset.m2hLightboxItem === "true") {
       continue;
     }
     const target = imageVisualRoot(image);
     if (target === null) {
       continue;
     }
-    image.dataset.m2hLightboxImage = "true";
+    image.dataset.m2hLightboxItem = "true";
 
     const frame = document.createElement("span");
     frame.className = "m2h-image-frame";
     target.replaceWith(frame);
-
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "m2h-image-lightbox-trigger";
-    button.setAttribute("aria-label", "查看大图");
-    button.title = "查看大图";
-    button.innerHTML = IMAGE_ZOOM_ICON;
 
     frame.append(target);
     // The tooltip repeats the alt text for sighted readers. aria-hidden: the
@@ -508,8 +501,23 @@ function addImageLightboxTriggers(root: HTMLElement): void {
       tooltip.setAttribute("aria-hidden", "true");
       frame.append(tooltip);
     }
-    frame.append(button);
+    frame.append(createLightboxTrigger("查看大图"));
   }
+}
+
+// Build the magnifier control every Lightbox frame carries — the image frame
+// and the Mermaid frame share one button so their affordance, gating, and
+// styling can never drift apart. The body DOM is not owned by React, so the
+// trigger renders an inline SVG instead of a lucide-react component; the
+// aria label is the only per-kind difference.
+function createLightboxTrigger(ariaLabel: string): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "m2h-lightbox-trigger";
+  button.setAttribute("aria-label", ariaLabel);
+  button.title = ariaLabel;
+  button.innerHTML = IMAGE_ZOOM_ICON;
+  return button;
 }
 
 // The element the frame should wrap, or null when the image must not be
@@ -611,8 +619,20 @@ async function renderMermaid(
     const container = document.createElement("div");
     container.className = "mermaid";
     container.textContent = source;
+    // The Lightbox marker rides on the container, never on the SVG inside:
+    // paintMermaidTarget rewrites the container's innerHTML on every theme
+    // switch, so the marker — like the frame below — survives each repaint.
+    container.dataset.m2hLightboxItem = "true";
     mermaidSources.set(container, source);
-    pre.replaceWith(container);
+
+    // A stable frame around the diagram. The container's content is owned by
+    // mermaid.render (and replaced wholesale on theme switches), so the
+    // Lightbox trigger can never live inside it; the frame keeps the trigger
+    // — and any focus on it — alive across every repaint.
+    const frame = document.createElement("div");
+    frame.className = "m2h-mermaid-frame";
+    pre.replaceWith(frame);
+    frame.append(container, createLightboxTrigger("查看 Mermaid 图表"));
     targets.push(container);
   }
 

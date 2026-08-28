@@ -17,7 +17,7 @@ async function openDocument(page: Page) {
   await page.waitForFunction(
     () =>
       document.querySelector(".markdown-body img") !== null &&
-      document.querySelectorAll(".m2h-image-lightbox-trigger").length >= 3,
+      document.querySelectorAll(".m2h-lightbox-trigger").length >= 3,
   );
 }
 
@@ -25,10 +25,7 @@ async function openDocument(page: Page) {
 // settle so the recorded hash is the stable pre-lightbox state. Returning the
 // invariants this way means no later Playwright auto-scroll can pollute them.
 async function captureInvariants(page: Page) {
-  await page
-    .locator(".m2h-image-lightbox-trigger")
-    .first()
-    .scrollIntoViewIfNeeded();
+  await page.locator(".m2h-lightbox-trigger").first().scrollIntoViewIfNeeded();
   await page.waitForTimeout(300);
   return {
     scrollY: await page.evaluate(() => window.scrollY),
@@ -52,7 +49,7 @@ async function openLightbox(page: Page, triggerIndex = 0) {
   // makes the trigger clickable; the mouse is then already inside the frame,
   // exactly how a user reaches the magnifier.
   await page.locator(".m2h-image-frame").nth(triggerIndex).hover();
-  await page.locator(".m2h-image-lightbox-trigger").nth(triggerIndex).click();
+  await page.locator(".m2h-lightbox-trigger").nth(triggerIndex).click();
   const popup = page.locator(".image-lightbox");
   await expect(popup).toBeVisible();
   return popup;
@@ -340,12 +337,159 @@ test("keeps the linked image's anchor while its trigger opens the lightbox", asy
   // The magnifier on the same frame opens the lightbox instead. Hover the
   // frame first: the trigger is hover-gated in the reader.
   await page.locator(".m2h-image-frame:has(> a)").hover();
-  await page
-    .locator(".m2h-image-frame:has(> a) .m2h-image-lightbox-trigger")
-    .click();
+  await page.locator(".m2h-image-frame:has(> a) .m2h-lightbox-trigger").click();
   const popup = page.locator(".image-lightbox");
   await expect(popup).toBeVisible();
   await expect(
     page.locator('.image-lightbox-counter > span[aria-hidden="true"]'),
   ).toHaveText("2 / 3");
+});
+
+// --- Mermaid diagrams in the shared lightbox --------------------------------
+//
+// The mermaid fixture interleaves image → diagram → image, so these tests
+// verify the two visual kinds really browse as ONE sequence with the shared
+// toolbar, and that a diagram snapshot (a serialized SVG data URL) survives
+// the same zoom / rotate / pan / close round a plain image goes through.
+
+const mermaidDocumentPath = "/doc/mermaid-lightbox.md";
+
+async function openMermaidDocument(page: Page) {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto(mermaidDocumentPath);
+  // The diagram must finish rendering — its SVG lands inside the frame —
+  // before the trigger has anything to open.
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".m2h-mermaid-frame svg") !== null &&
+      document.querySelectorAll(".m2h-lightbox-trigger").length >= 3,
+  );
+}
+
+async function openMermaidLightbox(page: Page) {
+  await page.locator(".m2h-mermaid-frame").hover();
+  await page.locator(".m2h-mermaid-frame .m2h-lightbox-trigger").click();
+  const popup = page.locator(".image-lightbox");
+  await expect(popup).toBeVisible();
+  return popup;
+}
+
+// Same contract as captureInvariants, but anchored at the diagram: hovering
+// the mermaid frame (below the first image in this fixture) auto-scrolls to
+// it, so the invariants must be recorded from the diagram's position, not
+// the first trigger's.
+async function captureMermaidInvariants(page: Page) {
+  await page.locator(".m2h-mermaid-frame").scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  return {
+    scrollY: await page.evaluate(() => window.scrollY),
+    hash: await page.evaluate(() => location.hash),
+  };
+}
+
+test("opens a mermaid diagram inside the shared image sequence", async ({
+  page,
+}) => {
+  await openMermaidDocument(page);
+  const before = await captureMermaidInvariants(page);
+
+  await openMermaidLightbox(page);
+  const displayed = page.locator(".image-lightbox-image");
+  const counter = page.locator(
+    '.image-lightbox-counter > span[aria-hidden="true"]',
+  );
+  // The diagram is the middle item of the image → diagram → image document.
+  await expect(counter).toHaveText("2 / 3");
+  await expect(displayed).toHaveAttribute("src", /^data:image\/svg\+xml/);
+
+  // Both neighbors are real images; the sequence is shared, not split into
+  // per-kind galleries.
+  await page.getByRole("button", { name: "下一张图片" }).click();
+  await expect(counter).toHaveText("3 / 3");
+  await expect(displayed).toHaveAttribute("src", /square\.png$/);
+  await page.getByRole("button", { name: "上一张图片" }).click();
+  await page.getByRole("button", { name: "上一张图片" }).click();
+  await expect(counter).toHaveText("1 / 3");
+  await expect(displayed).toHaveAttribute("src", /landscape\.png$/);
+
+  await page.getByRole("button", { name: "关闭图片预览" }).click();
+  await expect(page.locator(".image-lightbox")).toBeHidden();
+  await expectInvariantsUnchanged(page, before);
+});
+
+test("rotates, zooms, pans and closes a mermaid diagram without moving the document", async ({
+  page,
+}) => {
+  await openMermaidDocument(page);
+  const before = await captureMermaidInvariants(page);
+
+  await openMermaidLightbox(page);
+  await waitForFittedImage(page, 100);
+
+  // Rotate: the transform carries the quarter turn like any image.
+  await page.getByRole("button", { name: "顺时针旋转" }).click();
+  await page.waitForFunction(() => {
+    const image = document.querySelector<HTMLImageElement>(
+      ".image-lightbox-image",
+    );
+    return image?.style.transform.includes("rotate(90deg)") ?? false;
+  });
+
+  // Zoom to the 5x cap, then drag far past every edge. The pan must follow
+  // the drag direction and stay clamped inside the fitted stage: bounded by
+  // half the zoomed diagram's natural size along whichever axis the rotation
+  // leaves there (max() of both natural dimensions covers the swap).
+  const zoomIn = page.getByRole("button", { name: "放大图片" });
+  while (await zoomIn.isEnabled()) {
+    await zoomIn.click();
+  }
+  const box = await page.locator(".image-lightbox-image").boundingBox();
+  if (box === null) {
+    throw new Error("lightbox image was not rendered");
+  }
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(
+    box.x + box.width / 2 - 5000,
+    box.y + box.height / 2 - 5000,
+    { steps: 10 },
+  );
+  await page.mouse.up();
+
+  const pan = await imagePan(page);
+  const natural = await page.evaluate(() => {
+    const image = document.querySelector<HTMLImageElement>(
+      ".image-lightbox-image",
+    );
+    return {
+      width: image?.naturalWidth ?? 0,
+      height: image?.naturalHeight ?? 0,
+    };
+  });
+  const bound = (Math.max(natural.width, natural.height) * 5) / 2 + 1;
+  expect(pan.x).toBeLessThanOrEqual(0);
+  expect(pan.y).toBeLessThanOrEqual(0);
+  expect(pan.x).toBeGreaterThanOrEqual(-bound);
+  expect(pan.y).toBeGreaterThanOrEqual(-bound);
+
+  // Still closable at max zoom: the close button stays on top and works.
+  const close = page.getByRole("button", { name: "关闭图片预览" });
+  const closeBox = await close.boundingBox();
+  if (closeBox === null) {
+    throw new Error("close button was not rendered");
+  }
+  const closeIsTopmost = await page.evaluate(
+    ({ x, y }) => {
+      const element = document.elementFromPoint(x, y);
+      return element?.closest(".image-lightbox-close") !== null;
+    },
+    {
+      x: closeBox.x + closeBox.width / 2,
+      y: closeBox.y + closeBox.height / 2,
+    },
+  );
+  expect(closeIsTopmost).toBe(true);
+  await close.click();
+  await expect(page.locator(".image-lightbox")).toBeHidden();
+  await expectInvariantsUnchanged(page, before);
 });

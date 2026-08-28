@@ -781,14 +781,14 @@ describe("image lightbox triggers", () => {
     const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
     const image = root.querySelector<HTMLImageElement>("img");
     const button = root.querySelector<HTMLButtonElement>(
-      ".m2h-image-lightbox-trigger",
+      ".m2h-lightbox-trigger",
     );
     expect(frame).not.toBeNull();
     expect(image).not.toBeNull();
     expect(button).not.toBeNull();
     expect(image?.parentElement).toBe(frame);
     expect(button?.parentElement).toBe(frame);
-    expect(image?.dataset.m2hLightboxImage).toBe("true");
+    expect(image?.dataset.m2hLightboxItem).toBe("true");
     expect(button?.type).toBe("button");
     expect(button?.getAttribute("aria-label")).toBe("查看大图");
     expect(button?.title).toBe("查看大图");
@@ -814,7 +814,7 @@ describe("image lightbox triggers", () => {
     // The tooltip sits between the image and the trigger, all frame children.
     expect(tooltip?.previousElementSibling?.tagName).toBe("IMG");
     expect(tooltip?.nextElementSibling?.classList).toContain(
-      "m2h-image-lightbox-trigger",
+      "m2h-lightbox-trigger",
     );
   });
 
@@ -861,9 +861,7 @@ describe("image lightbox triggers", () => {
       frames,
     );
     expect(root.querySelector("[data-m2h-lightbox-index]")).toBeNull();
-    expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
-      3,
-    );
+    expect(root.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(3);
   });
 
   it("does not stack a second frame on repeated enhancement", async () => {
@@ -877,9 +875,7 @@ describe("image lightbox triggers", () => {
 
     expect(root.querySelectorAll("img")).toHaveLength(3);
     expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(3);
-    expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
-      3,
-    );
+    expect(root.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(3);
     // No frame nested inside another frame either.
     expect(
       root.querySelectorAll(".m2h-image-frame .m2h-image-frame"),
@@ -897,7 +893,7 @@ describe("image lightbox triggers", () => {
     const anchor = root.querySelector<HTMLAnchorElement>("a");
     const image = root.querySelector<HTMLImageElement>("img");
     const button = root.querySelector<HTMLButtonElement>(
-      ".m2h-image-lightbox-trigger",
+      ".m2h-lightbox-trigger",
     );
     expect(frame).not.toBeNull();
     expect(anchor?.parentElement).toBe(frame);
@@ -923,7 +919,7 @@ describe("image lightbox triggers", () => {
     const anchor = root.querySelector<HTMLAnchorElement>("a");
     expect(anchor?.parentElement).toBe(frame);
     expect(anchor?.querySelector("button")).toBeNull();
-    expect(anchor?.querySelector("img")?.dataset.m2hLightboxImage).toBe("true");
+    expect(anchor?.querySelector("img")?.dataset.m2hLightboxItem).toBe("true");
   });
 
   it("leaves a multi-image anchor untouched", async () => {
@@ -943,11 +939,9 @@ describe("image lightbox triggers", () => {
       anchor?.querySelector("img")?.closest(".m2h-image-frame"),
     ).toBeNull();
     expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(0);
-    expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
-      0,
-    );
+    expect(root.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(0);
     expect(
-      root.querySelectorAll('img[data-m2h-lightbox-image="true"]'),
+      root.querySelectorAll('[data-m2h-lightbox-item="true"]'),
     ).toHaveLength(0);
   });
 
@@ -962,9 +956,7 @@ describe("image lightbox triggers", () => {
     // The multi-image anchor is detected through closest("a"), so wrapping
     // each image in its own span must not smuggle a button into the link.
     expect(root.querySelector("a")?.querySelector("button")).toBeNull();
-    expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
-      0,
-    );
+    expect(root.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(0);
   });
 
   it("wraps the picture of a responsive image, keeping source selection", async () => {
@@ -982,13 +974,13 @@ describe("image lightbox triggers", () => {
     const picture = root.querySelector<HTMLPictureElement>("picture");
     const image = root.querySelector<HTMLImageElement>("img");
     const button = root.querySelector<HTMLButtonElement>(
-      ".m2h-image-lightbox-trigger",
+      ".m2h-lightbox-trigger",
     );
     expect(picture?.parentElement).toBe(frame);
     expect(image?.parentElement).toBe(picture);
     expect(picture?.querySelector("source")?.nextElementSibling).toBe(image);
     expect(button?.parentElement).toBe(frame);
-    expect(image?.dataset.m2hLightboxImage).toBe("true");
+    expect(image?.dataset.m2hLightboxItem).toBe("true");
   });
 
   it("wraps the anchor of a linked picture, keeping the button outside the link", async () => {
@@ -1003,7 +995,7 @@ describe("image lightbox triggers", () => {
     const anchor = root.querySelector<HTMLAnchorElement>("a");
     const picture = root.querySelector<HTMLPictureElement>("picture");
     const button = root.querySelector<HTMLButtonElement>(
-      ".m2h-image-lightbox-trigger",
+      ".m2h-lightbox-trigger",
     );
     expect(anchor?.parentElement).toBe(frame);
     expect(picture?.parentElement).toBe(anchor);
@@ -1012,7 +1004,7 @@ describe("image lightbox triggers", () => {
     expect(anchor?.querySelector("button")).toBeNull();
   });
 
-  it("never adds a trigger to a rendered mermaid diagram", async () => {
+  it("frames a rendered mermaid diagram with exactly one shared trigger", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML =
@@ -1020,11 +1012,68 @@ describe("image lightbox triggers", () => {
 
     await renderRichContent(root, "light");
 
-    expect(root.querySelector(".mermaid")).not.toBeNull();
-    expect(root.querySelectorAll("img")).toHaveLength(0);
-    expect(root.querySelectorAll(".m2h-image-lightbox-trigger")).toHaveLength(
-      0,
+    // The diagram pass owns its frame: a stable wrapper around the container
+    // (which mermaid rewrites on every theme switch) carrying the shared
+    // trigger, with the lightbox marker on the container itself.
+    const frame = root.querySelector<HTMLElement>(".m2h-mermaid-frame");
+    const container = root.querySelector<HTMLElement>("div.mermaid");
+    const button = root.querySelector<HTMLButtonElement>(
+      ".m2h-mermaid-frame > .m2h-lightbox-trigger",
     );
+    expect(frame).not.toBeNull();
+    expect(container?.parentElement).toBe(frame);
+    expect(button?.parentElement).toBe(frame);
+    expect(container?.dataset.m2hLightboxItem).toBe("true");
+    expect(button?.type).toBe("button");
+    expect(button?.getAttribute("aria-label")).toBe("查看 Mermaid 图表");
+    expect(button?.title).toBe("查看 Mermaid 图表");
+    expect(button?.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    // The image pass must not have added a second trigger: mermaid never
+    // appears as an <img>, so exactly one button lives in the frame.
+    expect(root.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(1);
+    expect(root.querySelectorAll("img")).toHaveLength(0);
+  });
+
+  it("keeps the mermaid frame, marker and trigger across a theme re-render", async () => {
+    const { renderRichContent, rerenderMermaid } = await import(
+      "./render-rich-content"
+    );
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+
+    await renderRichContent(root, "light");
+    const frame = root.querySelector<HTMLElement>(".m2h-mermaid-frame");
+    const container = root.querySelector<HTMLElement>("div.mermaid");
+    const button = root.querySelector<HTMLButtonElement>(
+      ".m2h-mermaid-frame > .m2h-lightbox-trigger",
+    );
+    if (frame === null || container === null || button === null) {
+      throw new Error("mermaid frame was not created");
+    }
+    // Focus only lands on connected elements, so the root joins the document
+    // for this test (and leaves again in the finally below).
+    document.body.append(root);
+    button.focus();
+    mermaidMock.render.mockClear();
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg data-mock="dark"></svg>',
+    });
+
+    try {
+      await rerenderMermaid(root, "dark");
+
+      // Only the SVG inside the container is replaced; the frame, the marker,
+      // the trigger — and focus on it — all survive the repaint, and no
+      // second trigger stacks.
+      expect(container.innerHTML).toContain('data-mock="dark"');
+      expect(root.querySelectorAll(".m2h-mermaid-frame")).toHaveLength(1);
+      expect(root.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(1);
+      expect(container.dataset.m2hLightboxItem).toBe("true");
+      expect(document.activeElement).toBe(button);
+    } finally {
+      root.remove();
+    }
   });
 
   // Cross-feature regression: Tablesort really moves <tr> elements, so the
@@ -1065,7 +1114,7 @@ describe("image lightbox triggers", () => {
     // then indexed against the current DOM order: b.png is now image 0.
     const frame = root.querySelector<HTMLElement>("tbody .m2h-image-frame");
     const selected = frame?.querySelector<HTMLImageElement>(
-      'img[data-m2h-lightbox-image="true"]',
+      '[data-m2h-lightbox-item="true"]',
     );
     const state =
       selected === undefined || selected === null

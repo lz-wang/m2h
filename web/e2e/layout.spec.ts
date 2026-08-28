@@ -209,13 +209,13 @@ test("shows the image magnifier on hover and keyboard focus only", async ({
   await page.setViewportSize({ width: 1280, height: 720 });
   await waitForBody(page, "/doc/images.md");
   await page.waitForFunction(
-    () => document.querySelectorAll(".m2h-image-lightbox-trigger").length > 0,
+    () => document.querySelectorAll(".m2h-lightbox-trigger").length > 0,
   );
 
   const readOpacity = () =>
     page.evaluate(() => {
       const trigger = document.querySelector(
-        ".m2h-image-lightbox-trigger",
+        ".m2h-lightbox-trigger",
       ) as HTMLElement | null;
       return trigger === null ? null : getComputedStyle(trigger).opacity;
     });
@@ -236,7 +236,7 @@ test("shows the image magnifier on hover and keyboard focus only", async ({
   });
   for (let step = 0; step < 50; step += 1) {
     const focused = await page.evaluate(() =>
-      document.activeElement?.classList.contains("m2h-image-lightbox-trigger"),
+      document.activeElement?.classList.contains("m2h-lightbox-trigger"),
     );
     if (focused === true) {
       break;
@@ -246,9 +246,7 @@ test("shows the image magnifier on hover and keyboard focus only", async ({
   await expect
     .poll(() =>
       page.evaluate(() =>
-        document.activeElement?.classList.contains(
-          "m2h-image-lightbox-trigger",
-        ),
+        document.activeElement?.classList.contains("m2h-lightbox-trigger"),
       ),
     )
     .toBe(true);

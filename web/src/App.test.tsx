@@ -2087,9 +2087,7 @@ describe("image lightbox integration", () => {
     // The body was not re-enhanced either: still exactly one trigger. (The
     // modal dialog inerts the article, so this is a DOM query, not a role
     // query.)
-    expect(
-      document.querySelectorAll(".m2h-image-lightbox-trigger"),
-    ).toHaveLength(1);
+    expect(document.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(1);
   });
 
   // Cross-feature regression: a sortable table reorders <tr> rows after the

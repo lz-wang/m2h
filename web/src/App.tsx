@@ -1116,25 +1116,26 @@ function PreviewContent({
   // ever sees it, and everything else falls through unchanged.
   const handleContentClick = (event: ReactMouseEvent<HTMLElement>) => {
     const target = event.target instanceof Element ? event.target : null;
-    const candidate = target?.closest(".m2h-image-lightbox-trigger");
+    const candidate = target?.closest(".m2h-lightbox-trigger");
     if (
       candidate instanceof HTMLButtonElement &&
       contentRef.current?.contains(candidate) === true
     ) {
       event.preventDefault();
       event.stopPropagation();
-      // Resolve the pressed trigger's own image through its frame, then index
-      // it against the body's current DOM order at click time. No index is
-      // baked into the DOM: a sortable table moves <tr> rows after the
-      // triggers were injected, so a recorded position could address another
-      // image than the one under this trigger.
+      // Resolve the pressed trigger's own item — an image or a rendered
+      // Mermaid container — through its frame, then index it against the
+      // body's current DOM order at click time. No index is baked into the
+      // DOM: a sortable table moves <tr> rows after the triggers were
+      // injected, so a recorded position could address another item than the
+      // one under this trigger.
       const root = contentRef.current;
-      const frame = candidate.closest(".m2h-image-frame");
-      const selectedImage = frame?.querySelector<HTMLImageElement>(
-        'img[data-m2h-lightbox-image="true"]',
+      const frame = candidate.closest(".m2h-image-frame, .m2h-mermaid-frame");
+      const selectedItem = frame?.querySelector<HTMLElement>(
+        '[data-m2h-lightbox-item="true"]',
       );
-      if (root !== null && selectedImage != null) {
-        const state = collectLightboxState(root, selectedImage);
+      if (root !== null && selectedItem != null) {
+        const state = collectLightboxState(root, selectedItem);
         if (state !== null) {
           setLightbox(state);
         }
