@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, type Page, test } from "@playwright/test";
 
 // Real-browser regression for the ZenUML external diagram. Mermaid Core does
 // not know the `zenuml` diagram type: without the vendored plugin registered

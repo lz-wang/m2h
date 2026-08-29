@@ -14,6 +14,11 @@
 
 ## [未发布]
 
+### 新增
+
+- Mermaid ZenUML 时序图支持：WebUI 与导出 HTML 均可渲染 `zenuml` 图表。此前两端只加载 Mermaid Core，合法的 ZenUML 会退化为 `Syntax error in text`；现在 WebUI 在文档含 zenuml 图表时按需加载二进制内嵌的 mermaid-zenuml 0.2.3 运行时（保留上游 dist 相对路径的 chunks 目录），按 load → register → initialize → render 顺序注册 external diagram 后渲染，导出页面则在产物确含 zenuml 图表时携带同一 release 的 jsDelivr 插件 URL、由内联引导脚本动态导入注册。插件注册按页面单例缓存且失败不缓存 rejected Promise（主题切换重绘可重试）；普通 Mermaid 图表不产生插件下载；WebUI 图表渲染失败时在控制台输出图表类型与原始错误，使插件缺失、资源加载失败与语法错误可区分。
+
+
 ## [0.14.0] - 2026-08-28
 
 ### 新增

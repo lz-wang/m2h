@@ -139,7 +139,7 @@ m2h 支持常用 GFM Markdown，并提供以下扩展：
 
 * GitHub 风格语法高亮与标题锚点
 * 脚注、Emoji、GitHub Alerts
-* 数学公式与 Mermaid
+* 数学公式与 Mermaid（含按需加载的 ZenUML 时序图）
 * YAML Frontmatter
 * 可排序表格
 * `==高亮==`、`^^插入^^`
