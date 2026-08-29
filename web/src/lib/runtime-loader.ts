@@ -166,6 +166,41 @@ function importZenUMLModule(): ReturnType<ZenUMLModuleImporter> {
 // theme rerender) can retry instead of staying broken forever.
 let zenumlRegistration: Promise<void> | null = null;
 
+function hostStylesheets(): Set<Element> {
+  return new Set(
+    Array.from(document.head.children).filter(
+      (element) =>
+        element instanceof HTMLStyleElement ||
+        (element instanceof HTMLLinkElement && element.rel === "stylesheet"),
+    ),
+  );
+}
+
+// External diagram registration is a renderer boundary: importing or
+// registering a renderer may return code and SVG markup, but it must never
+// install page-wide CSS into m2h's host document. mermaid-zenuml 0.2.3 loads
+// @zenuml/core 3.47.2, whose browser bundle appends an unscoped ~888 KiB
+// stylesheet during registration. Among its rules are :root --background and
+// other generic Tailwind/theme tokens, which overwrite the reader toolbar and
+// TOC colors even though the generated native SVG already carries every style
+// it needs in its own <defs>. Remove every stylesheet added by this one
+// isolated operation on both success and failure; pre-existing app/runtime
+// styles are retained by identity.
+async function withoutAddedHostStylesheets<T>(
+  operation: () => Promise<T>,
+): Promise<T> {
+  const retained = hostStylesheets();
+  try {
+    return await operation();
+  } finally {
+    for (const stylesheet of hostStylesheets()) {
+      if (!retained.has(stylesheet)) {
+        stylesheet.remove();
+      }
+    }
+  }
+}
+
 /**
  * Register the ZenUML external-diagram plugin with the shared Mermaid runtime.
  * Must complete before `mermaid.initialize`, per Mermaid's integration order
@@ -182,12 +217,14 @@ export async function ensureZenUMLRegistered(
   }
 
   const registration = (async () => {
-    const module = await importModule();
-    // lazyLoad stays off: the caller already knows this document renders
-    // ZenUML, so the diagram chunk downloads during registration and the
-    // subsequent render cannot hit a second, hidden lazy load.
-    await mermaid.registerExternalDiagrams([module.default], {
-      lazyLoad: false,
+    await withoutAddedHostStylesheets(async () => {
+      const module = await importModule();
+      // lazyLoad stays off: the caller already knows this document renders
+      // ZenUML, so the diagram chunk downloads during registration and the
+      // subsequent render cannot hit a second, hidden lazy load.
+      await mermaid.registerExternalDiagrams([module.default], {
+        lazyLoad: false,
+      });
     });
   })();
 

@@ -13,25 +13,98 @@
   // Same leading-keyword rule as the official plugin's own detector: only a
   // diagram whose source starts with the zenuml keyword needs the plugin.
   var ZENUML_PREFIX = /^\s*zenuml/;
+  // @zenuml/core returns one static light SVG palette. Keep the dark correction
+  // inside that SVG so exported pages match Mermaid's ordinary dark sequence
+  // diagrams without installing another host stylesheet.
+  var ZENUML_DARK_THEME_STYLE = [
+    'svg[data-m2h-zenuml-theme="dark"] { color-scheme: dark; }',
+    'svg[data-m2h-zenuml-theme="dark"] .frame-border-outer { fill: #d3d3d3; }',
+    'svg[data-m2h-zenuml-theme="dark"] .frame-border-inner, svg[data-m2h-zenuml-theme="dark"] .frame-header-bg, svg[data-m2h-zenuml-theme="dark"] .participant-box, svg[data-m2h-zenuml-theme="dark"] .group-title-bg { fill: #1f2020; }',
+    'svg[data-m2h-zenuml-theme="dark"] .frame-header-line, svg[data-m2h-zenuml-theme="dark"] .participant-box, svg[data-m2h-zenuml-theme="dark"] .participant-icon [fill="currentColor"]:not([stroke]), svg[data-m2h-zenuml-theme="dark"] .lifeline, svg[data-m2h-zenuml-theme="dark"] .fragment-border, svg[data-m2h-zenuml-theme="dark"] .group-outline { stroke: #d3d3d3; }',
+    'svg[data-m2h-zenuml-theme="dark"] .frame-title, svg[data-m2h-zenuml-theme="dark"] .participant-label, svg[data-m2h-zenuml-theme="dark"] .message-label, svg[data-m2h-zenuml-theme="dark"] .fragment-label, svg[data-m2h-zenuml-theme="dark"] .fragment-condition, svg[data-m2h-zenuml-theme="dark"] .fragment-section-label, svg[data-m2h-zenuml-theme="dark"] .return-label, svg[data-m2h-zenuml-theme="dark"] .return-icon, svg[data-m2h-zenuml-theme="dark"] .group-title-text { fill: #cccccc; }',
+    'svg[data-m2h-zenuml-theme="dark"] .participant-icon { color: #cccccc; }',
+    'svg[data-m2h-zenuml-theme="dark"] .message-line, svg[data-m2h-zenuml-theme="dark"] .arrow-head, svg[data-m2h-zenuml-theme="dark"] .return-line, svg[data-m2h-zenuml-theme="dark"] .return-arrow, svg[data-m2h-zenuml-theme="dark"] .arrow-head path[stroke] { stroke: #cccccc; }',
+    'svg[data-m2h-zenuml-theme="dark"] .arrow-head:not(.arrow-open) { fill: #cccccc; }',
+    'svg[data-m2h-zenuml-theme="dark"] .arrow-open, svg[data-m2h-zenuml-theme="dark"] .return-arrow { fill: none; }',
+    'svg[data-m2h-zenuml-theme="dark"] .occurrence, svg[data-m2h-zenuml-theme="dark"] .fragment-header { fill: #474949; }',
+    'svg[data-m2h-zenuml-theme="dark"] .occurrence { stroke: #d3d3d3; }',
+    'svg[data-m2h-zenuml-theme="dark"] .fragment-separator { stroke: #2f2f2f; }',
+    'svg[data-m2h-zenuml-theme="dark"] .divider-bg { fill: #2f2f2f; stroke: #aaaa33; }',
+    'svg[data-m2h-zenuml-theme="dark"] .divider-label { fill: #d3d3d3; }',
+    'svg[data-m2h-zenuml-theme="dark"] .comment-text, svg[data-m2h-zenuml-theme="dark"] .seq-number { fill: #b8b6b6; }'
+  ].join("\n");
 
   // Mermaid Core does not know the zenuml diagram type; the plugin module
   // (whose pinned URL the page carries in window.m2hZenUMLModuleURL) must be
   // dynamically imported and registered before initialize. A failure only
   // degrades ZenUML blocks — plain diagrams keep rendering — so it is reported
   // and swallowed here instead of aborting the whole enhancer.
+  function hostStylesheets() {
+    return new Set(Array.from(document.head.children).filter(function (element) {
+      return element instanceof HTMLStyleElement ||
+        (element instanceof HTMLLinkElement && element.rel === "stylesheet");
+    }));
+  }
+
+  // External renderers may return SVG, but may not leave global styles behind.
+  // The pinned ZenUML browser bundle injects an unscoped stylesheet while its
+  // diagram chunk registers; the native SVG output already includes the local
+  // styles it needs. Clean additions on both success and failure while keeping
+  // every stylesheet that belonged to the exported page before registration.
+  function withoutAddedHostStylesheets(operation) {
+    var retained = hostStylesheets();
+    var cleanup = function () {
+      hostStylesheets().forEach(function (stylesheet) {
+        if (!retained.has(stylesheet)) {
+          stylesheet.remove();
+        }
+      });
+    };
+    return Promise.resolve().then(operation).then(
+      function (value) {
+        cleanup();
+        return value;
+      },
+      function (error) {
+        cleanup();
+        throw error;
+      }
+    );
+  }
+
   function registerZenUML() {
     var url = window.m2hZenUMLModuleURL;
     if (!url || typeof mermaid.registerExternalDiagrams !== "function") {
       console.warn("ZenUML diagram present but no plugin module URL is available");
       return Promise.resolve();
     }
-    return import(url)
-      .then(function (plugin) {
+    return withoutAddedHostStylesheets(function () {
+      return import(url).then(function (plugin) {
         return mermaid.registerExternalDiagrams([plugin.default], { lazyLoad: false });
-      })
+      });
+    })
       .catch(function (error) {
         console.warn("Failed to register the ZenUML diagram plugin", error);
       });
+  }
+
+  function applyZenUMLTheme(root, dark) {
+    root.querySelectorAll('.mermaid[data-m2h-engine="zenuml"] > svg').forEach(function (svg) {
+      var mode = dark ? "dark" : "light";
+      svg.setAttribute("data-m2h-zenuml-theme", mode);
+      if (!dark) {
+        return;
+      }
+      var definitions = svg.querySelector(":scope > defs");
+      if (!definitions) {
+        definitions = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+        svg.insertBefore(definitions, svg.firstChild);
+      }
+      var style = document.createElementNS("http://www.w3.org/2000/svg", "style");
+      style.setAttribute("data-m2h-zenuml-theme-style", "dark");
+      style.textContent = ZENUML_DARK_THEME_STYLE;
+      definitions.appendChild(style);
+    });
   }
 
   function enhance() {
@@ -40,6 +113,13 @@
       return;
     }
     var hasMermaid = typeof mermaid !== "undefined" && typeof mermaid.initialize === "function";
+    if (hasMermaid) {
+      // Mermaid's CDN build also owns a window-load listener. ZenUML plugin
+      // registration is asynchronous, so prevent that listener from scanning
+      // the freshly-created containers before the external diagram exists.
+      // initializeTheme runs only after registration and keeps startOnLoad off.
+      mermaid.startOnLoad = false;
+    }
     var nodes = [];
     if (hasMermaid) {
       root.querySelectorAll("pre > code.language-mermaid").forEach(function (code) {
@@ -50,6 +130,9 @@
         var container = document.createElement("div");
         container.className = "mermaid";
         container.textContent = code.textContent || "";
+        if (ZENUML_PREFIX.test(container.textContent)) {
+          container.setAttribute("data-m2h-engine", "zenuml");
+        }
         pre.replaceWith(container);
         nodes.push(container);
       });
@@ -70,7 +153,7 @@
     };
     var initializeTheme = function () {
       if (!hasMermaid) {
-        return;
+        return false;
       }
       var rootClasses = document.documentElement.classList;
       var dark = rootClasses.contains("m2h-mode-dark") ||
@@ -78,14 +161,19 @@
           typeof window.matchMedia === "function" &&
           window.matchMedia("(prefers-color-scheme: dark)").matches);
       mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "default" });
+      return dark;
     };
-    var runDiagrams = function () {
+    var runDiagrams = function (dark) {
       var pending = hasMermaid && typeof mermaid.run === "function" && nodes.length > 0
         ? mermaid.run({ nodes: nodes, suppressErrors: true })
         : null;
       if (pending && typeof pending.then === "function") {
-        pending.then(finish);
+        pending.then(function () {
+          applyZenUMLTheme(root, dark);
+          finish();
+        });
       } else {
+        applyZenUMLTheme(root, dark);
         finish();
       }
     };
@@ -96,12 +184,10 @@
     // registered before initialize configures the runtime.
     if (needsZenUML) {
       registerZenUML().then(function () {
-        initializeTheme();
-        runDiagrams();
+        runDiagrams(initializeTheme());
       });
     } else {
-      initializeTheme();
-      runDiagrams();
+      runDiagrams(initializeTheme());
     }
   }
   if (document.readyState === "loading") {

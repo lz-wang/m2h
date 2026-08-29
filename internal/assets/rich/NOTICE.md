@@ -12,7 +12,7 @@ Tablesort core: the five comparator builds below stay WebUI-only.
 | KaTeX             | https://github.com/KaTeX/KaTeX        | 0.18.4  | MIT (`LICENSE.katex`)   |
 | Mermaid           | https://github.com/mermaid-js/mermaid | 11.16.1 | MIT (`LICENSE.mermaid`) |
 | mermaid-zenuml    | https://github.com/mermaid-js/mermaid (packages/mermaid-zenuml) | 0.2.3 | MIT (`LICENSE.mermaid-zenuml`) |
-| @zenuml/core      | https://github.com/mermaid-js/zenuml (bundled inside mermaid-zenuml) | 3.47.x | MIT (`LICENSE.zenuml-core`) |
+| @zenuml/core      | https://github.com/mermaid-js/zenuml (bundled inside mermaid-zenuml) | 3.47.2 | MIT (`LICENSE.zenuml-core`) |
 | Tablesort         | https://github.com/tristen/tablesort  | 5.3.0   | MIT (`LICENSE.tablesort`) |
 
 `katex.min.css` references `./fonts/*.woff2` relative to itself, so the
@@ -41,3 +41,16 @@ contains a `zenuml` diagram; Mermaid Core (`mermaid.min.js`) alone handles every
 other diagram type. Exported HTML does not embed this copy — the page carries
 the pinned jsDelivr URL of the same release, and its bootstrap downloads the
 plugin on demand under the same leading-keyword rule.
+
+The 0.2.3 browser build bundles @zenuml/core 3.47.2 exactly. Its registration
+path injects the core's application stylesheet into the host `<head>`, even
+though the native SVG renderer already returns self-styled SVG markup. Both
+the WebUI loader and exported-page bootstrap therefore treat registration as a
+no-host-stylesheet boundary: stylesheets added during import/registration are
+removed on success or failure before Mermaid renders the returned SVG.
+
+The core's static SVG output is light-only in this pinned release. m2h leaves
+that upstream palette unchanged in light mode and appends a constant, SVG-root
+scoped dark palette when the resolved reader mode is dark. The scoped rules are
+part of the SVG itself (including Lightbox snapshots and exported HTML) and do
+not alter host stylesheets or theme variables.

@@ -1403,6 +1403,45 @@ describe("mermaid external diagrams (ZenUML)", () => {
     );
   });
 
+  it("keeps the light SVG intact and adds a scoped dark ZenUML palette on rerender", async () => {
+    const { renderRichContent, rerenderMermaid } = await import(
+      "./render-rich-content"
+    );
+    mermaidMock.render.mockResolvedValue({
+      svg: `<svg data-mock="zenuml"><defs><style data-upstream="true">
+        .participant-box { fill: #ffffff; stroke: #666; }
+        .participant-label { fill: #222; }
+      </style></defs><rect class="participant-box"></rect><text class="participant-label">Alice</text></svg>`,
+    });
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    const lightSVG = root.querySelector<SVGSVGElement>(".mermaid > svg");
+    expect(lightSVG?.dataset.m2hZenumlTheme).toBe("light");
+    expect(
+      lightSVG?.querySelector('[data-m2h-zenuml-theme-style="dark"]'),
+    ).toBeNull();
+    expect(lightSVG?.querySelector('[data-upstream="true"]')).not.toBeNull();
+
+    await rerenderMermaid(root, "dark");
+
+    const darkSVG = root.querySelector<SVGSVGElement>(".mermaid > svg");
+    const darkStyle = darkSVG?.querySelector(
+      '[data-m2h-zenuml-theme-style="dark"]',
+    );
+    expect(darkSVG).not.toBe(lightSVG);
+    expect(darkSVG?.dataset.m2hZenumlTheme).toBe("dark");
+    expect(darkSVG?.querySelector('[data-upstream="true"]')).not.toBeNull();
+    expect(darkStyle?.textContent).toContain(
+      'svg[data-m2h-zenuml-theme="dark"] .participant-box',
+    );
+    expect(darkStyle?.textContent).toContain("fill: #1f2020");
+    expect(darkStyle?.textContent).toContain("fill: #cccccc");
+  });
+
   it("registers the plugin once for several ZenUML diagrams", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");

@@ -2,6 +2,8 @@
 
 这份文档用于真实浏览器环境下的 ZenUML external diagram 回归测试。ZenUML 是 Mermaid 官方的 external diagram 插件，Mermaid Core 本身不识别 `zenuml` 图表类型，必须按 load → register → initialize → render 的顺序完成插件注册后才能渲染；本图使用官方最小示例，任何一环断裂都会退化为语法错误提示而不是序列图。图表与普通 Mermaid 图表共用同一套外框与 Lightbox，无需任何针对 ZenUML 的特殊交互逻辑。
 
+## 图表示例
+
 ```mermaid
 zenuml
     title Demo

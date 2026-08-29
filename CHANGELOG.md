@@ -18,6 +18,10 @@
 
 - Mermaid ZenUML 时序图支持：WebUI 与导出 HTML 均可渲染 `zenuml` 图表。此前两端只加载 Mermaid Core，合法的 ZenUML 会退化为 `Syntax error in text`；现在 WebUI 在文档含 zenuml 图表时按需加载二进制内嵌的 mermaid-zenuml 0.2.3 运行时（保留上游 dist 相对路径的 chunks 目录），按 load → register → initialize → render 顺序注册 external diagram 后渲染，导出页面则在产物确含 zenuml 图表时携带同一 release 的 jsDelivr 插件 URL、由内联引导脚本动态导入注册。插件注册按页面单例缓存且失败不缓存 rejected Promise（主题切换重绘可重试）；普通 Mermaid 图表不产生插件下载；WebUI 图表渲染失败时在控制台输出图表类型与原始错误，使插件缺失、资源加载失败与语法错误可区分。
 
+### 修复
+
+- 修复 ZenUML 页面破坏 WebUI 与导出 HTML 主题的问题：mermaid-zenuml 0.2.3 内含的 @zenuml/core 3.47.2 会在 external diagram 注册时向宿主 `<head>` 注入约 888 KiB 的无作用域样式，其中 `:root --background` 会覆盖 m2h 的同名主题变量，造成浅色模式正文为浅色但顶栏、目录仍为深色，且离开文档后污染继续残留。现在两端都将第三方 renderer 的 import/register 约束为无宿主 stylesheet 副作用边界，在成功与失败路径清理该阶段新增的全局样式；导出页还会在异步注册前关闭 Mermaid 内置的 window-load 自动扫描，避免多图文档抢先退化为语法错误。由于上游静态 SVG 固定使用浅色配色，m2h 会按当前模式为 SVG 注入仅限图内的主题标记和暗色色板，使参与者、消息、片段与注释在暗色页面中采用与 Mermaid 原生时序图一致的深色表面、浅色文字及线条，同时浅色 SVG 保持上游原貌。多图文档、浅色/深色模式、主题切换、页内导航与导出页面均不会再污染宿主页面。
+
 
 ## [0.14.0] - 2026-08-28
 

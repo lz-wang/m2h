@@ -116,7 +116,7 @@ export async function renderRichContent(
   const tablesortLoad = hasSortableTables(root) ? loadTablesort() : null;
   if (hasMermaidBlocks(root)) {
     const mermaid = await prepareMermaid(mode, hasZenUMLBlocks(root));
-    await renderMermaid(mermaid, root, isCurrent);
+    await renderMermaid(mermaid, root, mode, isCurrent);
   }
   if (isCurrent !== undefined && !isCurrent()) {
     return;
@@ -569,6 +569,79 @@ type MermaidTheme = "default" | "dark";
 
 let currentMermaidTheme: MermaidTheme | null = null;
 
+const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
+
+// @zenuml/core 3.47.2 always returns the same white, self-styled SVG. Mermaid's
+// ordinary sequence renderer bakes a dark palette into its SVG, so leaving the
+// ZenUML result untouched creates a conspicuous white island on a dark reader.
+// Keep the correction inside the returned SVG: every selector is rooted at the
+// explicit diagram theme marker, the style travels with Lightbox snapshots,
+// and no rule can reach the host document. These colors mirror Mermaid 11's
+// dark sequence-diagram surfaces, foregrounds, and strokes rather than inventing
+// a separate visual language for the external renderer.
+const ZENUML_DARK_THEME_STYLE = `
+svg[data-m2h-zenuml-theme="dark"] { color-scheme: dark; }
+svg[data-m2h-zenuml-theme="dark"] .frame-border-outer { fill: #d3d3d3; }
+svg[data-m2h-zenuml-theme="dark"] .frame-border-inner,
+svg[data-m2h-zenuml-theme="dark"] .frame-header-bg,
+svg[data-m2h-zenuml-theme="dark"] .participant-box,
+svg[data-m2h-zenuml-theme="dark"] .group-title-bg { fill: #1f2020; }
+svg[data-m2h-zenuml-theme="dark"] .frame-header-line,
+svg[data-m2h-zenuml-theme="dark"] .participant-box,
+svg[data-m2h-zenuml-theme="dark"] .participant-icon [fill="currentColor"]:not([stroke]),
+svg[data-m2h-zenuml-theme="dark"] .lifeline,
+svg[data-m2h-zenuml-theme="dark"] .fragment-border,
+svg[data-m2h-zenuml-theme="dark"] .group-outline { stroke: #d3d3d3; }
+svg[data-m2h-zenuml-theme="dark"] .frame-title,
+svg[data-m2h-zenuml-theme="dark"] .participant-label,
+svg[data-m2h-zenuml-theme="dark"] .message-label,
+svg[data-m2h-zenuml-theme="dark"] .fragment-label,
+svg[data-m2h-zenuml-theme="dark"] .fragment-condition,
+svg[data-m2h-zenuml-theme="dark"] .fragment-section-label,
+svg[data-m2h-zenuml-theme="dark"] .return-label,
+svg[data-m2h-zenuml-theme="dark"] .return-icon,
+svg[data-m2h-zenuml-theme="dark"] .group-title-text { fill: #cccccc; }
+svg[data-m2h-zenuml-theme="dark"] .participant-icon { color: #cccccc; }
+svg[data-m2h-zenuml-theme="dark"] .message-line,
+svg[data-m2h-zenuml-theme="dark"] .arrow-head,
+svg[data-m2h-zenuml-theme="dark"] .return-line,
+svg[data-m2h-zenuml-theme="dark"] .return-arrow,
+svg[data-m2h-zenuml-theme="dark"] .arrow-head path[stroke] { stroke: #cccccc; }
+svg[data-m2h-zenuml-theme="dark"] .arrow-head:not(.arrow-open) { fill: #cccccc; }
+svg[data-m2h-zenuml-theme="dark"] .arrow-open,
+svg[data-m2h-zenuml-theme="dark"] .return-arrow { fill: none; }
+svg[data-m2h-zenuml-theme="dark"] .occurrence,
+svg[data-m2h-zenuml-theme="dark"] .fragment-header { fill: #474949; }
+svg[data-m2h-zenuml-theme="dark"] .occurrence { stroke: #d3d3d3; }
+svg[data-m2h-zenuml-theme="dark"] .fragment-separator { stroke: #2f2f2f; }
+svg[data-m2h-zenuml-theme="dark"] .divider-bg { fill: #2f2f2f; stroke: #aaaa33; }
+svg[data-m2h-zenuml-theme="dark"] .divider-label { fill: #d3d3d3; }
+svg[data-m2h-zenuml-theme="dark"] .comment-text,
+svg[data-m2h-zenuml-theme="dark"] .seq-number { fill: #b8b6b6; }
+`;
+
+function applyZenUMLTheme(target: HTMLElement, mode: ResolvedMode): void {
+  const svg = target.querySelector<SVGSVGElement>(":scope > svg");
+  if (svg === null) {
+    return;
+  }
+
+  svg.setAttribute("data-m2h-zenuml-theme", mode);
+  if (mode === "light") {
+    return;
+  }
+
+  let definitions = svg.querySelector<SVGDefsElement>(":scope > defs");
+  if (definitions === null) {
+    definitions = document.createElementNS(SVG_NAMESPACE, "defs");
+    svg.insertBefore(definitions, svg.firstChild);
+  }
+  const style = document.createElementNS(SVG_NAMESPACE, "style");
+  style.setAttribute("data-m2h-zenuml-theme-style", "dark");
+  style.textContent = ZENUML_DARK_THEME_STYLE;
+  definitions.append(style);
+}
+
 // Each rendered diagram keeps its source text here rather than in a data
 // attribute: Mermaid source can be long, and the WeakMap avoids leaking it once
 // the container leaves the DOM. Retaining the source lets a later theme switch
@@ -625,6 +698,7 @@ async function paintMermaidTarget(
   mermaid: MermaidRuntime,
   target: HTMLElement,
   source: string,
+  mode: ResolvedMode,
   isCurrent?: () => boolean,
 ): Promise<boolean> {
   try {
@@ -636,6 +710,9 @@ async function paintMermaidTarget(
       return false;
     }
     target.innerHTML = result.svg;
+    if (isZenUMLSource(source)) {
+      applyZenUMLTheme(target, mode);
+    }
     result.bindFunctions?.(target);
   } catch (error) {
     // Leave the existing content in place; a single bad diagram is isolated.
@@ -688,6 +765,7 @@ function syncMermaidLightboxAvailability(target: HTMLElement): void {
 async function renderMermaid(
   mermaid: MermaidRuntime,
   root: HTMLElement,
+  mode: ResolvedMode,
   isCurrent?: () => boolean,
 ): Promise<void> {
   const targets: HTMLElement[] = [];
@@ -727,7 +805,7 @@ async function renderMermaid(
     if (source === undefined) {
       continue;
     }
-    if (!(await paintMermaidTarget(mermaid, target, source, isCurrent))) {
+    if (!(await paintMermaidTarget(mermaid, target, source, mode, isCurrent))) {
       return;
     }
   }
@@ -762,7 +840,7 @@ export async function rerenderMermaid(
     if (source === undefined) {
       continue;
     }
-    if (!(await paintMermaidTarget(mermaid, target, source, isCurrent))) {
+    if (!(await paintMermaidTarget(mermaid, target, source, mode, isCurrent))) {
       return;
     }
   }

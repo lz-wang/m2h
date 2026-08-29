@@ -349,6 +349,12 @@ func TestRunExportRegistersZenUMLPluginOnDemand(t *testing.T) {
 	for _, want := range []string{
 		`<script src="https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.min.js"></script>`,
 		`window.m2hZenUMLModuleURL = "https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.3/dist/mermaid-zenuml.esm.min.mjs"`,
+		`mermaid.startOnLoad = false`,
+		`function withoutAddedHostStylesheets(operation)`,
+		`if (!retained.has(stylesheet))`,
+		`function applyZenUMLTheme(root, dark)`,
+		`data-m2h-zenuml-theme-style`,
+		`fill: #1f2020`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("zenuml export missing %q", want)

@@ -334,6 +334,53 @@ describe("ensureZenUMLRegistered", () => {
     expect(mermaidRuntime.initialize).not.toHaveBeenCalled();
   });
 
+  it("removes host stylesheets injected while the plugin registers", async () => {
+    const existing = document.createElement("style");
+    existing.dataset.owner = "m2h";
+    existing.textContent = ":root { --background: white; }";
+    document.head.append(existing);
+    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockImplementationOnce(
+      async () => {
+        const pollutedStyle = document.createElement("style");
+        pollutedStyle.textContent =
+          ":root { --background: #282a36; } *, ::before, ::after { --tw-shadow: 0 0 #0000; }";
+        const pollutedLink = document.createElement("link");
+        pollutedLink.rel = "stylesheet";
+        pollutedLink.href = "/zenuml-global.css";
+        document.head.append(pollutedStyle, pollutedLink);
+      },
+    );
+    const loader = await import("./runtime-loader");
+
+    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
+
+    expect(document.head.querySelector('[data-owner="m2h"]')).toBe(existing);
+    expect(document.head.querySelector('style:not([data-owner="m2h"])')).toBe(
+      null,
+    );
+    expect(
+      document.head.querySelector('link[href$="/zenuml-global.css"]'),
+    ).toBe(null);
+  });
+
+  it("removes injected host stylesheets when registration fails", async () => {
+    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockImplementationOnce(
+      async () => {
+        const pollution = document.createElement("style");
+        pollution.textContent = ":root { --background: #282a36; }";
+        document.head.append(pollution);
+        throw new Error("register rejected after loading the renderer");
+      },
+    );
+    const loader = await import("./runtime-loader");
+
+    await expect(
+      loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML),
+    ).rejects.toThrow("register rejected after loading the renderer");
+
+    expect(document.head.querySelector("style")).toBe(null);
+  });
+
   it("deduplicates concurrent registrations into one plugin import", async () => {
     const loader = await import("./runtime-loader");
 
