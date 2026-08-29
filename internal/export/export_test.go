@@ -303,6 +303,9 @@ func TestRunExportPreservesRichContent(t *testing.T) {
 		`<script src="https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.min.js"></script>`,
 		`<script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/tablesort.min.js"></script>`,
 		"renderMathInElement",
+		`var LITERAL_DOLLAR_CLASS = "m2h-literal-dollar"`,
+		"protectLiteralDollars(root)",
+		"ignoredClasses: [LITERAL_DOLLAR_CLASS]",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("export output missing %q", want)

@@ -291,6 +291,7 @@ describe("renderRichContent", () => {
       throw new Error("renderMathInElement was called without options");
     }
     expect(options.throwOnError).toBe(false);
+    expect(options.ignoredClasses).toEqual(["m2h-literal-dollar"]);
 
     const lefts =
       options.delimiters?.map(
@@ -298,6 +299,29 @@ describe("renderRichContent", () => {
       ) ?? [];
     expect(lefts.indexOf("$$")).toBeLessThan(lefts.indexOf("$"));
     expect(lefts).toEqual(["$$", "\\[", "\\(", "$"]);
+    expect(root.querySelector(".m2h-literal-dollar")).toBeNull();
+  });
+
+  it("keeps currency dollars literal while preserving valid inline math", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    const source =
+      "第一次裸跑，20 分钟花了 $9，公式 $E=mc^2$，第二次 6 小时花了 $200。";
+    root.textContent = source;
+
+    await renderRichContent(root, "light");
+
+    expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
+    expect(root.textContent).toBe(source);
+    expect(
+      Array.from(
+        root.querySelectorAll(".m2h-literal-dollar"),
+        (node) => node.textContent,
+      ),
+    ).toEqual(["$", "$"]);
+
+    const [, options] = renderMathInElementMock.mock.calls[0];
+    expect(options?.ignoredClasses).toContain("m2h-literal-dollar");
   });
 
   it("runs mermaid before KaTeX so math never scans diagram source", async () => {

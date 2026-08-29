@@ -50,6 +50,15 @@ const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
   { left: "$", right: "$", display: false },
 ];
 
+// KaTeX auto-render pairs every two single dollars without Markdown's usual
+// flanking rules. That turns prose such as "$9 ... $200" into one enormous
+// formula. Literal dollars are split into ignored spans before auto-render;
+// valid inline math keeps the Pandoc/VSCode-compatible boundary contract:
+// opener followed by non-space, closer preceded by non-space and not followed
+// by a digit.
+const LITERAL_DOLLAR_CLASS = "m2h-literal-dollar";
+const KATEX_IGNORED_CONTENT_SELECTOR = `script, noscript, style, textarea, pre, code, option, .katex, .${LITERAL_DOLLAR_CLASS}`;
+
 // Plain GFM tables Goldmark renders as bare <table>; a class attribute marks
 // user-authored HTML tables the client-side sorter must leave untouched, and
 // data-m2h-sortable marks tables a previous enhancement pass already owns.
@@ -123,8 +132,10 @@ export async function renderRichContent(
   }
   if (hasMathText(root)) {
     const renderMathInElement = await loadKatex();
+    protectLiteralDollars(root);
     renderMathInElement(root, {
       delimiters: MATH_DELIMITERS,
+      ignoredClasses: [LITERAL_DOLLAR_CLASS],
       throwOnError: false,
     });
   }
@@ -259,6 +270,84 @@ function hasMathText(root: HTMLElement): boolean {
     text !== null &&
     (text.includes("$") || text.includes("\\(") || text.includes("\\["))
   );
+}
+
+function protectLiteralDollars(root: HTMLElement): void {
+  const walker = root.ownerDocument.createTreeWalker(
+    root,
+    NodeFilter.SHOW_TEXT,
+  );
+  const candidates: Text[] = [];
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      candidates.push(node as Text);
+    }
+  }
+
+  for (const node of candidates) {
+    const parent = node.parentElement;
+    const source = node.data;
+    if (
+      parent === null ||
+      !source.includes("$") ||
+      parent.closest(KATEX_IGNORED_CONTENT_SELECTOR) !== null
+    ) {
+      continue;
+    }
+
+    const literalIndexes = literalDollarIndexes(source);
+    if (literalIndexes.length === 0) {
+      continue;
+    }
+
+    const fragment = root.ownerDocument.createDocumentFragment();
+    let start = 0;
+    for (const index of literalIndexes) {
+      fragment.append(source.slice(start, index));
+      const literal = root.ownerDocument.createElement("span");
+      literal.className = LITERAL_DOLLAR_CLASS;
+      literal.textContent = "$";
+      fragment.append(literal);
+      start = index + 1;
+    }
+    fragment.append(source.slice(start));
+    node.replaceWith(fragment);
+  }
+}
+
+function literalDollarIndexes(source: string): number[] {
+  const singles: number[] = [];
+  const openers: number[] = [];
+  const matched = new Set<number>();
+
+  for (let index = 0; index < source.length; index += 1) {
+    if (
+      source[index] !== "$" ||
+      source[index - 1] === "$" ||
+      source[index + 1] === "$"
+    ) {
+      continue;
+    }
+    singles.push(index);
+
+    const previous = source[index - 1] ?? "";
+    const next = source[index + 1] ?? "";
+    const canOpen = next !== "" && !/\s/u.test(next);
+    const canClose =
+      previous !== "" && !/\s/u.test(previous) && !/[0-9]/u.test(next);
+
+    if (canClose && openers.length > 0) {
+      const opener = openers.pop();
+      if (opener !== undefined) {
+        matched.add(opener);
+        matched.add(index);
+      }
+    } else if (canOpen) {
+      openers.push(index);
+    }
+  }
+
+  return singles.filter((index) => !matched.has(index));
 }
 
 // Prepend a GitHub-style permalink anchor to every heading that carries an id.

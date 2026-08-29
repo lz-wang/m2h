@@ -46,6 +46,7 @@ export interface MathAutoRenderDelimiter {
 
 export interface MathAutoRenderOptions {
   delimiters?: MathAutoRenderDelimiter[];
+  ignoredClasses?: string[];
   throwOnError?: boolean;
 }
 
