@@ -16,6 +16,8 @@
 
 ### 新增
 
+- Lightbox 新增鼠标滚轮平滑缩放：指针位于目标图片或 Mermaid 图表上时，向上滚动放大、向下滚动缩小；缩放量按实际滚动幅度连续计算，小幅触控板输入可细微调整，普通鼠标单次滚轮事件最多约改变 8.3%，避免快速跳级，同时保持 1–5 倍边界且不带动背景文档。工具栏按钮仍使用 1.25 倍步进，现有拖动、旋转和空白区域关闭行为不变。
+
 - Mermaid ZenUML 时序图支持：WebUI 与导出 HTML 均可渲染 `zenuml` 图表。此前两端只加载 Mermaid Core，合法的 ZenUML 会退化为 `Syntax error in text`；现在 WebUI 在文档含 zenuml 图表时按需加载二进制内嵌的 mermaid-zenuml 0.2.3 运行时（保留上游 dist 相对路径的 chunks 目录），按 load → register → initialize → render 顺序注册 external diagram 后渲染，导出页面则在产物确含 zenuml 图表时携带同一 release 的 jsDelivr 插件 URL、由内联引导脚本动态导入注册。插件注册按页面单例缓存且失败不缓存 rejected Promise（主题切换重绘可重试）；普通 Mermaid 图表不产生插件下载；WebUI 图表渲染失败时在控制台输出图表类型与原始错误，使插件缺失、资源加载失败与语法错误可区分。
 
 ### 修复

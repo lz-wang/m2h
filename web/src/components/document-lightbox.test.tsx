@@ -80,6 +80,14 @@ function currentItem(): HTMLImageElement {
   return image;
 }
 
+function currentScale(image: HTMLImageElement): number {
+  const match = image.style.transform.match(/scale\(([^)]+)\)/);
+  if (match === null) {
+    throw new Error("lightbox image scale was not rendered");
+  }
+  return Number(match[1]);
+}
+
 describe("DocumentLightbox", () => {
   it("shows the item at the given index", () => {
     const items = makeItems(3);
@@ -165,6 +173,55 @@ describe("DocumentLightbox", () => {
       (screen.getByRole("button", { name: "缩小图片" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
+  });
+
+  it.each([
+    ["图片", makeItems(1)[0]],
+    [
+      "Mermaid 图表",
+      {
+        kind: "mermaid" as const,
+        src: "data:image/svg+xml,%3Csvg%3E%3C/svg%3E",
+        srcSet: null,
+        sizes: null,
+        alt: "Mermaid 图表",
+        title: null,
+      },
+    ],
+  ])("uses the mouse wheel to zoom the %s", (_label, item) => {
+    renderLightbox([item], 0);
+
+    const image = currentItem();
+    const zoomInEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: -10,
+    });
+    fireEvent(image, zoomInEvent);
+
+    expect(zoomInEvent.defaultPrevented).toBe(true);
+    expect(currentScale(image)).toBeCloseTo(Math.exp(0.008), 5);
+    expect(currentScale(image)).toBeLessThan(1.01);
+
+    const zoomOutEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaY: 10,
+    });
+    fireEvent(image, zoomOutEvent);
+
+    expect(zoomOutEvent.defaultPrevented).toBe(true);
+    expect(currentScale(image)).toBeCloseTo(1, 5);
+  });
+
+  it("caps one large wheel event below a ten-percent zoom jump", () => {
+    renderLightbox(makeItems(1), 0);
+
+    const image = currentItem();
+    fireEvent.wheel(image, { deltaY: -1000 });
+
+    expect(currentScale(image)).toBeCloseTo(Math.exp(0.08), 5);
+    expect(currentScale(image)).toBeLessThan(1.1);
   });
 
   it("rotates in quarter turns in both directions", async () => {

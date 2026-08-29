@@ -13,7 +13,7 @@
 - 支持分享文档链接、Markdown 链接和 Markdown 全文
 - 支持 GFM、语法高亮、数学公式、Mermaid、脚注、Emoji 和 GitHub Alerts
 - 支持 Frontmatter（`title` 字段作为文档展示标题，`create_date`/`create_at`/`create_time` 与 `update_date`/`update_at`/`update_time` 别名按优先级归一为创建/更新时间摘要，`date` 为兜底）、可排序表格、代码行号与长代码块折叠
-- 图片与 Mermaid 图表支持 Lightbox 查看，可切换、缩放、拖动和旋转
+- 图片与 Mermaid 图表支持 Lightbox 查看，可切换、通过工具栏或鼠标滚轮平滑缩放、拖动和旋转
 - 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
 - 可将单个 Markdown 文件导出为 HTML
 
@@ -146,7 +146,7 @@ m2h 支持常用 GFM Markdown，并提供以下扩展：
 * `++ctrl+alt+del++` 键盘按键
 * Critic Markup
 * WebUI 代码复制、行号与长代码块折叠
-* WebUI 图片 Lightbox
+* WebUI 图片与 Mermaid 图表 Lightbox（支持鼠标滚轮平滑缩放）
 
 ## 许可证
 

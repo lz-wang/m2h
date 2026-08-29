@@ -48,6 +48,12 @@ import type { LightboxItem } from "../lib/document-lightbox";
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 5;
 const ZOOM_STEP = 1.25;
+// Pixel-mode trackpads report small deltas while a physical mouse notch is
+// commonly around 100px. Exponential scaling preserves equal-feeling in/out
+// motion; clamping each event to 100px caps a single notch at about 8.3%.
+const WHEEL_ZOOM_SENSITIVITY = 0.0008;
+const MAX_WHEEL_DELTA_PX = 100;
+const WHEEL_LINE_HEIGHT_PX = 16;
 
 type Rotation = 0 | 90 | 180 | 270;
 
@@ -66,6 +72,24 @@ interface PanDragState {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function zoomInOneStep(value: number): number {
+  return Math.min(MAX_ZOOM, value * ZOOM_STEP);
+}
+
+function zoomOutOneStep(value: number): number {
+  return Math.max(MIN_ZOOM, value / ZOOM_STEP);
+}
+
+function normalizedWheelDelta(event: WheelEvent): number {
+  let delta = event.deltaY;
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) {
+    delta *= WHEEL_LINE_HEIGHT_PX;
+  } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
+    delta *= window.innerHeight;
+  }
+  return clamp(delta, -MAX_WHEEL_DELTA_PX, MAX_WHEEL_DELTA_PX);
 }
 
 export interface DocumentLightboxProps {
@@ -119,6 +143,24 @@ export function DocumentLightbox({
   const observerRef = useRef<ResizeObserver | null>(null);
   const dragRef = useRef<PanDragState | null>(null);
 
+  const handleImageWheel = useCallback((event: WheelEvent) => {
+    if (event.deltaY === 0) {
+      return;
+    }
+    // React delegates wheel events through a passive root listener, where
+    // preventDefault cannot stop native scrolling. This handler is attached
+    // directly to the visual item with passive:false below so the wheel belongs
+    // to the preview while the pointer is over it. Scale continuously from the
+    // normalized delta: trackpad gestures stay fine-grained, large mouse-wheel
+    // deltas cannot jump straight through the 1–5x range, and inverse deltas
+    // retrace the same multiplicative path.
+    event.preventDefault();
+    const scaleFactor = Math.exp(
+      -normalizedWheelDelta(event) * WHEEL_ZOOM_SENSITIVITY,
+    );
+    setZoom((value) => clamp(value * scaleFactor, MIN_ZOOM, MAX_ZOOM));
+  }, []);
+
   const ensureObserver = useCallback(() => {
     if (observerRef.current === null) {
       observerRef.current = new ResizeObserver((entries) => {
@@ -158,12 +200,14 @@ export function DocumentLightbox({
       if (imageNodeRef.current !== null && observer !== null) {
         observer.unobserve(imageNodeRef.current);
       }
+      imageNodeRef.current?.removeEventListener("wheel", handleImageWheel);
       imageNodeRef.current = node;
       if (node !== null) {
         ensureObserver().observe(node);
+        node.addEventListener("wheel", handleImageWheel, { passive: false });
       }
     },
-    [ensureObserver],
+    [ensureObserver, handleImageWheel],
   );
 
   useEffect(
@@ -258,10 +302,10 @@ export function DocumentLightbox({
   }, [index, items.length, onIndexChange]);
 
   const zoomIn = () => {
-    setZoom((value) => Math.min(MAX_ZOOM, value * ZOOM_STEP));
+    setZoom(zoomInOneStep);
   };
   const zoomOut = () => {
-    setZoom((value) => Math.max(MIN_ZOOM, value / ZOOM_STEP));
+    setZoom(zoomOutOneStep);
   };
   const rotateClockwise = () => {
     setRotation((value) => ((value + 90) % 360) as Rotation);
