@@ -470,8 +470,12 @@ func TestCheckDuplicateAndCJKAnchors(t *testing.T) {
 		"guide.md": "# Guide\n\n[First](#中文-标题)\n[First again](#中文-标题)\n[Duplicate](#title-1)\n[Missing](#title-2)\n\n## 中文 标题\n\n# Title\n\n# Title\n",
 	}, Options{})
 	summary := summarize(t, result, err)
-	// Duplicate H1s get -1 suffixes; #title-2 never exists.
-	want := []string{fmt.Sprintf("guide.md:6:2 error %s", RuleAnchorMissing)}
+	// Duplicate H1s get -1 suffixes; #title-2 never exists. The fixture also
+	// carries three H1s, which is one multiple-h1 warning at the second H1.
+	want := []string{
+		fmt.Sprintf("guide.md:6:2 error %s", RuleAnchorMissing),
+		fmt.Sprintf("guide.md:10:1 warning %s", RuleDocumentMultipleH1),
+	}
 	if !slices.Equal(summary, want) {
 		t.Fatalf("diagnostics = %v, want only the missing duplicate anchor %v", summary, want)
 	}
@@ -731,6 +735,189 @@ func TestCheckPercentEncodedCJKAnchor(t *testing.T) {
 	summary := summarize(t, result, err)
 	if len(summary) != 0 {
 		t.Fatalf("diagnostics = %v, want the encoded anchor to resolve", result.Diagnostics)
+	}
+}
+
+func TestCheckImageAltEmptyWarning(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		markup string
+		want   []string
+	}{
+		{
+			name:   "no alt text",
+			markup: "![](images/logo.png)\n",
+			want:   []string{fmt.Sprintf("guide.md:3:5 warning %s", RuleImageAltEmpty)},
+		},
+		{
+			name:   "whitespace alt text",
+			markup: "![ ](images/logo.png)\n",
+			want:   []string{fmt.Sprintf("guide.md:3:3 warning %s", RuleImageAltEmpty)},
+		},
+		{
+			name:   "with alt text",
+			markup: "![Logo](images/logo.png)\n",
+			want:   []string{},
+		},
+		{
+			// A broken destination and a missing alt are independent findings.
+			name:   "no alt and broken destination",
+			markup: "![](images/missing.png)\n",
+			want: []string{
+				fmt.Sprintf("guide.md:3:5 warning %s", RuleImageAltEmpty),
+				fmt.Sprintf("guide.md:3:5 error %s", RuleLocalTargetMissing),
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := runCheck(t, map[string]string{
+				"guide.md":        "# Guide\n\n" + test.markup,
+				"images/logo.png": "png",
+			}, Options{})
+			summary := summarize(t, result, err)
+			if !slices.Equal(summary, test.want) {
+				t.Fatalf("diagnostics = %v, want %v", summary, test.want)
+			}
+			errors, warnings := 0, 0
+			for _, entry := range test.want {
+				if strings.Contains(entry, " error ") {
+					errors++
+				} else {
+					warnings++
+				}
+			}
+			if result.Errors != errors || result.Warnings != warnings {
+				t.Fatalf("counts = %d errors, %d warnings, want %d/%d", result.Errors, result.Warnings, errors, warnings)
+			}
+		})
+	}
+}
+
+func TestCheckMultipleH1Warning(t *testing.T) {
+	t.Parallel()
+
+	t.Run("single h1 is fine", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := runCheck(t, map[string]string{
+			"guide.md": "# Guide\n\n## Section\n",
+		}, Options{})
+		summary := summarize(t, result, err)
+		if len(summary) != 0 {
+			t.Fatalf("diagnostics = %v, want none", result.Diagnostics)
+		}
+	})
+
+	t.Run("warns at the second h1", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := runCheck(t, map[string]string{
+			"guide.md": "# Title A\n\nText.\n\n# Title B\n\n# Title C\n",
+		}, Options{})
+		summary := summarize(t, result, err)
+		want := []string{fmt.Sprintf("guide.md:5:1 warning %s", RuleDocumentMultipleH1)}
+		if !slices.Equal(summary, want) {
+			t.Fatalf("diagnostics = %v, want %v", summary, want)
+		}
+		if !strings.Contains(result.Diagnostics[0].Message, "3 H1 headings") {
+			t.Fatalf("message = %q, want the heading count", result.Diagnostics[0].Message)
+		}
+	})
+
+	t.Run("line is shifted past frontmatter", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := runCheck(t, map[string]string{
+			"guide.md": "---\ntitle: x\n---\n# First\n\n# Second\n",
+		}, Options{})
+		summary := summarize(t, result, err)
+		want := []string{fmt.Sprintf("guide.md:6:1 warning %s", RuleDocumentMultipleH1)}
+		if !slices.Equal(summary, want) {
+			t.Fatalf("diagnostics = %v, want %v", summary, want)
+		}
+	})
+}
+
+func TestCheckFrontMatterDateInvalidWarning(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{
+			name:   "valid dates stay silent",
+			source: "---\ndate: 2026-08-30\ncreate_date: 2026-08-30T10:00\ntitle: x\n---\n# Guide\n",
+			want:   []string{},
+		},
+		{
+			name:   "impossible calendar date",
+			source: "---\ncreate_date: 2026-99-99\n---\n# Guide\n",
+			want:   []string{fmt.Sprintf("guide.md:1:1 warning %s", RuleFrontMatterDateInvalid)},
+		},
+		{
+			name:   "free-form text never reaches the summary",
+			source: "---\ndate: last week\n---\n# Guide\n",
+			want:   []string{fmt.Sprintf("guide.md:1:1 warning %s", RuleFrontMatterDateInvalid)},
+		},
+		{
+			name:   "sequence value is not a date",
+			source: "---\nupdate_at:\n  - 2026\n---\n# Guide\n",
+			want:   []string{fmt.Sprintf("guide.md:1:1 warning %s", RuleFrontMatterDateInvalid)},
+		},
+		{
+			name:   "empty value is left alone",
+			source: "---\nupdate_at:\n---\n# Guide\n",
+			want:   []string{},
+		},
+		{
+			name:   "other keys are unconstrained",
+			source: "---\ncustom: whenever\n---\n# Guide\n",
+			want:   []string{},
+		},
+		{
+			name:   "each invalid field is reported",
+			source: "---\ncreate_date: nope\nupdate_time: nope\n---\n# Guide\n",
+			want: []string{
+				fmt.Sprintf("guide.md:1:1 warning %s", RuleFrontMatterDateInvalid),
+				fmt.Sprintf("guide.md:1:1 warning %s", RuleFrontMatterDateInvalid),
+			},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := runCheck(t, map[string]string{"guide.md": test.source}, Options{})
+			summary := summarize(t, result, err)
+			if !slices.Equal(summary, test.want) {
+				t.Fatalf("diagnostics = %v, want %v", summary, test.want)
+			}
+		})
+	}
+}
+
+func TestCheckEmptyDestinationWarning(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"guide.md": "# Guide\n\n[empty]() plus ![]() plus <a href=\"\">raw</a>\n",
+	}, Options{})
+	summary := summarize(t, result, err)
+	want := []string{
+		fmt.Sprintf("guide.md:3:2 warning %s", RuleLinkEmptyDestination),
+		fmt.Sprintf("guide.md:3:16 warning %s", RuleImageAltEmpty),
+		fmt.Sprintf("guide.md:3:16 warning %s", RuleLinkEmptyDestination),
+		fmt.Sprintf("guide.md:3:27 warning %s", RuleLinkEmptyDestination),
+	}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want %v", summary, want)
 	}
 }
 

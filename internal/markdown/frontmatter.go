@@ -251,17 +251,28 @@ func normalizeFrontMatterDate(node *yaml.Node) string {
 		return ""
 	}
 	value := strings.TrimSpace(node.Value)
-	if len(value) < 10 {
+	if !IsISODate(value) {
 		return ""
+	}
+	return value[:10]
+}
+
+// IsISODate reports whether value begins with a valid ISO calendar date
+// (YYYY-MM-DD) followed by the end of the value, a 'T' or a space — the exact
+// contract frontmatter date summaries apply. The check command reuses it to
+// report date fields that can never reach the summary.
+func IsISODate(value string) bool {
+	if len(value) < 10 {
+		return false
 	}
 	candidate := value[:10]
 	if _, err := time.Parse("2006-01-02", candidate); err != nil {
-		return ""
+		return false
 	}
 	if len(value) > 10 && value[10] != 'T' && value[10] != ' ' {
-		return ""
+		return false
 	}
-	return candidate
+	return true
 }
 
 // normalizeFrontMatterTags supports YAML sequences, inline flow sequences, and

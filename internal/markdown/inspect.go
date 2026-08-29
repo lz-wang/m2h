@@ -25,13 +25,15 @@ const (
 // Reference is one link, image or raw-HTML URL destination extracted from a
 // document. Destination is kept exactly as the Markdown source wrote it — no
 // sanitization or URL rewriting — and Line/Column locate it 1-based in the
-// source. Inline link and image nodes carry no position of their own, so the
+// source. Text is the link text or image alt text (empty for raw HTML).
+// Inline link and image nodes carry no position of their own, so the
 // position comes from the node's first child segment (the link or alt text)
 // and, when the node has none, from the first literal occurrence of the
 // destination after the previous reference.
 type Reference struct {
 	Kind        ReferenceKind
 	Destination string
+	Text        string
 	Line        int
 	Column      int
 }
@@ -122,7 +124,7 @@ func (collector *referenceCollector) markdownReference(kind ReferenceKind, desti
 	if !ok {
 		offset = collector.searchDestination(destination)
 	}
-	collector.record(kind, destination, offset)
+	collector.record(kind, destination, string(node.Text(collector.source)), offset)
 }
 
 // rawReferences records every URL attribute inside one raw HTML block or
@@ -135,14 +137,14 @@ func (collector *referenceCollector) rawReferences(raw []byte, node ast.Node) {
 		offset = collector.searchFrom
 	}
 	for _, destination := range extractRawHTMLDestinations(raw) {
-		collector.record(ReferenceRawHTML, destination, offset)
+		collector.record(ReferenceRawHTML, destination, "", offset)
 	}
 	if offset > collector.searchFrom {
 		collector.searchFrom = offset
 	}
 }
 
-func (collector *referenceCollector) record(kind ReferenceKind, destination string, offset int) {
+func (collector *referenceCollector) record(kind ReferenceKind, destination string, text string, offset int) {
 	if offset > collector.searchFrom {
 		collector.searchFrom = offset
 	}
@@ -150,6 +152,7 @@ func (collector *referenceCollector) record(kind ReferenceKind, destination stri
 	collector.references = append(collector.references, Reference{
 		Kind:        kind,
 		Destination: destination,
+		Text:        text,
 		Line:        line,
 		Column:      column,
 	})

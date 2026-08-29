@@ -716,6 +716,32 @@ func TestCheckCommandFailsOnDiagnostics(t *testing.T) {
 	}
 }
 
+func TestCheckCommandStrictFailsOnWarnings(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide\n\n![](logo.png)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "logo.png"), []byte("png"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Warnings alone keep the exit code clean without --strict.
+	stdout, _, err := runCommand(t, "check", root)
+	if err != nil {
+		t.Fatalf("check returned error: %v, want warnings to pass", err)
+	}
+	if !strings.HasSuffix(stdout, "Checked 1 Markdown file: 1 warning\n") {
+		t.Fatalf("check stdout = %q, want the warning summary", stdout)
+	}
+
+	_, _, err = runCommand(t, "check", root, "--strict")
+	if err == nil || err.Error() != "Error: check found 1 warning" {
+		t.Fatalf("check --strict error = %v, want the warning to fail the run", err)
+	}
+}
+
 func TestCheckCommandRejectsUnusableInput(t *testing.T) {
 	t.Parallel()
 

@@ -26,6 +26,21 @@ func TestInspectCollectsHeadings(t *testing.T) {
 	}
 }
 
+func TestInspectHeadingLines(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("# Title\n\nText.\n\n## Section\n\n### Deep\n")
+	inspection := Inspect(source)
+
+	lines := make([]int, 0, len(inspection.Headings))
+	for _, heading := range inspection.Headings {
+		lines = append(lines, heading.Line)
+	}
+	if !slices.Equal(lines, []int{1, 5, 7}) {
+		t.Fatalf("heading lines = %v, want 1, 5, 7", lines)
+	}
+}
+
 func TestInspectCountsSetextHeadingAsH1(t *testing.T) {
 	t.Parallel()
 
@@ -54,8 +69,8 @@ func TestInspectCollectsMarkdownReferences(t *testing.T) {
 	inspection := Inspect(source)
 
 	want := []Reference{
-		{Kind: ReferenceLink, Destination: "guide.md", Line: 1, Column: 15},
-		{Kind: ReferenceImage, Destination: "images/logo.png", Line: 3, Column: 3},
+		{Kind: ReferenceLink, Destination: "guide.md", Text: "link", Line: 1, Column: 15},
+		{Kind: ReferenceImage, Destination: "images/logo.png", Text: "alt text", Line: 3, Column: 3},
 	}
 	if !slices.Equal(inspection.References, want) {
 		t.Fatalf("references = %+v, want %+v", inspection.References, want)
@@ -69,8 +84,8 @@ func TestInspectLocatesReferenceStyleLinks(t *testing.T) {
 	inspection := Inspect(source)
 
 	want := []Reference{
-		{Kind: ReferenceLink, Destination: "docs/guide.md", Line: 1, Column: 2},
-		{Kind: ReferenceLink, Destination: "other.md", Line: 1, Column: 21},
+		{Kind: ReferenceLink, Destination: "docs/guide.md", Text: "Guide", Line: 1, Column: 2},
+		{Kind: ReferenceLink, Destination: "other.md", Text: "collapsed", Line: 1, Column: 21},
 	}
 	if !slices.Equal(inspection.References, want) {
 		t.Fatalf("references = %+v, want %+v", inspection.References, want)
@@ -102,8 +117,8 @@ func TestInspectLocatesNestedImageInsideLink(t *testing.T) {
 	inspection := Inspect(source)
 
 	want := []Reference{
-		{Kind: ReferenceLink, Destination: "target.md", Line: 1, Column: 4},
-		{Kind: ReferenceImage, Destination: "badge.svg", Line: 1, Column: 4},
+		{Kind: ReferenceLink, Destination: "target.md", Text: "badge", Line: 1, Column: 4},
+		{Kind: ReferenceImage, Destination: "badge.svg", Text: "badge", Line: 1, Column: 4},
 	}
 	if !slices.Equal(inspection.References, want) {
 		t.Fatalf("references = %+v, want %+v", inspection.References, want)
@@ -117,7 +132,7 @@ func TestInspectKeepsEmptyDestinations(t *testing.T) {
 	inspection := Inspect(source)
 
 	want := []Reference{
-		{Kind: ReferenceLink, Destination: "", Line: 1, Column: 2},
+		{Kind: ReferenceLink, Destination: "", Text: "empty", Line: 1, Column: 2},
 		{Kind: ReferenceImage, Destination: "", Line: 1, Column: 15},
 	}
 	if !slices.Equal(inspection.References, want) {
@@ -173,9 +188,9 @@ func TestInspectKeepsSchemeURLs(t *testing.T) {
 	inspection := Inspect(source)
 
 	want := []Reference{
-		{Kind: ReferenceLink, Destination: "https://example.com", Line: 1, Column: 2},
-		{Kind: ReferenceLink, Destination: "mailto:a@b.c", Line: 1, Column: 34},
-		{Kind: ReferenceLink, Destination: "//cdn.example.com/a.png", Line: 1, Column: 59},
+		{Kind: ReferenceLink, Destination: "https://example.com", Text: "site", Line: 1, Column: 2},
+		{Kind: ReferenceLink, Destination: "mailto:a@b.c", Text: "mail", Line: 1, Column: 34},
+		{Kind: ReferenceLink, Destination: "//cdn.example.com/a.png", Text: "cdn", Line: 1, Column: 59},
 	}
 	if !slices.Equal(inspection.References, want) {
 		t.Fatalf("references = %+v, want %+v", inspection.References, want)

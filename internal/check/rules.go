@@ -1,6 +1,10 @@
 package check
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/lz-wang/m2h/internal/markdown"
+)
 
 // Rule identifiers name diagnostic categories. They appear in both report
 // formats and are part of the stable contract CI and tooling consume, so
@@ -26,7 +30,46 @@ const (
 	// RuleAnchorMissing: a `#anchor` or `target.md#anchor` fragment points at
 	// a heading id the target document does not contain.
 	RuleAnchorMissing = "anchor.missing"
+
+	// RuleImageAltEmpty: an image reference carries no alt text. It stays a
+	// warning — not an error — because decorative images legitimately use an
+	// empty alt.
+	RuleImageAltEmpty = "image.alt-empty"
+	// RuleDocumentMultipleH1: a document contains more than one H1 while the
+	// sidebar and document title use only the first.
+	RuleDocumentMultipleH1 = "document.multiple-h1"
+	// RuleFrontMatterDateInvalid: a frontmatter date field m2h recognizes
+	// holds a value that is not a valid ISO date, so it never reaches the
+	// toolbar summary.
+	RuleFrontMatterDateInvalid = "frontmatter.date-invalid"
+	// RuleLinkEmptyDestination: a link, image or raw HTML URL attribute has
+	// an empty destination.
+	RuleLinkEmptyDestination = "link.empty-destination"
 )
+
+// frontMatterDateKeys are the frontmatter fields m2h normalizes into date
+// summaries; any other key may hold arbitrary metadata without a warning.
+var frontMatterDateKeys = map[string]bool{
+	"date":        true,
+	"create_date": true,
+	"create_at":   true,
+	"create_time": true,
+	"update_date": true,
+	"update_at":   true,
+	"update_time": true,
+}
+
+// emptyDestinationMessage describes an empty destination per reference kind.
+func emptyDestinationMessage(kind markdown.ReferenceKind) string {
+	switch kind {
+	case markdown.ReferenceImage:
+		return "image destination is empty"
+	case markdown.ReferenceRawHTML:
+		return "raw HTML URL attribute is empty"
+	default:
+		return "link destination is empty"
+	}
+}
 
 // notServedReason explains why an existing Markdown target is unreachable in
 // the current scope.

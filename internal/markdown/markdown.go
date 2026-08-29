@@ -72,11 +72,12 @@ type RenderOptions struct {
 
 // Heading is one entry of the document's table of contents, extracted from the
 // same Goldmark AST that produced the HTML so heading ids always match the
-// rendered anchors.
+// rendered anchors. Line is the 1-based source line the heading starts on.
 type Heading struct {
 	Level int
 	ID    string
 	Text  string
+	Line  int
 }
 
 // Result contains the rendered fragment and its metadata.
@@ -356,6 +357,7 @@ func extractTitle(document ast.Node, source []byte, sourcePath string) string {
 // suffixes), so the table of contents can never drift from the rendered ids.
 func extractHeadings(document ast.Node, source []byte) []Heading {
 	headings := make([]Heading, 0)
+	locator := newSourceLocator(source)
 	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -372,10 +374,15 @@ func extractHeadings(document ast.Node, source []byte) []Heading {
 		if !ok {
 			return ast.WalkContinue, nil
 		}
+		line := 1
+		if heading.Lines().Len() > 0 {
+			line, _ = locator.locate(heading.Lines().At(0).Start)
+		}
 		headings = append(headings, Heading{
 			Level: heading.Level,
 			ID:    string(id),
 			Text:  normalizeTitle(string(heading.Text(source))),
+			Line:  line,
 		})
 		return ast.WalkContinue, nil
 	})

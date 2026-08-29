@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
@@ -158,11 +159,69 @@ func indexDocument(current document) (*indexedDocument, error) {
 	for _, heading := range inspection.Headings {
 		anchors[heading.ID] = struct{}{}
 	}
+
+	diagnostics := make([]Diagnostic, 0)
+	// Heading lines are body-relative too.
+	if inspection.H1Count > 1 {
+		diagnostics = append(diagnostics, Diagnostic{
+			Path:     current.display,
+			Line:     secondH1Line(inspection.Headings) + lineOffset,
+			Column:   1,
+			Severity: SeverityWarning,
+			Rule:     RuleDocumentMultipleH1,
+			Message:  fmt.Sprintf("document contains %d H1 headings", inspection.H1Count),
+		})
+	}
+	for _, entry := range frontMatterDateEntries(frontMatter) {
+		if value := strings.TrimSpace(entry.Value); value != "" && !markdown.IsISODate(value) {
+			diagnostics = append(diagnostics, Diagnostic{
+				Path:     current.display,
+				Line:     1,
+				Column:   1,
+				Severity: SeverityWarning,
+				Rule:     RuleFrontMatterDateInvalid,
+				Message:  fmt.Sprintf("%s is not a valid ISO date", entry.Key),
+			})
+		}
+	}
+
 	return &indexedDocument{
 		document:    current,
 		inspectable: true,
+		diagnostics: diagnostics,
 		frontMatter: frontMatter,
 		inspection:  inspection,
 		anchors:     anchors,
 	}, nil
+}
+
+// secondH1Line returns the source line of a document's second H1 heading —
+// the first surplus one — for the multiple-H1 warning.
+func secondH1Line(headings []markdown.Heading) int {
+	seen := 0
+	for _, heading := range headings {
+		if heading.Level != 1 {
+			continue
+		}
+		seen++
+		if seen == 2 {
+			return heading.Line
+		}
+	}
+	return 1
+}
+
+// frontMatterDateEntries returns the key/value pairs of the frontmatter date
+// fields m2h recognizes, in source order.
+func frontMatterDateEntries(frontMatter *markdown.FrontMatter) []markdown.FrontMatterEntry {
+	if frontMatter == nil {
+		return nil
+	}
+	entries := make([]markdown.FrontMatterEntry, 0, len(frontMatter.Entries))
+	for _, entry := range frontMatter.Entries {
+		if frontMatterDateKeys[entry.Key] {
+			entries = append(entries, entry)
+		}
+	}
+	return entries
 }

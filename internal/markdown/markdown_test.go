@@ -352,11 +352,11 @@ func TestRenderExtractsHeadingsFromSharedAST(t *testing.T) {
 	}
 
 	want := []Heading{
-		{Level: 1, ID: "标题", Text: "标题"},
-		{Level: 2, ID: "安装", Text: "安装"},
-		{Level: 2, ID: "安装-1", Text: "安装"},
-		{Level: 3, ID: "homebrew", Text: "Homebrew"},
-		{Level: 4, ID: "c-api", Text: "C++ API"},
+		{Level: 1, ID: "标题", Text: "标题", Line: 1},
+		{Level: 2, ID: "安装", Text: "安装", Line: 3},
+		{Level: 2, ID: "安装-1", Text: "安装", Line: 5},
+		{Level: 3, ID: "homebrew", Text: "Homebrew", Line: 7},
+		{Level: 4, ID: "c-api", Text: "C++ API", Line: 9},
 	}
 	if !reflect.DeepEqual(result.Headings, want) {
 		t.Fatalf("Headings = %+v, want %+v", result.Headings, want)
