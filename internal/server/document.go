@@ -9,7 +9,6 @@ import (
 	"io/fs"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -179,7 +178,7 @@ func (handler *documentHandler) serveDocument(response http.ResponseWriter, requ
 		writeJSONError(response, http.StatusBadRequest, "exactly one path query parameter is required")
 		return
 	}
-	virtual, err := safeRelativePath(values[0])
+	virtual, err := files.DecodeRelativePath(values[0])
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "invalid document path")
 		return
@@ -278,7 +277,7 @@ func (handler *documentHandler) serveRawMarkdown(response http.ResponseWriter, r
 		http.Error(response, "query parameters are not supported", http.StatusBadRequest)
 		return
 	}
-	virtual, err := safeRelativePath(strings.TrimPrefix(request.URL.Path, "/raw/"))
+	virtual, err := files.DecodeRelativePath(strings.TrimPrefix(request.URL.Path, "/raw/"))
 	if err != nil {
 		http.Error(response, "invalid document path", http.StatusBadRequest)
 		return
@@ -320,7 +319,7 @@ func (handler *documentHandler) serveDirectoryIndex(response http.ResponseWriter
 
 	status := http.StatusOK
 	if strings.HasPrefix(request.URL.Path, "/doc/") {
-		virtual, err := safeRelativePath(strings.TrimPrefix(request.URL.Path, "/doc/"))
+		virtual, err := files.DecodeRelativePath(strings.TrimPrefix(request.URL.Path, "/doc/"))
 		if err != nil {
 			http.NotFound(response, request)
 			return
@@ -426,40 +425,10 @@ func frontMatterResponseFrom(frontMatter *markdown.FrontMatter) *frontMatterResp
 	}
 }
 
-func safeRelativePath(value string) (string, error) {
-	for iteration := 0; iteration < 8; iteration++ {
-		decoded, err := url.PathUnescape(value)
-		if err != nil {
-			return "", fmt.Errorf("decode path: %w", err)
-		}
-		if decoded == value {
-			break
-		}
-		value = decoded
-		if iteration == 7 {
-			return "", fmt.Errorf("path exceeds decoding limit")
-		}
-	}
-	value = strings.ReplaceAll(value, "\\", "/")
-	if value == "" || strings.ContainsRune(value, '\x00') || path.IsAbs(value) || hasWindowsVolume(value) {
-		return "", fmt.Errorf("path must be relative")
-	}
-	for _, segment := range strings.Split(value, "/") {
-		if segment == ".." {
-			return "", fmt.Errorf("path escapes root")
-		}
-	}
-	cleaned := path.Clean(value)
-	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return "", fmt.Errorf("invalid relative path")
-	}
-	return cleaned, nil
-}
-
-func hasWindowsVolume(value string) bool {
-	return len(value) >= 2 && unicode.IsLetter(rune(value[0])) && value[1] == ':'
-}
-
+// resolveRequestFile maps a decoded root-relative request path onto the exact
+// file the workspace would serve, applying the shared filesystem boundary:
+// exact-case components, no symlink directories, canonical resolution inside
+// the root and a regular-file requirement.
 func resolveRequestFile(root, relative string) (string, error) {
 	if err := files.RequireExactPath(root, relative); err != nil {
 		return "", err

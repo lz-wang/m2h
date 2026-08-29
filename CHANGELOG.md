@@ -16,7 +16,7 @@
 
 ### 新增
 
-- 新增 `m2h check` 子命令，检查 Markdown 文档完整性、可渲染性与本地引用一致性：`m2h check <file|directory>` 支持 `--depth`/`--glob`（与浏览命令同一文档范围）、`--format text|json` 与 `--strict`。检查六类 error（Frontmatter 无效、本地目标缺失/非普通文件/越过根目录、Markdown 目标不在当前服务范围、锚点不存在）与四类 warning（图片缺 alt、多个 H1、日期字段非有效 ISO 日期、空 destination），行内与 fenced 代码中的 URL 不会误报；本地引用覆盖 Markdown 链接/图片、reference-style 链接与 raw HTML 的 href/src/poster/data，锚点与标题 ID、URL 解析和 symlink 安全边界均与 Web 浏览共用同一实现。诊断按 path:line:column 输出并附带统计摘要，JSON 结构稳定供 CI 消费；发现 error（或 --strict 下存在 warning）时退出码为 1。
+- 新增 `m2h check` 子命令，检查 Markdown 文档的 Frontmatter、结构、本地引用、文档范围与锚点一致性：`m2h check <file|directory>` 支持 `--depth`/`--glob`（与浏览命令同一文档范围）、`--format text|json` 与 `--strict`。检查六类 error（Frontmatter 无效、本地目标缺失/非普通文件/越过根目录、Markdown 目标不在当前服务范围、锚点不存在）与四类 warning（图片缺 alt、多个 H1、日期字段非有效 ISO 日期、空 destination），行内与 fenced 代码中的 URL 不会误报；本地引用覆盖 Markdown 链接/图片、reference-style 链接与 raw HTML 的 href/src/poster/data。锚点与标题 ID、URL 解码、`/doc` 与 `/assets` 路由判定、symlink 安全边界均与 Web 浏览共用同一实现：图片与 raw HTML 的 src/poster/data 一律按 `/assets` 路由校验，该路由不提供 Markdown 文件，因此指向 `.md` 的此类引用（含 `guide%2Emd` 这类编码写法）会被报告为不可达；`sub%5Cdeep.md`、`images%2F.%2Flogo.png` 这类依赖服务端归一化的路径与浏览行为判定一致；Frontmatter 无法解析的目标文档不会再级联产生 anchor.missing 误报。诊断按 path:line:column 输出（raw HTML 引用定位到具体属性值所在行列）并附带统计摘要，JSON 结构稳定供 CI 消费；发现 error（或 --strict 下存在 warning）时退出码为 1。
 
 - Lightbox 新增鼠标滚轮平滑缩放：指针位于目标图片或 Mermaid 图表上时，向上滚动放大、向下滚动缩小；缩放量按实际滚动幅度连续计算，小幅触控板输入可细微调整，普通鼠标单次滚轮事件最多约改变 8.3%，避免快速跳级，同时保持 1–5 倍边界且不带动背景文档。工具栏按钮仍使用 1.25 倍步进，现有拖动、旋转和空白区域关闭行为不变。
 

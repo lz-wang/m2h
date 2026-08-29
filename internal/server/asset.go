@@ -65,5 +65,5 @@ func assetPath(requestURL *url.URL) (string, error) {
 	if !strings.HasPrefix(escaped, "/assets/") {
 		return "", fmt.Errorf("invalid asset route")
 	}
-	return safeRelativePath(strings.TrimPrefix(escaped, "/assets/"))
+	return files.DecodeRelativePath(strings.TrimPrefix(escaped, "/assets/"))
 }

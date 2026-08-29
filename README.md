@@ -168,7 +168,7 @@ m2h check docs --strict
 | 规则 | 等级 | 说明 |
 | --- | --- | --- |
 | `frontmatter.invalid` | error | Frontmatter YAML 无法解析或根节点不是 mapping |
-| `local-target.missing` | error | 本地链接、图片或附件目标不存在 |
+| `local-target.missing` | error | 本地链接、图片或附件目标不存在，或经 `/assets` 路由不可达（如指向 `.md` 的图片） |
 | `local-target.not-regular` | error | 引用目标存在，但不是普通文件 |
 | `local-target.outside-root` | error | `../` 或 symlink 使目标越过文档根目录 |
 | `markdown-target.not-served` | error | Markdown 目标存在，但被单文件模式或 `--glob`/`--depth` 排除 |
@@ -184,8 +184,9 @@ m2h check docs --strict
   与绝对路径默认跳过
 - Markdown 链接/图片、reference-style 链接与 raw HTML 的
   `href`/`src`/`poster`/`data` 均在检查范围内
-- 与 Web 浏览行为严格一致：同一 Markdown 解析引擎、同一文档范围与
-  symlink 安全边界、同一 GitHub 兼容锚点算法
+- 与 Web 浏览行为严格一致：同一 Markdown 解析引擎、同一 URL 解码与
+  `/doc`/`/assets` 路由判定（Markdown 文件不会经 `/assets` 提供）、同一
+  文档范围与 symlink 安全边界、同一 GitHub 兼容锚点算法
 - 退出码：发现 error（或 `--strict` 下存在 warning）时返回 `1`
 
 查看全部选项：

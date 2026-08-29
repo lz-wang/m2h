@@ -749,19 +749,8 @@ func TestClientIP(t *testing.T) {
 	}
 }
 
-func TestSafeRelativePathAndExactResolution(t *testing.T) {
+func TestExactPathResolution(t *testing.T) {
 	t.Parallel()
-
-	for _, value := range []string{"guide.md", "design/architecture.md", "space name.md", "计划.md"} {
-		if got, err := safeRelativePath(value); err != nil || got != value {
-			t.Errorf("safeRelativePath(%q) = %q, %v", value, got, err)
-		}
-	}
-	for _, value := range []string{"", ".", "../guide.md", "/guide.md", `C:\guide.md`, "name\x00.md", "%", "%2525252525252525252e"} {
-		if _, err := safeRelativePath(value); err == nil {
-			t.Errorf("safeRelativePath(%q) succeeded", value)
-		}
-	}
 
 	root := canonicalDirectory(t, t.TempDir())
 	writeTestFile(t, filepath.Join(root, "Folder", "Guide.md"), "# Guide")

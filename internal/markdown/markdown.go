@@ -230,8 +230,7 @@ func rewriteDestination(destination []byte, options RenderOptions, image bool) [
 	if image {
 		return webAsset(pathPart, suffix, options)
 	}
-	extension := pathpkg.Ext(pathPart)
-	if !strings.EqualFold(extension, ".md") && !strings.EqualFold(extension, ".markdown") {
+	if !RoutesToDocument(pathPart) {
 		return webAsset(pathPart, suffix, options)
 	}
 	resolved, ok := resolveWithinRoot(options.SourcePath, pathPart)
@@ -239,6 +238,18 @@ func rewriteDestination(destination []byte, options RenderOptions, image bool) [
 		return destination
 	}
 	return []byte("/doc/" + resolved + suffix)
+}
+
+// RoutesToDocument reports whether a relative destination — identified by its
+// path part exactly as the Markdown source wrote it, before any percent
+// decoding — is a Markdown document the web renderer routes to /doc. Every
+// other relative destination routes to /assets. The check command reuses this
+// predicate so routing decisions can never disagree with the renderer: an
+// encoded extension (guide%2Emd) is not a Markdown destination here, and the
+// assets route that receives it never serves Markdown files.
+func RoutesToDocument(pathPart string) bool {
+	extension := pathpkg.Ext(pathPart)
+	return strings.EqualFold(extension, ".md") || strings.EqualFold(extension, ".markdown")
 }
 
 func webAsset(pathPart, suffix string, options RenderOptions) []byte {

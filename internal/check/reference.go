@@ -61,7 +61,7 @@ func (resolver *targetResolver) resolve(reference string) targetStatus {
 }
 
 func (resolver *targetResolver) inspect(reference string) targetStatus {
-	target, err := decodeLocalPath(reference)
+	target, err := files.DecodeRelativePath(reference)
 	if err != nil {
 		return targetStatus{state: targetMissing, target: target, err: err}
 	}
@@ -181,7 +181,17 @@ func checkReference(
 			fmt.Sprintf("target %q resolves outside the workspace root", local.Path), reference))
 	}
 
-	if !files.IsMarkdown(status.target) {
+	// Mirror the web renderer's routing, decided from the raw destination:
+	// a link whose path part carries a Markdown extension routes to /doc;
+	// everything else (images, raw HTML src/poster/data, and links to
+	// non-Markdown names — including encoded ones like guide%2Emd) routes to
+	// /assets, and the assets route never serves Markdown files. Such a
+	// target is unreachable in the browser even though it exists on disk.
+	if reference.Route != markdown.ReferenceRouteLink || !markdown.RoutesToDocument(local.Path) {
+		if files.IsMarkdown(status.target) {
+			return append(diagnostics, current.diagnostic(SeverityError, RuleLocalTargetMissing,
+				fmt.Sprintf("target %q is not accessible: the assets route never serves Markdown files", status.target), reference))
+		}
 		// Assets only need to exist and be regular; the glob and depth
 		// filters never applied to them.
 		return diagnostics
@@ -190,7 +200,10 @@ func checkReference(
 		return append(diagnostics, current.diagnostic(SeverityError, RuleMarkdownTargetNotServed,
 			fmt.Sprintf("Markdown target %q exists but %s", status.target, scope.notServedReason(status.target).message()), reference))
 	}
-	if target, ok := index[status.target]; ok && !target.hasAnchor(local.Fragment) {
+	// A target whose frontmatter failed to parse is never inspected, so its
+	// headings are unknown; the frontmatter error already explains the break,
+	// and deriving an anchor.missing on top of it would be groundless.
+	if target, ok := index[status.target]; ok && target.inspectable && !target.hasAnchor(local.Fragment) {
 		diagnostics = append(diagnostics, current.diagnostic(SeverityError, RuleAnchorMissing,
 			fmt.Sprintf("heading %q does not exist in %q", "#"+local.Fragment, status.target), reference))
 	}
@@ -225,43 +238,4 @@ func (current *indexedDocument) diagnostic(severity Severity, rule string, messa
 		Rule:     rule,
 		Message:  message,
 	}
-}
-
-// decodeLocalPath repeatedly percent-decodes a path exactly the way the
-// server decodes a request path (bounded), and rejects encodings that decode
-// into a root escape or an absolute path.
-func decodeLocalPath(value string) (string, error) {
-	for iteration := range 8 {
-		decoded, err := url.PathUnescape(value)
-		if err != nil {
-			return "", fmt.Errorf("invalid URL encoding: %w", err)
-		}
-		if decoded == value {
-			break
-		}
-		value = decoded
-		if iteration == 7 {
-			return "", fmt.Errorf("path exceeds decoding limit")
-		}
-	}
-	if escapesRootPath(value) {
-		return value, fmt.Errorf("decoded path escapes the workspace root")
-	}
-	return value, nil
-}
-
-// escapesRootPath reports whether a slash path cannot stay inside a workspace
-// root: an absolute path, or any ".." segment — mirroring how the served
-// workspace refuses request paths.
-func escapesRootPath(value string) bool {
-	value = strings.ReplaceAll(value, "\\", "/")
-	if strings.HasPrefix(value, "/") {
-		return true
-	}
-	for _, segment := range strings.Split(value, "/") {
-		if segment == ".." {
-			return true
-		}
-	}
-	return false
 }

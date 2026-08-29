@@ -502,14 +502,92 @@ func TestCheckRawHTMLReferences(t *testing.T) {
 		"guide.md": "# Guide\n\n<a href=\"missing-a.md\">A</a>\n<img src=\"missing-b.png\">\n<video poster=\"missing-c.jpg\"></video>\n<object data=\"missing-d.pdf\"></object>\n",
 	}, Options{})
 	summary := summarize(t, result, err)
+	// Each raw-HTML URL locates at its attribute value, not the line start.
 	want := []string{
-		fmt.Sprintf("guide.md:3:1 error %s", RuleLocalTargetMissing),
-		fmt.Sprintf("guide.md:4:1 error %s", RuleLocalTargetMissing),
-		fmt.Sprintf("guide.md:5:1 error %s", RuleLocalTargetMissing),
-		fmt.Sprintf("guide.md:6:1 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("guide.md:3:10 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("guide.md:4:11 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("guide.md:5:16 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("guide.md:6:15 error %s", RuleLocalTargetMissing),
 	}
 	if !slices.Equal(summary, want) {
 		t.Fatalf("diagnostics = %v, want %v", summary, want)
+	}
+}
+
+// TestCheckAssetRouteNeverServesMarkdown pins the routing contract between
+// the web renderer and check: images and the src/poster/data attributes of
+// raw HTML always route to /assets, which refuses Markdown files outright,
+// and a link whose raw destination only looks encoded (guide%2Emd) routes to
+// /assets too because the renderer classifies before decoding. An existing
+// Markdown file behind any of these must be reported unreachable — the WebUI
+// serves it with a 404, whatever the filesystem says.
+func TestCheckAssetRouteNeverServesMarkdown(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		markup string
+		column int
+	}{
+		{name: "markdown image", markup: "![Guide](guide.md)\n", column: 3},
+		{name: "raw img src", markup: "<img src=\"guide.md\">\n", column: 11},
+		{name: "raw object data", markup: "<object data=\"guide.md\"></object>\n", column: 15},
+		{name: "encoded markdown link", markup: "[Guide](guide%2Emd)\n", column: 2},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := runCheck(t, map[string]string{
+				"index.md": "# Index\n\n" + test.markup,
+				"guide.md": "# Guide\n\n## Install\n",
+			}, Options{})
+			summary := summarize(t, result, err)
+			want := []string{fmt.Sprintf("index.md:3:%d error %s", test.column, RuleLocalTargetMissing)}
+			if !slices.Equal(summary, want) {
+				t.Fatalf("diagnostics = %v, want the asset-routed Markdown target rejected %v", summary, want)
+			}
+			if !strings.Contains(result.Diagnostics[0].Message, "assets route never serves Markdown files") {
+				t.Fatalf("message = %q, want the assets-route reason", result.Diagnostics[0].Message)
+			}
+		})
+	}
+}
+
+// TestCheckMatchesServerPathNormalization covers destinations that only
+// resolve because the served workspace decodes request paths with the same
+// shared normalizer (backslash → slash, "." segment cleanup, multi-layer
+// percent decoding); check must accept exactly these too.
+func TestCheckMatchesServerPathNormalization(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"index.md":        "# Index\n\n[Deep](sub%5Cdeep.md)\n![Logo](images%2F.%2Flogo.png)\n![Two](images%2F%2Flogo.png)\n[Guide](%2567uide.md)\n",
+		"guide.md":        "# Guide\n",
+		"sub/deep.md":     "# Deep\n",
+		"images/logo.png": "png",
+	}, Options{Depth: 4})
+	summary := summarize(t, result, err)
+	if len(summary) != 0 {
+		t.Fatalf("diagnostics = %v, want the server-normalized targets to resolve", result.Diagnostics)
+	}
+}
+
+// TestCheckInvalidFrontMatterTargetReportsNoCascadingAnchor pins the rule
+// that a target which could not be parsed never derives secondary findings:
+// its headings are unknown, so an anchor.missing on top of the frontmatter
+// error would be groundless.
+func TestCheckInvalidFrontMatterTargetReportsNoCascadingAnchor(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"index.md":  "# Index\n\n[Install](target.md#install)\n",
+		"target.md": "---\ntitle: [broken\n---\n\n## install\n",
+	}, Options{})
+	summary := summarize(t, result, err)
+	want := []string{fmt.Sprintf("target.md:1:1 error %s", RuleFrontMatterInvalid)}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want only the frontmatter error without a cascading anchor %v", summary, want)
 	}
 }
 
@@ -930,7 +1008,7 @@ func TestCheckEmptyDestinationWarning(t *testing.T) {
 		fmt.Sprintf("guide.md:3:2 warning %s", RuleLinkEmptyDestination),
 		fmt.Sprintf("guide.md:3:16 warning %s", RuleImageAltEmpty),
 		fmt.Sprintf("guide.md:3:16 warning %s", RuleLinkEmptyDestination),
-		fmt.Sprintf("guide.md:3:27 warning %s", RuleLinkEmptyDestination),
+		fmt.Sprintf("guide.md:3:36 warning %s", RuleLinkEmptyDestination),
 	}
 	if !slices.Equal(summary, want) {
 		t.Fatalf("diagnostics = %v, want %v", summary, want)
