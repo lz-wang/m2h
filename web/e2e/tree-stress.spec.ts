@@ -92,10 +92,13 @@ async function activeRowInsideViewport(
 test("re-measures overflow after a collapse that scrolls and resizes nothing", async ({
   page,
 }) => {
-  // 1280 tall so the fully collapsed tree (a/, tree/, 23 root notes ≈ 1000px)
-  // fits the viewport with margin — the collapse below must end in a
-  // no-overflow state for the re-measure assertion to be observable.
-  await page.setViewportSize({ width: 1280, height: 1280 });
+  // 1360 tall so the fully collapsed tree (the fixture root plus tree-stress's
+  // root notes, ≈1190px with the current fixture set) fits the viewport with
+  // margin — the collapse below must end in a no-overflow state for the
+  // re-measure assertion to be observable. The height is calibrated against
+  // the whole fixture directory: every root-level e2e document adds a sidebar
+  // row, and at 1280 the margin was down to a single row.
+  await page.setViewportSize({ width: 1280, height: 1360 });
   await waitForTreePage(page, rootFile);
 
   // Expand level-1, then level-2-a: 40 more rows render on top of the other
@@ -205,7 +208,7 @@ test("leaves no text pixels at the sidebar boundary after a collapse", async ({
 }) => {
   // Same tall viewport as the re-measure test: after the collapse below the
   // whole tree fits, so the strip is scrollbar-free.
-  await page.setViewportSize({ width: 1280, height: 1280 });
+  await page.setViewportSize({ width: 1280, height: 1360 });
   await waitForTreePage(page, deepFile);
 
   // Return to the top, then collapse the whole level-1 subtree in one commit
