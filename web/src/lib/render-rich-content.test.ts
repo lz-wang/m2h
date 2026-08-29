@@ -34,6 +34,8 @@ const loadMermaidMock = vi.hoisted(() =>
   vi.fn(async (): Promise<MermaidRuntime> => mermaidMock),
 );
 
+const ensureZenUMLRegisteredMock = vi.hoisted(() => vi.fn(async () => {}));
+
 const loadKatexMock = vi.hoisted(() =>
   vi.fn(async (): Promise<MathAutoRenderer> => renderMathInElementMock),
 );
@@ -44,6 +46,7 @@ vi.mock("./runtime-loader", () => ({
   loadMermaid: loadMermaidMock,
   loadKatex: loadKatexMock,
   loadTablesort: loadTablesortMock,
+  ensureZenUMLRegistered: ensureZenUMLRegisteredMock,
 }));
 
 // The vendored tablesort bundles, concatenated in the same order the runtime
@@ -85,6 +88,7 @@ describe("renderRichContent", () => {
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
+    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
@@ -439,6 +443,7 @@ describe("collapsible code blocks", () => {
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
+    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
@@ -611,6 +616,7 @@ describe("code line numbers", () => {
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
+    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
@@ -762,6 +768,7 @@ describe("image lightbox triggers", () => {
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
+    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
@@ -1225,6 +1232,7 @@ describe("rerenderMermaid", () => {
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
+    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
@@ -1331,6 +1339,7 @@ describe("sortable tables", () => {
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
+    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({

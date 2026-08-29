@@ -7,15 +7,18 @@
 // individually.
 //
 // Mermaid runs before KaTeX so KaTeX never scans raw diagram source code.
-// Tables sort last so the caller's scroll restore lands on the fully enhanced
-// DOM; the sortable-header geometry itself is reserved statically in the
-// stylesheet, so the enhancement never shifts layout. All runtimes are the
-// shared /runtime/* assets the document server embeds, loaded through the
-// runtime loader only when the document actually uses them.
+// ZenUML diagrams additionally register Mermaid's external-diagram plugin
+// before anything initializes — Mermaid Core alone does not know the `zenuml`
+// diagram type. Tables sort last so the caller's scroll restore lands on the
+// fully enhanced DOM; the sortable-header geometry itself is reserved
+// statically in the stylesheet, so the enhancement never shifts layout. All
+// runtimes are the shared /runtime/* assets the document server embeds,
+// loaded through the runtime loader only when the document actually uses them.
 
 import type { ResolvedMode } from "../model";
 import { copyText } from "./clipboard";
 import {
+  ensureZenUMLRegistered,
   loadKatex,
   loadMermaid,
   loadTablesort,
@@ -112,8 +115,7 @@ export async function renderRichContent(
   // enhancement itself never changes table geometry.
   const tablesortLoad = hasSortableTables(root) ? loadTablesort() : null;
   if (hasMermaidBlocks(root)) {
-    const mermaid = await loadMermaid();
-    ensureMermaidInitialized(mode, mermaid);
+    const mermaid = await prepareMermaid(mode, hasZenUMLBlocks(root));
     await renderMermaid(mermaid, root, isCurrent);
   }
   if (isCurrent !== undefined && !isCurrent()) {
@@ -137,6 +139,25 @@ export async function renderRichContent(
 
 function hasMermaidBlocks(root: HTMLElement): boolean {
   return root.querySelector("pre > code.language-mermaid") !== null;
+}
+
+// Mirrors the official plugin's own detector (/^\s*zenuml/): a diagram counts
+// as ZenUML only when the keyword is the first word of its source, so prose
+// or other diagrams that merely mention "zenuml" never trigger the plugin
+// download.
+function isZenUMLSource(source: string): boolean {
+  return /^\s*zenuml\b/.test(source);
+}
+
+function hasZenUMLBlocks(root: HTMLElement): boolean {
+  for (const code of root.querySelectorAll<HTMLElement>(
+    "pre > code.language-mermaid",
+  )) {
+    if (isZenUMLSource(code.textContent ?? "")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function hasSortableTables(root: HTMLElement): boolean {
@@ -575,6 +596,25 @@ function ensureMermaidInitialized(
   currentMermaidTheme = theme;
 }
 
+// The single Mermaid preparation path for first render and theme rerender:
+// load the runtime, register the ZenUML external-diagram plugin when the
+// document needs it, then configure the theme — in that order. Mermaid's
+// integration model requires external diagrams to be registered before
+// initialize, and registration is attempted on rerender too, so a document
+// whose first registration failed (or a reloaded runtime in dev/test) can
+// still recover on a theme switch instead of staying broken.
+async function prepareMermaid(
+  mode: ResolvedMode,
+  needsZenUML: boolean,
+): Promise<MermaidRuntime> {
+  const mermaid = await loadMermaid();
+  if (needsZenUML) {
+    await ensureZenUMLRegistered(mermaid);
+  }
+  ensureMermaidInitialized(mode, mermaid);
+  return mermaid;
+}
+
 // Render one diagram offscreen via mermaid.render and swap the resulting SVG in
 // atomically, so the container never flashes back to source text while the new
 // palette resolves. Returns false when the render is no longer current, telling
@@ -598,11 +638,26 @@ async function paintMermaidTarget(
     }
     target.innerHTML = result.svg;
     result.bindFunctions?.(target);
-  } catch {
+  } catch (error) {
     // Leave the existing content in place; a single bad diagram is isolated.
+    // The failure is still reported: without the diagram type and the error, a
+    // missing plugin, a failed runtime fetch, and a genuine syntax error all
+    // collapse into the same silent empty frame.
+    console.warn("Failed to render Mermaid diagram", {
+      diagramType: getMermaidDiagramType(source),
+      error,
+    });
   }
   syncMermaidLightboxAvailability(target);
   return true;
+}
+
+// The first word of a diagram source names its diagram type. Reported with
+// render failures so "unknown diagram type" (an unregistered external
+// diagram) is distinguishable from a fetch failure or a syntax error.
+function getMermaidDiagramType(source: string): string {
+  const type = source.trimStart().split(/\s+/, 1)[0];
+  return type === "" ? "unknown" : type;
 }
 
 // Whether a diagram may open the Lightbox is a function of its rendered SVG,
@@ -697,8 +752,11 @@ export async function rerenderMermaid(
     return;
   }
 
-  const mermaid = await loadMermaid();
-  ensureMermaidInitialized(mode, mermaid);
+  const needsZenUML = targets.some((target) => {
+    const source = mermaidSources.get(target);
+    return source !== undefined && isZenUMLSource(source);
+  });
+  const mermaid = await prepareMermaid(mode, needsZenUML);
 
   for (const target of targets) {
     const source = mermaidSources.get(target);
