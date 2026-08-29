@@ -980,17 +980,17 @@ func TestCheckFrontMatterDateInvalidWarning(t *testing.T) {
 		{
 			name:   "impossible calendar date",
 			source: "---\ncreate_date: 2026-99-99\n---\n# Guide\n",
-			want:   []string{fmt.Sprintf("guide.md:1:1 warning %s", RuleFrontMatterDateInvalid)},
+			want:   []string{fmt.Sprintf("guide.md:2:1 warning %s", RuleFrontMatterDateInvalid)},
 		},
 		{
 			name:   "free-form text never reaches the summary",
 			source: "---\ndate: last week\n---\n# Guide\n",
-			want:   []string{fmt.Sprintf("guide.md:1:1 warning %s", RuleFrontMatterDateInvalid)},
+			want:   []string{fmt.Sprintf("guide.md:2:1 warning %s", RuleFrontMatterDateInvalid)},
 		},
 		{
 			name:   "sequence value is not a date",
 			source: "---\nupdate_at:\n  - 2026\n---\n# Guide\n",
-			want:   []string{fmt.Sprintf("guide.md:1:1 warning %s", RuleFrontMatterDateInvalid)},
+			want:   []string{fmt.Sprintf("guide.md:2:1 warning %s", RuleFrontMatterDateInvalid)},
 		},
 		{
 			name:   "empty value is left alone",
@@ -1003,11 +1003,11 @@ func TestCheckFrontMatterDateInvalidWarning(t *testing.T) {
 			want:   []string{},
 		},
 		{
-			name:   "each invalid field is reported",
+			name:   "each invalid field is reported at its own line",
 			source: "---\ncreate_date: nope\nupdate_time: nope\n---\n# Guide\n",
 			want: []string{
-				fmt.Sprintf("guide.md:1:1 warning %s", RuleFrontMatterDateInvalid),
-				fmt.Sprintf("guide.md:1:1 warning %s", RuleFrontMatterDateInvalid),
+				fmt.Sprintf("guide.md:2:1 warning %s", RuleFrontMatterDateInvalid),
+				fmt.Sprintf("guide.md:3:1 warning %s", RuleFrontMatterDateInvalid),
 			},
 		},
 	}

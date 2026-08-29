@@ -27,10 +27,15 @@ type FrontMatter struct {
 
 // FrontMatterEntry is a single frontmatter key/value pair rendered as a table
 // row. Value is a display string: scalars keep their decoded text, while
-// sequences and mappings are re-serialized as readable YAML.
+// sequences and mappings are re-serialized as readable YAML. Line and Column
+// locate the key inside the frontmatter YAML block, 1-based, so diagnostics
+// can point at the source line; the caller adds the file-level offset (the
+// opening `---` delimiter sits above the block).
 type FrontMatterEntry struct {
-	Key   string
-	Value string
+	Key    string
+	Value  string
+	Line   int
+	Column int
 }
 
 // ParseFrontMatter splits optional YAML frontmatter from source. When a valid
@@ -145,8 +150,10 @@ func parseFrontMatterYAML(raw []byte) (*FrontMatter, error) {
 			return nil, err
 		}
 		meta.Entries = append(meta.Entries, FrontMatterEntry{
-			Key:   key,
-			Value: displayValue,
+			Key:    key,
+			Value:  displayValue,
+			Line:   keyNode.Line,
+			Column: keyNode.Column,
 		})
 
 		switch key {

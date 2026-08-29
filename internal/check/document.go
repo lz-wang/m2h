@@ -183,10 +183,16 @@ func indexDocument(current document) (*indexedDocument, error) {
 	}
 	for _, entry := range frontMatterDateEntries(frontMatter) {
 		if value := strings.TrimSpace(entry.Value); value != "" && !markdown.IsISODate(value) {
+			// The entry position is relative to the YAML block; in the file
+			// the opening `---` delimiter sits one line above it.
+			line, column := 1, 1
+			if entry.Line > 0 {
+				line, column = entry.Line+1, max(entry.Column, 1)
+			}
 			diagnostics = append(diagnostics, Diagnostic{
 				Path:     current.display,
-				Line:     1,
-				Column:   1,
+				Line:     line,
+				Column:   column,
 				Severity: SeverityWarning,
 				Rule:     RuleFrontMatterDateInvalid,
 				Message:  fmt.Sprintf("%s is not a valid ISO date", entry.Key),

@@ -96,6 +96,35 @@ func TestParseFrontMatterDateTime(t *testing.T) {
 	}
 }
 
+func TestParseFrontMatterEntryPositions(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("---\ntitle: Guide\ndate: yesterday\ntags:\n  - go\n---\nbody\n")
+	_, frontMatter, err := ParseFrontMatter(source)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := []struct {
+		key    string
+		line   int
+		column int
+	}{
+		{key: "title", line: 1, column: 1},
+		{key: "date", line: 2, column: 1},
+		{key: "tags", line: 3, column: 1},
+	}
+	if len(frontMatter.Entries) != len(want) {
+		t.Fatalf("Entries = %+v, want %d entries", frontMatter.Entries, len(want))
+	}
+	for index, expected := range want {
+		entry := frontMatter.Entries[index]
+		if entry.Key != expected.key || entry.Line != expected.line || entry.Column != expected.column {
+			t.Fatalf("entry %d = %+v, want key %q at %d:%d (positions are relative to the YAML block)",
+				index, entry, expected.key, expected.line, expected.column)
+		}
+	}
+}
+
 func TestParseFrontMatterInvalidDate(t *testing.T) {
 	t.Parallel()
 
