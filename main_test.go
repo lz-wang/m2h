@@ -2,6 +2,9 @@ package main
 
 import (
 	"bytes"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	webui "github.com/lz-wang/m2h/web"
@@ -46,6 +49,41 @@ func TestRunReturnsExitCodeAndRoutesOutput(t *testing.T) {
 				t.Fatalf("stderr = %q, want %q", got, test.wantStderr)
 			}
 		})
+	}
+}
+
+// TestRunCheckExitCodes pins the check subcommand's process-level contract:
+// a clean scope exits 0, diagnostics on stdout fail the process with 1.
+func TestRunCheckExitCodes(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide\n\n![missing](nope.png)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	if got := run([]string{"m2h", "check", filepath.Join(root, "guide.md")}, webui.Content(), &stdout, &stderr); got != 1 {
+		t.Fatalf("run() exit code = %d, want 1 for broken references", got)
+	}
+	if !strings.Contains(stdout.String(), "error [local-target.missing]") ||
+		!strings.HasSuffix(stdout.String(), "Checked 1 Markdown file: 1 error\n") {
+		t.Fatalf("stdout = %q, want the diagnostic report", stdout.String())
+	}
+	if !strings.HasPrefix(stderr.String(), "Error: check found 1 error\n") {
+		t.Fatalf("stderr = %q, want the failure reason", stderr.String())
+	}
+
+	stdout.Reset()
+	stderr.Reset()
+	clean := filepath.Join(root, "clean.md")
+	if err := os.WriteFile(clean, []byte("# Clean\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := run([]string{"m2h", "check", clean}, webui.Content(), &stdout, &stderr); got != 0 {
+		t.Fatalf("run() exit code = %d, want 0 for a clean document", got)
+	}
+	if stdout.String() != "Checked 1 Markdown file: no issues found\n" || stderr.String() != "" {
+		t.Fatalf("stdout = %q stderr = %q, want a clean summary", stdout.String(), stderr.String())
 	}
 }
 

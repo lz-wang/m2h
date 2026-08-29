@@ -16,11 +16,15 @@
 
 ### 新增
 
+- 新增 `m2h check` 子命令，检查 Markdown 文档完整性、可渲染性与本地引用一致性：`m2h check <file|directory>` 支持 `--depth`/`--glob`（与浏览命令同一文档范围）、`--format text|json` 与 `--strict`。检查六类 error（Frontmatter 无效、本地目标缺失/非普通文件/越过根目录、Markdown 目标不在当前服务范围、锚点不存在）与四类 warning（图片缺 alt、多个 H1、日期字段非有效 ISO 日期、空 destination），行内与 fenced 代码中的 URL 不会误报；本地引用覆盖 Markdown 链接/图片、reference-style 链接与 raw HTML 的 href/src/poster/data，锚点与标题 ID、URL 解析和 symlink 安全边界均与 Web 浏览共用同一实现。诊断按 path:line:column 输出并附带统计摘要，JSON 结构稳定供 CI 消费；发现 error（或 --strict 下存在 warning）时退出码为 1。
+
 - Lightbox 新增鼠标滚轮平滑缩放：指针位于目标图片或 Mermaid 图表上时，向上滚动放大、向下滚动缩小；缩放量按实际滚动幅度连续计算，小幅触控板输入可细微调整，普通鼠标单次滚轮事件最多约改变 8.3%，避免快速跳级，同时保持 1–5 倍边界且不带动背景文档。工具栏按钮仍使用 1.25 倍步进，现有拖动、旋转和空白区域关闭行为不变。
 
 - Mermaid ZenUML 时序图支持：WebUI 与导出 HTML 均可渲染 `zenuml` 图表。此前两端只加载 Mermaid Core，合法的 ZenUML 会退化为 `Syntax error in text`；现在 WebUI 在文档含 zenuml 图表时按需加载二进制内嵌的 mermaid-zenuml 0.2.3 运行时（保留上游 dist 相对路径的 chunks 目录），按 load → register → initialize → render 顺序注册 external diagram 后渲染，导出页面则在产物确含 zenuml 图表时携带同一 release 的 jsDelivr 插件 URL、由内联引导脚本动态导入注册。插件注册按页面单例缓存且失败不缓存 rejected Promise（主题切换重绘可重试）；普通 Mermaid 图表不产生插件下载；WebUI 图表渲染失败时在控制台输出图表类型与原始错误，使插件缺失、资源加载失败与语法错误可区分。
 
 ### 修复
+
+- 修复不带参数执行 `m2h export` 时输出 "No help topic for 'export'" 并以退出码 3 失败的问题：urfave/cli v3 的 ShowCommandHelp 需要在父命令中按名查找子命令，此前传入命令自身导致帮助从未显示；现在 `m2h export` 与 `m2h check` 不带参数时正常显示各自帮助并以退出码 0 结束。
 
 - 修复同一段落中的多个美元金额被误渲染为行内公式的问题：KaTeX 的单美元自动分隔此前会把 `$9` 与后续 `$200` 直接配成一个跨句公式；现在 WebUI 与导出 HTML 都按 Markdown 常用边界识别 `$...$`（开启符右侧非空白，闭合符左侧非空白且右侧非数字），未配对的金额美元符号保持普通文本，合法行内与行间公式不受影响。
 

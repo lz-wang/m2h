@@ -37,6 +37,7 @@ trap cleanup EXIT
 cd "${smoke_root}"
 printf '# Smoke\n\n- %s\n\n[Next](next.md)\n' "${RUNNER_OS:-local}" > smoke.md
 printf '# Next\n' > next.md
+printf '# Clean\n' > clean.md
 
 actual_version=$("${binary}" --version)
 if [[ "${actual_version}" != "${expected_version}" ]]; then
@@ -49,6 +50,15 @@ echo "[smoke] version ${actual_version}"
 grep -F '<title>Smoke</title>' smoke.html >/dev/null
 grep -F 'href="next.md"' smoke.html >/dev/null
 echo "[smoke] export"
+
+"${binary}" check clean.md > check.log
+grep -F 'Checked 1 Markdown file: no issues found' check.log >/dev/null
+"${binary}" check clean.md --format json | grep -F '"files": 1' >/dev/null
+if "${binary}" check smoke.md > /dev/null 2>&1; then
+	echo "Error: check accepted a not-served sibling Markdown target" >&2
+	exit 1
+fi
+echo "[smoke] check"
 
 port=${M2H_SMOKE_PORT:-18793}
 "${binary}" smoke.md --host 127.0.0.1 --port "${port}" --no-open > preview.log 2>&1 &

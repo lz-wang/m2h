@@ -724,6 +724,22 @@ func TestCheckDecodedRootEscapes(t *testing.T) {
 	}
 }
 
+func TestCheckBackslashSeparatorDestination(t *testing.T) {
+	t.Parallel()
+
+	// Backslash-separated destinations resolve like forward slashes — the
+	// same normalization the shared URL resolver applies — so the target
+	// must be found on every platform.
+	result, err := runCheck(t, map[string]string{
+		"guide.md":    "# Guide\n\n[Deep](sub\\deep.md)\n",
+		"sub/deep.md": "# Deep\n",
+	}, Options{Depth: 4})
+	summary := summarize(t, result, err)
+	if len(summary) != 0 {
+		t.Fatalf("diagnostics = %v, want the backslash destination resolved", result.Diagnostics)
+	}
+}
+
 func TestCheckPercentEncodedCJKAnchor(t *testing.T) {
 	t.Parallel()
 
