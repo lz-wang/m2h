@@ -11,6 +11,8 @@ Tablesort core: the five comparator builds below stay WebUI-only.
 | ----------------- | ------------------------------------- | ------- | ------------------- |
 | KaTeX             | https://github.com/KaTeX/KaTeX        | 0.18.4  | MIT (`LICENSE.katex`)   |
 | Mermaid           | https://github.com/mermaid-js/mermaid | 11.16.1 | MIT (`LICENSE.mermaid`) |
+| mermaid-zenuml    | https://github.com/mermaid-js/mermaid (packages/mermaid-zenuml) | 0.2.3 | MIT (`LICENSE.mermaid-zenuml`) |
+| @zenuml/core      | https://github.com/mermaid-js/zenuml (bundled inside mermaid-zenuml) | 3.47.x | MIT (`LICENSE.zenuml-core`) |
 | Tablesort         | https://github.com/tristen/tablesort  | 5.3.0   | MIT (`LICENSE.tablesort`) |
 
 `katex.min.css` references `./fonts/*.woff2` relative to itself, so the
@@ -24,3 +26,16 @@ directory; the comparators are the upstream minified `dist/sorts` builds renamed
 without the `.min` infix. Note the 5.3.0 npm package ships dist builds whose
 banner still reads v5.2.1 — upstream published the release without rebuilding
 dist — so the npm version, not the banner, is authoritative here.
+
+ZenUML lives in `mermaid-zenuml/` and keeps the upstream `dist/` file names and
+relative paths (`mermaid-zenuml.esm.min.mjs` plus
+`chunks/mermaid-zenuml.esm.min/*`), because the entry module lazy-imports its
+diagram chunk through a relative URL at registration time — renaming or
+flattening the chunks would break that import. It is the browser-side,
+self-contained build: the npm `module` entry (`mermaid-zenuml.core.mjs`) keeps
+`@zenuml/core` as a bare bundler external, which no browser can resolve, while
+`mermaid-zenuml.esm.min.mjs` bundles the ZenUML engine and exports the same
+`{ id, detector, loader }` external-diagram plugin. Source maps are not
+vendored. The WebUI fetches this directory only when a document actually
+contains a `zenuml` diagram; Mermaid Core (`mermaid.min.js`) alone handles every
+other diagram type.

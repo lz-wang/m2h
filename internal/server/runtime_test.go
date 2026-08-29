@@ -18,6 +18,12 @@ func TestRuntimeHandlerServesEmbeddedAssets(t *testing.T) {
 		contentType string
 	}{
 		{path: "/runtime/mermaid.min.js", contentType: "text/javascript; charset=utf-8"},
+		// The ZenUML external-diagram plugin is served at its upstream dist
+		// paths: the entry module lazy-imports its chunks via relative URLs, so
+		// both the entry and a dynamic dependency must stay reachable.
+		{path: "/runtime/mermaid-zenuml/mermaid-zenuml.esm.min.mjs", contentType: "text/javascript; charset=utf-8"},
+		{path: "/runtime/mermaid-zenuml/chunks/mermaid-zenuml.esm.min/zenuml-definition-EPHX7WPJ.mjs", contentType: "text/javascript; charset=utf-8"},
+		{path: "/runtime/mermaid-zenuml/chunks/mermaid-zenuml.esm.min/chunk-PPGA74DV.mjs", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/katex.min.js", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/auto-render.min.js", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/tablesort.min.js", contentType: "text/javascript; charset=utf-8"},
