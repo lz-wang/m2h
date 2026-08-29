@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   MathAutoRenderer,
+  MermaidExternalDiagramDefinition,
   MermaidRuntime,
   TablesortConstructor,
 } from "./runtime-loader";
@@ -12,6 +13,14 @@ const mermaidRuntime: MermaidRuntime = {
   registerExternalDiagrams: vi.fn(async () => {}),
   run: vi.fn(async () => {}),
   render: vi.fn(async () => ({ svg: "<svg></svg>" })),
+};
+
+// Same shape as the vendored plugin's default export: an id, the official
+// leading-keyword detector, and a loader producing the diagram.
+const zenumlPlugin: MermaidExternalDiagramDefinition = {
+  id: "zenuml",
+  detector: (text: string) => /^\s*zenuml/.test(text),
+  loader: async () => ({ id: "zenuml", diagram: {} }),
 };
 
 const renderMathInElement: MathAutoRenderer = vi.fn();
@@ -289,5 +298,88 @@ describe("runtime loader", () => {
     }
 
     await expect(retry).resolves.toBe(tablesortCtor);
+  });
+});
+
+describe("ensureZenUMLRegistered", () => {
+  const importZenUML = vi.fn(async () => ({ default: zenumlPlugin }));
+
+  beforeEach(() => {
+    // Each test re-imports the module so the registration singleton resets.
+    vi.resetModules();
+    document.head.innerHTML = "";
+    delete window.mermaid;
+    vi.mocked(mermaidRuntime.initialize).mockClear();
+    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockReset();
+    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockResolvedValue(
+      undefined,
+    );
+    importZenUML.mockReset();
+    importZenUML.mockResolvedValue({ default: zenumlPlugin });
+  });
+
+  it("registers the plugin with lazy loading disabled", async () => {
+    const loader = await import("./runtime-loader");
+
+    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
+
+    expect(importZenUML).toHaveBeenCalledTimes(1);
+    // lazyLoad stays off: registration itself downloads the diagram chunk so
+    // the following render never hits a second, hidden lazy load.
+    expect(mermaidRuntime.registerExternalDiagrams).toHaveBeenCalledWith(
+      [zenumlPlugin],
+      { lazyLoad: false },
+    );
+    // Registration never configures the theme; that stays with the caller.
+    expect(mermaidRuntime.initialize).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates concurrent registrations into one plugin import", async () => {
+    const loader = await import("./runtime-loader");
+
+    const first = loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
+    const second = loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
+    await Promise.all([first, second]);
+
+    expect(importZenUML).toHaveBeenCalledTimes(1);
+    expect(mermaidRuntime.registerExternalDiagrams).toHaveBeenCalledTimes(1);
+  });
+
+  it("reuses the completed registration for later documents", async () => {
+    const loader = await import("./runtime-loader");
+
+    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
+    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
+
+    expect(importZenUML).toHaveBeenCalledTimes(1);
+    expect(mermaidRuntime.registerExternalDiagrams).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a failed import so the next document retries", async () => {
+    const loader = await import("./runtime-loader");
+    importZenUML.mockRejectedValueOnce(new Error("plugin fetch failed"));
+
+    await expect(
+      loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML),
+    ).rejects.toThrow("plugin fetch failed");
+    // The rejected promise is not cached forever: a later document can retry.
+    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
+
+    expect(importZenUML).toHaveBeenCalledTimes(2);
+    expect(mermaidRuntime.registerExternalDiagrams).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops a failed registration so the next attempt retries", async () => {
+    const loader = await import("./runtime-loader");
+    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockRejectedValueOnce(
+      new Error("register rejected"),
+    );
+
+    await expect(
+      loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML),
+    ).rejects.toThrow("register rejected");
+    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
+
+    expect(mermaidRuntime.registerExternalDiagrams).toHaveBeenCalledTimes(2);
   });
 });

@@ -1330,6 +1330,148 @@ describe("rerenderMermaid", () => {
   });
 });
 
+describe("mermaid external diagrams (ZenUML)", () => {
+  beforeEach(() => {
+    // Each test re-imports the module so the lazy mermaid singleton and the
+    // ZenUML registration state reset between cases.
+    vi.resetModules();
+    mermaidMock.initialize.mockClear();
+    mermaidMock.registerExternalDiagrams.mockClear();
+    mermaidMock.run.mockClear();
+    mermaidMock.render.mockClear();
+    renderMathInElementMock.mockClear();
+    loadMermaidMock.mockClear();
+    ensureZenUMLRegisteredMock.mockClear();
+    loadKatexMock.mockClear();
+    loadTablesortMock.mockClear();
+    mermaidMock.run.mockResolvedValue(undefined);
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg data-mock="mermaid"></svg>',
+    });
+    ensureZenUMLRegisteredMock.mockReset();
+    ensureZenUMLRegisteredMock.mockResolvedValue(undefined);
+  });
+
+  it("does not fetch the ZenUML plugin for plain Mermaid diagrams", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    expect(loadMermaidMock).toHaveBeenCalledTimes(1);
+    expect(ensureZenUMLRegisteredMock).not.toHaveBeenCalled();
+    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not treat prose mentioning zenuml as a ZenUML diagram", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    // Only a leading zenuml keyword identifies the diagram type; the word
+    // appearing elsewhere is ordinary diagram content.
+    root.innerHTML =
+      '<pre><code class="language-mermaid">flowchart TD\nA[zenuml inside a label]</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    expect(ensureZenUMLRegisteredMock).not.toHaveBeenCalled();
+    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
+  });
+
+  it("registers ZenUML once in load → register → initialize → render order", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    expect(ensureZenUMLRegisteredMock).toHaveBeenCalledTimes(1);
+    expect(ensureZenUMLRegisteredMock).toHaveBeenCalledWith(mermaidMock);
+    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
+    // Mermaid's integration order: the plugin must be known before
+    // initialize configures the runtime and before any diagram renders.
+    expect(loadMermaidMock.mock.invocationCallOrder[0]).toBeLessThan(
+      ensureZenUMLRegisteredMock.mock.invocationCallOrder[0],
+    );
+    expect(ensureZenUMLRegisteredMock.mock.invocationCallOrder[0]).toBeLessThan(
+      mermaidMock.initialize.mock.invocationCallOrder[0],
+    );
+    expect(mermaidMock.initialize.mock.invocationCallOrder[0]).toBeLessThan(
+      mermaidMock.render.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("registers the plugin once for several ZenUML diagrams", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>' +
+      '<pre><code class="language-mermaid">zenuml\n    Bob->Alice: Hi</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    expect(ensureZenUMLRegisteredMock).toHaveBeenCalledTimes(1);
+    expect(mermaidMock.render).toHaveBeenCalledTimes(2);
+  });
+
+  it("renders ZenUML and flowchart together after one registration", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>' +
+      '<pre><code class="language-mermaid">flowchart TD\nA--&gt;B</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    expect(ensureZenUMLRegisteredMock).toHaveBeenCalledTimes(1);
+    expect(mermaidMock.render).toHaveBeenCalledTimes(2);
+    expect(root.querySelectorAll("div.mermaid svg")).toHaveLength(2);
+  });
+
+  it("re-attempts registration when a theme rerender repaints ZenUML diagrams", async () => {
+    const { renderRichContent, rerenderMermaid } = await import(
+      "./render-rich-content"
+    );
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>';
+
+    await renderRichContent(root, "light");
+    mermaidMock.render.mockClear();
+
+    await rerenderMermaid(root, "dark");
+
+    // The rerender re-runs preparation (the loader singleton decides whether
+    // a second network fetch happens), so a first-attempt failure or a
+    // reloaded runtime can still recover on theme switch.
+    expect(ensureZenUMLRegisteredMock).toHaveBeenCalledTimes(2);
+    expect(mermaidMock.initialize).toHaveBeenCalledWith(
+      expect.objectContaining({ theme: "dark" }),
+    );
+    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails the render when plugin registration fails", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    ensureZenUMLRegisteredMock.mockRejectedValueOnce(
+      new Error("zenuml plugin unavailable"),
+    );
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>';
+
+    // A plugin that cannot be registered is a runtime failure like a failed
+    // mermaid.min.js fetch — the document cannot render its diagrams, so the
+    // error surfaces instead of silently skipping every zenuml block.
+    await expect(renderRichContent(root, "light")).rejects.toThrow(
+      "zenuml plugin unavailable",
+    );
+    expect(mermaidMock.render).not.toHaveBeenCalled();
+  });
+});
+
 describe("sortable tables", () => {
   beforeEach(() => {
     vi.resetModules();
