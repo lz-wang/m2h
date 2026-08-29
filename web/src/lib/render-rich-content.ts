@@ -142,11 +142,10 @@ function hasMermaidBlocks(root: HTMLElement): boolean {
 }
 
 // Mirrors the official plugin's own detector (/^\s*zenuml/): a diagram counts
-// as ZenUML only when the keyword is the first word of its source, so prose
-// or other diagrams that merely mention "zenuml" never trigger the plugin
-// download.
+// as ZenUML only when the keyword leads its source, so prose or other
+// diagrams that merely mention "zenuml" never trigger the plugin download.
 function isZenUMLSource(source: string): boolean {
-  return /^\s*zenuml\b/.test(source);
+  return /^\s*zenuml/.test(source);
 }
 
 function hasZenUMLBlocks(root: HTMLElement): boolean {

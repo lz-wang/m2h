@@ -329,6 +329,53 @@ func TestRunExportPreservesRichContent(t *testing.T) {
 	}
 }
 
+func TestRunExportRegistersZenUMLPluginOnDemand(t *testing.T) {
+	t.Parallel()
+
+	// A zenuml diagram needs both Mermaid Core and the external-diagram
+	// plugin: the page pins the core CDN script and carries the plugin module
+	// URL the bootstrap imports at runtime.
+	root := t.TempDir()
+	source := writeFixture(t, root, "zenuml.md",
+		"# ZenUML\n\n```mermaid\nzenuml\n    Alice->John: Hello\n```\n")
+	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
+		t.Fatal(err)
+	}
+	html, err := os.ReadFile(filepath.Join(root, "zenuml.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(html)
+	for _, want := range []string{
+		`<script src="https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.min.js"></script>`,
+		`window.m2hZenUMLModuleURL = "https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.3/dist/mermaid-zenuml.esm.min.mjs"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("zenuml export missing %q", want)
+		}
+	}
+
+	// A plain flowchart must not carry the plugin URL: the inlined bootstrap
+	// always contains the detector text and the global's read site, but only
+	// the CDN assignment makes the browser download the multi-megabyte plugin.
+	flowRoot := t.TempDir()
+	flow := writeFixture(t, flowRoot, "flow.md",
+		"# Flow\n\n```mermaid\nflowchart LR\n    A-->B\n```\n")
+	if _, err := Run(context.Background(), defaultOptions(flow)); err != nil {
+		t.Fatal(err)
+	}
+	flowHTML, err := os.ReadFile(filepath.Join(flowRoot, "flow.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(flowHTML), `https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.min.js`) {
+		t.Error("flowchart export missing the Mermaid core CDN script")
+	}
+	if strings.Contains(string(flowHTML), "@mermaid-js/mermaid-zenuml@") {
+		t.Error("flowchart export unexpectedly carries the ZenUML plugin URL")
+	}
+}
+
 func TestRunExportWithoutRichContentStaysLean(t *testing.T) {
 	t.Parallel()
 
@@ -348,6 +395,9 @@ func TestRunExportWithoutRichContentStaysLean(t *testing.T) {
 	}
 	if strings.Contains(body, "cdn.jsdelivr.net") {
 		t.Errorf("plain document unexpectedly loads CDN runtimes")
+	}
+	if strings.Contains(body, "m2hZenUMLModuleURL = ") {
+		t.Errorf("plain document unexpectedly carries the ZenUML plugin URL")
 	}
 }
 

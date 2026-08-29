@@ -3,6 +3,7 @@ package export
 import (
 	"fmt"
 	"html/template"
+	"regexp"
 	"strings"
 
 	"github.com/lz-wang/m2h/internal/assets"
@@ -24,9 +25,10 @@ var exportBootstrapScript = "\n  <script>\n" + runtimeJS + "\n</script>\n"
 // loads only the core from the CDN — sorting falls back to its default
 // comparison — while the WebUI additionally embeds the five typed
 // comparators, whose upstream location (dist/sorts/) differs from the core's.
-// ZenUML shares the Mermaid Core script and only adds its plugin module URL:
-// the exported page downloads the plugin itself, and only when the document
-// really contains a zenuml diagram (decided by runtime.js, not here).
+// ZenUML shares the Mermaid Core script and only adds its plugin module URL
+// when the rendered body really contains a zenuml diagram; the plugin itself
+// is downloaded by runtime.js, which re-checks the same keyword rule before
+// importing.
 const (
 	katexVersion     = "0.18.4"
 	mermaidVersion   = "11.16.1"
@@ -126,16 +128,32 @@ func runtimeFragments(body string) (template.HTML, template.HTML) {
 	}
 	if strings.Contains(body, "language-mermaid") {
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.MermaidJS)
-		// Not a script tag: the plugin is an ES module, dynamically imported
-		// by runtime.js only when a zenuml diagram is actually present. The
-		// page merely carries the pinned URL so the version stays owned here.
-		fmt.Fprintf(&scripts, "  <script>window.m2hZenUMLModuleURL = %q;</script>\n", urls.ZenUMLJS)
+		if containsZenUML(body) {
+			// Not a script tag: the plugin is an ES module, dynamically
+			// imported by runtime.js only when a zenuml diagram is actually
+			// present. The page merely carries the pinned URL so the version
+			// stays owned here; runtime.js re-checks the keyword before
+			// importing, so the two gates stay cheap and aligned.
+			fmt.Fprintf(&scripts, "  <script>window.m2hZenUMLModuleURL = %q;</script>\n", urls.ZenUMLJS)
+		}
 	}
 	if containsSortableTable(body) {
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.TablesortJS)
 	}
 	scripts.WriteString(exportBootstrapScript)
 	return template.HTML(head.String()), template.HTML(scripts.String())
+}
+
+// zenumlBlockPattern anchors the official plugin detector (/^\s*zenuml/) to
+// Goldmark's output: the diagram source begins right after the language class
+// attribute, so only a block whose source starts with the zenuml keyword
+// matches — prose or another diagram merely containing the word never does.
+var zenumlBlockPattern = regexp.MustCompile(`language-mermaid">\s*zenuml`)
+
+// containsZenUML reports whether the rendered body contains a ZenUML diagram
+// and the exported page therefore needs the external-diagram plugin URL.
+func containsZenUML(body string) bool {
+	return zenumlBlockPattern.MatchString(body)
 }
 
 // containsSortableTable reports whether the rendered body contains a plain GFM
