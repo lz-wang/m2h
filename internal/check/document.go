@@ -40,15 +40,24 @@ type documentScope struct {
 
 // newSingleFileScope builds the scope for a resolved Markdown file input. The
 // file's name is kept literally and never reinterpreted as a glob, so files
-// named with glob metacharacters remain checkable.
+// named with glob metacharacters remain checkable. Filesystem identity
+// (relative, absolute) comes from the resolved path, while the diagnostic
+// display path keeps the input as the user wrote it: a symlinked input such
+// as alias.md -> docs/real-name.md must report against alias.md, which stays
+// resolvable from the working directory even though the resolved basename
+// differs.
 func newSingleFileScope(input string, resolved string) documentScope {
 	root := filepath.Dir(resolved)
 	relative := files.NormalizeRelativePath(filepath.Base(resolved))
 	return documentScope{
-		root:      root,
-		single:    true,
-		file:      relative,
-		documents: []document{newDocument(root, filepath.Dir(input), relative)},
+		root:   root,
+		single: true,
+		file:   relative,
+		documents: []document{{
+			relative: relative,
+			absolute: filepath.Join(root, filepath.FromSlash(relative)),
+			display:  filepath.Clean(input),
+		}},
 	}
 }
 

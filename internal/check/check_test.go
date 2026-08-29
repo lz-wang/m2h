@@ -723,6 +723,33 @@ func TestCheckSymlinkTargets(t *testing.T) {
 	}
 }
 
+// TestCheckSingleFileSymlinkDiagnosticsUseInputPath pins the split between
+// filesystem identity and user-facing identity: a symlinked input keeps the
+// resolved name for scope membership, but diagnostics display the path the
+// user actually passed, which stays clickable even when the resolved basename
+// differs.
+func TestCheckSingleFileSymlinkDiagnosticsUseInputPath(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "docs", "real-name.md"), "# Guide\n\n![missing](nope.png)\n")
+	alias := filepath.Join(root, "alias.md")
+	if err := os.Symlink(filepath.Join(root, "docs", "real-name.md"), alias); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), Options{Input: alias})
+	if err != nil {
+		t.Fatalf("Run() returned error: %v", err)
+	}
+	if len(result.Diagnostics) != 1 {
+		t.Fatalf("diagnostics = %+v, want exactly the broken image", result.Diagnostics)
+	}
+	if got := result.Diagnostics[0].Path; got != alias {
+		t.Fatalf("diagnostic path = %q, want the input path %q", got, alias)
+	}
+}
+
 func TestCheckExactCaseTargets(t *testing.T) {
 	t.Parallel()
 
