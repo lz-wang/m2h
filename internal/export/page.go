@@ -24,9 +24,13 @@ var exportBootstrapScript = "\n  <script>\n" + runtimeJS + "\n</script>\n"
 // loads only the core from the CDN — sorting falls back to its default
 // comparison — while the WebUI additionally embeds the five typed
 // comparators, whose upstream location (dist/sorts/) differs from the core's.
+// ZenUML shares the Mermaid Core script and only adds its plugin module URL:
+// the exported page downloads the plugin itself, and only when the document
+// really contains a zenuml diagram (decided by runtime.js, not here).
 const (
 	katexVersion     = "0.18.4"
 	mermaidVersion   = "11.16.1"
+	zenumlVersion    = "0.2.3"
 	tablesortVersion = "5.3.0"
 )
 
@@ -90,6 +94,7 @@ type runtimeURLs struct {
 	KatexJS         string
 	KatexAutoRender string
 	MermaidJS       string
+	ZenUMLJS        string
 	TablesortJS     string
 }
 
@@ -99,7 +104,10 @@ func newRuntimeURLs() runtimeURLs {
 		KatexJS:         fmt.Sprintf("%s/katex@%s/dist/katex.min.js", cdnBase, katexVersion),
 		KatexAutoRender: fmt.Sprintf("%s/katex@%s/dist/contrib/auto-render.min.js", cdnBase, katexVersion),
 		MermaidJS:       fmt.Sprintf("%s/mermaid@%s/dist/mermaid.min.js", cdnBase, mermaidVersion),
-		TablesortJS:     fmt.Sprintf("%s/tablesort@%s/dist/tablesort.min.js", cdnBase, tablesortVersion),
+		ZenUMLJS: fmt.Sprintf(
+			"%s/@mermaid-js/mermaid-zenuml@%s/dist/mermaid-zenuml.esm.min.mjs",
+			cdnBase, zenumlVersion),
+		TablesortJS: fmt.Sprintf("%s/tablesort@%s/dist/tablesort.min.js", cdnBase, tablesortVersion),
 	}
 }
 
@@ -118,6 +126,10 @@ func runtimeFragments(body string) (template.HTML, template.HTML) {
 	}
 	if strings.Contains(body, "language-mermaid") {
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.MermaidJS)
+		// Not a script tag: the plugin is an ES module, dynamically imported
+		// by runtime.js only when a zenuml diagram is actually present. The
+		// page merely carries the pinned URL so the version stays owned here.
+		fmt.Fprintf(&scripts, "  <script>window.m2hZenUMLModuleURL = %q;</script>\n", urls.ZenUMLJS)
 	}
 	if containsSortableTable(body) {
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.TablesortJS)

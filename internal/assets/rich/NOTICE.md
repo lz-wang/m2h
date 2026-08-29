@@ -38,4 +38,6 @@ self-contained build: the npm `module` entry (`mermaid-zenuml.core.mjs`) keeps
 `{ id, detector, loader }` external-diagram plugin. Source maps are not
 vendored. The WebUI fetches this directory only when a document actually
 contains a `zenuml` diagram; Mermaid Core (`mermaid.min.js`) alone handles every
-other diagram type.
+other diagram type. Exported HTML does not embed this copy — the page carries
+the pinned jsDelivr URL of the same release, and its bootstrap downloads the
+plugin on demand under the same leading-keyword rule.
