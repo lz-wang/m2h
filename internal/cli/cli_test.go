@@ -63,7 +63,7 @@ func TestRootHelpDocumentsCommands(t *testing.T) {
 	if stderr != "" {
 		t.Fatalf("root help wrote stderr %q", stderr)
 	}
-	for _, want := range []string{"export", "--version", "-v", "--host", "--port"} {
+	for _, want := range []string{"export", "check", "--version", "-v", "--host", "--port"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("root help does not contain %q:\n%s", want, stdout)
 		}
@@ -95,6 +95,14 @@ func TestHelpDocumentsContract(t *testing.T) {
 			want: []string{
 				"--output", "-o", "--mode", "(default: \"auto\")",
 				"--width", "(default: \"standard\")", "--force",
+			},
+		},
+		{
+			name: "check",
+			args: []string{"check", "--help"},
+			want: []string{
+				"--glob", "--depth", "-d", "(default: 4)",
+				"--format", "(default: \"text\")", "--strict",
 			},
 		},
 	}
@@ -155,6 +163,16 @@ func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
 		{"export", "README.md", "--standalone"},
 		{"export", "README.md", "--copy-assets=false"},
 		{"export", "README.md", "--yes"},
+		{"check", "README.md", "--host", "0.0.0.0"},
+		{"check", "README.md", "--port", "9000"},
+		{"check", "README.md", "--mode", "dark"},
+		{"check", "README.md", "--width", "wide"},
+		{"check", "README.md", "--toc"},
+		{"check", "README.md", "--open"},
+		{"check", "README.md", "--output", "out.html"},
+		{"check", "README.md", "--force"},
+		{"README.md", "--strict"},
+		{"README.md", "--format", "json"},
 	} {
 		_, _, err := runCommand(t, args...)
 		if err == nil {
@@ -574,5 +592,145 @@ func TestInvalidVersionFailsConstruction(t *testing.T) {
 
 	if _, err := New("invalid", nil, &bytes.Buffer{}, &bytes.Buffer{}); err == nil {
 		t.Fatal("New() succeeded with an invalid version")
+	}
+}
+
+func TestCheckCommandReportsScope(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "index.md"), []byte("# Index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "notes.txt"), []byte("plain"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCommand(t, "check", root)
+	if err != nil {
+		t.Fatalf("check returned error: %v", err)
+	}
+	want := "Checked 2 Markdown files: no issues found\n"
+	if stdout != want || stderr != "" {
+		t.Fatalf("check stdout=%q stderr=%q, want %q", stdout, stderr, want)
+	}
+
+	stdout, _, err = runCommand(t, "check", root, "--glob", "index.md")
+	if err != nil {
+		t.Fatalf("check --glob returned error: %v", err)
+	}
+	if want := "Checked 1 Markdown file: no issues found\n"; stdout != want {
+		t.Fatalf("check --glob stdout=%q, want %q", stdout, want)
+	}
+
+	stdout, _, err = runCommand(t, "check", filepath.Join(root, "guide.md"))
+	if err != nil {
+		t.Fatalf("check single file returned error: %v", err)
+	}
+	if want := "Checked 1 Markdown file: no issues found\n"; stdout != want {
+		t.Fatalf("check single file stdout=%q, want %q", stdout, want)
+	}
+}
+
+func TestCheckCommandWritesJSONReport(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "index.md"), []byte("# Index"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCommand(t, "check", root, "--format", "json")
+	if err != nil {
+		t.Fatalf("check --format json returned error: %v", err)
+	}
+	want := "{\n  \"files\": 1,\n  \"errors\": 0,\n  \"warnings\": 0,\n  \"diagnostics\": []\n}\n"
+	if stdout != want || stderr != "" {
+		t.Fatalf("check json stdout=%q stderr=%q, want %q", stdout, stderr, want)
+	}
+}
+
+func TestCheckCommandValidatesArguments(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// No arguments prints help instead of failing.
+	stdout, _, err := runCommand(t, "check")
+	if err != nil {
+		t.Fatalf("check without arguments returned error: %v", err)
+	}
+	if !strings.Contains(stdout, "check Markdown documents") {
+		t.Fatalf("check without arguments should print help, got %q", stdout)
+	}
+
+	_, _, err = runCommand(t, "check", filepath.Join(root, "guide.md"), root)
+	if err == nil || err.Error() != "Error: requires exactly one file or directory" {
+		t.Fatalf("check error = %v, want argument count error", err)
+	}
+}
+
+func TestCheckCommandValidatesFlagsBeforeFilesystem(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		args []string
+		want string
+	}{
+		{args: []string{"check", "docs", "--format", "table"}, want: "Error: --format must be text or json"},
+		{args: []string{"check", "docs", "--depth", "-1"}, want: "Error: --depth must be zero or greater"},
+		{args: []string{"check", "docs", "--glob", "["}, want: `Error: validate check options: invalid glob "["`},
+	}
+	for _, test := range tests {
+		_, _, err := runCommand(t, test.args...)
+		if err == nil || err.Error() != test.want {
+			t.Errorf("m2h %v error = %v, want %q", test.args, err, test.want)
+		}
+	}
+}
+
+func TestCheckCommandRejectsUnusableInput(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	notes := filepath.Join(root, "notes.txt")
+	if err := os.WriteFile(notes, []byte("plain"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err := runCommand(t, "check", notes)
+	if err == nil || !strings.Contains(err.Error(), "Error: check requires a Markdown file or directory") {
+		t.Fatalf("check non-markdown error = %v", err)
+	}
+
+	_, _, err = runCommand(t, "check", filepath.Join(root, "missing"))
+	if err == nil || !strings.Contains(err.Error(), "Error: inspect input") {
+		t.Fatalf("check missing input error = %v", err)
+	}
+}
+
+// Bare "m2h export" used to print "No help topic for 'export'" and exit 3:
+// urfave/cli v3's ShowCommandHelp resolves the name among the *parent's*
+// commands, so a command action must pass its root, not itself.
+func TestBareSubcommandsShowOwnHelp(t *testing.T) {
+	t.Parallel()
+
+	for _, name := range []string{"export", "check"} {
+		stdout, stderr, err := runCommand(t, name)
+		if err != nil {
+			t.Fatalf("m2h %s returned error: %v", name, err)
+		}
+		if stderr != "" {
+			t.Fatalf("m2h %s wrote stderr %q", name, stderr)
+		}
+		if !strings.Contains(stdout, "USAGE:") || !strings.Contains(stdout, name) {
+			t.Fatalf("m2h %s help output does not document the command:\n%s", name, stdout)
+		}
 	}
 }

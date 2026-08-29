@@ -36,7 +36,7 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 	command := &urfavecli.Command{
 		Name:        "m2h",
 		Usage:       "serve Markdown documents in a browser",
-		UsageText:   "m2h [options] <file|directory>...\n   m2h export [options] <file>",
+		UsageText:   "m2h [options] <file|directory>...\n   m2h export [options] <file>\n   m2h check [options] <file|directory>",
 		HideVersion: true,
 		Writer:      stdout,
 		ErrWriter:   stderr,
@@ -51,6 +51,7 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 		),
 		Commands: []*urfavecli.Command{
 			exportCommand(),
+			checkCommand(),
 		},
 		OnUsageError: normalizeUsageError,
 	}
@@ -183,7 +184,7 @@ var runExport = export.Run
 
 func exportAction(ctx context.Context, command *urfavecli.Command) error {
 	if command.Args().Len() == 0 {
-		return urfavecli.ShowCommandHelp(ctx, command, "export")
+		return urfavecli.ShowCommandHelp(ctx, command.Root(), command.Name)
 	}
 	if command.Args().Len() != 1 {
 		return fmt.Errorf("Error: requires exactly one Markdown file")
