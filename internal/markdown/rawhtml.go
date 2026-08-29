@@ -84,13 +84,8 @@ func rewriteRawHTMLURLs(raw []byte, options RenderOptions) []byte {
 			changed := false
 			for index := range token.Attr {
 				attribute := &token.Attr[index]
-				var asset bool
-				switch strings.ToLower(attribute.Key) {
-				case "href":
-					asset = false
-				case "src", "poster", "data":
-					asset = true
-				default:
+				asset, relevant := isRawHTMLURLAttribute(attribute.Key)
+				if !relevant {
 					continue
 				}
 				destination := string(rewriteDestination([]byte(attribute.Val), options, asset))
@@ -109,4 +104,24 @@ func rewriteRawHTMLURLs(raw []byte, options RenderOptions) []byte {
 			rewritten.Write(tokenizer.Raw())
 		}
 	}
+}
+
+// rawHTMLURLAttributes lists the HTML attributes whose values m2h treats as
+// URLs when rendering raw HTML. Rendering rewrites their values onto the web
+// routes; Inspect extracts them as document references. The boolean reports
+// whether the URL is an asset reference (src/poster/data, routed to /assets)
+// rather than a link (href, Markdown targets route to /doc). Both features
+// share this one list so they can never drift apart.
+var rawHTMLURLAttributes = map[string]bool{
+	"href":   false,
+	"src":    true,
+	"poster": true,
+	"data":   true,
+}
+
+// isRawHTMLURLAttribute reports whether an attribute name (case-insensitive)
+// carries a URL, and whether that URL is an asset reference.
+func isRawHTMLURLAttribute(key string) (asset bool, relevant bool) {
+	asset, relevant = rawHTMLURLAttributes[strings.ToLower(key)]
+	return asset, relevant
 }
