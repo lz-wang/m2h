@@ -695,6 +695,27 @@ func TestCheckCommandValidatesFlagsBeforeFilesystem(t *testing.T) {
 	}
 }
 
+func TestCheckCommandFailsOnDiagnostics(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide\n\n![missing](nope.png)\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCommand(t, "check", root)
+	if err == nil || err.Error() != "Error: check found 1 error" {
+		t.Fatalf("check error = %v, want a single-error failure", err)
+	}
+	if !strings.Contains(stdout, "guide.md:3:3: error [local-target.missing]: target \"nope.png\" does not exist\n") ||
+		!strings.HasSuffix(stdout, "Checked 1 Markdown file: 1 error\n") {
+		t.Fatalf("check stdout = %q, want the diagnostic and summary lines", stdout)
+	}
+	if stderr != "" {
+		t.Fatalf("check wrote stderr %q, want none (the error is the exit signal)", stderr)
+	}
+}
+
 func TestCheckCommandRejectsUnusableInput(t *testing.T) {
 	t.Parallel()
 

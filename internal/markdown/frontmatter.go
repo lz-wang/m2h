@@ -50,6 +50,20 @@ func ParseFrontMatter(source []byte) (body []byte, frontMatter *FrontMatter, err
 	return body, frontMatter, nil
 }
 
+// FrontMatterLineOffset reports the 1-based source line where the Markdown
+// body starts after a leading frontmatter block, or 1 when the document has
+// none. Callers that inspect the body use it to translate body-relative
+// positions back to source positions.
+func FrontMatterLineOffset(source []byte) int {
+	raw, _, ok := splitFrontMatter(source)
+	if !ok {
+		return 1
+	}
+	// One line for the opening delimiter, the raw YAML lines, and one for
+	// the closing delimiter.
+	return bytes.Count(raw, []byte("\n")) + 3
+}
+
 // splitFrontMatter locates a leading `---` opening delimiter and its matching
 // closing `---` line. It returns the YAML between them and the remaining body.
 // A missing closing delimiter is treated as ordinary Markdown (not frontmatter)

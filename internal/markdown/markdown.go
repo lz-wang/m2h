@@ -255,6 +255,61 @@ func splitDestination(destination string) (string, string) {
 	return destination, ""
 }
 
+// LocalDestination is one parsed relative local reference: the path part
+// with query and fragment split off, each kept without its leading "?"/"#"
+// exactly as the Markdown source wrote it.
+type LocalDestination struct {
+	Path     string
+	Query    string
+	Fragment string
+}
+
+// ParseLocalDestination splits a reference destination into path, query and
+// fragment when — and only when — it is a relative local path: no scheme, no
+// host, no leading slash. Absolute URLs, scheme links (mailto:, tel:),
+// protocol-relative URLs and a path-less fragment return false, mirroring
+// exactly the destinations the web renderer rewrites, so check and the WebUI
+// can never disagree about what counts as a local reference.
+func ParseLocalDestination(destination string) (LocalDestination, bool) {
+	pathPart, suffix := splitDestination(destination)
+	if !isRelativeLocalPath(pathPart) {
+		return LocalDestination{}, false
+	}
+	parsed := LocalDestination{Path: pathPart}
+	if suffix == "" {
+		return parsed, true
+	}
+	query := suffix
+	if before, fragment, found := strings.Cut(suffix, "#"); found {
+		query = before
+		parsed.Fragment = fragment
+	}
+	parsed.Query = strings.TrimPrefix(query, "?")
+	return parsed, true
+}
+
+// ResolveLocalDestination resolves a relative local destination path against
+// the root-relative source path of the referencing document and reports
+// whether the result stays inside the workspace root. It is the same textual
+// resolution the web renderer's URL rewriting applies, shared verbatim with
+// the check command.
+func ResolveLocalDestination(sourcePath, destinationPath string) (string, bool) {
+	return resolveWithinRoot(sourcePath, destinationPath)
+}
+
+// InvalidLocalDestination reports whether destination is a relative-looking
+// reference whose percent-encoding is malformed. Such a destination is not a
+// valid relative local path, but it is also not a working URL — the browser
+// can never resolve it — so the check command reports it as unreachable.
+func InvalidLocalDestination(destination string) bool {
+	pathPart, _ := splitDestination(destination)
+	if pathPart == "" || strings.HasPrefix(pathPart, "/") {
+		return false
+	}
+	_, err := url.Parse(pathPart)
+	return err != nil
+}
+
 func isRelativeLocalPath(value string) bool {
 	if value == "" || strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") {
 		return false

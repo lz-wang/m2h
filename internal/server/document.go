@@ -461,7 +461,7 @@ func hasWindowsVolume(value string) bool {
 }
 
 func resolveRequestFile(root, relative string) (string, error) {
-	if err := requireExactPath(root, relative); err != nil {
+	if err := files.RequireExactPath(root, relative); err != nil {
 		return "", err
 	}
 	target, err := files.CanonicalPath(filepath.Join(root, filepath.FromSlash(relative)))
@@ -476,32 +476,6 @@ func resolveRequestFile(root, relative string) (string, error) {
 		return "", fmt.Errorf("path is not a regular file")
 	}
 	return target, nil
-}
-
-func requireExactPath(root, relative string) error {
-	current := root
-	segments := strings.Split(relative, "/")
-	for index, segment := range segments {
-		entries, err := os.ReadDir(current)
-		if err != nil {
-			return err
-		}
-		found := false
-		for _, entry := range entries {
-			if entry.Name() == segment {
-				if index < len(segments)-1 && entry.Type()&os.ModeSymlink != 0 {
-					return fmt.Errorf("path traverses a symlink directory")
-				}
-				found = true
-				break
-			}
-		}
-		if !found {
-			return fmt.Errorf("path component %q does not exist with exact case", segment)
-		}
-		current = filepath.Join(current, segment)
-	}
-	return nil
 }
 
 type statusResponseWriter struct {

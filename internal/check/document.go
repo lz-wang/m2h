@@ -2,11 +2,14 @@ package check
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
 	"github.com/lz-wang/m2h/internal/files"
+	"github.com/lz-wang/m2h/internal/markdown"
 )
 
 // document is one Markdown file inside the checked scope. relative is the
@@ -37,22 +40,15 @@ type documentScope struct {
 // newSingleFileScope builds the scope for a resolved Markdown file input. The
 // file's name is kept literally and never reinterpreted as a glob, so files
 // named with glob metacharacters remain checkable.
-func newSingleFileScope(input string, resolved string) (documentScope, error) {
+func newSingleFileScope(input string, resolved string) documentScope {
 	root := filepath.Dir(resolved)
 	relative := files.NormalizeRelativePath(filepath.Base(resolved))
-	info, err := os.Stat(resolved)
-	if err != nil {
-		return documentScope{}, fmt.Errorf("inspect %q: %w", resolved, err)
-	}
-	if !info.Mode().IsRegular() {
-		return documentScope{}, fmt.Errorf("workspace document %q is not a regular file", relative)
-	}
 	return documentScope{
 		root:      root,
 		single:    true,
 		file:      relative,
 		documents: []document{newDocument(root, filepath.Dir(input), relative)},
-	}, nil
+	}
 }
 
 // newDirectoryScope builds the scope for a resolved directory input by
@@ -80,4 +76,93 @@ func newDocument(root string, inputDir string, relative string) document {
 		absolute: filepath.Join(root, filepath.FromSlash(relative)),
 		display:  filepath.Join(inputDir, filepath.FromSlash(relative)),
 	}
+}
+
+// allowsDocument reports whether a normalized relative path is reachable
+// through the scope, mirroring rootScope.allowsDocument on the server: a
+// single-file scope admits only itself; a directory scope admits Markdown
+// files that pass the depth and glob rules.
+func (scope documentScope) allowsDocument(relative string) bool {
+	if scope.single {
+		return relative == scope.file
+	}
+	return files.IsMarkdown(relative) && files.Matches(relative, scope.discovery)
+}
+
+// notServedReason explains why an existing Markdown target is unreachable in
+// the scope, distinguishing the single-file boundary from the depth and glob
+// filters so the diagnostic can say which rule excluded it.
+func (scope documentScope) notServedReason(relative string) notServedReason {
+	if scope.single {
+		return notServedSingleFile
+	}
+	if relative == "." || files.FileDepth(relative) > scope.discovery.Depth {
+		return notServedDepth
+	}
+	return notServedGlob
+}
+
+// indexedDocument is one parsed document of a check run. inspectable is
+// false when its frontmatter failed to parse — the WebUI refuses such a
+// document with a 422, so its references can never be followed and are not
+// checked — and diagnostics carries that document-level finding.
+type indexedDocument struct {
+	document
+	inspectable bool
+	diagnostics []Diagnostic
+	frontMatter *markdown.FrontMatter
+	inspection  markdown.Inspection
+	anchors     map[string]struct{}
+}
+
+// indexDocument reads and inspects one document for the check index,
+// mirroring the serve command's document pipeline: frontmatter is split
+// first, then the body is inspected with the shared Markdown engine. A
+// frontmatter that fails to parse makes the document non-inspectable — the
+// WebUI refuses it with a 422, so its references can never be followed —
+// and yields the frontmatter.invalid diagnostic instead. A file that
+// vanished between discovery and reading returns (nil, nil).
+func indexDocument(current document) (*indexedDocument, error) {
+	source, err := os.ReadFile(current.absolute)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("read Markdown %q: %w", current.absolute, err)
+	}
+
+	body, frontMatter, err := markdown.ParseFrontMatter(source)
+	if err != nil {
+		return &indexedDocument{
+			document:    current,
+			inspectable: false,
+			diagnostics: []Diagnostic{{
+				Path:     current.display,
+				Line:     1,
+				Column:   1,
+				Severity: SeverityError,
+				Rule:     RuleFrontMatterInvalid,
+				Message:  err.Error(),
+			}},
+		}, nil
+	}
+
+	inspection := markdown.Inspect(body)
+	// Reference positions are body-relative; shift them past the frontmatter
+	// block so reported lines match the source file.
+	lineOffset := markdown.FrontMatterLineOffset(source) - 1
+	for index := range inspection.References {
+		inspection.References[index].Line += lineOffset
+	}
+	anchors := make(map[string]struct{}, len(inspection.Headings))
+	for _, heading := range inspection.Headings {
+		anchors[heading.ID] = struct{}{}
+	}
+	return &indexedDocument{
+		document:    current,
+		inspectable: true,
+		frontMatter: frontMatter,
+		inspection:  inspection,
+		anchors:     anchors,
+	}, nil
 }

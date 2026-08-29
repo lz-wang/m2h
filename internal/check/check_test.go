@@ -3,6 +3,7 @@ package check
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -164,6 +165,590 @@ func TestRunRejectsDirectoryInputForFileOptions(t *testing.T) {
 	}
 	if result.Files != 1 {
 		t.Fatalf("Files = %d, want 1", result.Files)
+	}
+}
+
+// setupCheckRoot writes the given files (relative slash paths) under a fresh
+// temporary root and returns the root path.
+func setupCheckRoot(t *testing.T, sources map[string]string) string {
+	t.Helper()
+	root := t.TempDir()
+	for relative, contents := range sources {
+		writeFile(t, filepath.Join(root, filepath.FromSlash(relative)), contents)
+	}
+	return root
+}
+
+// runCheck runs a directory check over a fresh root and returns the result.
+// Discovery options (depth, glob) are passed through unchanged.
+func runCheck(t *testing.T, sources map[string]string, options Options) (Result, error) {
+	t.Helper()
+	options.Input = setupCheckRoot(t, sources)
+	return Run(context.Background(), options)
+}
+
+// summarize compresses a result into one "path:line:col severity rule"
+// entry per diagnostic for compact assertions.
+func summarize(t *testing.T, result Result, err error) []string {
+	t.Helper()
+	if err != nil {
+		t.Fatalf("Run() returned error: %v", err)
+	}
+	summary := make([]string, 0, len(result.Diagnostics))
+	for _, diagnostic := range result.Diagnostics {
+		summary = append(summary, fmt.Sprintf("%s:%d:%d %s %s",
+			filepath.Base(diagnostic.Path), diagnostic.Line, diagnostic.Column, diagnostic.Severity, diagnostic.Rule))
+	}
+	return summary
+}
+
+func TestCheckCleanDocumentPasses(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"index.md":        "# Index\n\n[Guide](guide.md) and [section](guide.md#install)\n\n![Logo](images/logo.png)\n",
+		"guide.md":        "# Guide\n\n## Install\n\nSee [index](index.md) and the [PDF](files/spec.pdf).\n",
+		"images/logo.png": "png",
+		"files/spec.pdf":  "pdf",
+	}, Options{})
+	summary := summarize(t, result, err)
+	if len(summary) != 0 {
+		t.Fatalf("diagnostics = %v, want none", result.Diagnostics)
+	}
+	if result.Files != 2 || result.Errors != 0 || result.Warnings != 0 {
+		t.Fatalf("result = %+v, want 2 clean files", result)
+	}
+}
+
+func TestCheckDiagnosticPathsAreInputPrefixed(t *testing.T) {
+	t.Parallel()
+
+	root := setupCheckRoot(t, map[string]string{
+		"guide.md": "# Guide\n\n![missing](nope.png)\n",
+	})
+	result, err := Run(context.Background(), Options{Input: filepath.Join(root, "sub"), Depth: 4})
+	if err == nil || !strings.Contains(err.Error(), "resolve input") && !strings.Contains(err.Error(), "inspect input") {
+		t.Fatalf("Run() under a missing directory error = %v, want failure", err)
+	}
+
+	result, err = Run(context.Background(), Options{Input: root, Depth: 4})
+	if err != nil {
+		t.Fatalf("Run() returned error: %v", err)
+	}
+	if len(result.Diagnostics) != 1 {
+		t.Fatalf("diagnostics = %+v, want one", result.Diagnostics)
+	}
+	want := filepath.Join(root, "guide.md")
+	if result.Diagnostics[0].Path != want {
+		t.Fatalf("diagnostic path = %q, want %q", result.Diagnostics[0].Path, want)
+	}
+}
+
+func TestCheckFrontMatterInvalid(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{
+			name:   "invalid yaml",
+			source: "---\ntitle: [unclosed\n---\n\n[link](guide.md)\n",
+			want:   "frontmatter is not valid YAML",
+		},
+		{
+			name:   "not a mapping",
+			source: "---\n- one\n- two\n---\n\n[link](guide.md)\n",
+			want:   "frontmatter must be a mapping",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := runCheck(t, map[string]string{
+				"meta.md":  test.source,
+				"guide.md": "# Guide\n",
+			}, Options{})
+			if err != nil {
+				t.Fatalf("Run() returned error: %v", err)
+			}
+			if result.Files != 2 {
+				t.Fatalf("Files = %d, want 2 (invalid frontmatter still counts)", result.Files)
+			}
+			if len(result.Diagnostics) != 1 {
+				t.Fatalf("diagnostics = %+v, want exactly the frontmatter error", result.Diagnostics)
+			}
+			diagnostic := result.Diagnostics[0]
+			if diagnostic.Rule != RuleFrontMatterInvalid || diagnostic.Severity != SeverityError ||
+				diagnostic.Line != 1 || diagnostic.Column != 1 || !strings.Contains(diagnostic.Message, test.want) {
+				t.Fatalf("diagnostic = %+v, want frontmatter.invalid at 1:1", diagnostic)
+			}
+		})
+	}
+}
+
+func TestCheckFrontMatterShiftsReferenceLines(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"guide.md": "---\ntitle: Guide\n---\n\nBody with a [broken](missing.png) link.\n",
+	}, Options{})
+	if err != nil {
+		t.Fatalf("Run() returned error: %v", err)
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].Line != 5 {
+		t.Fatalf("diagnostics = %+v, want the reference reported on source line 5", result.Diagnostics)
+	}
+}
+
+func TestCheckMissingTargets(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		markup  string
+		column  int
+		rule    string
+		message string
+	}{
+		{
+			name:    "missing image",
+			markup:  "![Logo](images/missing.png)\n",
+			column:  3,
+			rule:    RuleLocalTargetMissing,
+			message: `target "images/missing.png" does not exist`,
+		},
+		{
+			name:    "missing markdown",
+			markup:  "[Guide](missing-guide.md)\n",
+			column:  2,
+			rule:    RuleLocalTargetMissing,
+			message: `target "missing-guide.md" does not exist`,
+		},
+		{
+			name:    "missing attachment",
+			markup:  "[PDF](files/missing.pdf)\n",
+			column:  2,
+			rule:    RuleLocalTargetMissing,
+			message: `target "files/missing.pdf" does not exist`,
+		},
+		{
+			name:    "directory target is not regular",
+			markup:  "[Assets](images)\n",
+			column:  2,
+			rule:    RuleLocalTargetNotRegular,
+			message: `target "images" is not a regular file`,
+		},
+		{
+			name:    "invalid percent encoding",
+			markup:  "![Logo](missing%zz.png)\n",
+			column:  3,
+			rule:    RuleLocalTargetMissing,
+			message: `is not accessible: invalid URL encoding`,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := runCheck(t, map[string]string{
+				"guide.md":        "# Guide\n\n" + test.markup,
+				"images/logo.png": "png",
+				"files/spec.pdf":  "pdf",
+			}, Options{})
+			summary := summarize(t, result, err)
+			want := []string{fmt.Sprintf("guide.md:3:%d error %s", test.column, test.rule)}
+			if !slices.Equal(summary, want) {
+				t.Fatalf("diagnostics = %v, want %v", summary, want)
+			}
+			if !strings.Contains(result.Diagnostics[0].Message, test.message) {
+				t.Fatalf("message = %q, want it to contain %q", result.Diagnostics[0].Message, test.message)
+			}
+		})
+	}
+}
+
+func TestCheckOutsideRootTargets(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"sub/guide.md": "# Guide\n\n[Up one](../logo.png) and [too far](../../logo.png)\n",
+		"logo.png":     "png",
+	}, Options{Depth: 4})
+	summary := summarize(t, result, err)
+	// ../logo.png from sub/ resolves to the root-level file: allowed.
+	want := []string{"guide.md:3:28 error " + RuleLocalTargetOutsideRoot}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want only the root escape %v", summary, want)
+	}
+	if !strings.Contains(result.Diagnostics[0].Message, "resolves outside the workspace root") {
+		t.Fatalf("message = %q", result.Diagnostics[0].Message)
+	}
+}
+
+func TestCheckPercentDecodingAndQueries(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"guide.md":    "# Guide\n\n![Logo](my%20logo.png)\n[Query](guide.md?lang=zh)\n[Escaped](missing%zz)\n",
+		"my logo.png": "png",
+	}, Options{})
+	summary := summarize(t, result, err)
+	want := []string{fmt.Sprintf("guide.md:5:2 error %s", RuleLocalTargetMissing)}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want only the encoded-missing entry %v", summary, want)
+	}
+}
+
+func TestCheckSchemeAndAbsoluteDestinationsAreIgnored(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"guide.md": "# Guide\n\n[Site](https://example.com/x.png) and [Mail](mailto:a@b.c)\n\n[Teal](tel:123) and [CDN](//cdn.example.com/a.png) and [Root](/absolute.png) and [Anchor](#install)\n\n## Install\n",
+	}, Options{})
+	summary := summarize(t, result, err)
+	if len(summary) != 0 {
+		t.Fatalf("diagnostics = %v, want none for non-relative destinations", result.Diagnostics)
+	}
+}
+
+func TestCheckAnchorRules(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{
+			name:   "local anchor present",
+			source: "# Guide\n\n[Install](#install)\n\n## Install\n",
+			want:   nil,
+		},
+		{
+			name:   "local anchor missing",
+			source: "# Guide\n\n[Install](#setup)\n",
+			want:   []string{"guide.md:3:2 error " + RuleAnchorMissing},
+		},
+		{
+			name:   "cross document anchor",
+			source: "# Guide\n\n[Install](target.md#install)\n",
+			want:   []string{"guide.md:3:2 error " + RuleAnchorMissing},
+		},
+		{
+			name:   "anchor ids are case sensitive",
+			source: "# Guide\n\n[Install](#Install)\n\n## install\n",
+			want:   []string{"guide.md:3:2 error " + RuleAnchorMissing},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := runCheck(t, map[string]string{
+				"guide.md":  test.source,
+				"target.md": "# Target\n\n## Overview\n",
+			}, Options{})
+			summary := summarize(t, result, err)
+			want := test.want
+			if want == nil {
+				want = []string{}
+			}
+			if !slices.Equal(summary, want) {
+				t.Fatalf("diagnostics = %v, want %v", summary, want)
+			}
+		})
+	}
+}
+
+func TestCheckDuplicateAndCJKAnchors(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"guide.md": "# Guide\n\n[First](#中文-标题)\n[First again](#中文-标题)\n[Duplicate](#title-1)\n[Missing](#title-2)\n\n## 中文 标题\n\n# Title\n\n# Title\n",
+	}, Options{})
+	summary := summarize(t, result, err)
+	// Duplicate H1s get -1 suffixes; #title-2 never exists.
+	want := []string{fmt.Sprintf("guide.md:6:2 error %s", RuleAnchorMissing)}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want only the missing duplicate anchor %v", summary, want)
+	}
+}
+
+func TestCheckFragmentWithQueryIsSplit(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"guide.md":  "# Guide\n\n[Install](target.md?lang=zh#install)\n",
+		"target.md": "# Target\n\n## Overview\n",
+	}, Options{})
+	summary := summarize(t, result, err)
+	want := []string{"guide.md:3:2 error " + RuleAnchorMissing}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want the fragment checked (and missing) %v", summary, want)
+	}
+}
+
+func TestCheckRawHTMLReferences(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"guide.md": "# Guide\n\n<a href=\"missing-a.md\">A</a>\n<img src=\"missing-b.png\">\n<video poster=\"missing-c.jpg\"></video>\n<object data=\"missing-d.pdf\"></object>\n",
+	}, Options{})
+	summary := summarize(t, result, err)
+	want := []string{
+		fmt.Sprintf("guide.md:3:1 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("guide.md:4:1 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("guide.md:5:1 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("guide.md:6:1 error %s", RuleLocalTargetMissing),
+	}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want %v", summary, want)
+	}
+}
+
+func TestCheckReferenceStyleLinks(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"guide.md": "# Guide\n\n[Guide][guide]\n\n[guide]: missing-guide.md\n",
+	}, Options{})
+	summary := summarize(t, result, err)
+	want := []string{fmt.Sprintf("guide.md:3:2 error %s", RuleLocalTargetMissing)}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want %v", summary, want)
+	}
+}
+
+func TestCheckCodeContentNeverReports(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"guide.md": "# Guide\n\nInline `![not image](missing.png)` and `[link](missing.md)`.\n\n```markdown\n![not image](missing.png)\n<a href=\"missing.md\">A</a>\n```\n",
+	}, Options{})
+	summary := summarize(t, result, err)
+	if len(summary) != 0 {
+		t.Fatalf("diagnostics = %v, want none for code content", result.Diagnostics)
+	}
+}
+
+func TestCheckMarkdownNotServed(t *testing.T) {
+	t.Parallel()
+
+	t.Run("glob excluded", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := runCheck(t, map[string]string{
+			"index.md": "# Index\n\n[Guide](guide.md)\n",
+			"guide.md": "# Guide\n",
+		}, Options{Pattern: "index.md", Depth: 4})
+		summary := summarize(t, result, err)
+		want := []string{"index.md:3:2 error " + RuleMarkdownTargetNotServed}
+		if !slices.Equal(summary, want) {
+			t.Fatalf("diagnostics = %v, want %v", summary, want)
+		}
+		if !strings.Contains(result.Diagnostics[0].Message, "excluded by the glob filter") {
+			t.Fatalf("message = %q, want glob reason", result.Diagnostics[0].Message)
+		}
+	})
+
+	t.Run("depth excluded", func(t *testing.T) {
+		t.Parallel()
+
+		result, err := runCheck(t, map[string]string{
+			"index.md":      "# Index\n\n[Deep](deep/guide.md)\n",
+			"deep/guide.md": "# Deep\n",
+		}, Options{Depth: 0})
+		summary := summarize(t, result, err)
+		want := []string{"index.md:3:2 error " + RuleMarkdownTargetNotServed}
+		if !slices.Equal(summary, want) {
+			t.Fatalf("diagnostics = %v, want %v", summary, want)
+		}
+		if !strings.Contains(result.Diagnostics[0].Message, "excluded by the depth limit") {
+			t.Fatalf("message = %q, want depth reason", result.Diagnostics[0].Message)
+		}
+	})
+
+	t.Run("single file mode", func(t *testing.T) {
+		t.Parallel()
+
+		root := setupCheckRoot(t, map[string]string{
+			"README.md": "# Readme\n\n[Guide](guide.md) and ![Logo](logo.png)\n",
+			"guide.md":  "# Guide\n",
+			"logo.png":  "png",
+		})
+		result, err := Run(context.Background(), Options{Input: filepath.Join(root, "README.md")})
+		if err != nil {
+			t.Fatalf("Run() returned error: %v", err)
+		}
+		summary := summarize(t, result, err)
+		want := []string{"README.md:3:2 error " + RuleMarkdownTargetNotServed}
+		if !slices.Equal(summary, want) {
+			t.Fatalf("diagnostics = %v, want only the sibling Markdown rejection %v", summary, want)
+		}
+		if !strings.Contains(result.Diagnostics[0].Message, "not available in single-file mode") {
+			t.Fatalf("message = %q, want single-file reason", result.Diagnostics[0].Message)
+		}
+	})
+}
+
+func TestCheckSymlinkTargets(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "guide.md"), "# Guide\n\n[Inside](inside.png), [Outside](outside.png), [Broken](broken.png), [Through dir](linked/file.png)\n")
+	writeFile(t, filepath.Join(root, "real.png"), "png")
+	writeFile(t, filepath.Join(root, "realdir", "file.png"), "png")
+
+	outside := t.TempDir()
+	writeFile(t, filepath.Join(outside, "secret.png"), "png")
+
+	if err := os.Symlink(filepath.Join(root, "real.png"), filepath.Join(root, "inside.png")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret.png"), filepath.Join(root, "outside.png")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "nowhere.png"), filepath.Join(root, "broken.png")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "realdir"), filepath.Join(root, "linked")); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Run(context.Background(), Options{Input: root, Depth: 4})
+	if err != nil {
+		t.Fatalf("Run() returned error: %v", err)
+	}
+	summary := summarize(t, result, err)
+	want := []string{
+		fmt.Sprintf("guide.md:3:24 error %s", RuleLocalTargetOutsideRoot),
+		fmt.Sprintf("guide.md:3:48 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("guide.md:3:70 error %s", RuleLocalTargetOutsideRoot),
+	}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v\nwant %v\nfull: %+v", summary, want, result.Diagnostics)
+	}
+	// The inside-root symlink file itself must pass, and the outside one
+	// must be reported as a root escape, not a missing file.
+	if !strings.Contains(result.Diagnostics[0].Message, "resolves outside the workspace root") {
+		t.Fatalf("outside message = %q", result.Diagnostics[0].Message)
+	}
+	if !strings.Contains(result.Diagnostics[2].Message, "crosses a symlink directory") {
+		t.Fatalf("symlink directory message = %q", result.Diagnostics[2].Message)
+	}
+}
+
+func TestCheckExactCaseTargets(t *testing.T) {
+	t.Parallel()
+
+	// On case-insensitive filesystems os.Stat happily accepts LOGO.png for
+	// logo.png, but the served workspace refuses the differently-cased name;
+	// check reports it missing so both agree.
+	result, err := runCheck(t, map[string]string{
+		"guide.md": "# Guide\n\n![Logo](LOGO.png)\n",
+		"logo.png": "png",
+	}, Options{})
+	summary := summarize(t, result, err)
+	want := []string{fmt.Sprintf("guide.md:3:3 error %s", RuleLocalTargetMissing)}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want the case mismatch reported %v", summary, want)
+	}
+}
+
+func TestCheckTargetStatusIsCachedPerPath(t *testing.T) {
+	t.Parallel()
+
+	// Many references to one target exercise the resolver cache; the
+	// outcome must not depend on the number of references.
+	source := "# Guide\n\n"
+	for index := range 50 {
+		source += fmt.Sprintf("![Logo %d](missing.png)\n", index)
+	}
+	result, err := runCheck(t, map[string]string{"guide.md": source}, Options{})
+	if err != nil {
+		t.Fatalf("Run() returned error: %v", err)
+	}
+	if len(result.Diagnostics) != 50 || result.Errors != 50 {
+		t.Fatalf("diagnostics = %d, errors = %d, want 50", len(result.Diagnostics), result.Errors)
+	}
+}
+
+func TestCheckDecodedRootEscapes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		markup string
+	}{
+		{
+			name:   "encoded parent escape",
+			markup: "[Secret](..%2Fsecret.png)\n",
+		},
+		{
+			name:   "encoded mid-path parent",
+			markup: "[Up](sub%2F..%2Fsecret.png)\n",
+		},
+		{
+			name:   "absolute path after decoding",
+			markup: "[Abs](%2Fetc%2Fpasswd)\n",
+		},
+		{
+			name:   "decoding never stabilizes",
+			markup: "[Loop](%25252525252525252525252525x)\n",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			result, err := runCheck(t, map[string]string{
+				"guide.md": "# Guide\n\n" + test.markup,
+			}, Options{})
+			summary := summarize(t, result, err)
+			want := []string{fmt.Sprintf("guide.md:3:2 error %s", RuleLocalTargetMissing)}
+			if !slices.Equal(summary, want) {
+				t.Fatalf("diagnostics = %v, want the encoded escape reported missing %v", summary, want)
+			}
+			message := result.Diagnostics[0].Message
+			if !strings.Contains(message, "not accessible") {
+				t.Fatalf("message = %q, want an accessibility failure", message)
+			}
+		})
+	}
+}
+
+func TestCheckPercentEncodedCJKAnchor(t *testing.T) {
+	t.Parallel()
+
+	// Browsers percent-decode fragments before seeking the element id, so a
+	// URL-encoded CJK heading anchor must resolve.
+	result, err := runCheck(t, map[string]string{
+		"guide.md": "# Guide\n\n[中文](#%E4%B8%AD%E6%96%87-%E6%A0%87%E9%A2%98)\n\n## 中文 标题\n",
+	}, Options{})
+	summary := summarize(t, result, err)
+	if len(summary) != 0 {
+		t.Fatalf("diagnostics = %v, want the encoded anchor to resolve", result.Diagnostics)
+	}
+}
+
+func TestCheckDiagnosticsOrderAcrossFiles(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"b.md": "# B\n\n![x](missing-b.png)\n",
+		"a.md": "# A\n\n![x](missing-a.png)\n![y](missing-a2.png)\n",
+	}, Options{})
+	summary := summarize(t, result, err)
+	want := []string{
+		fmt.Sprintf("a.md:3:3 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("a.md:4:3 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("b.md:3:3 error %s", RuleLocalTargetMissing),
+	}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want path-then-line order %v", summary, want)
 	}
 }
 

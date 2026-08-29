@@ -162,7 +162,7 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 			}
 			return nil
 		}
-		if fileDepth(relative) > options.Depth {
+		if FileDepth(relative) > options.Depth {
 			return nil
 		}
 
@@ -197,7 +197,7 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 // Call ValidateDiscoverOptions before using this helper with external input.
 func Matches(relative string, options DiscoverOptions) bool {
 	relative = NormalizeRelativePath(relative)
-	if relative == "." || fileDepth(relative) > options.Depth {
+	if relative == "." || FileDepth(relative) > options.Depth {
 		return false
 	}
 	return options.Pattern == "" || doublestar.MatchUnvalidated(options.Pattern, relative)
@@ -281,7 +281,10 @@ func directoryDepth(relative string) int {
 	return strings.Count(relative, "/") + 1
 }
 
-func fileDepth(relative string) int {
+// FileDepth reports how many directories a normalized relative file path is
+// nested beneath its root (a root-level file has depth 0). It backs the
+// depth filter that both discovery and scope admission apply.
+func FileDepth(relative string) int {
 	return strings.Count(relative, "/")
 }
 
