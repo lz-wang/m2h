@@ -19,6 +19,7 @@ interface MermaidRunOptions {
 
 const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn<(config: unknown) => void>(),
+  registerExternalDiagrams: vi.fn(async () => {}),
   run: vi.fn<(options: MermaidRunOptions) => Promise<void>>(async () => {}),
   render: vi.fn<(id: string, text: string) => Promise<MermaidRenderResult>>(
     async () => ({ svg: '<svg data-mock="mermaid"></svg>' }),
@@ -79,6 +80,7 @@ describe("renderRichContent", () => {
     // Each test re-imports the module so the lazy mermaid singleton resets.
     vi.resetModules();
     mermaidMock.initialize.mockClear();
+    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
@@ -432,6 +434,7 @@ describe("collapsible code blocks", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
+    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
@@ -603,6 +606,7 @@ describe("code line numbers", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
+    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
@@ -753,6 +757,7 @@ describe("image lightbox triggers", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
+    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
@@ -1215,6 +1220,7 @@ describe("rerenderMermaid", () => {
     // mermaidSources WeakMap reset between cases.
     vi.resetModules();
     mermaidMock.initialize.mockClear();
+    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
@@ -1320,6 +1326,7 @@ describe("sortable tables", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
+    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();

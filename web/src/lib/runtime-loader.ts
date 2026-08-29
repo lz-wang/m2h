@@ -14,8 +14,23 @@ export interface MermaidRenderResult {
   bindFunctions?: (element: HTMLElement) => void;
 }
 
+// Shape of a Mermaid external-diagram plugin (see registerExternalDiagrams):
+// `detector` decides whether a diagram source belongs to the plugin and
+// `loader` produces the diagram implementation Mermaid renders with.
+export interface MermaidExternalDiagramDefinition {
+  id: string;
+  detector: (text: string) => boolean;
+  loader: () => Promise<{ id: string; diagram: unknown }>;
+}
+
 export interface MermaidRuntime {
   initialize(options: MermaidInitializeOptions): void;
+  registerExternalDiagrams(
+    diagrams: MermaidExternalDiagramDefinition[],
+    options?: {
+      lazyLoad?: boolean;
+    },
+  ): Promise<void>;
   run(options: {
     nodes: HTMLElement[];
     suppressErrors: boolean;
@@ -126,6 +141,63 @@ export async function loadMermaid(): Promise<MermaidRuntime> {
     throw new Error("mermaid runtime did not attach window.mermaid");
   }
   return runtime;
+}
+
+// The ZenUML plugin keeps its upstream dist layout (see
+// internal/assets/rich/NOTICE.md): the entry module lazy-imports its diagram
+// chunk through a relative URL, so the chunks directory must stay reachable
+// next to this file under /runtime/.
+export const ZENUML_MODULE_URL =
+  "/runtime/mermaid-zenuml/mermaid-zenuml.esm.min.mjs";
+
+type ZenUMLModuleImporter = () => Promise<{
+  default: MermaidExternalDiagramDefinition;
+}>;
+
+function importZenUMLModule(): ReturnType<ZenUMLModuleImporter> {
+  // The specifier is a runtime URL served by the document server, never a
+  // module in Vite's graph; the ignore comment keeps Vite from trying to
+  // resolve and bundle it at build time.
+  return import(/* @vite-ignore */ ZENUML_MODULE_URL);
+}
+
+// One registration per page load: concurrent diagrams share the in-flight
+// promise, and a rejection drops the cached promise so the next document (or
+// theme rerender) can retry instead of staying broken forever.
+let zenumlRegistration: Promise<void> | null = null;
+
+/**
+ * Register the ZenUML external-diagram plugin with the shared Mermaid runtime.
+ * Must complete before `mermaid.initialize`, per Mermaid's integration order
+ * (load → register → initialize → render). The plugin is fetched only when a
+ * document actually contains a `zenuml` diagram; plain Mermaid documents never
+ * download it.
+ */
+export async function ensureZenUMLRegistered(
+  mermaid: MermaidRuntime,
+  importModule: ZenUMLModuleImporter = importZenUMLModule,
+): Promise<void> {
+  if (zenumlRegistration !== null) {
+    return zenumlRegistration;
+  }
+
+  const registration = (async () => {
+    const module = await importModule();
+    // lazyLoad stays off: the caller already knows this document renders
+    // ZenUML, so the diagram chunk downloads during registration and the
+    // subsequent render cannot hit a second, hidden lazy load.
+    await mermaid.registerExternalDiagrams([module.default], {
+      lazyLoad: false,
+    });
+  })();
+
+  zenumlRegistration = registration;
+  try {
+    await registration;
+  } catch (error) {
+    zenumlRegistration = null;
+    throw error;
+  }
 }
 
 /**

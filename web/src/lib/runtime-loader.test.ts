@@ -9,6 +9,7 @@ import type {
 
 const mermaidRuntime: MermaidRuntime = {
   initialize: vi.fn(),
+  registerExternalDiagrams: vi.fn(async () => {}),
   run: vi.fn(async () => {}),
   render: vi.fn(async () => ({ svg: "<svg></svg>" })),
 };
@@ -56,6 +57,7 @@ describe("runtime loader", () => {
     delete window.renderMathInElement;
     delete window.Tablesort;
     vi.mocked(mermaidRuntime.initialize).mockClear();
+    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockClear();
   });
 
   it("injects the mermaid script and resolves with window.mermaid", async () => {
