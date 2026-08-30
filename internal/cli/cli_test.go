@@ -11,6 +11,7 @@ import (
 	"testing"
 	"testing/fstest"
 
+	"github.com/lz-wang/m2h/internal/check"
 	"github.com/lz-wang/m2h/internal/markdown"
 	"github.com/lz-wang/m2h/internal/server"
 )
@@ -103,6 +104,7 @@ func TestHelpDocumentsContract(t *testing.T) {
 			want: []string{
 				"--glob", "--depth", "-d", "(default: 4)",
 				"--format", "(default: \"text\")", "--strict",
+				"--enable", "--disable",
 			},
 		},
 	}
@@ -686,12 +688,44 @@ func TestCheckCommandValidatesFlagsBeforeFilesystem(t *testing.T) {
 		{args: []string{"check", "docs", "--format", "table"}, want: "Error: --format must be text or json"},
 		{args: []string{"check", "docs", "--depth", "-1"}, want: "Error: --depth must be zero or greater"},
 		{args: []string{"check", "docs", "--glob", "["}, want: `Error: validate check options: invalid glob "["`},
+		{args: []string{"check", "docs", "--enable", "foo.bar"}, want: `Error: unknown check rule "foo.bar"`},
+		{args: []string{"check", "docs", "--disable", "foo.bar"}, want: `Error: unknown check rule "foo.bar"`},
 	}
 	for _, test := range tests {
 		_, _, err := runCommand(t, test.args...)
 		if err == nil || err.Error() != test.want {
 			t.Errorf("m2h %v error = %v, want %q", test.args, err, test.want)
 		}
+	}
+}
+
+func TestCheckCommandForwardsRuleSelection(t *testing.T) {
+	t.Parallel()
+
+	previous := runCheck
+	t.Cleanup(func() { runCheck = previous })
+
+	var captured check.Options
+	runCheck = func(_ context.Context, options check.Options) (check.Result, error) {
+		captured = options
+		return check.Result{}, nil
+	}
+	stdout, stderr, err := runCommand(t,
+		"check", "docs",
+		"--enable", "section.empty,unicode.mojibake",
+		"--disable", "image.alt-empty",
+	)
+	if err != nil || stderr != "" {
+		t.Fatalf("check stderr=%q err=%v", stderr, err)
+	}
+	if want := "Checked 0 Markdown files: no issues found\n"; stdout != want {
+		t.Fatalf("check stdout=%q, want %q", stdout, want)
+	}
+	if want := []string{"section.empty", "unicode.mojibake"}; !slices.Equal(captured.EnableRules, want) {
+		t.Fatalf("EnableRules = %v, want %v", captured.EnableRules, want)
+	}
+	if want := []string{"image.alt-empty"}; !slices.Equal(captured.DisableRules, want) {
+		t.Fatalf("DisableRules = %v, want %v", captured.DisableRules, want)
 	}
 }
 

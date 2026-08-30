@@ -130,9 +130,10 @@ type indexedDocument struct {
 // first, then the body is inspected with the shared Markdown engine. A
 // frontmatter that fails to parse makes the document non-inspectable — the
 // WebUI refuses it with a 422, so its references can never be followed —
-// and yields the frontmatter.invalid diagnostic instead. A file that
-// vanished between discovery and reading returns (nil, nil).
-func indexDocument(current document) (*indexedDocument, error) {
+// and yields the frontmatter.invalid diagnostic instead (unless the run
+// disabled that rule). A file that vanished between discovery and reading
+// returns (nil, nil).
+func indexDocument(current document, rules RuleSet) (*indexedDocument, error) {
 	source, err := os.ReadFile(current.absolute)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
@@ -143,17 +144,21 @@ func indexDocument(current document) (*indexedDocument, error) {
 
 	body, frontMatter, err := markdown.ParseFrontMatter(source)
 	if err != nil {
-		return &indexedDocument{
-			document:    current,
-			inspectable: false,
-			diagnostics: []Diagnostic{{
+		var diagnostics []Diagnostic
+		if rules.Enabled(RuleFrontMatterInvalid) {
+			diagnostics = append(diagnostics, Diagnostic{
 				Path:     current.display,
 				Line:     1,
 				Column:   1,
 				Severity: SeverityError,
 				Rule:     RuleFrontMatterInvalid,
 				Message:  err.Error(),
-			}},
+			})
+		}
+		return &indexedDocument{
+			document:    current,
+			inspectable: false,
+			diagnostics: diagnostics,
 		}, nil
 	}
 
@@ -171,7 +176,7 @@ func indexDocument(current document) (*indexedDocument, error) {
 
 	diagnostics := make([]Diagnostic, 0)
 	// Heading lines are body-relative too.
-	if inspection.H1Count > 1 {
+	if inspection.H1Count > 1 && rules.Enabled(RuleDocumentMultipleH1) {
 		diagnostics = append(diagnostics, Diagnostic{
 			Path:     current.display,
 			Line:     secondH1Line(inspection.Headings) + lineOffset,
@@ -181,22 +186,24 @@ func indexDocument(current document) (*indexedDocument, error) {
 			Message:  fmt.Sprintf("document contains %d H1 headings", inspection.H1Count),
 		})
 	}
-	for _, entry := range frontMatterDateEntries(frontMatter) {
-		if value := strings.TrimSpace(entry.Value); value != "" && !markdown.IsISODate(value) {
-			// The entry position is relative to the YAML block; in the file
-			// the opening `---` delimiter sits one line above it.
-			line, column := 1, 1
-			if entry.Line > 0 {
-				line, column = entry.Line+1, max(entry.Column, 1)
+	if rules.Enabled(RuleFrontMatterDateInvalid) {
+		for _, entry := range frontMatterDateEntries(frontMatter) {
+			if value := strings.TrimSpace(entry.Value); value != "" && !markdown.IsISODate(value) {
+				// The entry position is relative to the YAML block; in the file
+				// the opening `---` delimiter sits one line above it.
+				line, column := 1, 1
+				if entry.Line > 0 {
+					line, column = entry.Line+1, max(entry.Column, 1)
+				}
+				diagnostics = append(diagnostics, Diagnostic{
+					Path:     current.display,
+					Line:     line,
+					Column:   column,
+					Severity: SeverityWarning,
+					Rule:     RuleFrontMatterDateInvalid,
+					Message:  fmt.Sprintf("%s is not a valid ISO date", entry.Key),
+				})
 			}
-			diagnostics = append(diagnostics, Diagnostic{
-				Path:     current.display,
-				Line:     line,
-				Column:   column,
-				Severity: SeverityWarning,
-				Rule:     RuleFrontMatterDateInvalid,
-				Message:  fmt.Sprintf("%s is not a valid ISO date", entry.Key),
-			})
 		}
 	}
 

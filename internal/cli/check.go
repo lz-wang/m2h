@@ -22,7 +22,9 @@ func checkCommand() *urfavecli.Command {
 
 // checkFlags returns the document-scope and reporting options for the check
 // subcommand. --glob and --depth mirror the root serve command's flags so
-// "m2h docs" and "m2h check docs" always see the same document scope.
+// "m2h docs" and "m2h check docs" always see the same document scope, while
+// --enable/--disable select which rules run: the defaults, widened by
+// --enable and narrowed by --disable (which wins).
 func checkFlags() []urfavecli.Flag {
 	return []urfavecli.Flag{
 		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
@@ -55,6 +57,16 @@ func checkFlags() []urfavecli.Flag {
 			},
 		},
 		&urfavecli.BoolFlag{Name: "strict", Usage: "treat warnings as failures", Local: true},
+		&urfavecli.StringSliceFlag{
+			Name:  "enable",
+			Usage: `enable additional check rules (comma-separated; "all" addresses every rule)`,
+			Local: true,
+		},
+		&urfavecli.StringSliceFlag{
+			Name:  "disable",
+			Usage: `disable check rules, overriding --enable (comma-separated; "all" addresses every rule)`,
+			Local: true,
+		},
 	}
 }
 
@@ -68,9 +80,11 @@ func checkAction(ctx context.Context, command *urfavecli.Command) error {
 		return fmt.Errorf("Error: requires exactly one file or directory")
 	}
 	result, err := runCheck(ctx, check.Options{
-		Input:   command.Args().First(),
-		Pattern: command.String("glob"),
-		Depth:   command.Int("depth"),
+		Input:        command.Args().First(),
+		Pattern:      command.String("glob"),
+		Depth:        command.Int("depth"),
+		EnableRules:  command.StringSlice("enable"),
+		DisableRules: command.StringSlice("disable"),
 	})
 	if err != nil {
 		return fmt.Errorf("Error: %w", err)

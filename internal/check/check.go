@@ -48,6 +48,11 @@ type Options struct {
 	// Depth bounds directory recursion, exactly like the serve command's
 	// --depth. Zero admits only files directly inside the root.
 	Depth int
+	// EnableRules names rules to run in addition to the defaults; the special
+	// name "all" addresses every known rule.
+	EnableRules []string
+	// DisableRules names rules to skip, always winning over EnableRules.
+	DisableRules []string
 }
 
 // Result summarizes one completed check run. Files counts every Markdown
@@ -71,7 +76,8 @@ type Result struct {
 // only then are references resolved against that index and the filesystem,
 // so a target document linked a hundred times is parsed exactly once.
 func Run(ctx context.Context, options Options) (Result, error) {
-	if err := validateOptions(options); err != nil {
+	rules, err := validateOptions(options)
+	if err != nil {
 		return Result{}, err
 	}
 	if err := ctx.Err(); err != nil {
@@ -107,7 +113,7 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		if err := ctx.Err(); err != nil {
 			return Result{}, fmt.Errorf("check: %w", err)
 		}
-		indexed, err := indexDocument(current)
+		indexed, err := indexDocument(current, rules)
 		if err != nil {
 			return Result{}, err
 		}
@@ -131,7 +137,7 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		if !ok || !indexed.inspectable {
 			continue
 		}
-		result.Diagnostics = append(result.Diagnostics, checkDocumentReferences(scope, index, resolver, indexed)...)
+		result.Diagnostics = append(result.Diagnostics, checkDocumentReferences(scope, index, resolver, indexed, rules)...)
 	}
 
 	sortDiagnostics(result.Diagnostics)
@@ -146,17 +152,21 @@ func Run(ctx context.Context, options Options) (Result, error) {
 	return result, nil
 }
 
-func validateOptions(options Options) error {
+// validateOptions checks every option before the run touches the filesystem
+// and resolves the rule selection. Unknown rule names fail with their own
+// message — the rule name is the actionable part — instead of the shared
+// "validate check options" prefix.
+func validateOptions(options Options) (RuleSet, error) {
 	if strings.TrimSpace(options.Input) == "" {
-		return fmt.Errorf("input path is required")
+		return RuleSet{}, fmt.Errorf("input path is required")
 	}
 	if err := files.ValidateDiscoverOptions(files.DiscoverOptions{
 		Depth:   options.Depth,
 		Pattern: options.Pattern,
 	}); err != nil {
-		return fmt.Errorf("validate check options: %w", err)
+		return RuleSet{}, fmt.Errorf("validate check options: %w", err)
 	}
-	return nil
+	return NewRuleSet(options.EnableRules, options.DisableRules)
 }
 
 // sortDiagnostics orders diagnostics by path, line, column and rule so both
