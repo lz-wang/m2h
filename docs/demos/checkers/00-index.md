@@ -55,7 +55,9 @@ m2h check docs --enable all --disable image.alt-empty
 
 - 本地引用中，`images/logo.png` 相对当前文档，`/images/logo.png` 相对当前输入
   root（多 root 模式下为引用所在的 root），而 `//cdn.example.com/logo.png`
-  仍是协议相对网络 URL。WebUI 路由与检查器共享这套分类和越界边界。
+  仍是协议相对网络 URL。WebUI 路由与检查器共享这套分类和越界边界；已经分类
+  为本地但越出当前 root 的引用会在预览中改写到专用 404 地址，不会保留原始
+  相对 URL 供浏览器再次解析。
 - 引用、脚注和反转链接扫描以真实 Goldmark AST 为边界：行内/块级代码、HTML
   block、HTML comment 与 inline raw HTML tag token 不参与；inline tag 之间的
   文本仍是普通 Markdown，会按渲染器相同语义检查。

@@ -52,6 +52,12 @@ const (
 	URLWeb
 )
 
+// InvalidLocalReferencePath is the server endpoint used for local references
+// that cannot be resolved inside their logical workspace root. Rewriting them
+// to this fixed 404 route prevents the browser from re-resolving an authored
+// relative URL into another root.
+const InvalidLocalReferencePath = "/__m2h_invalid_local_reference__"
+
 // String names the URL mode for option errors.
 func (mode URLMode) String() string {
 	switch mode {
@@ -241,13 +247,17 @@ func rewriteDestination(destination []byte, options RenderOptions, image bool) [
 	}
 	resolved, ok := ResolveLocalDestination(options.SourcePath, options.RootPath, local)
 	if !ok {
-		return destination
+		return invalidLocalDestination(original)
 	}
 	_, suffix := splitDestination(original)
 	if image || !RoutesToDocument(local.Path) {
 		return []byte("/assets/" + resolved + suffix)
 	}
 	return []byte("/doc/" + resolved + suffix)
+}
+
+func invalidLocalDestination(original string) []byte {
+	return []byte(InvalidLocalReferencePath + "?target=" + url.QueryEscape(original))
 }
 
 // RoutesToDocument reports whether a local destination — identified by its

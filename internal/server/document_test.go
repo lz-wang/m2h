@@ -20,6 +20,7 @@ import (
 
 	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/files"
+	"github.com/lz-wang/m2h/internal/markdown"
 	appversion "github.com/lz-wang/m2h/internal/version"
 )
 
@@ -622,6 +623,10 @@ func TestDirectoryAssetsSPAFallbackAndAPINotFound(t *testing.T) {
 	if response := performRequest(handler, http.MethodGet, "/unrelated"); response.Code != http.StatusNotFound {
 		t.Fatalf("unrelated route status = %d", response.Code)
 	}
+	invalid := performRequest(handler, http.MethodGet, markdown.InvalidLocalReferencePath+"?target=..%2Fsecret.md")
+	if invalid.Code != http.StatusNotFound || strings.Contains(invalid.Body.String(), `id="root"`) {
+		t.Fatalf("invalid local reference route = %d %q, want explicit non-SPA 404", invalid.Code, invalid.Body.String())
+	}
 
 	apiMissing := performRequest(handler, http.MethodGet, "/api/missing")
 	assertJSONError(t, apiMissing, http.StatusNotFound)
@@ -865,7 +870,7 @@ func TestWorkspaceDocumentAPIRoutesVirtualPathsPerRoot(t *testing.T) {
 	for _, want := range []string{
 		`href="/doc/r0/notes.md"`,
 		`src="/assets/r0/images/logo.png"`,
-		`href="../r1/README.md"`,
+		`href="/__m2h_invalid_local_reference__?target=..%2Fr1%2FREADME.md"`,
 	} {
 		if !strings.Contains(alphaDocument.HTML, want) {
 			t.Errorf("alpha document HTML missing %q: %s", want, alphaDocument.HTML)
@@ -994,13 +999,16 @@ func TestWorkspaceDocumentRendersVirtualLinkRouting(t *testing.T) {
 			t.Errorf("document HTML missing %q: %s", want, document.HTML)
 		}
 	}
-	// Climbing past the current root stays exactly as authored. Neither the
-	// short nor long escape can become an address inside another root.
-	if !strings.Contains(document.HTML, `href="../../README.md"`) {
-		t.Errorf("short escape link was rewritten past the current root: %s", document.HTML)
-	}
-	if !strings.Contains(document.HTML, `href="../../../README.md"`) {
-		t.Errorf("long escape link was rewritten: %s", document.HTML)
+	// A local link rejected by the logical resolver must never be handed back
+	// to the browser as a relative href: from /doc/r1/deep/guide.md the browser
+	// could otherwise normalize it into a valid route for a sibling root.
+	for _, want := range []string{
+		`href="/__m2h_invalid_local_reference__?target=..%2F..%2FREADME.md"`,
+		`href="/__m2h_invalid_local_reference__?target=..%2F..%2F..%2FREADME.md"`,
+	} {
+		if !strings.Contains(document.HTML, want) {
+			t.Errorf("rejected local link missing invalid route %q: %s", want, document.HTML)
+		}
 	}
 	if strings.Contains(document.HTML, "/doc/r0/") || strings.Contains(document.HTML, "/assets/r0/") {
 		t.Errorf("document leaks the other root's prefix: %s", document.HTML)

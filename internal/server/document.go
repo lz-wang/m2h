@@ -115,6 +115,7 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 	mux.Handle("/runtime/", newRuntimeHandler())
 	mux.HandleFunc("/ui/markdown.css", handler.serveMarkdownStyles)
 	mux.Handle("/ui/", http.StripPrefix("/ui/", immutableUIAssets(http.FileServer(http.FS(handler.ui)))))
+	mux.HandleFunc(markdown.InvalidLocalReferencePath, http.NotFound)
 	mux.HandleFunc("/doc/", handler.serveDirectoryIndex)
 	mux.HandleFunc("/raw/", handler.serveRawMarkdown)
 	mux.HandleFunc("/", handler.serveDirectoryIndex)

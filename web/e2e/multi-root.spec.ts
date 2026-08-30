@@ -164,6 +164,31 @@ test("internal Markdown links stay inside their own root", async ({ page }) => {
   );
 });
 
+test("rejected local links cannot navigate into a sibling root", async ({
+  page,
+  request,
+}) => {
+  await openWorkspace(page, "/doc/r0/README.md");
+
+  const rejectedLink = page.getByRole("link", { name: "尝试跨到 Root B" });
+  const href = "/__m2h_invalid_local_reference__?target=..%2Fr1%2FREADME.md";
+  await expect(rejectedLink).toHaveAttribute("href", href);
+
+  // The DOM address itself is inert, so ordinary clicks, modifier clicks,
+  // middle-clicks and "open in new tab" all resolve to the same 404 endpoint
+  // instead of relying on the React click handler for isolation.
+  expect(
+    await rejectedLink.evaluate((anchor) => new URL(anchor.href).pathname),
+  ).toBe("/__m2h_invalid_local_reference__");
+  const rejected = await request.get(baseURL + href);
+  expect(rejected.status()).toBe(404);
+
+  await rejectedLink.click();
+  await page.waitForURL(`**/__m2h_invalid_local_reference__?**`);
+  expect(new URL(page.url()).pathname).toBe("/__m2h_invalid_local_reference__");
+  await expect(page.locator("body")).not.toContainText("Root B Readme");
+});
+
 test("a deep link with a fragment survives a reload into the same root", async ({
   page,
 }) => {

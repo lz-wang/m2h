@@ -187,7 +187,7 @@ func TestRenderKeepsLocalLinksInsideNamedRoot(t *testing.T) {
 	}
 	for _, want := range []string{
 		`href="/doc/r1/guide.md"`,
-		`href="../../r0/secret.md"`,
+		`href="/__m2h_invalid_local_reference__?target=..%2F..%2Fr0%2Fsecret.md"`,
 		`src="/assets/r1/images/logo.png"`,
 	} {
 		if !strings.Contains(result.Body, want) {
@@ -550,7 +550,7 @@ func TestRenderStripsDangerousImageURL(t *testing.T) {
 	}
 }
 
-func TestRenderPreviewImageOutsideRootUnchanged(t *testing.T) {
+func TestRenderPreviewImageOutsideRootUsesInvalidRoute(t *testing.T) {
 	t.Parallel()
 
 	result, err := Render([]byte("![escape](../../outside.png)\n![root escape](/../outside.png)"), RenderOptions{
@@ -559,11 +559,11 @@ func TestRenderPreviewImageOutsideRootUnchanged(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(result.Body, `src="../../outside.png"`) {
-		t.Fatalf("out-of-root image was rewritten instead of left unchanged: %s", result.Body)
+	if !strings.Contains(result.Body, `src="/__m2h_invalid_local_reference__?target=..%2F..%2Foutside.png"`) {
+		t.Fatalf("out-of-root image did not use the invalid-reference route: %s", result.Body)
 	}
-	if !strings.Contains(result.Body, `src="/../outside.png"`) {
-		t.Fatalf("root-relative escape was rewritten instead of left unchanged: %s", result.Body)
+	if !strings.Contains(result.Body, `src="/__m2h_invalid_local_reference__?target=%2F..%2Foutside.png"`) {
+		t.Fatalf("root-relative escape did not use the invalid-reference route: %s", result.Body)
 	}
 }
 

@@ -6,6 +6,8 @@
 
 [阅读 A 指南](guide.md)
 
+[尝试跨到 Root B](../r1/README.md)
+
 ## Root A Section
 
 root-a 专属章节内容。

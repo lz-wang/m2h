@@ -18,6 +18,10 @@
 
 - Markdown 本地引用支持以单个 `/` 开头的当前文档 root 相对路径：`/docs/guide.md` 与 `/images/logo.png` 分别在 WebUI 中统一路由到当前 root 的 `/doc` 与 `/assets` 地址，Markdown 链接/图片及 raw HTML 的 `href`、`src`、`poster`、`data` 使用同一语义；`m2h check` 同步检查目标缺失、非普通文件、越界、symlink、文档服务范围与锚点。该路径绝不映射到宿主机文件系统根目录，多 root 模式始终锚定引用所在 root；`//host/path`、HTTP/HTTPS、`mailto:` 与 `tel:` 保持外部 URL 行为。
 
+### 修复
+
+- 修复 multi-root WebUI 中越界的文档相对链接仍可能被浏览器解析到其他 root 的问题：已经分类为本地、但无法在当前逻辑 root 内解析的 Markdown 链接/图片及 raw HTML URL 不再原样输出，而是改写到携带原始目标的专用 `/__m2h_invalid_local_reference__` 404 地址；普通点击、修饰键点击、中键和“在新标签页打开”因此都无法绕过 renderer 的 root 边界。外部、协议相对和纯片段 URL 保持原样。
+
 ## [0.15.0] - 2026-08-30
 
 ### 新增

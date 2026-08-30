@@ -172,7 +172,9 @@ m2h check docs --enable all --disable image.alt-empty
 本地引用使用与 WebUI 相同的路径语义：`images/logo.png` 相对当前文档，
 `/images/logo.png` 相对当前输入 root（不是宿主机文件系统根目录）；多 root 模式
 始终锚定引用所在的 root。`//cdn.example.com/logo.png` 仍是协议相对网络 URL，
-与带 scheme 的外链一样不会映射到本地文件。
+与带 scheme 的外链一样不会映射到本地文件。已经识别为本地、但解析后越出
+当前 root 的引用会在 WebUI 中改写到专用的 404 地址，不再把原始相对 URL
+交给浏览器重新解析；`m2h check` 同时报告 `local-target.outside-root`。
 
 ## Markdown 支持
 
