@@ -2,6 +2,7 @@ package check
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/lz-wang/m2h/internal/markdown"
 )
@@ -34,5 +35,43 @@ func checkReferenceRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 			}
 		}
 	}
+	if !rules.Enabled(RuleLinkTextNondescriptive) {
+		return diagnostics
+	}
+	for _, reference := range inspection.References {
+		// Only real Markdown links carry screen-reader-visible text worth
+		// judging; image alt, raw HTML anchors and autolinks are out of
+		// scope. Exact matches only — "click here to read the API docs"
+		// carries real information and must stay silent.
+		if _, generic := nondescriptiveLinkText[lowerTrim(reference.Text)]; reference.Kind != markdown.ReferenceLink || !generic {
+			continue
+		}
+		diagnostics = append(diagnostics, current.diagnostic(SeverityWarning, RuleLinkTextNondescriptive,
+			fmt.Sprintf("link text %q is not descriptive", reference.Text), reference))
+	}
 	return diagnostics
+}
+
+// nondescriptiveLinkText is the exact-match word list of generic link
+// texts, lowercased for comparison. Deliberately tiny: anything beyond
+// exact matches starts guessing at intent.
+var nondescriptiveLinkText = map[string]struct{}{
+	"here":       {},
+	"click here": {},
+	"link":       {},
+	"this link":  {},
+	"more":       {},
+	"read more":  {},
+	"details":    {},
+	"这里":         {},
+	"点击这里":       {},
+	"点这里":        {},
+	"链接":         {},
+	"更多":         {},
+	"详情":         {},
+	"查看详情":       {},
+}
+
+func lowerTrim(value string) string {
+	return strings.ToLower(strings.TrimSpace(value))
 }

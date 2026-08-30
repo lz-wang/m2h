@@ -490,6 +490,81 @@ func TestCheckHeadingDuplicate(t *testing.T) {
 	}
 }
 
+func TestCheckOptInRulesStayOffByDefault(t *testing.T) {
+	t.Parallel()
+
+	source := "# Guide\n\nIntro.\n\n## Empty\n\n## Next\n\nSee [click here](https://example.com) and CafÃ© and word​word.\n"
+	result, err := runCheck(t, map[string]string{"guide.md": source}, Options{})
+	if err != nil {
+		t.Fatalf("Run() returned error: %v", err)
+	}
+	for _, diagnostic := range result.Diagnostics {
+		switch diagnostic.Rule {
+		case RuleSectionEmpty, RuleLinkTextNondescriptive, RuleUnicodeMojibake, RuleUnicodeInvisibleCharacter:
+			t.Fatalf("opt-in rule %s fired without --enable: %+v", diagnostic.Rule, diagnostic)
+		}
+	}
+}
+
+func TestCheckSectionEmptyOptIn(t *testing.T) {
+	t.Parallel()
+
+	source := "# Title\n\nIntro.\n\n## Empty\n\n## Next\n\ncontent\n"
+	enabled := Options{EnableRules: []string{RuleSectionEmpty}}
+	expectDiagnostics(t, "enabled", source, enabled,
+		[]string{fmt.Sprintf("guide.md:5:1 warning %s", RuleSectionEmpty)})
+	expectDiagnostics(t, "default off", source, Options{}, nil)
+
+	withFrontmatter := Options{EnableRules: []string{RuleSectionEmpty}}
+	expectDiagnostics(t, "frontmatter shifts the heading", "---\ntitle: T\n---\n\n# T\n\n## Empty\n\n## Next\n\ncontent\n",
+		withFrontmatter, []string{
+			fmt.Sprintf("guide.md:5:1 warning %s", RuleSectionEmpty), // # T with only headings
+			fmt.Sprintf("guide.md:7:1 warning %s", RuleSectionEmpty),
+		})
+}
+
+func TestCheckLinkTextNondescriptiveOptIn(t *testing.T) {
+	t.Parallel()
+
+	enabled := Options{EnableRules: []string{RuleLinkTextNondescriptive}}
+
+	expectDiagnostics(t, "english and chinese generic texts",
+		"# Guide\n\nSee [click here](https://example.com) and [点击这里](https://example.com).\n",
+		enabled, []string{
+			fmt.Sprintf("guide.md:3:6 warning %s", RuleLinkTextNondescriptive),
+			fmt.Sprintf("guide.md:3:44 warning %s", RuleLinkTextNondescriptive),
+		})
+
+	expectDiagnostics(t, "informative text stays silent",
+		"# Guide\n\nSee [click here to read the API docs](https://example.com), [the guide](https://example.com) and ![alt](https://example.com/x.png).\n",
+		enabled, nil)
+
+	expectDiagnostics(t, "image alt and raw HTML are out of scope",
+		"# Guide\n\n![logo](https://example.com/x.png)\n\n<a href=\"https://example.com\">link</a>\n",
+		enabled, nil)
+}
+
+func TestCheckUnicodeRulesOptIn(t *testing.T) {
+	t.Parallel()
+
+	enabled := Options{EnableRules: []string{RuleUnicodeMojibake, RuleUnicodeInvisibleCharacter}}
+
+	expectDiagnostics(t, "mojibake and invisible findings",
+		"# Guide\n\nCafÃ© and word ​word.\n",
+		enabled, []string{
+			fmt.Sprintf("guide.md:3:4 warning %s", RuleUnicodeMojibake),
+			fmt.Sprintf("guide.md:3:18 warning %s", RuleUnicodeInvisibleCharacter),
+		})
+
+	expectDiagnostics(t, "correct text and emoji stay silent",
+		"# Guide\n\nCafé ❤️ and 👩‍❤️‍👨.\n",
+		enabled, nil)
+
+	expectDiagnostics(t, "code regions stay silent",
+		"# Guide\n\nUse `CafÃ©` and `​`.\n",
+		enabled, nil)
+}
+
 func TestCheckReferenceRulesWorkAlongsideFilesystemChecks(t *testing.T) {
 	t.Parallel()
 

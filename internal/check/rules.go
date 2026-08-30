@@ -86,6 +86,22 @@ const (
 	// one parent section. Identical headings under different sections stay
 	// legitimate, and duplicate H1s are left to document.multiple-h1.
 	RuleHeadingDuplicate = "heading.duplicate"
+
+	// RuleSectionEmpty: a heading whose section holds no rendered content.
+	// Opt-in because documents legitimately keep parent sections bare as
+	// structure. Disabled by default.
+	RuleSectionEmpty = "section.empty"
+	// RuleLinkTextNondescriptive: a link whose text is a generic phrase from
+	// a small exact-match word list ("click here", "点击这里"). Opt-in and
+	// disabled by default.
+	RuleLinkTextNondescriptive = "link.text-nondescriptive"
+	// RuleUnicodeMojibake: a multi-character mojibake signature ("CafÃ©",
+	// "â€™") in text outside code. Opt-in and disabled by default.
+	RuleUnicodeMojibake = "unicode.mojibake"
+	// RuleUnicodeInvisibleCharacter: an invisible Unicode character in a
+	// suspicious position — line edges, next to whitespace, consecutive
+	// runs, or a bidi override anywhere. Opt-in and disabled by default.
+	RuleUnicodeInvisibleCharacter = "unicode.invisible-character"
 )
 
 // frontMatterDateKeys are the frontmatter fields m2h normalizes into date

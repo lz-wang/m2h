@@ -145,6 +145,31 @@ type ReversedLink struct {
 	Position    Position
 }
 
+// EmptySection is one heading whose section carries no rendered content
+// before the next heading: only blanks, comments, reference definitions or
+// thematic breaks in between. Documents deliberately structure parent
+// sections this way, so the fact exists for an opt-in rule, never a default.
+type EmptySection struct {
+	Level    int
+	Text     string
+	Position Position
+}
+
+// Mojibake is one multi-character mojibake signature in text — UTF-8 bytes
+// that were once decoded as Latin-1 and re-encoded, the "CafÃ©" family.
+type Mojibake struct {
+	Pattern  string
+	Position Position
+}
+
+// InvisibleCharacter is one suspicious invisible Unicode character with its
+// code point name for the diagnostic message.
+type InvisibleCharacter struct {
+	Rune     rune
+	Name     string
+	Position Position
+}
+
 // Inspection is the check-oriented view of one Markdown document: the same
 // heading anchors the WebUI table of contents shows, every reference the web
 // renderer would rewrite, reference definitions and the uses the parser
@@ -162,6 +187,9 @@ type Inspection struct {
 	TableMismatches      []TableColumnMismatch
 	UnclosedComments     []UnclosedComment
 	ReversedLinks        []ReversedLink
+	EmptySections        []EmptySection
+	Mojibake             []Mojibake
+	InvisibleCharacters  []InvisibleCharacter
 	H1Count              int
 }
 
@@ -200,6 +228,15 @@ func (inspection *Inspection) ShiftLines(delta int) {
 	}
 	for index := range inspection.ReversedLinks {
 		inspection.ReversedLinks[index].Position.Line += delta
+	}
+	for index := range inspection.EmptySections {
+		inspection.EmptySections[index].Position.Line += delta
+	}
+	for index := range inspection.Mojibake {
+		inspection.Mojibake[index].Position.Line += delta
+	}
+	for index := range inspection.InvisibleCharacters {
+		inspection.InvisibleCharacters[index].Position.Line += delta
 	}
 }
 
@@ -270,7 +307,62 @@ func Inspect(source []byte) Inspection {
 	inspection.TableMismatches = extractTableMismatches(document, source)
 	inspection.UnclosedComments = extractUnclosedComments(document, source)
 	inspection.ReversedLinks = scanner.reversedLinks()
+	inspection.EmptySections = extractEmptySections(document, source)
+	inspection.Mojibake, inspection.InvisibleCharacters = scanner.unicodeFindings()
 	return inspection
+}
+
+// extractEmptySections reports document-level headings whose section holds
+// no rendered content before the next heading. Blanks never become nodes;
+// thematic breaks, reference definitions and comment blocks are the only
+// siblings that render nothing, so anything else between headings counts as
+// content. Headings nested inside containers are left alone — their
+// surroundings render as part of the container.
+func extractEmptySections(document ast.Node, source []byte) []EmptySection {
+	sections := make([]EmptySection, 0)
+	locator := newSourceLocator(source)
+	for heading := document.FirstChild(); heading != nil; heading = heading.NextSibling() {
+		typed, ok := heading.(*ast.Heading)
+		if !ok {
+			continue
+		}
+		empty := true
+		for sibling := heading.NextSibling(); sibling != nil; sibling = sibling.NextSibling() {
+			if _, isHeading := sibling.(*ast.Heading); isHeading {
+				break
+			}
+			if !rendersNothing(sibling) {
+				empty = false
+				break
+			}
+		}
+		if !empty {
+			continue
+		}
+		line := 1
+		if typed.Lines().Len() > 0 {
+			line, _ = locator.locate(typed.Lines().At(0).Start)
+		}
+		sections = append(sections, EmptySection{
+			Level:    typed.Level,
+			Text:     normalizeTitle(string(typed.Text(source))),
+			Position: Position{Line: line, Column: 1},
+		})
+	}
+	return sections
+}
+
+// rendersNothing reports whether one block sibling contributes no rendered
+// content of its own: a thematic break, a link reference definition, or an
+// HTML comment block. Any other HTML renders and counts.
+func rendersNothing(node ast.Node) bool {
+	switch typed := node.(type) {
+	case *ast.ThematicBreak, *ast.LinkReferenceDefinition:
+		return true
+	case *ast.HTMLBlock:
+		return typed.HTMLBlockType == ast.HTMLBlockType2
+	}
+	return false
 }
 
 // extractUnclosedComments reports HTML comment blocks whose comment never

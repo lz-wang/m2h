@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"sort"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/util"
@@ -316,6 +317,131 @@ func looksLikeDestination(destination string) bool {
 	}
 	dot := strings.LastIndex(destination, ".")
 	return dot > 0
+}
+
+// mojibakePatterns are multi-character UTF-8 signatures of text that was
+// decoded as Latin-1 and re-encoded: curly punctuation ("â€™"), accented
+// letters ("Ã©"), an embedded BOM ("ï»¿") and the prefix of a truncated
+// four-byte emoji ("ðŸ"). Single characters like a lone Ã or Â never
+// appear here — they are legitimate letters in several languages.
+var mojibakePatterns = []string{
+	"â€™", "â€œ", "â€", "â€“", "â€”", "â€¦",
+	"Ã©", "Ã¨", "Ã«", "Ã±", "Ã¼", "Ã¶", "Ã¤", "Ã§",
+	"Â«", "Â»", "Â°", "Â ",
+	"ï»¿",
+	"ðŸ",
+}
+
+// invisibleNames maps the invisible characters the scan tracks to their
+// code point names. ZWJ (U+200D) and variation selectors (U+FE0F) are
+// deliberately absent: emoji sequences like ❤️ and 👩‍❤️‍👨 depend on them.
+var invisibleNames = map[rune]string{
+	0x00AD: "SOFT HYPHEN",
+	0x200B: "ZERO WIDTH SPACE",
+	0x2060: "WORD JOINER",
+	0xFEFF: "ZERO WIDTH NO-BREAK SPACE",
+	// Bidi embeddings and overrides can flip or scramble surrounding text —
+	// suspicious wherever they appear.
+	0x202A: "LEFT-TO-RIGHT EMBEDDING",
+	0x202B: "RIGHT-TO-LEFT EMBEDDING",
+	0x202C: "POP DIRECTIONAL FORMATTING",
+	0x202D: "LEFT-TO-RIGHT OVERRIDE",
+	0x202E: "RIGHT-TO-LEFT OVERRIDE",
+	0x2066: "LEFT-TO-RIGHT ISOLATE",
+	0x2067: "RIGHT-TO-LEFT ISOLATE",
+	0x2068: "FIRST STRONG ISOLATE",
+	0x2069: "POP DIRECTIONAL ISOLATE",
+}
+
+// alwaysSuspicious reports whether an invisible character is suspicious in
+// any position: the bidi embedding and override controls.
+func alwaysSuspicious(char rune) bool {
+	return (char >= 0x202A && char <= 0x202E) || (char >= 0x2066 && char <= 0x2069)
+}
+
+// unicodeFindings reports mojibake signatures and suspicious invisible
+// characters outside code. Invisible characters only count in suspicious
+// positions — line start or end, next to whitespace, or in a consecutive
+// run — because legitimate text uses them in far more places than attacks
+// do.
+func (scanner *sourceScanner) unicodeFindings() ([]Mojibake, []InvisibleCharacter) {
+	mojibake := make([]Mojibake, 0)
+	for _, pattern := range mojibakePatterns {
+		signature := []byte(pattern)
+		for offset := bytes.Index(scanner.source, signature); offset >= 0; {
+			if !scanner.protected(offset) {
+				line, column := scanner.locator.locate(offset)
+				mojibake = append(mojibake, Mojibake{Pattern: pattern, Position: Position{Line: line, Column: column}})
+			}
+			next := bytes.Index(scanner.source[offset+1:], signature)
+			if next < 0 {
+				break
+			}
+			offset += 1 + next
+		}
+	}
+
+	invisible := make([]InvisibleCharacter, 0)
+	source := scanner.source
+	for offset, char := range string(source) {
+		name, tracked := invisibleNames[char]
+		if !tracked || scanner.protected(offset) {
+			continue
+		}
+		if alwaysSuspicious(char) || scanner.suspiciousPosition(offset, char) {
+			line, column := scanner.locator.locate(offset)
+			invisible = append(invisible, InvisibleCharacter{Rune: char, Name: name, Position: Position{Line: line, Column: column}})
+		}
+	}
+	return mojibake, invisible
+}
+
+// suspiciousPosition reports whether an invisible character at offset sits
+// where legitimate text would not put it: the start or end of a line, next
+// to whitespace, or directly beside another invisible character.
+func (scanner *sourceScanner) suspiciousPosition(offset int, char rune) bool {
+	source := scanner.source
+	previous, previousWidth := lastRuneBefore(source, offset)
+	next, nextWidth := nextRuneAfter(source, offset+len(string(char)))
+
+	if offset == 0 || previous == '\n' {
+		return true // line start
+	}
+	if offset+len(string(char)) >= len(source) || next == '\n' {
+		return true // line end
+	}
+	if previous == ' ' || previous == '\t' || next == ' ' || next == '\t' {
+		return true // adjacent whitespace
+	}
+	if previousWidth > 0 {
+		if _, invisible := invisibleNames[previous]; invisible {
+			return true
+		}
+	}
+	if nextWidth > 0 {
+		if _, invisible := invisibleNames[next]; invisible {
+			return true
+		}
+	}
+	return false
+}
+
+// lastRuneBefore decodes the rune ending at offset with its byte width.
+func lastRuneBefore(source []byte, offset int) (rune, int) {
+	if offset <= 0 {
+		return 0, 0
+	}
+	decoded, size := utf8.DecodeLastRune(source[:offset])
+	return decoded, size
+}
+
+// nextRuneAfter decodes the rune starting at offset with its byte width.
+func nextRuneAfter(source []byte, offset int) (rune, int) {
+	if offset >= len(source) {
+		return 0, 0
+	}
+	decoded, size := utf8.DecodeRune(source[offset:])
+	return decoded, size
 }
 
 // matchBracket returns the index of the ']' closing the '[' at open. With

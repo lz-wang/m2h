@@ -15,10 +15,28 @@ func checkDocumentRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	diagnostics := make([]Diagnostic, 0)
 	diagnostics = append(diagnostics, checkHeadingRules(current, rules)...)
 	diagnostics = append(diagnostics, checkDuplicateHeadings(current, rules)...)
+	diagnostics = append(diagnostics, checkSectionRules(current, rules)...)
 	diagnostics = append(diagnostics, checkReferenceRules(current, rules)...)
 	diagnostics = append(diagnostics, checkFootnoteRules(current, rules)...)
 	diagnostics = append(diagnostics, checkTableRules(current, rules)...)
 	diagnostics = append(diagnostics, checkSyntaxRules(current, rules)...)
+	diagnostics = append(diagnostics, checkUnicodeRules(current, rules)...)
+	return diagnostics
+}
+
+// checkSectionRules reports headings whose section carries no rendered
+// content — opt-in, because bare parent sections are a legitimate
+// structural pattern ("Installation" introducing only subsections).
+func checkSectionRules(current *indexedDocument, rules RuleSet) []Diagnostic {
+	if !rules.Enabled(RuleSectionEmpty) {
+		return nil
+	}
+	inspection := &current.inspection
+	diagnostics := make([]Diagnostic, 0)
+	for _, section := range inspection.EmptySections {
+		diagnostics = append(diagnostics, current.diagnosticAt(SeverityWarning, RuleSectionEmpty,
+			fmt.Sprintf("section %q has no content", section.Text), section.Position))
+	}
 	return diagnostics
 }
 

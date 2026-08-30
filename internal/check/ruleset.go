@@ -39,6 +39,13 @@ var ruleDefinitions = []RuleDefinition{
 	{ID: RuleLinkEmptyDestination, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleReferenceUnused, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleFootnoteUnused, Severity: SeverityWarning, DefaultEnabled: true},
+
+	// Opt-in quality rules: false-positive-prone by nature, so they run only
+	// when named by --enable.
+	{ID: RuleSectionEmpty, Severity: SeverityWarning, DefaultEnabled: false},
+	{ID: RuleLinkTextNondescriptive, Severity: SeverityWarning, DefaultEnabled: false},
+	{ID: RuleUnicodeMojibake, Severity: SeverityWarning, DefaultEnabled: false},
+	{ID: RuleUnicodeInvisibleCharacter, Severity: SeverityWarning, DefaultEnabled: false},
 }
 
 // ruleAll is the special rule name that addresses every known rule, so
