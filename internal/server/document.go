@@ -108,6 +108,7 @@ func newDocumentHandlerWithVersion(
 
 func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 	mux := http.NewServeMux()
+	mux.HandleFunc("/healthz", handler.serveHealth)
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
 	mux.HandleFunc("/api/", jsonNotFound)

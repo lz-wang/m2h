@@ -20,6 +20,8 @@
 
 - HTTP 服务硬化以支持长期常驻运行：`ReadHeaderTimeout`（5s）与 `IdleTimeout`（60s）防止慢速头部与闲置连接无限占用，`MaxHeaderBytes`（1 MiB）限制请求头大小；`WriteTimeout` 刻意不设置，`/assets` 的大文件（PDF/视频/压缩包）下载不会被全局写超时截断，公网慢客户端由反向代理隔离。
 
+- 新增 `GET/HEAD /healthz` 健康端点：返回 `200` 与 `ok`（`text/plain; charset=utf-8`、`Cache-Control: no-store`），其他方法返回 `405`。它只回答 HTTP 进程是否已初始化并可接受请求，不读取、不扫描任何文档——发布目录在 `git pull` 等瞬时变更期间不会导致健康检查失败与误重启。适合 systemd 与 Uptime Kuma 等本机监控直接探测 upstream。
+
 ### 修复
 
 - 修复目录文档服务默认暴露点开头隐藏路径的问题：目录 root 下任何包含 `.` 开头路径段的内容（如 `.env`、`.git/config`、`.github/workflows/`、`foo/.private/file.pdf`）不再出现在文件树与文档 API 中，`/doc`、`/raw` 也不再响应这些路径；隐藏目录在扫描阶段即被跳过，不再进入遍历结果。显式以单文件路径启动（如 `m2h notes/.private.md`）仍正常服务该文件，`m2h check` 的静态分析语义不变，仍可检查隐藏 Markdown。

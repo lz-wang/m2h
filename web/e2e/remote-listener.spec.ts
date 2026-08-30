@@ -90,6 +90,23 @@ test("serves documents and the file tree with a path-free API", async ({
   ).toBeVisible();
 });
 
+test("serves the health endpoint with hardened headers", async ({
+  request,
+}) => {
+  // The real binary path: the non-loopback server must answer /healthz
+  // without touching documents, and the response carries the same
+  // hardening baseline as every other route.
+  const response = await request.get(`${baseURL}/healthz`);
+  expect(response.status()).toBe(200);
+  expect(await response.text()).toBe("ok\n");
+  expect(response.headers()["content-type"]).toBe("text/plain; charset=utf-8");
+  expect(response.headers()["cache-control"]).toBe("no-store");
+  expect(response.headers()["x-content-type-options"]).toBe("nosniff");
+  expect(response.headers()["content-security-policy"]).toContain(
+    "script-src 'self'",
+  );
+});
+
 test("keeps every server-local path affordance out of the UI", async ({
   page,
 }) => {
