@@ -115,9 +115,9 @@ func checkDocumentReferences(
 	return diagnostics
 }
 
-// checkReference resolves one reference. Non-relative destinations (scheme
-// URLs, absolute paths) are deliberately ignored: the web renderer leaves
-// them untouched, so check has nothing to verify.
+// checkReference resolves one local reference. Scheme and protocol-relative
+// URLs are deliberately ignored because the web renderer leaves them
+// untouched, so check has no workspace target to verify.
 func checkReference(
 	scope documentScope,
 	index map[string]*indexedDocument,
@@ -167,7 +167,7 @@ func checkReference(
 		return diagnostics
 	}
 
-	resolved, ok := markdown.ResolveLocalDestination(current.relative, local.Path)
+	resolved, ok := markdown.ResolveLocalDestination(current.relative, "", local)
 	if !ok {
 		if rules.Enabled(RuleLocalTargetOutsideRoot) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetOutsideRoot,

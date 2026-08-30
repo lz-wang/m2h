@@ -267,27 +267,83 @@ func splitDestination(destination string) (string, string) {
 	return destination, ""
 }
 
-// LocalDestination is one parsed relative local reference: the path part
-// with query and fragment split off, each kept without its leading "?"/"#"
-// exactly as the Markdown source wrote it.
+// DestinationKind classifies the addressing model of one Markdown URL.
+// The zero value represents an empty or syntactically invalid destination.
+type DestinationKind uint8
+
+const (
+	DestinationRelative DestinationKind = iota + 1
+	DestinationRootRelative
+	DestinationFragment
+	DestinationExternal
+	DestinationProtocolRelative
+)
+
+// LocalDestinationBase identifies which logical directory anchors a local
+// destination: the referencing document's directory or its workspace root.
+type LocalDestinationBase uint8
+
+const (
+	DestinationBaseDocument LocalDestinationBase = iota + 1
+	DestinationBaseRoot
+)
+
+// LocalDestination is one parsed local reference: the path part with query
+// and fragment split off, each kept without its leading "?"/"#" exactly as
+// the Markdown source wrote it. Root-relative paths omit their one leading
+// slash because it selects Base; it never denotes the host filesystem root.
 type LocalDestination struct {
 	Path     string
 	Query    string
 	Fragment string
+	Base     LocalDestinationBase
 }
 
-// ParseLocalDestination splits a reference destination into path, query and
-// fragment when — and only when — it is a relative local path: no scheme, no
-// host, no leading slash. Absolute URLs, scheme links (mailto:, tel:),
-// protocol-relative URLs and a path-less fragment return false, mirroring
-// exactly the destinations the web renderer rewrites, so check and the WebUI
-// can never disagree about what counts as a local reference.
+// ClassifyDestination reports how a Markdown destination is addressed.
+// A single leading slash means workspace-root-relative; two leading slashes
+// remain a protocol-relative network URL. Empty and malformed URLs return the
+// zero value.
+func ClassifyDestination(destination string) DestinationKind {
+	pathPart, _ := splitDestination(destination)
+	if strings.HasPrefix(destination, "#") {
+		return DestinationFragment
+	}
+	if pathPart == "" {
+		return 0
+	}
+	if strings.HasPrefix(pathPart, "//") {
+		return DestinationProtocolRelative
+	}
+	parsed, err := url.Parse(pathPart)
+	if err != nil {
+		return 0
+	}
+	if parsed.Scheme != "" || parsed.Host != "" {
+		return DestinationExternal
+	}
+	if strings.HasPrefix(pathPart, "/") {
+		return DestinationRootRelative
+	}
+	return DestinationRelative
+}
+
+// ParseLocalDestination splits a document-relative or workspace-root-relative
+// destination into its logical path, query, fragment and base. Scheme URLs,
+// protocol-relative URLs and path-less fragments return false.
 func ParseLocalDestination(destination string) (LocalDestination, bool) {
 	pathPart, suffix := splitDestination(destination)
-	if !isRelativeLocalPath(pathPart) {
+	kind := ClassifyDestination(destination)
+	if kind != DestinationRelative && kind != DestinationRootRelative {
 		return LocalDestination{}, false
 	}
-	parsed := LocalDestination{Path: pathPart}
+	parsed := LocalDestination{Path: pathPart, Base: DestinationBaseDocument}
+	if kind == DestinationRootRelative {
+		parsed.Path = strings.TrimPrefix(pathPart, "/")
+		parsed.Base = DestinationBaseRoot
+	}
+	if parsed.Path == "" {
+		return LocalDestination{}, false
+	}
 	if suffix == "" {
 		return parsed, true
 	}
@@ -300,13 +356,26 @@ func ParseLocalDestination(destination string) (LocalDestination, bool) {
 	return parsed, true
 }
 
-// ResolveLocalDestination resolves a relative local destination path against
-// the root-relative source path of the referencing document and reports
-// whether the result stays inside the workspace root. It is the same textual
-// resolution the web renderer's URL rewriting applies, shared verbatim with
-// the check command.
-func ResolveLocalDestination(sourcePath, destinationPath string) (string, bool) {
-	return resolveWithinRoot(sourcePath, destinationPath)
+// ResolveLocalDestination resolves a parsed local destination inside one
+// logical workspace root. sourcePath and rootPath use the public slash paths
+// exposed by the server; rootPath is empty for a single-root workspace and is
+// the root id (for example "r1") in a multi-root workspace.
+func ResolveLocalDestination(sourcePath, rootPath string, destination LocalDestination) (string, bool) {
+	normalizedRoot, ok := normalizeLogicalRootPath(rootPath)
+	if !ok || !withinLogicalRoot(sourcePath, normalizedRoot) {
+		return "", false
+	}
+
+	var basePath string
+	switch destination.Base {
+	case DestinationBaseDocument:
+		basePath = pathpkg.Dir(sourcePath)
+	case DestinationBaseRoot:
+		basePath = normalizedRoot
+	default:
+		return "", false
+	}
+	return resolveWithinLogicalRoot(basePath, normalizedRoot, destination.Path)
 }
 
 // InvalidLocalDestination reports whether destination is a relative-looking
@@ -315,7 +384,7 @@ func ResolveLocalDestination(sourcePath, destinationPath string) (string, bool) 
 // can never resolve it — so the check command reports it as unreachable.
 func InvalidLocalDestination(destination string) bool {
 	pathPart, _ := splitDestination(destination)
-	if pathPart == "" || strings.HasPrefix(pathPart, "/") {
+	if pathPart == "" || strings.HasPrefix(pathPart, "//") {
 		return false
 	}
 	_, err := url.Parse(pathPart)
@@ -323,20 +392,39 @@ func InvalidLocalDestination(destination string) bool {
 }
 
 func isRelativeLocalPath(value string) bool {
-	if value == "" || strings.HasPrefix(value, "/") || strings.HasPrefix(value, "//") {
-		return false
-	}
-	parsed, err := url.Parse(value)
-	return err == nil && parsed.Scheme == "" && parsed.Host == ""
+	return ClassifyDestination(value) == DestinationRelative
 }
 
 func resolveWithinRoot(sourcePath, destination string) (string, bool) {
+	return resolveWithinLogicalRoot(pathpkg.Dir(sourcePath), "", destination)
+}
+
+func resolveWithinLogicalRoot(basePath, rootPath, destination string) (string, bool) {
 	destination = strings.ReplaceAll(destination, "\\", "/")
-	resolved := pathpkg.Clean(pathpkg.Join(pathpkg.Dir(sourcePath), destination))
-	if resolved == "." || escapesRoot(resolved) || pathpkg.IsAbs(resolved) {
+	resolved := pathpkg.Clean(pathpkg.Join(basePath, destination))
+	if resolved == "." || escapesRoot(resolved) || pathpkg.IsAbs(resolved) || !withinLogicalRoot(resolved, rootPath) {
 		return "", false
 	}
 	return resolved, true
+}
+
+func normalizeLogicalRootPath(rootPath string) (string, bool) {
+	if rootPath == "" {
+		return "", true
+	}
+	rootPath = strings.ReplaceAll(rootPath, "\\", "/")
+	rootPath = pathpkg.Clean(rootPath)
+	if rootPath == "." || pathpkg.IsAbs(rootPath) || escapesRoot(rootPath) {
+		return "", false
+	}
+	return rootPath, true
+}
+
+func withinLogicalRoot(value, rootPath string) bool {
+	if rootPath == "" {
+		return !pathpkg.IsAbs(value) && !escapesRoot(value)
+	}
+	return value == rootPath || strings.HasPrefix(value, rootPath+"/")
 }
 
 func escapesRoot(value string) bool {

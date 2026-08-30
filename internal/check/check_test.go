@@ -402,11 +402,11 @@ func TestCheckPercentDecodingAndQueries(t *testing.T) {
 	}
 }
 
-func TestCheckSchemeAndAbsoluteDestinationsAreIgnored(t *testing.T) {
+func TestCheckSchemeAndProtocolRelativeDestinationsAreIgnored(t *testing.T) {
 	t.Parallel()
 
 	result, err := runCheck(t, map[string]string{
-		"guide.md": "# Guide\n\n[Site](https://example.com/x.png) and [Mail](mailto:a@b.c)\n\n[Teal](tel:123) and [CDN](//cdn.example.com/a.png) and [Root](/absolute.png) and [Anchor](#install)\n\n## Install\n",
+		"guide.md": "# Guide\n\n[Site](https://example.com/x.png) and [Mail](mailto:a@b.c)\n\n[Teal](tel:123) and [CDN](//cdn.example.com/a.png) and [Anchor](#install)\n\n## Install\n",
 	}, Options{})
 	summary := summarize(t, result, err)
 	if len(summary) != 0 {

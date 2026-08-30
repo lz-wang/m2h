@@ -156,6 +156,111 @@ func TestRenderRewritesPreviewAssetsAndPreservesConvertAssets(t *testing.T) {
 	}
 }
 
+func TestClassifyDestination(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		destination string
+		want        DestinationKind
+	}{
+		{destination: "guide.md", want: DestinationRelative},
+		{destination: "../guide.md?mode=full#start", want: DestinationRelative},
+		{destination: "/docs/guide.md", want: DestinationRootRelative},
+		{destination: "/images/logo.png?raw=1#icon", want: DestinationRootRelative},
+		{destination: "#install", want: DestinationFragment},
+		{destination: "https://example.com/guide.md", want: DestinationExternal},
+		{destination: "mailto:user@example.com", want: DestinationExternal},
+		{destination: "tel:123", want: DestinationExternal},
+		{destination: "//cdn.example.com/a.js", want: DestinationProtocolRelative},
+		{destination: "", want: 0},
+		{destination: "missing%zz.png", want: 0},
+	}
+	for _, test := range tests {
+		test := test
+		t.Run(test.destination, func(t *testing.T) {
+			t.Parallel()
+
+			if got := ClassifyDestination(test.destination); got != test.want {
+				t.Fatalf("ClassifyDestination(%q) = %d, want %d", test.destination, got, test.want)
+			}
+		})
+	}
+}
+
+func TestParseAndResolveLocalDestination(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name        string
+		sourcePath  string
+		rootPath    string
+		destination string
+		wantLocal   LocalDestination
+		wantPath    string
+		wantOK      bool
+	}{
+		{
+			name:        "document relative",
+			sourcePath:  "docs/current.md",
+			destination: "images/logo.png?raw=1#icon",
+			wantLocal:   LocalDestination{Path: "images/logo.png", Query: "raw=1", Fragment: "icon", Base: DestinationBaseDocument},
+			wantPath:    "docs/images/logo.png",
+			wantOK:      true,
+		},
+		{
+			name:        "single root relative",
+			sourcePath:  "docs/current.md",
+			destination: "/images/logo.png#icon",
+			wantLocal:   LocalDestination{Path: "images/logo.png", Fragment: "icon", Base: DestinationBaseRoot},
+			wantPath:    "images/logo.png",
+			wantOK:      true,
+		},
+		{
+			name:        "multi root relative",
+			sourcePath:  "r1/docs/current.md",
+			rootPath:    "r1",
+			destination: "/images/logo.png",
+			wantLocal:   LocalDestination{Path: "images/logo.png", Base: DestinationBaseRoot},
+			wantPath:    "r1/images/logo.png",
+			wantOK:      true,
+		},
+		{
+			name:        "multi root document escape",
+			sourcePath:  "r1/docs/current.md",
+			rootPath:    "r1",
+			destination: "../../r0/secret.md",
+			wantLocal:   LocalDestination{Path: "../../r0/secret.md", Base: DestinationBaseDocument},
+			wantOK:      false,
+		},
+		{
+			name:        "root traversal",
+			sourcePath:  "docs/current.md",
+			destination: "/../secret.md",
+			wantLocal:   LocalDestination{Path: "../secret.md", Base: DestinationBaseRoot},
+			wantOK:      false,
+		},
+	}
+
+	for _, test := range tests {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			local, ok := ParseLocalDestination(test.destination)
+			if !ok {
+				t.Fatalf("ParseLocalDestination(%q) did not parse a local destination", test.destination)
+			}
+			if !reflect.DeepEqual(local, test.wantLocal) {
+				t.Fatalf("ParseLocalDestination(%q) = %+v, want %+v", test.destination, local, test.wantLocal)
+			}
+			got, ok := ResolveLocalDestination(test.sourcePath, test.rootPath, local)
+			if ok != test.wantOK || got != test.wantPath {
+				t.Fatalf("ResolveLocalDestination() = %q, %t, want %q, %t", got, ok, test.wantPath, test.wantOK)
+			}
+		})
+	}
+}
+
 func TestRenderExtractsFirstH1Title(t *testing.T) {
 	t.Parallel()
 
