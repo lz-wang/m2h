@@ -102,3 +102,18 @@ func (scope rootScope) allowsDocument(relative string) bool {
 	}
 	return files.IsMarkdown(relative) && files.Matches(relative, scope.discovery)
 }
+
+// allowsAsset reports whether a normalized relative path may be served
+// through /assets. Markdown files belong to the document routes only, hidden
+// paths are never publishable, and active web documents (HTML/JS/CSS) must
+// not become same-origin content on the m2h origin — every other regular
+// file is an ordinary passive attachment.
+func (scope rootScope) allowsAsset(relative string) bool {
+	if files.IsMarkdown(relative) {
+		return false
+	}
+	if files.IsHiddenPath(relative) {
+		return false
+	}
+	return !isActiveWebAsset(relative)
+}

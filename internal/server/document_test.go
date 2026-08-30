@@ -590,18 +590,26 @@ func TestDirectoryAssetsSPAFallbackAndAPINotFound(t *testing.T) {
 
 	root := t.TempDir()
 	writeTestFile(t, filepath.Join(root, "README.md"), "# Readme")
-	writeTestFile(t, filepath.Join(root, "styles", "site.css"), "body { color: red; }")
+	writeTestFile(t, filepath.Join(root, "data", "site.css"), "body { color: red; }")
+	writeTestFile(t, filepath.Join(root, "data", "site.txt"), "body { color: red; }")
 	handler := newDocumentHandler(
 		singleRootWorkspace(rootScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
 		nil,
 		directoryTestUI(),
 	)
 
-	asset := performRequest(handler, http.MethodGet, "/assets/styles/site.css")
+	// Stylesheets are active web documents now: the assets route refuses
+	// them so nothing inside the published root becomes same-origin CSS.
+	css := performRequest(handler, http.MethodGet, "/assets/data/site.css")
+	if css.Code != http.StatusNotFound {
+		t.Fatalf("stylesheet response = %d, want 404", css.Code)
+	}
+
+	asset := performRequest(handler, http.MethodGet, "/assets/data/site.txt")
 	if asset.Code != http.StatusOK || asset.Body.String() != "body { color: red; }" {
 		t.Fatalf("asset response = %d %q", asset.Code, asset.Body.String())
 	}
-	if !strings.HasPrefix(asset.Header().Get("Content-Type"), "text/css") || asset.Header().Get("Cache-Control") != "no-cache" {
+	if !strings.HasPrefix(asset.Header().Get("Content-Type"), "text/plain") || asset.Header().Get("Cache-Control") != "no-cache" {
 		t.Fatalf("asset headers content-type=%q cache=%q", asset.Header().Get("Content-Type"), asset.Header().Get("Cache-Control"))
 	}
 

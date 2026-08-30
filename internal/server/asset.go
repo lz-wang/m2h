@@ -14,7 +14,9 @@ import (
 // root keeps the unprefixed /assets/<path> routes; a multi-root workspace
 // requires the root id as the first segment (/assets/r0/<path>) so every
 // attachment resolves inside its own root's boundary and can never cross into
-// another root's tree. Markdown files are deliberately refused.
+// another root's tree. Admission goes through the scope's asset policy —
+// Markdown, hidden paths and active web documents are refused — before the
+// shared filesystem sandbox resolves the file.
 type assetHandler struct {
 	workspace workspace
 }
@@ -36,7 +38,7 @@ func (handler *assetHandler) ServeHTTP(response http.ResponseWriter, request *ht
 		return
 	}
 	root, relative, err := handler.workspace.locate(virtual)
-	if err != nil || files.IsMarkdown(relative) {
+	if err != nil || !root.scope.allowsAsset(relative) {
 		http.NotFound(response, request)
 		return
 	}
@@ -57,6 +59,11 @@ func (handler *assetHandler) ServeHTTP(response http.ResponseWriter, request *ht
 		return
 	}
 	response.Header().Set("Cache-Control", "no-cache")
+	// Attachments can be navigated to directly. A standalone SVG may carry
+	// embedded script, and the sandbox CSP keeps it from running as document
+	// script when that happens — while <img src="/assets/..."> embedding is
+	// unaffected, because a subresource load ignores the response's own CSP.
+	response.Header().Set("Content-Security-Policy", "sandbox; default-src 'none'")
 	http.ServeContent(response, request, info.Name(), info.ModTime(), asset)
 }
 

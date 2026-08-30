@@ -196,6 +196,32 @@ func TestAllowsDocumentSingleFileHiddenName(t *testing.T) {
 	}
 }
 
+func TestAllowsAsset(t *testing.T) {
+	t.Parallel()
+
+	// The asset policy is scope-independent: no Markdown, no hidden path, no
+	// active web document — regardless of single-file or directory shape.
+	single := rootScope{root: t.TempDir(), file: "guide.md"}
+	directory := rootScope{root: t.TempDir(), discovery: files.DiscoverOptions{Depth: 4, SkipHidden: true}}
+
+	for _, scope := range []rootScope{single, directory} {
+		for _, allowed := range []string{"image.png", "manual.pdf", "archive.zip", "diagram.svg", "movie.mp4"} {
+			if !scope.allowsAsset(allowed) {
+				t.Errorf("scope rejected passive asset %q", allowed)
+			}
+		}
+		for _, rejected := range []string{
+			"guide.md", "docs/design.md",
+			"page.html", "page.htm", "page.xhtml", "app.js", "app.mjs", "app.cjs", "style.css",
+			".env", ".git/config", "foo/.secret/data.json",
+		} {
+			if scope.allowsAsset(rejected) {
+				t.Errorf("scope admitted asset %q", rejected)
+			}
+		}
+	}
+}
+
 func TestRootScopeKind(t *testing.T) {
 	t.Parallel()
 
