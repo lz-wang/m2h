@@ -316,44 +316,52 @@ func Inspect(source []byte) Inspection {
 	return inspection
 }
 
-// extractEmptySections reports document-level headings whose section holds
-// no rendered content before the next heading. Blanks never become nodes;
-// thematic breaks, reference definitions and comment blocks are the only
-// siblings that render nothing, so anything else between headings counts as
-// content. Headings nested inside containers are left alone — their
-// surroundings render as part of the container.
+// extractEmptySections reports headings whose section holds no rendered
+// content before the next heading. Every container's direct children are
+// analyzed on their own — the document, blockquotes, list items — so a
+// heading nested in a container is judged among its own siblings, exactly
+// where the renderer places it. Blanks never become nodes; thematic breaks,
+// reference definitions and comment blocks are the only siblings that
+// render nothing, so anything else between headings counts as content.
 func extractEmptySections(document ast.Node, source []byte) []EmptySection {
 	sections := make([]EmptySection, 0)
 	locator := newSourceLocator(source)
-	for heading := document.FirstChild(); heading != nil; heading = heading.NextSibling() {
-		typed, ok := heading.(*ast.Heading)
-		if !ok {
-			continue
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
 		}
-		empty := true
-		for sibling := heading.NextSibling(); sibling != nil; sibling = sibling.NextSibling() {
-			if _, isHeading := sibling.(*ast.Heading); isHeading {
-				break
+		for child := node.FirstChild(); child != nil; child = child.NextSibling() {
+			heading, ok := child.(*ast.Heading)
+			if !ok || sectionHasContent(child) {
+				continue
 			}
-			if !rendersNothing(sibling) {
-				empty = false
-				break
+			line := 1
+			if heading.Lines().Len() > 0 {
+				line, _ = locator.locate(heading.Lines().At(0).Start)
 			}
+			sections = append(sections, EmptySection{
+				Level:    heading.Level,
+				Text:     normalizeTitle(string(heading.Text(source))),
+				Position: Position{Line: line, Column: 1},
+			})
 		}
-		if !empty {
-			continue
-		}
-		line := 1
-		if typed.Lines().Len() > 0 {
-			line, _ = locator.locate(typed.Lines().At(0).Start)
-		}
-		sections = append(sections, EmptySection{
-			Level:    typed.Level,
-			Text:     normalizeTitle(string(typed.Text(source))),
-			Position: Position{Line: line, Column: 1},
-		})
-	}
+		return ast.WalkContinue, nil
+	})
 	return sections
+}
+
+// sectionHasContent reports whether any sibling between one heading and the
+// next heading of the same parent renders something.
+func sectionHasContent(heading ast.Node) bool {
+	for sibling := heading.NextSibling(); sibling != nil; sibling = sibling.NextSibling() {
+		if _, isHeading := sibling.(*ast.Heading); isHeading {
+			return false
+		}
+		if !rendersNothing(sibling) {
+			return true
+		}
+	}
+	return false
 }
 
 // rendersNothing reports whether one block sibling contributes no rendered

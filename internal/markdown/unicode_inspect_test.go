@@ -57,6 +57,31 @@ func TestInspectEmptySections(t *testing.T) {
 			source: "# Guide\n\nIntro.\n\n## Panel\n\n<div>panel</div>\n",
 			want:   nil,
 		},
+		{
+			name:   "blockquote headings judge among blockquote siblings",
+			source: "# Guide\n\nIntro.\n\n> ## Quoted\n>\n> ### Child\n",
+			want: []EmptySection{
+				{Level: 2, Text: "Quoted", Position: Position{Line: 5, Column: 1}},
+				{Level: 3, Text: "Child", Position: Position{Line: 7, Column: 1}},
+			},
+		},
+		{
+			name:   "blockquote heading with content stays clean",
+			source: "> ## Quoted\n>\n> text\n",
+			want:   nil,
+		},
+		{
+			name:   "list item heading with content stays clean",
+			source: "- ## Item\n  body\n",
+			want:   nil,
+		},
+		{
+			name:   "list item heading without content reports",
+			source: "- ## Item\n- next\n",
+			want: []EmptySection{
+				{Level: 2, Text: "Item", Position: Position{Line: 1, Column: 1}},
+			},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

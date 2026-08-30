@@ -207,7 +207,7 @@ Error: unknown check rule "foo.bar"
 | `reference.unused` | warning | 开 | reference 定义从未被引用 |
 | `frontmatter.date-invalid` | warning | 开 | 已识别的日期字段不是有效 ISO 日期 |
 | `link.empty-destination` | warning | 开 | 链接或图片的 destination 为空 |
-| `section.empty` | warning | **关** | 标题与下一个标题之间没有任何渲染内容（父标题只承载子标题是常见合法结构） |
+| `section.empty` | warning | **关** | 标题与同容器内下一个标题之间没有任何渲染内容，含 blockquote/列表内的标题（按各自容器内判断；父标题只承载子标题是常见合法结构） |
 | `link.text-nondescriptive` | warning | **关** | 链接文本为 `click here`/`点击这里` 等无信息短语（仅精确匹配，仅 Markdown 链接） |
 | `unicode.mojibake` | warning | **关** | 疑似错误编码文本（`CafÃ©`、`â€™` 等多字符签名；单字符不报） |
 | `unicode.invisible-character` | warning | **关** | 可疑不可见字符（仅行首/行尾、邻接空白、连续出现或 bidi 控制字符触发；emoji 的 ZWJ 与 variation selector 不报） |
