@@ -14,6 +14,8 @@
 
 ## [未发布]
 
+## [0.15.0] - 2026-08-30
+
 ### 新增
 
 - WebUI 文档中的跨站 HTTP/HTTPS 链接改为在新标签页打开：Markdown 链接、GFM autolink 与 raw HTML `<a>` 统一在浏览器端按页面 origin 判定，跨 origin（协议或端口不同同样视为跨站）的外链自动附加 `target="_blank"` 与 `rel="noopener"`，作者已有的 `rel` 标记（如 `nofollow`）保留不覆盖；本站链接、锚点与 `mailto:`/`tel:` 保持原有行为。本站判定使用浏览器实际访问的地址而非服务端视角，因此 Nginx 反向代理（HTTPS termination → HTTP upstream）部署下无需任何额外配置。导出 HTML 不受影响。
