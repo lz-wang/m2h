@@ -50,8 +50,8 @@ Internet
 
 m2h 自身不负责身份认证，发布边界由以下规则构成：
 
-1. CLI 指定的 root 是"允许发布的内容边界"。
-2. 目录 root 下任何包含 `.` 开头路径段的内容（`.env`、`.git/`、`foo/.private/`）不属于 Web 可见内容；显式以单文件路径启动（如 `m2h notes/.private.md`）是主动发布行为，不受此限制。
+1. CLI 指定的 root 是"允许发布的内容边界"。单文件模式下，为支持 Markdown 相对附件引用，文件所在目录是附件解析边界，因此同目录中的其他非隐藏、非主动类型附件也可能通过 `/assets/` 被访问。VPS 长期服务推荐使用专门的文档目录作为 root。
+2. 目录 root 下任何包含 `.` 开头路径段的内容（`.env`、`.git/`、`foo/.private/`）不属于 Web 可见内容；显式以单文件路径启动（如 `m2h notes/.private.md`）是主动发布行为，不受此限制。发布策略同时作用于请求路径与符号链接解析后的 canonical 目标：可见别名无法指向隐藏文件或主动 Web 内容绕过边界。
 3. Markdown 文档视为管理员提供的**可信内容**：raw HTML 按输入原样渲染。认证只控制谁可以读取文档，并不能把恶意 Markdown 转换为可信内容——不要使用 m2h 直接托管未经审核的用户上传 Markdown。如需展示不可信内容，应在反向代理层隔离 origin，或等待独立的 safe rendering mode。
 4. HTML/JS/CSS 等主动 Web 文件不得通过 `/assets/` 运行（返回 404）；SVG 等普通附件允许访问，但 `/assets` 响应携带 `Content-Security-Policy: sandbox; default-src 'none'`，直接导航到 SVG 时其中的内嵌脚本不会执行。
 5. 不要试图把秘密文件放进 root 再依赖文件名规则保护：真正的秘密必须位于 root 之外。
@@ -244,6 +244,8 @@ location /tinyauth {
 ```
 
 `auth_request` 必须位于 `location /`，这样自动保护全部路由（`/`、`/doc/`、`/raw/`、`/api/`、`/assets/`、`/runtime/`、`/ui/`）。只保护 `/doc/` 会让 `/raw/private.md`、`/api/document`、`/assets/private.pdf` 绕过认证。
+
+如果 Tinyauth 需要正确识别客户端 IP（尤其使用 IP ACL 时，这是必需的），需将 Nginx 的实际来源地址/CIDR 加入 `TINYAUTH_AUTH_TRUSTEDPROXIES`，否则 Tinyauth 不应信任代理传来的真实客户端 IP。注意这是 `Nginx → Tinyauth` 的信任关系，与后文 m2h 自己不解析 `X-Forwarded-For` 的原则互不冲突。
 
 ## 日志职责
 
