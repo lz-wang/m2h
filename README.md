@@ -202,7 +202,7 @@ Error: unknown check rule "foo.bar"
 | `document.multiple-h1` | warning | 开 | 一个文档包含多个 H1 |
 | `heading.level-skip` | warning | 开 | 标题层级向下跳超过一级（向上跳任意级合法） |
 | `heading.duplicate` | warning | 开 | 同一父 section 下出现重复标题文本；不同 section 的同名标题合法 |
-| `code-fence.language-missing` | warning | 开 | fenced code 未指定语言（indented code 不检查） |
+| `code-fence.language-missing` | warning | 开 | fenced code 未指定语言，含 blockquote/列表内的 fence（由解析器 AST 判定；indented code 与 raw HTML 块内的 ``` 不检查） |
 | `footnote.unused` | warning | 开 | 脚注定义从未被引用 |
 | `reference.unused` | warning | 开 | reference 定义从未被引用 |
 | `frontmatter.date-invalid` | warning | 开 | 已识别的日期字段不是有效 ISO 日期 |

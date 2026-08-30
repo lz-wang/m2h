@@ -299,11 +299,12 @@ func Inspect(source []byte) Inspection {
 	inspection.References = extractReferences(document, source)
 	inspection.ReferenceDefinitions = extractReferenceDefinitions(document, source)
 
-	scanner := newSourceScanner(source, codeRanges(document), rawHTMLRanges(document, source))
+	fences, fenceLines := extractFences(document, source)
+	scanner := newSourceScanner(source, codeRanges(document), rawHTMLRanges(document, source), fenceLines)
 	inspection.UndefinedReferences = scanner.undefinedReferences(context.missingReferences)
 	inspection.UndefinedFootnotes = scanner.undefinedFootnotes(footnotes)
 	inspection.Footnotes = footnotes
-	inspection.CodeFences = scanner.fences
+	inspection.CodeFences = fences
 	inspection.TableMismatches = extractTableMismatches(document, source)
 	inspection.UnclosedComments = extractUnclosedComments(document, source)
 	inspection.ReversedLinks = scanner.reversedLinks()

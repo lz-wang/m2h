@@ -151,37 +151,250 @@ func htmlTag(raw []byte) (name string, closing bool, selfClosing bool) {
 	return asciiLower(string(raw[start:index])), closing, selfClosing
 }
 
+// pendingFence is one fenced code block whose opener line the AST gives no
+// anchor for — no content lines and no info string — held until the walk
+// reaches a later offset that bounds where its opener can sit.
+type pendingFence struct {
+	index int // position in the fences slice
+	lower int // source offset the walk had consumed when the block appeared
+}
+
+// extractFences walks the AST's fenced code blocks, recovering each opener
+// line's position and span from the source. Whether something is a fence and
+// what language it carries is the parser's verdict alone: a line scanner
+// guessing at raw text gets containers wrong (blockquote and list item lines
+// carry their marker before the fence) and counts fence-looking lines inside
+// raw HTML blocks. Only the position is recovered here — the AST keeps a
+// fence's content but strips the fence lines themselves. The opener lines
+// come back as protected ranges: their info strings are literal text.
+func extractFences(document ast.Node, source []byte) ([]CodeFence, []byteRange) {
+	locator := newSourceLocator(source)
+	fences := make([]CodeFence, 0)
+	openers := make([]byteRange, 0)
+	cursor := 0
+	pending := make([]pendingFence, 0)
+
+	// resolve locates every pending opener. The window since a fence's lower
+	// bound holds nothing but that fence's own lines, so the first
+	// fence-shaped line in it is the opener; consecutive fences resolve in
+	// order, each search resuming past the previous fence's closing line.
+	resolve := func(upper int) {
+		after := 0
+		for _, fence := range pending {
+			opener, past, found := locateFencePair(source, locator, max(fence.lower, after), upper)
+			if !found {
+				continue
+			}
+			line, column := locator.locate(opener)
+			fences[fence.index].Position = Position{Line: line, Column: column}
+			openers[fence.index] = lineSpan(source, opener)
+			after = past
+		}
+		pending = pending[:0]
+	}
+
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		if start, ok := nodeOffset(node); ok {
+			// A node with a source position bounds every still-pending fence.
+			resolve(start)
+		}
+		if end, ok := nodeSourceEnd(node); ok && end > cursor {
+			cursor = end
+		}
+		block, ok := node.(*ast.FencedCodeBlock)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		index := len(fences)
+		fences = append(fences, CodeFence{Language: string(block.Language(source))})
+		openers = append(openers, byteRange{})
+		if anchor, hasContent := fenceAnchor(block); anchor >= 0 {
+			var opener int
+			if hasContent {
+				// The first content line follows the opener line directly;
+				// the segment itself may start mid-line (container prefix).
+				opener = locator.previousLineStart(anchor)
+			} else {
+				// The info string is part of the opener line itself.
+				opener = locator.lineStart(anchor)
+			}
+			line, column := locator.locate(opener)
+			fences[index].Position = Position{Line: line, Column: column}
+			openers[index] = lineSpan(source, opener)
+		} else {
+			pending = append(pending, pendingFence{index: index, lower: cursor})
+		}
+		return ast.WalkContinue, nil
+	})
+	resolve(len(source))
+	return fences, openers
+}
+
+// fenceAnchor returns a source offset that locates a fence's opener line:
+// the first content line (whose start the opener line directly precedes), or
+// the info string (which is part of the opener line). hasContent tells the
+// two apart; (-1, false) means the bare fence carries neither.
+func fenceAnchor(block *ast.FencedCodeBlock) (anchor int, hasContent bool) {
+	if lines := block.Lines(); lines.Len() > 0 {
+		return lines.At(0).Start, true
+	}
+	if block.Info != nil {
+		return block.Info.Segment.Start, false
+	}
+	return -1, false
+}
+
+// nodeSourceEnd returns the offset just past a node's own source text, for
+// walk-position tracking: text segments for inline nodes, block lines for
+// block nodes. Nodes carrying no position (an entity string, an empty fence)
+// report false and leave the cursor alone.
+func nodeSourceEnd(node ast.Node) (int, bool) {
+	switch typed := node.(type) {
+	case *ast.Text:
+		return typed.Segment.Stop, true
+	case *ast.RawHTML:
+		if typed.Segments.Len() > 0 {
+			return typed.Segments.At(typed.Segments.Len() - 1).Stop, true
+		}
+	}
+	// Lines() panics on inline nodes; only block nodes carry block lines.
+	if node.Type() != ast.TypeBlock {
+		return 0, false
+	}
+	if lines := node.Lines(); lines != nil && lines.Len() > 0 {
+		return lines.At(lines.Len() - 1).Stop, true
+	}
+	return 0, false
+}
+
+// locateFencePair locates a bare fence's opener line between lower and
+// upper, plus the offset just past its closing line. The first line whose
+// content — after any container prefix of blockquote and list markers —
+// opens a fence run is the opener; the closer is the next line whose run of
+// the same character is at least as long, trailing nothing but spaces, and
+// an unclosed fence runs to upper.
+func locateFencePair(source []byte, locator sourceLocator, lower int, upper int) (int, int, bool) {
+	for index := sort.SearchInts(locator.lineStarts, lower); index < len(locator.lineStarts); index++ {
+		opener := locator.lineStarts[index]
+		if opener >= upper {
+			break
+		}
+		char, run, prefixed := fenceRun(source[opener:lineStartStop(source, opener)])
+		if !prefixed || run < 3 {
+			continue
+		}
+		return opener, locateFenceClose(source, locator, index+1, char, run, upper), true
+	}
+	return 0, 0, false
+}
+
+// locateFenceClose returns the offset just past the closing fence line at or
+// after the given line index, or upper when the fence never closes.
+func locateFenceClose(source []byte, locator sourceLocator, index int, char byte, run int, upper int) int {
+	for ; index < len(locator.lineStarts); index++ {
+		start := locator.lineStarts[index]
+		if start >= upper {
+			break
+		}
+		line := source[start:lineStartStop(source, start)]
+		content := line[containerPrefixLength(line):]
+		length := 0
+		for length < len(content) && content[length] == char {
+			length++
+		}
+		if length >= run && util.IsBlank(content[length:]) {
+			return min(start+len(line)+1, len(source))
+		}
+	}
+	return upper
+}
+
+// fenceRun reports the fence character and run length a line opens with
+// after any container prefix, or prefixed=false when the line does not open
+// with a fence run.
+func fenceRun(line []byte) (char byte, run int, prefixed bool) {
+	content := line[containerPrefixLength(line):]
+	if len(content) < 3 {
+		return 0, 0, false
+	}
+	char = content[0]
+	if char != '`' && char != '~' {
+		return 0, 0, false
+	}
+	for run < len(content) && content[run] == char {
+		run++
+	}
+	if run < 3 {
+		return 0, 0, false
+	}
+	return char, run, true
+}
+
+// containerPrefixLength counts the bytes a container can put before a fence
+// opener — blockquote markers, list markers and the indentation around
+// them.
+func containerPrefixLength(line []byte) int {
+	index := 0
+	for index < len(line) {
+		current := line[index]
+		switch {
+		case current == ' ' || current == '\t' || current == '>' || current == '-' || current == ')' || current == '.' || (current >= '0' && current <= '9'):
+			index++
+		default:
+			return index
+		}
+	}
+	return index
+}
+
+// lineStartStop returns the offset of the newline ending the line that
+// starts at start, or the end of source for the last line.
+func lineStartStop(source []byte, start int) int {
+	if index := bytes.IndexByte(source[start:], '\n'); index >= 0 {
+		return start + index
+	}
+	return len(source)
+}
+
+// lineSpan returns the [start, stop) span of the line starting at start,
+// newline excluded.
+func lineSpan(source []byte, start int) byteRange {
+	return byteRange{start: start, stop: lineStartStop(source, start)}
+}
+
 // sourceScanner walks one document's source once, recovering syntax the
-// final AST can no longer represent: uses the parser rejected and fence
-// lines the code block AST strips away. It never re-parses what the AST
-// still knows — headings, resolved references and tables come from the AST —
-// and never reports anything inside code, because code is literal text no
-// parser ever interpreted.
+// final AST can no longer represent: uses the parser rejected. It never
+// re-parses what the AST still knows — headings, resolved references, tables
+// and fenced code blocks come from the AST — and never reports anything
+// inside code, because code is literal text no parser ever interpreted.
 type sourceScanner struct {
 	source     []byte
 	locator    sourceLocator
 	code       []byteRange // AST code ranges, sorted by start
 	rawHTML    []byteRange // AST raw HTML ranges, sorted by start
-	fences     []CodeFence
-	fenceLines []byteRange // the fence opener/closer lines themselves
+	fenceLines []byteRange // the fence opener lines, from the AST fences
 }
 
-// CodeFence is one fenced code block seen at line level. The AST keeps the
-// content lines but strips the fence lines, so the language and the fence
-// position come from the scan. Position is the opening fence line, column 1.
+// CodeFence is one fenced code block the parser accepted. The AST keeps the
+// content lines but strips the fence lines, so only the opener position is
+// recovered from the source. Position is the opening fence line, column 1.
 type CodeFence struct {
 	Language string
 	Position Position
 }
 
-// newSourceScanner prepares a scan over source, skipping the protected code
-// and raw HTML ranges the AST identified.
-func newSourceScanner(source []byte, code []byteRange, rawHTML []byteRange) *sourceScanner {
+// newSourceScanner prepares a scan over source, skipping the protected code,
+// raw HTML and fence line ranges the AST identified.
+func newSourceScanner(source []byte, code []byteRange, rawHTML []byteRange, fenceLines []byteRange) *sourceScanner {
 	scanner := &sourceScanner{
-		source:  source,
-		locator: newSourceLocator(source),
-		code:    code,
-		rawHTML: rawHTML,
+		source:     source,
+		locator:    newSourceLocator(source),
+		code:       code,
+		rawHTML:    rawHTML,
+		fenceLines: fenceLines,
 	}
 	sort.Slice(scanner.code, func(left, right int) bool {
 		return scanner.code[left].start < scanner.code[right].start
@@ -189,7 +402,6 @@ func newSourceScanner(source []byte, code []byteRange, rawHTML []byteRange) *sou
 	sort.Slice(scanner.rawHTML, func(left, right int) bool {
 		return scanner.rawHTML[left].start < scanner.rawHTML[right].start
 	})
-	scanner.scanFences()
 	return scanner
 }
 
@@ -615,69 +827,18 @@ func matchBracket(source []byte, open int, nesting bool) (int, bool) {
 	return 0, false
 }
 
-// scanFences tracks fenced code blocks line by line. Fence lines open with
-// three or more backticks or tildes at up to three spaces of indentation
-// and close with a run of the same character at least as long followed by
-// nothing but spaces; the fence lines themselves become protected ranges
-// (their info strings are literal text), while the content between them is
-// already covered by the AST code ranges.
-func (scanner *sourceScanner) scanFences() {
-	var fenceChar byte
-	fenceLength := 0
-	lineStart := 0
-	for position := 0; position <= len(scanner.source); position++ {
-		if position != len(scanner.source) && scanner.source[position] != '\n' {
-			continue
-		}
-		line := scanner.source[lineStart:position]
-		char, runStart, runLength := fenceMarker(line)
-		if fenceLength > 0 {
-			if char == fenceChar && runLength >= fenceLength && util.IsBlank(line[runStart+runLength:]) {
-				scanner.fenceLines = append(scanner.fenceLines, byteRange{start: lineStart, stop: position})
-				fenceChar, fenceLength = 0, 0
-			}
-		} else if char != 0 && runLength >= 3 {
-			fenceChar, fenceLength = char, runLength
-			scanner.fenceLines = append(scanner.fenceLines, byteRange{start: lineStart, stop: position})
-			lineNumber, column := scanner.locator.locate(lineStart)
-			scanner.fences = append(scanner.fences, CodeFence{
-				Language: fenceLanguage(line, runStart+runLength),
-				Position: Position{Line: lineNumber, Column: column},
-			})
-		}
-		lineStart = position + 1
-	}
+// lineStart returns the offset where the line containing offset begins.
+func (locator sourceLocator) lineStart(offset int) int {
+	line, _ := locator.locate(offset)
+	return locator.lineStarts[line-1]
 }
 
-// fenceMarker reports the fence character of a line, the byte where its run
-// starts, and the run's length — or (0, 0, 0) when the line does not begin
-// with a fence run after up to three leading spaces.
-func fenceMarker(line []byte) (char byte, runStart int, runLength int) {
-	indent := 0
-	for indent < len(line) && line[indent] == ' ' && indent < 4 {
-		indent++
+// previousLineStart returns the offset where the line before the one
+// containing offset begins.
+func (locator sourceLocator) previousLineStart(offset int) int {
+	line, _ := locator.locate(offset)
+	if line < 2 {
+		return 0
 	}
-	if indent > 3 || indent >= len(line) {
-		return 0, 0, 0
-	}
-	char = line[indent]
-	if char != '`' && char != '~' {
-		return 0, 0, 0
-	}
-	runStart = indent
-	for runStart+runLength < len(line) && line[runStart+runLength] == char {
-		runLength++
-	}
-	return char, runStart, runLength
-}
-
-// fenceLanguage extracts the fence's language: the first word of the info
-// string after the opening run, the way Goldmark's
-// FencedCodeBlock.Language does.
-func fenceLanguage(line []byte, infoStart int) string {
-	info := bytes.TrimSpace(line[min(infoStart, len(line)):])
-	if index := bytes.IndexByte(info, ' '); index >= 0 {
-		info = info[:index]
-	}
-	return string(info)
+	return locator.lineStarts[line-2]
 }

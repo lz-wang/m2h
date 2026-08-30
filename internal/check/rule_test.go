@@ -423,6 +423,21 @@ func TestCheckCodeFenceLanguageMissing(t *testing.T) {
 			want:   []string{fmt.Sprintf("guide.md:3:1 warning %s", RuleCodeFenceLanguageMissing)},
 		},
 		{
+			name:   "fence inside a blockquote reports",
+			source: "# Guide\n\n> ```\n> code\n> ```\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 warning %s", RuleCodeFenceLanguageMissing)},
+		},
+		{
+			name:   "named fence inside a list item stays clean",
+			source: "# Guide\n\n- ```js\n  code\n  ```\n",
+			want:   nil,
+		},
+		{
+			name:   "fence-looking lines inside an html block stay clean",
+			source: "# Guide\n\n<div>\n```\nnot fence\n```\n</div>\n",
+			want:   nil,
+		},
+		{
 			name:   "frontmatter shifts the fence",
 			source: "---\ntitle: Guide\n---\n\n```\nx\n```\n",
 			want:   []string{fmt.Sprintf("guide.md:5:1 warning %s", RuleCodeFenceLanguageMissing)},

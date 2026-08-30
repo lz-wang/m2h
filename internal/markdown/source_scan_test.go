@@ -363,6 +363,34 @@ func TestInspectCollectsCodeFences(t *testing.T) {
 			source: "```\n```\n",
 			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
 		},
+		{
+			name:   "fence inside a blockquote",
+			source: "> ```\n> code\n> ```\n",
+			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
+		},
+		{
+			name:   "named fence inside a list item",
+			source: "- ```js\n  code\n  ```\n",
+			want:   []CodeFence{{Language: "js", Position: Position{Line: 1, Column: 1}}},
+		},
+		{
+			name:   "empty fence inside a blockquote",
+			source: "> ```\n> ```\n",
+			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
+		},
+		{
+			name:   "two consecutive empty fences",
+			source: "```\n```\n\n```\n```\n",
+			want: []CodeFence{
+				{Language: "", Position: Position{Line: 1, Column: 1}},
+				{Language: "", Position: Position{Line: 4, Column: 1}},
+			},
+		},
+		{
+			name:   "fence-looking lines inside an html block are not fences",
+			source: "<div>\n```\nnot fence\n```\n</div>\n",
+			want:   []CodeFence{},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
