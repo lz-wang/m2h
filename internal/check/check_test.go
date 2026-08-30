@@ -335,15 +335,15 @@ func TestCheckMissingTargets(t *testing.T) {
 			message: `target "files/missing.pdf" does not exist`,
 		},
 		{
-			name:    "directory target is not regular",
-			markup:  "[Assets](images)\n",
+			name:    "root-relative directory target is not regular",
+			markup:  "[Assets](/images)\n",
 			column:  2,
 			rule:    RuleLocalTargetNotRegular,
 			message: `target "images" is not a regular file`,
 		},
 		{
-			name:    "invalid percent encoding",
-			markup:  "![Logo](missing%zz.png)\n",
+			name:    "root-relative invalid percent encoding",
+			markup:  "![Logo](/missing%zz.png)\n",
 			column:  3,
 			rule:    RuleLocalTargetMissing,
 			message: `is not accessible: invalid URL encoding`,
@@ -385,6 +385,50 @@ func TestCheckOutsideRootTargets(t *testing.T) {
 	}
 	if !strings.Contains(result.Diagnostics[0].Message, "resolves outside the workspace root") {
 		t.Fatalf("message = %q", result.Diagnostics[0].Message)
+	}
+}
+
+func TestCheckRootRelativeReferences(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"sub/guide.md":    "# Guide\n\n[Document](/docs/a.md)\n[Missing](/docs/missing.md)\n![Logo](/images/logo.png)\n![Missing](/images/missing.png)\n[Anchor](/docs/a.md#install)\n[Missing anchor](/docs/a.md#missing)\n",
+		"docs/a.md":       "# A\n\n## Install\n",
+		"images/logo.png": "png",
+	}, Options{Depth: 4})
+	summary := summarize(t, result, err)
+	want := []string{
+		fmt.Sprintf("guide.md:4:2 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("guide.md:6:3 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("guide.md:8:2 error %s", RuleAnchorMissing),
+	}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want %v", summary, want)
+	}
+}
+
+func TestCheckRootRelativeTraversal(t *testing.T) {
+	t.Parallel()
+
+	result, err := runCheck(t, map[string]string{
+		"guide.md": "# Guide\n\n[Literal](/../secret.md)\n[Encoded](/%2E%2E/secret.md)\n[Encoded absolute](%2Fetc%2Fpasswd)\n[CDN](//example.com/a.md)\n[Site](https://example.com/a.md)\n",
+	}, Options{})
+	summary := summarize(t, result, err)
+	want := []string{
+		fmt.Sprintf("guide.md:3:2 error %s", RuleLocalTargetOutsideRoot),
+		fmt.Sprintf("guide.md:4:2 error %s", RuleLocalTargetOutsideRoot),
+		fmt.Sprintf("guide.md:5:2 error %s", RuleLocalTargetMissing),
+	}
+	if !slices.Equal(summary, want) {
+		t.Fatalf("diagnostics = %v, want %v", summary, want)
+	}
+	for _, diagnostic := range result.Diagnostics[:2] {
+		if !strings.Contains(diagnostic.Message, "resolves outside the workspace root") {
+			t.Fatalf("message = %q, want root escape", diagnostic.Message)
+		}
+	}
+	if !strings.Contains(result.Diagnostics[2].Message, "not accessible") {
+		t.Fatalf("encoded absolute message = %q, want existing accessibility failure", result.Diagnostics[2].Message)
 	}
 }
 
@@ -499,8 +543,8 @@ func TestCheckRawHTMLReferences(t *testing.T) {
 	t.Parallel()
 
 	result, err := runCheck(t, map[string]string{
-		"guide.md": "# Guide\n\n<a href=\"missing-a.md\">A</a>\n<img src=\"missing-b.png\">\n<video poster=\"missing-c.jpg\"></video>\n<object data=\"missing-d.pdf\"></object>\n",
-	}, Options{})
+		"docs/guide.md": "# Guide\n\n<a href=\"/missing-a.md\">A</a>\n<img src=\"/missing-b.png\">\n<video poster=\"/missing-c.jpg\"></video>\n<object data=\"/missing-d.pdf\"></object>\n",
+	}, Options{Depth: 4})
 	summary := summarize(t, result, err)
 	// Each raw-HTML URL locates at its attribute value, not the line start.
 	want := []string{
@@ -623,7 +667,7 @@ func TestCheckMarkdownNotServed(t *testing.T) {
 		t.Parallel()
 
 		result, err := runCheck(t, map[string]string{
-			"index.md": "# Index\n\n[Guide](guide.md)\n",
+			"index.md": "# Index\n\n[Guide](/guide.md)\n",
 			"guide.md": "# Guide\n",
 		}, Options{Pattern: "index.md", Depth: 4})
 		summary := summarize(t, result, err)
@@ -640,7 +684,7 @@ func TestCheckMarkdownNotServed(t *testing.T) {
 		t.Parallel()
 
 		result, err := runCheck(t, map[string]string{
-			"index.md":      "# Index\n\n[Deep](deep/guide.md)\n",
+			"index.md":      "# Index\n\n[Deep](/deep/guide.md)\n",
 			"deep/guide.md": "# Deep\n",
 		}, Options{Depth: 0})
 		summary := summarize(t, result, err)
@@ -680,7 +724,7 @@ func TestCheckSymlinkTargets(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "guide.md"), "# Guide\n\n[Inside](inside.png), [Outside](outside.png), [Broken](broken.png), [Through dir](linked/file.png)\n")
+	writeFile(t, filepath.Join(root, "docs", "guide.md"), "# Guide\n\n[Inside](/inside.png), [Outside](/outside.png), [Broken](/broken.png), [Through dir](/linked/file.png)\n")
 	writeFile(t, filepath.Join(root, "real.png"), "png")
 	writeFile(t, filepath.Join(root, "realdir", "file.png"), "png")
 
@@ -706,9 +750,9 @@ func TestCheckSymlinkTargets(t *testing.T) {
 	}
 	summary := summarize(t, result, err)
 	want := []string{
-		fmt.Sprintf("guide.md:3:24 error %s", RuleLocalTargetOutsideRoot),
-		fmt.Sprintf("guide.md:3:48 error %s", RuleLocalTargetMissing),
-		fmt.Sprintf("guide.md:3:70 error %s", RuleLocalTargetOutsideRoot),
+		fmt.Sprintf("guide.md:3:25 error %s", RuleLocalTargetOutsideRoot),
+		fmt.Sprintf("guide.md:3:50 error %s", RuleLocalTargetMissing),
+		fmt.Sprintf("guide.md:3:73 error %s", RuleLocalTargetOutsideRoot),
 	}
 	if !slices.Equal(summary, want) {
 		t.Fatalf("diagnostics = %v\nwant %v\nfull: %+v", summary, want, result.Diagnostics)

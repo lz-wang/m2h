@@ -171,7 +171,7 @@ func checkReference(
 	if !ok {
 		if rules.Enabled(RuleLocalTargetOutsideRoot) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetOutsideRoot,
-				fmt.Sprintf("target %q resolves outside the workspace root", local.Path), reference))
+				fmt.Sprintf("target %q resolves outside the workspace root", localReferencePath(local)), reference))
 		}
 		return diagnostics
 	}
@@ -179,6 +179,10 @@ func checkReference(
 	status := resolver.resolve(resolved)
 	switch status.state {
 	case targetMissing:
+		if local.Base == markdown.DestinationBaseRoot && errors.Is(status.err, files.ErrPathTraversal) && rules.Enabled(RuleLocalTargetOutsideRoot) {
+			return append(diagnostics, current.diagnostic(RuleLocalTargetOutsideRoot,
+				fmt.Sprintf("target %q resolves outside the workspace root", localReferencePath(local)), reference))
+		}
 		if rules.Enabled(RuleLocalTargetMissing) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
 				missingMessage(status.target, status.err), reference))
@@ -199,7 +203,7 @@ func checkReference(
 	case targetOutsideRoot:
 		if rules.Enabled(RuleLocalTargetOutsideRoot) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetOutsideRoot,
-				fmt.Sprintf("target %q resolves outside the workspace root", local.Path), reference))
+				fmt.Sprintf("target %q resolves outside the workspace root", localReferencePath(local)), reference))
 		}
 		return diagnostics
 	}
@@ -234,6 +238,13 @@ func checkReference(
 			fmt.Sprintf("heading %q does not exist in %q", "#"+local.Fragment, status.target), reference))
 	}
 	return diagnostics
+}
+
+func localReferencePath(local markdown.LocalDestination) string {
+	if local.Base == markdown.DestinationBaseRoot {
+		return "/" + local.Path
+	}
+	return local.Path
 }
 
 // hasAnchor reports whether the document contains a heading with the given

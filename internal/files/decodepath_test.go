@@ -84,7 +84,7 @@ func TestDecodeRelativePathReturnsValueForDiagnostics(t *testing.T) {
 	if got != "../secret.md" {
 		t.Fatalf("value = %q, want the decoded path for diagnostics", got)
 	}
-	if !errors.Is(err, err) {
-		t.Fatal("error must satisfy errors.Is with itself")
+	if !errors.Is(err, ErrPathTraversal) {
+		t.Fatalf("error = %v, want ErrPathTraversal", err)
 	}
 }

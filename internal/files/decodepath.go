@@ -10,6 +10,11 @@ import (
 	"unicode"
 )
 
+// ErrPathTraversal identifies a decoded path containing a parent-directory
+// segment. Callers can distinguish an attempted root escape from other invalid
+// or inaccessible URL paths without duplicating percent-decoding logic.
+var ErrPathTraversal = errors.New("path contains parent traversal")
+
 // DecodeRelativePath converts a percent-encoded slash-style relative path —
 // exactly as a browser address or a Markdown destination writes it — into the
 // cleaned, root-relative slash path the filesystem boundary expects: bounded
@@ -40,11 +45,11 @@ func DecodeRelativePath(value string) (string, error) {
 		return value, errors.New("path must be relative")
 	}
 	if slices.Contains(strings.Split(value, "/"), "..") {
-		return value, errors.New("path escapes root")
+		return value, fmt.Errorf("%w: path escapes root", ErrPathTraversal)
 	}
 	cleaned := path.Clean(value)
 	if cleaned == "." || cleaned == ".." || strings.HasPrefix(cleaned, "../") {
-		return cleaned, errors.New("invalid relative path")
+		return cleaned, fmt.Errorf("%w: invalid relative path", ErrPathTraversal)
 	}
 	return cleaned, nil
 }
