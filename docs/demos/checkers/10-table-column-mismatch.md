@@ -1,8 +1,17 @@
 ---
 title: 表格行列数不一致
+description: 演示 Markdown 表格数据行与分隔行列数不一致的诊断。
+tags:
+  - 文档检查
+  - 表格
+create_date: 2026-08-30
+update_date: 2026-08-30
+checker: table.column-mismatch
 ---
 
 # 表格行列数不一致
+
+检查规则：`table.column-mismatch`
 
 下面的表格分隔行声明了两列，第一条数据行规规矩矩，第二条却写了三列——
 渲染时第三列会被悄悄截掉：
@@ -15,6 +24,8 @@ title: 表格行列数不一致
 预期表现：
 
 - `m2h check docs/demos/checkers/10-table-column-mismatch.md` 报告
-  `13:1: error [table.column-mismatch]: table row has 3 columns; expected 2`
+  `22:1: error [table.column-mismatch]: table row has 3 columns; expected 2`
 - 列数不足的行会被悄悄补空 cell；表头多于分隔线时整表被拒绝、什么都不渲染，
   同样报本规则
+
+[返回检查规则演示索引](00-index.md)

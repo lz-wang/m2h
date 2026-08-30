@@ -1,5 +1,11 @@
 ---
 title: 检查规则演示索引
+description: m2h check 的 25 条检查规则、触发示例与预期诊断。
+tags:
+  - 文档检查
+  - 演示索引
+create_date: 2026-08-30
+update_date: 2026-08-30
 ---
 
 # 检查规则演示索引
