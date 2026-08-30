@@ -245,6 +245,150 @@ func TestCheckFootnoteRules(t *testing.T) {
 	}
 }
 
+func TestCheckTableColumnMismatch(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{
+			name:   "long data row",
+			source: "# Guide\n\n| A | B |\n|---|---|\n| 1 | 2 | 3 |\n",
+			want:   []string{fmt.Sprintf("guide.md:5:1 error %s", RuleTableColumnMismatch)},
+		},
+		{
+			name:   "short data row",
+			source: "# Guide\n\n| A | B |\n|---|---|\n| 1 |\n",
+			want:   []string{fmt.Sprintf("guide.md:5:1 error %s", RuleTableColumnMismatch)},
+		},
+		{
+			name:   "short header padded by the parser",
+			source: "# Guide\n\n| A |\n|---|---|\n| 1 | 2 |\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleTableColumnMismatch)},
+		},
+		{
+			name:   "rejected header/delimiter pair",
+			source: "# Guide\n\n| A | B | C |\n|---|---|\n",
+			want:   []string{fmt.Sprintf("guide.md:4:1 error %s", RuleTableColumnMismatch)},
+		},
+		{
+			name:   "consistent table stays clean",
+			source: "# Guide\n\n| A | B |\n|---|---|\n| 1 | 2 |\n| 1 \\| 2 | w |\n",
+			want:   nil,
+		},
+		{
+			name:   "frontmatter shifts the row",
+			source: "---\ntitle: Guide\n---\n\n| A | B |\n|---|---|\n| 1 |\n",
+			want:   []string{fmt.Sprintf("guide.md:7:1 error %s", RuleTableColumnMismatch)},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			expectDiagnostics(t, test.name, test.source, Options{}, test.want)
+		})
+	}
+}
+
+func TestCheckHTMLCommentUnclosed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{
+			name:   "unclosed comment swallows content",
+			source: "# A\n\n<!-- forgotten\n\n## B\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleHTMLCommentUnclosed)},
+		},
+		{
+			name:   "closed comment stays clean",
+			source: "# A\n\n<!-- note -->\n\n## B\n",
+			want:   nil,
+		},
+		{
+			name:   "comment in fenced code is code",
+			source: "# A\n\n```html\n<!-- oops\n```\n",
+			want:   nil,
+		},
+		{
+			name:   "comment in inline code is text",
+			source: "# A\n\nUse `<!-- oops` here.\n",
+			want:   nil,
+		},
+		{
+			name:   "frontmatter value is YAML, not Markdown",
+			source: "---\ndescription: \"<!-- example\"\n---\n\n# A\n",
+			want:   nil,
+		},
+		{
+			name:   "frontmatter shifts the opener",
+			source: "---\ntitle: A\n---\n\n<!-- broken\n",
+			want:   []string{fmt.Sprintf("guide.md:5:1 error %s", RuleHTMLCommentUnclosed)},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			expectDiagnostics(t, test.name, test.source, Options{}, test.want)
+		})
+	}
+}
+
+func TestCheckLinkReversed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{
+			name:   "https destination",
+			source: "# Guide\n\n(OpenAI)[https://openai.com]\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleLinkReversed)},
+		},
+		{
+			name:   "markdown file destination",
+			source: "# Guide\n\nSee (Guide)[guide.md].\n",
+			want:   []string{fmt.Sprintf("guide.md:3:5 error %s", RuleLinkReversed)},
+		},
+		{
+			name:   "anchor destination",
+			source: "# Guide\n\n(Section)[#setup]\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleLinkReversed)},
+		},
+		{
+			name:   "indexing stays prose",
+			source: "# Guide\n\nCall f(x)[0] and array[index].\n",
+			want:   nil,
+		},
+		{
+			name:   "code protects the shape",
+			source: "# Guide\n\nUse `(x)[y.md]`.\n\n```md\n(x)[y.md]\n```\n",
+			want:   nil,
+		},
+		{
+			name:   "frontmatter shifts the line",
+			source: "---\ntitle: Guide\n---\n\n(x)[y.md]\n",
+			want:   []string{fmt.Sprintf("guide.md:5:1 error %s", RuleLinkReversed)},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			expectDiagnostics(t, test.name, test.source, Options{}, test.want)
+		})
+	}
+}
+
 func TestCheckReferenceRulesWorkAlongsideFilesystemChecks(t *testing.T) {
 	t.Parallel()
 

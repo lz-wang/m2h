@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"sort"
+	"strings"
 
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/util"
@@ -233,6 +234,88 @@ func (scanner *sourceScanner) footnoteUseCandidates() []footnoteUseCandidate {
 		offset = close
 	}
 	return candidates
+}
+
+// reversedLinks finds (text)[destination] forms in unprotected source where
+// the destination clearly reads as a URL or path. The parenthesized-then-
+// bracketed shape also occurs in ordinary prose — f(x)[0], array[index] —
+// so only destinations that obviously name a target count, trading recall
+// for precision: a vague case unreported beats a correct one falsely
+// flagged.
+func (scanner *sourceScanner) reversedLinks() []ReversedLink {
+	links := make([]ReversedLink, 0)
+	source := scanner.source
+	for offset := 0; offset < len(source); offset++ {
+		switch source[offset] {
+		case '\\':
+			offset++
+		case '(':
+			if scanner.protected(offset) {
+				continue
+			}
+			close := bytes.IndexByte(source[offset+1:], ')')
+			if close < 0 {
+				continue
+			}
+			close += offset + 1
+			// A link typo sits on one line; text spanning lines is prose.
+			if bytes.IndexByte(source[offset+1:close], '\n') >= 0 {
+				continue
+			}
+			destinationOpen := close + 1
+			if destinationOpen >= len(source) || source[destinationOpen] != '[' || scanner.protected(destinationOpen) {
+				continue
+			}
+			destinationClose := bytes.IndexByte(source[destinationOpen+1:], ']')
+			if destinationClose < 0 {
+				continue
+			}
+			destinationClose += destinationOpen + 1
+			if bytes.IndexByte(source[destinationOpen+1:destinationClose], '\n') >= 0 {
+				continue
+			}
+			text := bytes.TrimSpace(source[offset+1 : close])
+			destination := string(source[destinationOpen+1 : destinationClose])
+			if len(text) == 0 || !looksLikeDestination(destination) {
+				continue
+			}
+			line, column := scanner.locator.locate(offset)
+			links = append(links, ReversedLink{
+				Text:        string(text),
+				Destination: destination,
+				Position:    Position{Line: line, Column: column},
+			})
+			offset = destinationClose
+		}
+	}
+	return links
+}
+
+// looksLikeDestination reports whether a bracketed value obviously names a
+// link target: a known scheme, an anchor, a rooted or relative path, or a
+// file-like token with an extension.
+func looksLikeDestination(destination string) bool {
+	switch {
+	case destination == "":
+		return false
+	case strings.HasPrefix(destination, "http://"),
+		strings.HasPrefix(destination, "https://"),
+		strings.HasPrefix(destination, "mailto:"),
+		strings.HasPrefix(destination, "tel:"),
+		strings.HasPrefix(destination, "#"),
+		strings.HasPrefix(destination, "./"),
+		strings.HasPrefix(destination, "../"),
+		strings.HasPrefix(destination, "/"):
+		return true
+	}
+	if strings.ContainsAny(destination, " \t") {
+		return false
+	}
+	if strings.Contains(destination, "/") {
+		return true
+	}
+	dot := strings.LastIndex(destination, ".")
+	return dot > 0
 }
 
 // matchBracket returns the index of the ']' closing the '[' at open. With

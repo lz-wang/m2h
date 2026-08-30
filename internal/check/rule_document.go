@@ -16,6 +16,8 @@ func checkDocumentRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	diagnostics = append(diagnostics, checkHeadingRules(current, rules)...)
 	diagnostics = append(diagnostics, checkReferenceRules(current, rules)...)
 	diagnostics = append(diagnostics, checkFootnoteRules(current, rules)...)
+	diagnostics = append(diagnostics, checkTableRules(current, rules)...)
+	diagnostics = append(diagnostics, checkSyntaxRules(current, rules)...)
 	return diagnostics
 }
 

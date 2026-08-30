@@ -699,9 +699,9 @@ func TestCheckCommandValidatesFlagsBeforeFilesystem(t *testing.T) {
 	}
 }
 
+// TestCheckCommandForwardsRuleSelection replaces runCheck and therefore
+// cannot run in parallel, the same contract the runServer stub tests follow.
 func TestCheckCommandForwardsRuleSelection(t *testing.T) {
-	t.Parallel()
-
 	previous := runCheck
 	t.Cleanup(func() { runCheck = previous })
 

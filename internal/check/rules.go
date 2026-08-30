@@ -66,6 +66,18 @@ const (
 	// RuleFootnoteEmpty: a footnote definition without any content, which
 	// renders an empty footnote block at the end of the document.
 	RuleFootnoteEmpty = "footnote.empty"
+
+	// RuleTableColumnMismatch: a table row — or a header/delimiter pair —
+	// whose column count disagrees with the table. The renderer pads or
+	// truncates accepted rows, and rejects the whole table when the
+	// delimiter disagrees with the header.
+	RuleTableColumnMismatch = "table.column-mismatch"
+	// RuleHTMLCommentUnclosed: a `<!--` HTML comment block that never saw
+	// its closing `-->`; everything after it renders as comment content.
+	RuleHTMLCommentUnclosed = "html.comment-unclosed"
+	// RuleLinkReversed: a high-confidence `(text)[destination]` with a
+	// URL- or path-like destination — Markdown link syntax written backwards.
+	RuleLinkReversed = "link.reversed"
 )
 
 // frontMatterDateKeys are the frontmatter fields m2h normalizes into date

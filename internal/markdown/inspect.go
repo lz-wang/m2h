@@ -107,6 +107,44 @@ type FootnoteReference struct {
 	Position Position
 }
 
+// TableMismatchKind distinguishes which part of a table disagrees with the
+// column count its delimiter row established.
+type TableMismatchKind uint8
+
+const (
+	// TableMismatchRow is a data row of a table the parser accepted: the
+	// renderer silently pads or truncates it to fit.
+	TableMismatchRow TableMismatchKind = iota + 1
+	// TableMismatchDelimiter is a header/delimiter pair whose counts differ,
+	// which made the parser reject the whole table — no table renders at all.
+	TableMismatchDelimiter
+)
+
+// TableColumnMismatch is one column-count disagreement inside a table:
+// what the source wrote (Actual) against what the table expects (Expected).
+type TableColumnMismatch struct {
+	Kind     TableMismatchKind
+	Expected int
+	Actual   int
+	Position Position
+}
+
+// UnclosedComment is one `<!--` the parser took as an HTML comment block
+// that never saw its closing `-->`. Everything after it renders as comment
+// content, so whole sections can silently vanish from the page.
+type UnclosedComment struct {
+	Position Position
+}
+
+// ReversedLink is one `(text)[destination]` form whose destination clearly
+// reads as a URL or path — the classic swapped Markdown link syntax, which
+// renders as literal parentheses plus a stray shortcut reference.
+type ReversedLink struct {
+	Text        string
+	Destination string
+	Position    Position
+}
+
 // Inspection is the check-oriented view of one Markdown document: the same
 // heading anchors the WebUI table of contents shows, every reference the web
 // renderer would rewrite, reference definitions and the uses the parser
@@ -121,6 +159,9 @@ type Inspection struct {
 	UndefinedFootnotes   []FootnoteReference
 	Footnotes            []Footnote
 	CodeFences           []CodeFence
+	TableMismatches      []TableColumnMismatch
+	UnclosedComments     []UnclosedComment
+	ReversedLinks        []ReversedLink
 	H1Count              int
 }
 
@@ -150,6 +191,15 @@ func (inspection *Inspection) ShiftLines(delta int) {
 	}
 	for index := range inspection.CodeFences {
 		inspection.CodeFences[index].Position.Line += delta
+	}
+	for index := range inspection.TableMismatches {
+		inspection.TableMismatches[index].Position.Line += delta
+	}
+	for index := range inspection.UnclosedComments {
+		inspection.UnclosedComments[index].Position.Line += delta
+	}
+	for index := range inspection.ReversedLinks {
+		inspection.ReversedLinks[index].Position.Line += delta
 	}
 }
 
@@ -217,7 +267,45 @@ func Inspect(source []byte) Inspection {
 	inspection.UndefinedFootnotes = scanner.undefinedFootnotes(footnotes)
 	inspection.Footnotes = footnotes
 	inspection.CodeFences = scanner.fences
+	inspection.TableMismatches = extractTableMismatches(document, source)
+	inspection.UnclosedComments = extractUnclosedComments(document, source)
+	inspection.ReversedLinks = scanner.reversedLinks()
 	return inspection
+}
+
+// extractUnclosedComments reports HTML comment blocks whose comment never
+// closed. Goldmark keeps a `<!--` block open until a line containing `-->`
+// — blank lines do not close it — and renders it raw, so everything after
+// an opener with no closer silently disappears inside the comment. Whether
+// the comment closed is decided by the `-->` inside the block's own content
+// (the opener line may close it itself, as `<!-- note -->` does); comments
+// inside code never become HTML blocks, and a mid-paragraph `<!--` without
+// a closure stays escaped text, so this AST fact is exactly the case that
+// breaks rendering.
+func extractUnclosedComments(document ast.Node, source []byte) []UnclosedComment {
+	comments := make([]UnclosedComment, 0)
+	locator := newSourceLocator(source)
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		block, ok := node.(*ast.HTMLBlock)
+		if !ok || block.HTMLBlockType != ast.HTMLBlockType2 || block.Lines().Len() == 0 {
+			return ast.WalkContinue, nil
+		}
+		start := block.Lines().At(0).Start
+		stop := block.Lines().At(block.Lines().Len() - 1).Stop
+		if block.HasClosure() && block.ClosureLine.Stop > stop {
+			stop = block.ClosureLine.Stop
+		}
+		if bytes.Contains(source[start:stop], []byte("-->")) {
+			return ast.WalkContinue, nil
+		}
+		line, column := locator.locate(block.Lines().At(0).Start)
+		comments = append(comments, UnclosedComment{Position: Position{Line: line, Column: column}})
+		return ast.WalkContinue, nil
+	})
+	return comments
 }
 
 // footnoteInspectionTransformer records the footnote facts before Goldmark's
