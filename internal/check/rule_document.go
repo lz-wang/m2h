@@ -15,6 +15,7 @@ func checkDocumentRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	diagnostics := make([]Diagnostic, 0)
 	diagnostics = append(diagnostics, checkHeadingRules(current, rules)...)
 	diagnostics = append(diagnostics, checkReferenceRules(current, rules)...)
+	diagnostics = append(diagnostics, checkFootnoteRules(current, rules)...)
 	return diagnostics
 }
 

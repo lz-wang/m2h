@@ -127,6 +127,97 @@ func TestInspectUndefinedReferenceSkipsMixedForms(t *testing.T) {
 	}
 }
 
+func TestInspectCollectsFootnotes(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("# Guide\n\nText[^a] and [^a] again.\n\n[^a]: first note\n\n[^b]: orphan\n\n[^e]:\n")
+	inspection := Inspect(source)
+
+	want := []Footnote{
+		{Label: "a", Used: true, Empty: false, Position: Position{Line: 5, Column: 1}},
+		{Label: "b", Used: false, Empty: false, Position: Position{Line: 7, Column: 1}},
+		{Label: "e", Used: false, Empty: true, Position: Position{Line: 9, Column: 1}},
+	}
+	if !slices.Equal(inspection.Footnotes, want) {
+		t.Fatalf("footnotes = %+v, want %+v", inspection.Footnotes, want)
+	}
+}
+
+func TestInspectMultilineFootnoteIsNotEmpty(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("[^m]:\n    multiline\n    content\n\nText[^m].\n")
+	inspection := Inspect(source)
+	if len(inspection.Footnotes) != 1 || inspection.Footnotes[0].Empty || !inspection.Footnotes[0].Used {
+		t.Fatalf("footnotes = %+v, want one used multiline definition", inspection.Footnotes)
+	}
+}
+
+func TestInspectUndefinedFootnotes(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		want   []FootnoteReference
+	}{
+		{
+			name:   "marker without definition",
+			source: "Text[^missing].\n",
+			want:   []FootnoteReference{{Label: "missing", Position: Position{Line: 1, Column: 5}}},
+		},
+		{
+			name:   "defined marker stays clean",
+			source: "Text[^ok].\n\n[^ok]: note\n",
+			want:   nil,
+		},
+		{
+			name:   "use before definition still resolves",
+			source: "Text[^later].\n\n[later]: x\n\n[^later]: note\n",
+			want:   nil,
+		},
+		{
+			name:   "labels compare by exact bytes",
+			source: "Text[^Missing].\n\n[^missing]: note\n",
+			want:   []FootnoteReference{{Label: "Missing", Position: Position{Line: 1, Column: 5}}},
+		},
+		{
+			name:   "inline code protects the marker",
+			source: "Use `[^missing]` verbatim.\n",
+			want:   nil,
+		},
+		{
+			name:   "fenced code protects the marker",
+			source: "```md\n[^missing]\n```\n",
+			want:   nil,
+		},
+		{
+			name:   "escaped marker stays text",
+			source: "Use \\[^missing] verbatim.\n",
+			want:   nil,
+		},
+		{
+			name:   "empty marker is not a use",
+			source: "Use [^] verbatim.\n",
+			want:   nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			inspection := Inspect([]byte(test.source))
+			want := test.want
+			if want == nil {
+				want = []FootnoteReference{}
+			}
+			if !slices.Equal(inspection.UndefinedFootnotes, want) {
+				t.Fatalf("undefined footnotes = %+v, want %+v", inspection.UndefinedFootnotes, want)
+			}
+		})
+	}
+}
+
 func TestInspectCollectsCodeFences(t *testing.T) {
 	t.Parallel()
 

@@ -57,6 +57,15 @@ const (
 	RuleReferenceUndefined = "reference.undefined"
 	// RuleReferenceUnused: a reference definition nothing ever references.
 	RuleReferenceUnused = "reference.unused"
+
+	// RuleFootnoteUndefined: a [^label] use with no matching definition, so
+	// the footnote marker renders as literal text instead of a link.
+	RuleFootnoteUndefined = "footnote.undefined"
+	// RuleFootnoteUnused: a footnote definition no marker ever references.
+	RuleFootnoteUnused = "footnote.unused"
+	// RuleFootnoteEmpty: a footnote definition without any content, which
+	// renders an empty footnote block at the end of the document.
+	RuleFootnoteEmpty = "footnote.empty"
 )
 
 // frontMatterDateKeys are the frontmatter fields m2h normalizes into date

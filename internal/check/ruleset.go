@@ -25,12 +25,15 @@ var ruleDefinitions = []RuleDefinition{
 	{ID: RuleMarkdownTargetNotServed, Severity: SeverityError, DefaultEnabled: true},
 	{ID: RuleAnchorMissing, Severity: SeverityError, DefaultEnabled: true},
 	{ID: RuleReferenceUndefined, Severity: SeverityError, DefaultEnabled: true},
+	{ID: RuleFootnoteUndefined, Severity: SeverityError, DefaultEnabled: true},
+	{ID: RuleFootnoteEmpty, Severity: SeverityError, DefaultEnabled: true},
 	{ID: RuleImageAltEmpty, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleDocumentMultipleH1, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleHeadingLevelSkip, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleFrontMatterDateInvalid, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleLinkEmptyDestination, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleReferenceUnused, Severity: SeverityWarning, DefaultEnabled: true},
+	{ID: RuleFootnoteUnused, Severity: SeverityWarning, DefaultEnabled: true},
 }
 
 // ruleAll is the special rule name that addresses every known rule, so

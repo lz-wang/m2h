@@ -172,6 +172,69 @@ func (scanner *sourceScanner) referenceUseCandidates() []referenceUseCandidate {
 	return candidates
 }
 
+// footnoteUseCandidate is one [^label] occurrence in unprotected source.
+type footnoteUseCandidate struct {
+	label    string
+	position Position
+}
+
+// undefinedFootnotes returns the located [^label] uses whose label no
+// definition matches. Unlike link references, an unresolved footnote leaves
+// plain text with no parser hook to observe, so candidates are compared
+// against the collected definitions by exact bytes — the comparison
+// Goldmark's own footnote parser applies.
+func (scanner *sourceScanner) undefinedFootnotes(definitions []Footnote) []FootnoteReference {
+	defined := make(map[string]struct{}, len(definitions))
+	for _, footnote := range definitions {
+		defined[footnote.Label] = struct{}{}
+	}
+	uses := make([]FootnoteReference, 0)
+	for _, candidate := range scanner.footnoteUseCandidates() {
+		if _, resolved := defined[candidate.label]; !resolved {
+			uses = append(uses, FootnoteReference{Label: candidate.label, Position: candidate.position})
+		}
+	}
+	return uses
+}
+
+// footnoteUseCandidates finds every [^label] form in unprotected source.
+// The label closes on the same line — the footnote parser never scans past
+// a newline — and escaped brackets never match.
+func (scanner *sourceScanner) footnoteUseCandidates() []footnoteUseCandidate {
+	candidates := make([]footnoteUseCandidate, 0)
+	source := scanner.source
+	for offset := 0; offset < len(source); offset++ {
+		if source[offset] == '\\' {
+			offset++
+			continue
+		}
+		if source[offset] != '[' || offset+1 >= len(source) || source[offset+1] != '^' || scanner.protected(offset) {
+			continue
+		}
+		labelStart := offset + 2
+		close := bytes.IndexByte(source[labelStart:], ']')
+		if close < 0 {
+			continue
+		}
+		close += labelStart
+		// The label must close on the same line it opened.
+		if bytes.IndexByte(source[labelStart:close], '\n') >= 0 {
+			continue
+		}
+		label := source[labelStart:close]
+		if len(bytes.TrimSpace(label)) == 0 {
+			continue
+		}
+		line, column := scanner.locator.locate(offset)
+		candidates = append(candidates, footnoteUseCandidate{
+			label:    string(label),
+			position: Position{Line: line, Column: column},
+		})
+		offset = close
+	}
+	return candidates
+}
+
 // matchBracket returns the index of the ']' closing the '[' at open. With
 // nesting, inner '[' increase the depth (balanced link text); without it the
 // first ']' closes, mirroring Goldmark's non-nesting reference-label

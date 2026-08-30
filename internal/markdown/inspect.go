@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/yuin/goldmark/ast"
+	extensionast "github.com/yuin/goldmark/extension/ast"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
@@ -88,6 +89,24 @@ type ReferenceUse struct {
 	Position Position
 }
 
+// Footnote is one footnote definition ([^label]: content) with what the
+// parser knew about it at transform time: whether any use referenced it and
+// whether it carries any content at all.
+type Footnote struct {
+	Label    string
+	Used     bool
+	Empty    bool
+	Position Position
+}
+
+// FootnoteReference is one [^label] use whose label no definition matches.
+// Footnote labels compare by exact bytes — Goldmark never folds case or
+// whitespace for them — so the candidate scan compares the same way.
+type FootnoteReference struct {
+	Label    string
+	Position Position
+}
+
 // Inspection is the check-oriented view of one Markdown document: the same
 // heading anchors the WebUI table of contents shows, every reference the web
 // renderer would rewrite, reference definitions and the uses the parser
@@ -99,6 +118,8 @@ type Inspection struct {
 	References           []Reference
 	ReferenceDefinitions []ReferenceDefinition
 	UndefinedReferences  []ReferenceUse
+	UndefinedFootnotes   []FootnoteReference
+	Footnotes            []Footnote
 	CodeFences           []CodeFence
 	H1Count              int
 }
@@ -120,6 +141,12 @@ func (inspection *Inspection) ShiftLines(delta int) {
 	}
 	for index := range inspection.UndefinedReferences {
 		inspection.UndefinedReferences[index].Position.Line += delta
+	}
+	for index := range inspection.UndefinedFootnotes {
+		inspection.UndefinedFootnotes[index].Position.Line += delta
+	}
+	for index := range inspection.Footnotes {
+		inspection.Footnotes[index].Position.Line += delta
 	}
 	for index := range inspection.CodeFences {
 		inspection.CodeFences[index].Position.Line += delta
@@ -162,6 +189,14 @@ func (context *inspectionContext) Reference(label string) (parser.Reference, boo
 // code blocks whose fence lines the AST strips away.
 func Inspect(source []byte) Inspection {
 	engine := newEngine()
+	var footnotes []Footnote
+	// Observe the footnote list one priority step below Goldmark's own
+	// footnote transformer (999), while every definition — used or not — is
+	// still attached and each definition's Index already tells whether a use
+	// referenced it.
+	engine.Parser().AddOptions(parser.WithASTTransformers(
+		util.Prioritized(&footnoteInspectionTransformer{footnotes: &footnotes}, 998),
+	))
 	context := &inspectionContext{
 		Context:           parser.NewContext(parser.WithIDs(newGitHubIDs())),
 		missingReferences: make(map[string]struct{}),
@@ -179,8 +214,50 @@ func Inspect(source []byte) Inspection {
 
 	scanner := newSourceScanner(source, codeRanges(document))
 	inspection.UndefinedReferences = scanner.undefinedReferences(context.missingReferences)
+	inspection.UndefinedFootnotes = scanner.undefinedFootnotes(footnotes)
+	inspection.Footnotes = footnotes
 	inspection.CodeFences = scanner.fences
 	return inspection
+}
+
+// footnoteInspectionTransformer records the footnote facts before Goldmark's
+// own footnote transformer runs: after priority 999 the unreferenced
+// definitions are gone from the AST, which is exactly the information the
+// check rules need. It only observes — the parse output stays identical.
+type footnoteInspectionTransformer struct {
+	footnotes *[]Footnote
+}
+
+// Transform implements parser.ASTTransformer.
+func (transformer *footnoteInspectionTransformer) Transform(node *ast.Document, reader text.Reader, pc parser.Context) {
+	source := reader.Source()
+	locator := newSourceLocator(source)
+	_ = ast.Walk(node, func(child ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		list, ok := child.(*extensionast.FootnoteList)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		for definition := list.FirstChild(); definition != nil; definition = definition.NextSibling() {
+			footnote, ok := definition.(*extensionast.Footnote)
+			if !ok {
+				continue
+			}
+			line, column := locator.locate(max(footnote.Pos(), 0))
+			*transformer.footnotes = append(*transformer.footnotes, Footnote{
+				Label: string(footnote.Ref),
+				// Index stays -1 until the first use references the definition.
+				Used: footnote.Index >= 0,
+				// A definition without children carries no content at all —
+				// not on its first line nor on any indented continuation.
+				Empty:    footnote.ChildCount() == 0,
+				Position: Position{Line: line, Column: column},
+			})
+		}
+		return ast.WalkContinue, nil
+	})
 }
 
 // referenceCollector walks one document's AST in order, keeping every located

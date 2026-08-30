@@ -187,6 +187,64 @@ func TestCheckReferenceUnused(t *testing.T) {
 	}
 }
 
+func TestCheckFootnoteRules(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{
+			name:   "undefined marker",
+			source: "# Guide\n\nText[^missing].\n",
+			want:   []string{fmt.Sprintf("guide.md:3:5 error %s", RuleFootnoteUndefined)},
+		},
+		{
+			name:   "unused definition",
+			source: "# Guide\n\nText[^a].\n\n[^a]: note\n[^b]: orphan\n",
+			want:   []string{fmt.Sprintf("guide.md:6:1 warning %s", RuleFootnoteUnused)},
+		},
+		{
+			name:   "empty definition",
+			source: "# Guide\n\nText[^e].\n\n[^e]:\n",
+			want:   []string{fmt.Sprintf("guide.md:5:1 error %s", RuleFootnoteEmpty)},
+		},
+		{
+			name:   "multiline definition is not empty",
+			source: "# Guide\n\nText[^m].\n\n[^m]: first\n    second\n",
+			want:   nil,
+		},
+		{
+			name:   "multiple uses keep the definition used",
+			source: "# Guide\n\nText[^a] and again[^a].\n\n[^a]: note\n",
+			want:   nil,
+		},
+		{
+			name:   "markers inside code stay silent",
+			source: "# Guide\n\nUse `[^x]` and:\n\n```md\n[^y]\n```\n\n[^z]: never referenced\n",
+			want:   []string{fmt.Sprintf("guide.md:9:1 warning %s", RuleFootnoteUnused)},
+		},
+		{
+			name:   "frontmatter shifts definition lines",
+			source: "---\ntitle: Guide\n---\n\n[^b]: orphan\n",
+			want:   []string{fmt.Sprintf("guide.md:5:1 warning %s", RuleFootnoteUnused)},
+		},
+		{
+			name:   "frontmatter shifts use lines",
+			source: "---\ntitle: Guide\n---\n\nText[^missing].\n",
+			want:   []string{fmt.Sprintf("guide.md:5:5 error %s", RuleFootnoteUndefined)},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			expectDiagnostics(t, test.name, test.source, Options{}, test.want)
+		})
+	}
+}
+
 func TestCheckReferenceRulesWorkAlongsideFilesystemChecks(t *testing.T) {
 	t.Parallel()
 
