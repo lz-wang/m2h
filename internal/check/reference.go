@@ -253,10 +253,17 @@ func (current *indexedDocument) hasAnchor(fragment string) bool {
 
 // diagnostic builds one finding at a reference's source position.
 func (current *indexedDocument) diagnostic(severity Severity, rule string, message string, reference markdown.Reference) Diagnostic {
+	return current.diagnosticAt(severity, rule, message, markdown.Position{Line: reference.Line, Column: reference.Column})
+}
+
+// diagnosticAt builds one finding at an explicit fact position. Every body
+// fact enters this call already carrying file-level lines, so rules never
+// adjust frontmatter offsets themselves.
+func (current *indexedDocument) diagnosticAt(severity Severity, rule string, message string, position markdown.Position) Diagnostic {
 	return Diagnostic{
 		Path:     current.display,
-		Line:     reference.Line,
-		Column:   reference.Column,
+		Line:     position.Line,
+		Column:   position.Column,
 		Severity: severity,
 		Rule:     rule,
 		Message:  message,

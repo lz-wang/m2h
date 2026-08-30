@@ -130,7 +130,7 @@ func (inspection *Inspection) ShiftLines(delta int) {
 // Goldmark itself decides whether a reference-style link resolves; a failed
 // lookup leaves plain text with no AST trace, so the fact must be recorded
 // while the parse is running. Labels are recorded in Goldmark's normalized
-// form (see normalizeReferenceLabel) exactly as the parser looked them up.
+// form (see NormalizeReferenceLabel) exactly as the parser looked them up.
 type inspectionContext struct {
 	parser.Context
 
@@ -319,7 +319,7 @@ func extractReferenceDefinitions(document ast.Node, source []byte) []ReferenceDe
 		if !ok {
 			return ast.WalkContinue, nil
 		}
-		label := normalizeReferenceLabel(definition.Label)
+		label := NormalizeReferenceLabel(string(definition.Label))
 		if _, duplicate := seen[label]; duplicate {
 			return ast.WalkContinue, nil
 		}
@@ -338,11 +338,12 @@ func extractReferenceDefinitions(document ast.Node, source []byte) []ReferenceDe
 	return definitions
 }
 
-// normalizeReferenceLabel applies Goldmark's link reference normalization —
+// NormalizeReferenceLabel applies Goldmark's link reference normalization —
 // trim, full Unicode case folding, whitespace collapsed to single spaces —
-// so facts and parser lookups can never disagree about label identity.
-func normalizeReferenceLabel(label []byte) string {
-	return util.ToLinkReference(label)
+// so callers comparing labels against parser lookups can never disagree
+// about label identity.
+func NormalizeReferenceLabel(label string) string {
+	return util.ToLinkReference([]byte(label))
 }
 
 // searchDestination finds the first literal occurrence of destination at or

@@ -112,7 +112,7 @@ func (scanner *sourceScanner) protected(offset int) bool {
 func (scanner *sourceScanner) undefinedReferences(missing map[string]struct{}) []ReferenceUse {
 	uses := make([]ReferenceUse, 0)
 	for _, candidate := range scanner.referenceUseCandidates() {
-		if _, rejected := missing[normalizeReferenceLabel([]byte(candidate.label))]; rejected {
+		if _, rejected := missing[NormalizeReferenceLabel(candidate.label)]; rejected {
 			uses = append(uses, ReferenceUse{Label: candidate.label, Position: candidate.position})
 		}
 	}
@@ -152,7 +152,7 @@ func (scanner *sourceScanner) referenceUseCandidates() []referenceUseCandidate {
 							// Collapsed use: the label is the link text itself.
 							label = source[offset+1 : textClose]
 						}
-						if normalizeReferenceLabel(label) != "" {
+						if NormalizeReferenceLabel(string(label)) != "" {
 							line, column := scanner.locator.locate(offset)
 							candidates = append(candidates, referenceUseCandidate{
 								label:    string(label),

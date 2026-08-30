@@ -171,17 +171,15 @@ func indexDocument(current document, rules RuleSet) (*indexedDocument, error) {
 		anchors[heading.ID] = struct{}{}
 	}
 
-	diagnostics := make([]Diagnostic, 0)
-	if inspection.H1Count > 1 && rules.Enabled(RuleDocumentMultipleH1) {
-		diagnostics = append(diagnostics, Diagnostic{
-			Path:     current.display,
-			Line:     secondH1Line(inspection.Headings),
-			Column:   1,
-			Severity: SeverityWarning,
-			Rule:     RuleDocumentMultipleH1,
-			Message:  fmt.Sprintf("document contains %d H1 headings", inspection.H1Count),
-		})
+	indexed := &indexedDocument{
+		document:    current,
+		inspectable: true,
+		frontMatter: frontMatter,
+		inspection:  inspection,
+		anchors:     anchors,
 	}
+	diagnostics := make([]Diagnostic, 0)
+	diagnostics = append(diagnostics, checkDocumentRules(indexed, rules)...)
 	if rules.Enabled(RuleFrontMatterDateInvalid) {
 		for _, entry := range frontMatterDateEntries(frontMatter) {
 			if value := strings.TrimSpace(entry.Value); value != "" && !markdown.IsISODate(value) {
@@ -203,14 +201,8 @@ func indexDocument(current document, rules RuleSet) (*indexedDocument, error) {
 		}
 	}
 
-	return &indexedDocument{
-		document:    current,
-		inspectable: true,
-		diagnostics: diagnostics,
-		frontMatter: frontMatter,
-		inspection:  inspection,
-		anchors:     anchors,
-	}, nil
+	indexed.diagnostics = diagnostics
+	return indexed, nil
 }
 
 // secondH1Line returns the source line of a document's second H1 heading —

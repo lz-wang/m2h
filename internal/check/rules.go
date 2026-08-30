@@ -45,6 +45,18 @@ const (
 	// RuleLinkEmptyDestination: a link, image or raw HTML URL attribute has
 	// an empty destination.
 	RuleLinkEmptyDestination = "link.empty-destination"
+
+	// RuleHeadingLevelSkip: a heading jumps down more than one level. A
+	// warning — not an error — because the document still renders and
+	// navigates; closing a section by any number of levels upwards stays
+	// legal.
+	RuleHeadingLevelSkip = "heading.level-skip"
+	// RuleReferenceUndefined: an explicit reference-style use — [text][label]
+	// or [text][] — names a label no definition provides, so the renderer
+	// outputs literal brackets instead of a link.
+	RuleReferenceUndefined = "reference.undefined"
+	// RuleReferenceUnused: a reference definition nothing ever references.
+	RuleReferenceUnused = "reference.unused"
 )
 
 // frontMatterDateKeys are the frontmatter fields m2h normalizes into date
