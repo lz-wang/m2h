@@ -60,6 +60,10 @@ func TestRenderRewritesPreviewRawHTMLURLs(t *testing.T) {
 	source := []byte(`<p align="center">
   <img src="web/public/favicon.svg?raw=1#icon" alt="m2h Logo">
   <a href="docs/guide.md#install">Guide</a>
+  <img src="/images/logo.png" alt="Root Logo">
+  <a href="/docs/root.md#start">Root Guide</a>
+  <video poster="/images/poster.jpg"><source src="/videos/demo.mp4"></video>
+  <a href="//cdn.example.com/guide.md">CDN</a>
 </p>`)
 	preview, err := Render(source, RenderOptions{
 		URLMode:    URLWeb,
@@ -71,6 +75,11 @@ func TestRenderRewritesPreviewRawHTMLURLs(t *testing.T) {
 	for _, want := range []string{
 		`src="/assets/web/public/favicon.svg?raw=1#icon"`,
 		`href="/doc/docs/guide.md#install"`,
+		`src="/assets/images/logo.png"`,
+		`href="/doc/docs/root.md#start"`,
+		`poster="/assets/images/poster.jpg"`,
+		`src="/assets/videos/demo.mp4"`,
+		`href="//cdn.example.com/guide.md"`,
 	} {
 		if !strings.Contains(preview.Body, want) {
 			t.Errorf("preview raw HTML missing rewritten URL %q: %s", want, preview.Body)
@@ -86,6 +95,11 @@ func TestRenderRewritesPreviewRawHTMLURLs(t *testing.T) {
 	for _, want := range []string{
 		`src="web/public/favicon.svg?raw=1#icon"`,
 		`href="docs/guide.md#install"`,
+		`src="/images/logo.png"`,
+		`href="/docs/root.md#start"`,
+		`poster="/images/poster.jpg"`,
+		`src="/videos/demo.mp4"`,
+		`href="//cdn.example.com/guide.md"`,
 	} {
 		if !strings.Contains(exported.Body, want) {
 			t.Errorf("export raw HTML changed URL %q: %s", want, exported.Body)
@@ -108,7 +122,10 @@ func TestRenderRewritesLocalLinksAtASTLevel(t *testing.T) {
 		{name: "passthrough parent and query", urlMode: URLPassthrough, sourcePath: "design/current.md", destination: "../guide.markdown?mode=full#start", want: "../guide.markdown?mode=full#start"},
 		{name: "web relative", urlMode: URLWeb, sourcePath: "design/current.md", destination: "guide.md", want: "/doc/design/guide.md"},
 		{name: "web parent", urlMode: URLWeb, sourcePath: "design/current.md", destination: "../guide.md?mode=full#start", want: "/doc/guide.md?mode=full#start"},
+		{name: "web root relative", urlMode: URLWeb, sourcePath: "design/current.md", destination: "/guide.md#start", want: "/doc/guide.md#start"},
+		{name: "web root attachment", urlMode: URLWeb, sourcePath: "design/current.md", destination: "/files/guide.pdf?download=1", want: "/assets/files/guide.pdf?download=1"},
 		{name: "absolute URL", urlMode: URLWeb, sourcePath: "design/current.md", destination: "https://example.com/a.md", want: "https://example.com/a.md"},
+		{name: "protocol relative", urlMode: URLWeb, sourcePath: "design/current.md", destination: "//cdn.example.com/a.md", want: "//cdn.example.com/a.md"},
 		{name: "mailto", urlMode: URLPassthrough, sourcePath: "current.md", destination: "mailto:user@example.com", want: "mailto:user@example.com"},
 		{name: "anchor", urlMode: URLPassthrough, sourcePath: "current.md", destination: "#install", want: "#install"},
 		{name: "non markdown", urlMode: URLPassthrough, sourcePath: "current.md", destination: "guide.txt", want: "guide.txt"},
@@ -508,7 +525,7 @@ func TestRenderStripsDangerousImageURL(t *testing.T) {
 func TestRenderPreviewImageOutsideRootUnchanged(t *testing.T) {
 	t.Parallel()
 
-	result, err := Render([]byte("![escape](../../outside.png)"), RenderOptions{
+	result, err := Render([]byte("![escape](../../outside.png)\n![root escape](/../outside.png)"), RenderOptions{
 		URLMode: URLWeb, SourcePath: "design/current.md",
 	})
 	if err != nil {
@@ -516,6 +533,9 @@ func TestRenderPreviewImageOutsideRootUnchanged(t *testing.T) {
 	}
 	if !strings.Contains(result.Body, `src="../../outside.png"`) {
 		t.Fatalf("out-of-root image was rewritten instead of left unchanged: %s", result.Body)
+	}
+	if !strings.Contains(result.Body, `src="/../outside.png"`) {
+		t.Fatalf("root-relative escape was rewritten instead of left unchanged: %s", result.Body)
 	}
 }
 

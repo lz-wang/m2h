@@ -39,15 +39,15 @@ const (
 	WidthFull     Width = "full"
 )
 
-// URLMode controls how relative local links and images in the Markdown source
-// are rewritten for the surrounding document.
+// URLMode controls how local links and images in the Markdown source are
+// rewritten for the surrounding document.
 type URLMode uint8
 
 const (
-	// URLPassthrough keeps every relative destination exactly as written, so
-	// an exported HTML file continues to reference the source tree's files.
+	// URLPassthrough keeps every local destination exactly as written, so an
+	// exported HTML file continues to reference the source tree's files.
 	URLPassthrough URLMode = iota
-	// URLWeb rewrites relative Markdown links to /doc/<path> and other local
+	// URLWeb rewrites local Markdown links to /doc/<path> and other local
 	// references to /assets/<path>, the address space of the document server.
 	URLWeb
 )
@@ -212,52 +212,41 @@ func rewriteDocument(document ast.Node, options RenderOptions) error {
 	})
 }
 
-// rewriteDestination maps a relative local destination onto the address space
-// selected by URLMode. Non-relative destinations (absolute URLs, anchors,
-// scheme links) are always kept as written; URLPassthrough keeps relative
-// destinations too, so an exported file keeps referencing the source tree.
+// rewriteDestination maps a local destination onto the address space selected
+// by URLMode. External, protocol-relative and fragment destinations are always
+// kept as written; URLPassthrough also keeps local destinations unchanged so
+// an exported file continues to reference the source tree.
 func rewriteDestination(destination []byte, options RenderOptions, image bool) []byte {
 	if options.URLMode != URLWeb {
 		return destination
 	}
 
 	original := string(destination)
-	pathPart, suffix := splitDestination(original)
-	if !isRelativeLocalPath(pathPart) {
-		return destination
-	}
-
-	if image {
-		return webAsset(pathPart, suffix, options)
-	}
-	if !RoutesToDocument(pathPart) {
-		return webAsset(pathPart, suffix, options)
-	}
-	resolved, ok := resolveWithinRoot(options.SourcePath, pathPart)
+	local, ok := ParseLocalDestination(original)
 	if !ok {
 		return destination
+	}
+	resolved, ok := ResolveLocalDestination(options.SourcePath, "", local)
+	if !ok {
+		return destination
+	}
+	_, suffix := splitDestination(original)
+	if image || !RoutesToDocument(local.Path) {
+		return []byte("/assets/" + resolved + suffix)
 	}
 	return []byte("/doc/" + resolved + suffix)
 }
 
-// RoutesToDocument reports whether a relative destination — identified by its
+// RoutesToDocument reports whether a local destination — identified by its
 // path part exactly as the Markdown source wrote it, before any percent
 // decoding — is a Markdown document the web renderer routes to /doc. Every
-// other relative destination routes to /assets. The check command reuses this
+// other local destination routes to /assets. The check command reuses this
 // predicate so routing decisions can never disagree with the renderer: an
 // encoded extension (guide%2Emd) is not a Markdown destination here, and the
 // assets route that receives it never serves Markdown files.
 func RoutesToDocument(pathPart string) bool {
 	extension := pathpkg.Ext(pathPart)
 	return strings.EqualFold(extension, ".md") || strings.EqualFold(extension, ".markdown")
-}
-
-func webAsset(pathPart, suffix string, options RenderOptions) []byte {
-	resolved, ok := resolveWithinRoot(options.SourcePath, pathPart)
-	if !ok {
-		return []byte(pathPart + suffix)
-	}
-	return []byte("/assets/" + resolved + suffix)
 }
 
 func splitDestination(destination string) (string, string) {
@@ -389,14 +378,6 @@ func InvalidLocalDestination(destination string) bool {
 	}
 	_, err := url.Parse(pathPart)
 	return err != nil
-}
-
-func isRelativeLocalPath(value string) bool {
-	return ClassifyDestination(value) == DestinationRelative
-}
-
-func resolveWithinRoot(sourcePath, destination string) (string, bool) {
-	return resolveWithinLogicalRoot(pathpkg.Dir(sourcePath), "", destination)
 }
 
 func resolveWithinLogicalRoot(basePath, rootPath, destination string) (string, bool) {
