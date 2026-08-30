@@ -34,7 +34,7 @@ func checkSectionRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	inspection := &current.inspection
 	diagnostics := make([]Diagnostic, 0)
 	for _, section := range inspection.EmptySections {
-		diagnostics = append(diagnostics, current.diagnosticAt(SeverityWarning, RuleSectionEmpty,
+		diagnostics = append(diagnostics, current.diagnosticForRule(RuleSectionEmpty,
 			fmt.Sprintf("section %q has no content", section.Text), section.Position))
 	}
 	return diagnostics
@@ -47,7 +47,7 @@ func checkHeadingRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	inspection := &current.inspection
 	diagnostics := make([]Diagnostic, 0)
 	if inspection.H1Count > 1 && rules.Enabled(RuleDocumentMultipleH1) {
-		diagnostics = append(diagnostics, current.diagnosticAt(SeverityWarning, RuleDocumentMultipleH1,
+		diagnostics = append(diagnostics, current.diagnosticForRule(RuleDocumentMultipleH1,
 			fmt.Sprintf("document contains %d H1 headings", inspection.H1Count),
 			markdown.Position{Line: secondH1Line(inspection.Headings), Column: 1}))
 	}
@@ -60,7 +60,7 @@ func checkHeadingRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	for index := 1; index < len(inspection.Headings); index++ {
 		previous, heading := inspection.Headings[index-1], inspection.Headings[index]
 		if heading.Level > previous.Level+1 {
-			diagnostics = append(diagnostics, current.diagnosticAt(SeverityWarning, RuleHeadingLevelSkip,
+			diagnostics = append(diagnostics, current.diagnosticForRule(RuleHeadingLevelSkip,
 				fmt.Sprintf("heading level jumps from H%d to H%d", previous.Level, heading.Level),
 				markdown.Position{Line: heading.Line, Column: 1}))
 		}
@@ -94,7 +94,7 @@ func checkDuplicateHeadings(current *indexedDocument, rules RuleSet) []Diagnosti
 		parent := &stack[len(stack)-1]
 		if heading.Level > 1 {
 			if _, duplicate := parent.children[heading.Text]; duplicate {
-				diagnostics = append(diagnostics, current.diagnosticAt(SeverityWarning, RuleHeadingDuplicate,
+				diagnostics = append(diagnostics, current.diagnosticForRule(RuleHeadingDuplicate,
 					fmt.Sprintf("duplicate heading %q in the same section", heading.Text),
 					markdown.Position{Line: heading.Line, Column: 1}))
 			} else {

@@ -144,22 +144,12 @@ func indexDocument(current document, rules RuleSet) (*indexedDocument, error) {
 
 	body, frontMatter, err := markdown.ParseFrontMatter(source)
 	if err != nil {
-		var diagnostics []Diagnostic
+		indexed := &indexedDocument{document: current, inspectable: false}
 		if rules.Enabled(RuleFrontMatterInvalid) {
-			diagnostics = append(diagnostics, Diagnostic{
-				Path:     current.display,
-				Line:     1,
-				Column:   1,
-				Severity: SeverityError,
-				Rule:     RuleFrontMatterInvalid,
-				Message:  err.Error(),
-			})
+			indexed.diagnostics = append(indexed.diagnostics,
+				indexed.diagnosticForRule(RuleFrontMatterInvalid, err.Error(), markdown.Position{Line: 1, Column: 1}))
 		}
-		return &indexedDocument{
-			document:    current,
-			inspectable: false,
-			diagnostics: diagnostics,
-		}, nil
+		return indexed, nil
 	}
 
 	inspection := markdown.Inspect(body)
@@ -189,14 +179,9 @@ func indexDocument(current document, rules RuleSet) (*indexedDocument, error) {
 				if entry.Line > 0 {
 					line, column = entry.Line+1, max(entry.Column, 1)
 				}
-				diagnostics = append(diagnostics, Diagnostic{
-					Path:     current.display,
-					Line:     line,
-					Column:   column,
-					Severity: SeverityWarning,
-					Rule:     RuleFrontMatterDateInvalid,
-					Message:  fmt.Sprintf("%s is not a valid ISO date", entry.Key),
-				})
+				diagnostics = append(diagnostics, indexed.diagnosticForRule(RuleFrontMatterDateInvalid,
+					fmt.Sprintf("%s is not a valid ISO date", entry.Key),
+					markdown.Position{Line: line, Column: column}))
 			}
 		}
 	}

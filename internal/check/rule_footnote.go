@@ -11,14 +11,14 @@ func checkFootnoteRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	diagnostics := make([]Diagnostic, 0)
 	if rules.Enabled(RuleFootnoteUndefined) {
 		for _, use := range inspection.UndefinedFootnotes {
-			diagnostics = append(diagnostics, current.diagnosticAt(SeverityError, RuleFootnoteUndefined,
+			diagnostics = append(diagnostics, current.diagnosticForRule(RuleFootnoteUndefined,
 				fmt.Sprintf("footnote [^%s] is not defined", use.Label), use.Position))
 		}
 	}
 	if rules.Enabled(RuleFootnoteEmpty) {
 		for _, footnote := range inspection.Footnotes {
 			if footnote.Empty {
-				diagnostics = append(diagnostics, current.diagnosticAt(SeverityError, RuleFootnoteEmpty,
+				diagnostics = append(diagnostics, current.diagnosticForRule(RuleFootnoteEmpty,
 					fmt.Sprintf("footnote [^%s] has no content", footnote.Label), footnote.Position))
 			}
 		}
@@ -26,7 +26,7 @@ func checkFootnoteRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	if rules.Enabled(RuleFootnoteUnused) {
 		for _, footnote := range inspection.Footnotes {
 			if !footnote.Used {
-				diagnostics = append(diagnostics, current.diagnosticAt(SeverityWarning, RuleFootnoteUnused,
+				diagnostics = append(diagnostics, current.diagnosticForRule(RuleFootnoteUnused,
 					fmt.Sprintf("footnote [^%s] is never referenced", footnote.Label), footnote.Position))
 			}
 		}

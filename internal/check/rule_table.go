@@ -21,7 +21,7 @@ func checkTableRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 		if mismatch.Kind == markdown.TableMismatchDelimiter {
 			message = fmt.Sprintf("table delimiter has %d columns; header has %d", mismatch.Actual, mismatch.Expected)
 		}
-		diagnostics = append(diagnostics, current.diagnosticAt(SeverityError, RuleTableColumnMismatch, message, mismatch.Position))
+		diagnostics = append(diagnostics, current.diagnosticForRule(RuleTableColumnMismatch, message, mismatch.Position))
 	}
 	return diagnostics
 }

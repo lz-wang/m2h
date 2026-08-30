@@ -130,12 +130,12 @@ func checkReference(
 	if reference.Kind == markdown.ReferenceImage && rules.Enabled(RuleImageAltEmpty) && strings.TrimSpace(reference.Text) == "" {
 		// Reported alongside, not instead of, the target checks: an image can
 		// have no alt text and a broken or empty destination at once.
-		diagnostics = append(diagnostics, current.diagnostic(SeverityWarning, RuleImageAltEmpty,
+		diagnostics = append(diagnostics, current.diagnostic(RuleImageAltEmpty,
 			"image has no alt text", reference))
 	}
 	if reference.Destination == "" {
 		if rules.Enabled(RuleLinkEmptyDestination) {
-			diagnostics = append(diagnostics, current.diagnostic(SeverityWarning, RuleLinkEmptyDestination,
+			diagnostics = append(diagnostics, current.diagnostic(RuleLinkEmptyDestination,
 				emptyDestinationMessage(reference.Kind), reference))
 		}
 		return diagnostics
@@ -148,7 +148,7 @@ func checkReference(
 	// relative local path, but its anchor is still verifiable.
 	if fragment, ok := strings.CutPrefix(reference.Destination, "#"); ok {
 		if rules.Enabled(RuleAnchorMissing) && !current.hasAnchor(fragment) {
-			diagnostics = append(diagnostics, current.diagnostic(SeverityError, RuleAnchorMissing,
+			diagnostics = append(diagnostics, current.diagnostic(RuleAnchorMissing,
 				fmt.Sprintf("heading %q does not exist in %q", "#"+fragment, current.relative), reference))
 		}
 		return diagnostics
@@ -158,7 +158,7 @@ func checkReference(
 	if !ok {
 		if markdown.InvalidLocalDestination(reference.Destination) && rules.Enabled(RuleLocalTargetMissing) {
 			// Malformed percent-encoding can never resolve in the browser.
-			diagnostics = append(diagnostics, current.diagnostic(SeverityError, RuleLocalTargetMissing,
+			diagnostics = append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
 				fmt.Sprintf("target %q is not accessible: invalid URL encoding", reference.Destination), reference))
 		}
 		return diagnostics
@@ -167,7 +167,7 @@ func checkReference(
 	resolved, ok := markdown.ResolveLocalDestination(current.relative, local.Path)
 	if !ok {
 		if rules.Enabled(RuleLocalTargetOutsideRoot) {
-			return append(diagnostics, current.diagnostic(SeverityError, RuleLocalTargetOutsideRoot,
+			return append(diagnostics, current.diagnostic(RuleLocalTargetOutsideRoot,
 				fmt.Sprintf("target %q resolves outside the workspace root", local.Path), reference))
 		}
 		return diagnostics
@@ -177,25 +177,25 @@ func checkReference(
 	switch status.state {
 	case targetMissing:
 		if rules.Enabled(RuleLocalTargetMissing) {
-			return append(diagnostics, current.diagnostic(SeverityError, RuleLocalTargetMissing,
+			return append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
 				missingMessage(status.target, status.err), reference))
 		}
 		return diagnostics
 	case targetNotRegular:
 		if rules.Enabled(RuleLocalTargetNotRegular) {
-			return append(diagnostics, current.diagnostic(SeverityError, RuleLocalTargetNotRegular,
+			return append(diagnostics, current.diagnostic(RuleLocalTargetNotRegular,
 				fmt.Sprintf("target %q is not a regular file", status.target), reference))
 		}
 		return diagnostics
 	case targetCrossesSymlink:
 		if rules.Enabled(RuleLocalTargetOutsideRoot) {
-			return append(diagnostics, current.diagnostic(SeverityError, RuleLocalTargetOutsideRoot,
+			return append(diagnostics, current.diagnostic(RuleLocalTargetOutsideRoot,
 				fmt.Sprintf("target %q crosses a symlink directory the workspace refuses to follow", status.target), reference))
 		}
 		return diagnostics
 	case targetOutsideRoot:
 		if rules.Enabled(RuleLocalTargetOutsideRoot) {
-			return append(diagnostics, current.diagnostic(SeverityError, RuleLocalTargetOutsideRoot,
+			return append(diagnostics, current.diagnostic(RuleLocalTargetOutsideRoot,
 				fmt.Sprintf("target %q resolves outside the workspace root", local.Path), reference))
 		}
 		return diagnostics
@@ -209,7 +209,7 @@ func checkReference(
 	// target is unreachable in the browser even though it exists on disk.
 	if reference.Route != markdown.ReferenceRouteLink || !markdown.RoutesToDocument(local.Path) {
 		if files.IsMarkdown(status.target) && rules.Enabled(RuleLocalTargetMissing) {
-			return append(diagnostics, current.diagnostic(SeverityError, RuleLocalTargetMissing,
+			return append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
 				fmt.Sprintf("target %q is not accessible: the assets route never serves Markdown files", status.target), reference))
 		}
 		// Assets only need to exist and be regular; the glob and depth
@@ -218,7 +218,7 @@ func checkReference(
 	}
 	if !scope.allowsDocument(status.target) {
 		if rules.Enabled(RuleMarkdownTargetNotServed) {
-			return append(diagnostics, current.diagnostic(SeverityError, RuleMarkdownTargetNotServed,
+			return append(diagnostics, current.diagnostic(RuleMarkdownTargetNotServed,
 				fmt.Sprintf("Markdown target %q exists but %s", status.target, scope.notServedReason(status.target).message()), reference))
 		}
 		return diagnostics
@@ -227,7 +227,7 @@ func checkReference(
 	// headings are unknown; the frontmatter error already explains the break,
 	// and deriving an anchor.missing on top of it would be groundless.
 	if target, ok := index[status.target]; ok && target.inspectable && rules.Enabled(RuleAnchorMissing) && !target.hasAnchor(local.Fragment) {
-		diagnostics = append(diagnostics, current.diagnostic(SeverityError, RuleAnchorMissing,
+		diagnostics = append(diagnostics, current.diagnostic(RuleAnchorMissing,
 			fmt.Sprintf("heading %q does not exist in %q", "#"+local.Fragment, status.target), reference))
 	}
 	return diagnostics
@@ -252,19 +252,23 @@ func (current *indexedDocument) hasAnchor(fragment string) bool {
 }
 
 // diagnostic builds one finding at a reference's source position.
-func (current *indexedDocument) diagnostic(severity Severity, rule string, message string, reference markdown.Reference) Diagnostic {
-	return current.diagnosticAt(severity, rule, message, markdown.Position{Line: reference.Line, Column: reference.Column})
+func (current *indexedDocument) diagnostic(rule string, message string, reference markdown.Reference) Diagnostic {
+	return current.diagnosticForRule(rule, message, markdown.Position{Line: reference.Line, Column: reference.Column})
 }
 
-// diagnosticAt builds one finding at an explicit fact position. Every body
-// fact enters this call already carrying file-level lines, so rules never
-// adjust frontmatter offsets themselves.
-func (current *indexedDocument) diagnosticAt(severity Severity, rule string, message string, position markdown.Position) Diagnostic {
+// diagnosticForRule builds one finding at an explicit fact position,
+// carrying the severity the rule's registry definition declares — the
+// registry is the single source of truth, so no emission site can ever
+// disagree with the rule table README documents. Every body fact enters
+// this call already carrying file-level lines, so rules never adjust
+// frontmatter offsets themselves.
+func (current *indexedDocument) diagnosticForRule(rule string, message string, position markdown.Position) Diagnostic {
+	definition, _ := ruleDefinition(rule)
 	return Diagnostic{
 		Path:     current.display,
 		Line:     position.Line,
 		Column:   position.Column,
-		Severity: severity,
+		Severity: definition.Severity,
 		Rule:     rule,
 		Message:  message,
 	}

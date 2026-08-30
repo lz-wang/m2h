@@ -16,7 +16,7 @@ func checkReferenceRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	diagnostics := make([]Diagnostic, 0)
 	if rules.Enabled(RuleReferenceUndefined) {
 		for _, use := range inspection.UndefinedReferences {
-			diagnostics = append(diagnostics, current.diagnosticAt(SeverityError, RuleReferenceUndefined,
+			diagnostics = append(diagnostics, current.diagnosticForRule(RuleReferenceUndefined,
 				fmt.Sprintf("reference label %q is not defined", use.Label), use.Position))
 		}
 	}
@@ -30,7 +30,7 @@ func checkReferenceRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 		}
 		for _, definition := range inspection.ReferenceDefinitions {
 			if _, referenced := used[markdown.NormalizeReferenceLabel(definition.Label)]; !referenced {
-				diagnostics = append(diagnostics, current.diagnosticAt(SeverityWarning, RuleReferenceUnused,
+				diagnostics = append(diagnostics, current.diagnosticForRule(RuleReferenceUnused,
 					fmt.Sprintf("reference definition %q is never used", definition.Label), definition.Position))
 			}
 		}
@@ -46,7 +46,7 @@ func checkReferenceRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 		if _, generic := nondescriptiveLinkText[lowerTrim(reference.Text)]; reference.Kind != markdown.ReferenceLink || !generic {
 			continue
 		}
-		diagnostics = append(diagnostics, current.diagnostic(SeverityWarning, RuleLinkTextNondescriptive,
+		diagnostics = append(diagnostics, current.diagnostic(RuleLinkTextNondescriptive,
 			fmt.Sprintf("link text %q is not descriptive", reference.Text), reference))
 	}
 	return diagnostics
