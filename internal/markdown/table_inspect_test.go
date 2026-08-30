@@ -253,6 +253,26 @@ func TestInspectReversedLinks(t *testing.T) {
 			source: "Use \\(x\\)[y] here.\n",
 			want:   nil,
 		},
+		{
+			name:   "version-like destination stays prose",
+			source: "Compare (version)[v1.2] and (section)[1.2.3].\n",
+			want:   nil,
+		},
+		{
+			name:   "html comment protects the shape",
+			source: "<!--\nBad example: (Guide)[guide.md]\n-->\n",
+			want:   nil,
+		},
+		{
+			name:   "html block protects the shape",
+			source: "<div>\n(Guide)[guide.md]\n</div>\n",
+			want:   nil,
+		},
+		{
+			name:   "literal code element protects the shape",
+			source: "Use <code>(Guide)[guide.md]</code> verbatim.\n",
+			want:   nil,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

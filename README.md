@@ -197,7 +197,7 @@ Error: unknown check rule "foo.bar"
 | `footnote.empty` | error | 开 | 脚注定义没有任何内容（多行缩进续行不算空） |
 | `table.column-mismatch` | error | 开 | 表格行列数与分隔行不一致（渲染时会被补空或截断），或表头与分隔行列数不符导致整表被拒绝 |
 | `html.comment-unclosed` | error | 开 | `<!--` 没有闭合，其后内容整体渲染为注释 |
-| `link.reversed` | error | 开 | 高置信度识别 `(text)[url]` 反转链接写法；`f(x)[0]`、`array[index]` 不报 |
+| `link.reversed` | error | 开 | 高置信度识别 `(text)[url]` 反转链接写法（destination 须为 scheme、路径或已知文件扩展名）；`f(x)[0]`、`array[index]`、`(version)[v1.2]` 不报 |
 | `image.alt-empty` | warning | 开 | 图片没有 alt 文本 |
 | `document.multiple-h1` | warning | 开 | 一个文档包含多个 H1 |
 | `heading.level-skip` | warning | 开 | 标题层级向下跳超过一级（向上跳任意级合法） |
@@ -222,8 +222,10 @@ Error: unknown check rule "foo.bar"
   `/doc`/`/assets` 路由判定（Markdown 文件不会经 `/assets` 提供）、同一
   文档范围与 symlink 安全边界、同一 GitHub 兼容锚点算法
 - 引用与脚注的"未定义/未使用"判定由实际解析器给出（reference 标签按
-  渲染器同一归一化比较、脚注标签逐字节比较），行内与 fenced 代码中的
-  内容永不参与判定；所有正文诊断的行列号已含 Frontmatter 偏移
+  渲染器同一归一化比较、脚注标签逐字节比较），行内与 fenced 代码、
+  raw HTML 与 HTML 注释（含 `<code>`、`<kbd>` 等字面内容元素）中的
+  内容永不参与语法判定；`unicode.*` 检查的是源文件质量，仍扫描
+  raw HTML，仅代码区域豁免；所有正文诊断的行列号已含 Frontmatter 偏移
 - 退出码：发现 error（或 `--strict` 下存在 warning）时返回 `1`
 
 查看全部选项：

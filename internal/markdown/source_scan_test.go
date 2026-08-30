@@ -127,6 +127,98 @@ func TestInspectUndefinedReferenceSkipsMixedForms(t *testing.T) {
 	}
 }
 
+func TestInspectUndefinedReferenceSkipsRawHTML(t *testing.T) {
+	t.Parallel()
+
+	// Goldmark never interprets brackets inside raw HTML — comment blocks,
+	// inline comments, HTML blocks and the literal-content elements like
+	// <code> — so however link-like the text there looks, it is prose the
+	// parser never attempted to resolve and can never be undefined.
+	tests := []struct {
+		name   string
+		source string
+		want   []ReferenceUse
+	}{
+		{
+			name:   "comment block protects all but the real use",
+			source: "[Real][x]\n\n<!--\n[Example][x]\n-->\n",
+			want:   []ReferenceUse{{Label: "x", Position: Position{Line: 1, Column: 1}}},
+		},
+		{
+			name:   "inline comment protects the shape",
+			source: "Text <!-- [Example][x] --> here.\n",
+			want:   []ReferenceUse{},
+		},
+		{
+			name:   "html block protects the shape",
+			source: "<div>\n[Example][x]\n</div>\n",
+			want:   []ReferenceUse{},
+		},
+		{
+			name:   "literal code element protects the shape",
+			source: "Use <code>[Example][x]</code> verbatim.\n",
+			want:   []ReferenceUse{},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			inspection := Inspect([]byte(test.source))
+			want := test.want
+			if want == nil {
+				want = []ReferenceUse{}
+			}
+			if !slices.Equal(inspection.UndefinedReferences, want) {
+				t.Fatalf("undefined references = %+v, want %+v", inspection.UndefinedReferences, want)
+			}
+		})
+	}
+}
+
+func TestInspectUndefinedFootnoteSkipsRawHTML(t *testing.T) {
+	t.Parallel()
+
+	// Same boundary as undefined references: a marker inside raw HTML is
+	// displayed verbatim, never parsed as a footnote, so it cannot be
+	// undefined.
+	tests := []struct {
+		name   string
+		source string
+		want   []FootnoteReference
+	}{
+		{
+			name:   "comment block protects the marker",
+			source: "# Document\n\n<!--\nExample syntax: [^demo]\n-->\n",
+			want:   []FootnoteReference{},
+		},
+		{
+			name:   "inline comment protects the marker",
+			source: "Syntax <!-- [^demo] --> shown.\n",
+			want:   []FootnoteReference{},
+		},
+		{
+			name:   "literal code element protects the marker",
+			source: "Use <code>[^demo]</code> verbatim.\n",
+			want:   []FootnoteReference{},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			inspection := Inspect([]byte(test.source))
+			want := test.want
+			if want == nil {
+				want = []FootnoteReference{}
+			}
+			if !slices.Equal(inspection.UndefinedFootnotes, want) {
+				t.Fatalf("undefined footnotes = %+v, want %+v", inspection.UndefinedFootnotes, want)
+			}
+		})
+	}
+}
+
 func TestInspectCollectsFootnotes(t *testing.T) {
 	t.Parallel()
 

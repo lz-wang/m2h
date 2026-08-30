@@ -51,6 +51,106 @@ func codeRanges(document ast.Node) []byteRange {
 	return ranges
 }
 
+// rawHTMLRanges collects the byte ranges Goldmark passes through as raw
+// HTML: HTML blocks (comment blocks among them) and inline raw HTML tags.
+// The parser never interprets brackets inside them, so the syntax scans must
+// never report candidates there. Inline literal-content elements — <code>,
+// <kbd>, … — carry Markdown-uninteresting verbatim text between their tags,
+// so each open/close pair's whole span joins the protected ranges; the tags
+// alone would leave that span scannable.
+func rawHTMLRanges(document ast.Node, source []byte) []byteRange {
+	ranges := make([]byteRange, 0)
+	// rawTag is one inline raw HTML tag kept for literal-element pairing.
+	type rawTag struct {
+		span    byteRange
+		name    string
+		closing bool
+	}
+	inline := make([]rawTag, 0)
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		switch typed := node.(type) {
+		case *ast.HTMLBlock:
+			lines := typed.Lines()
+			if lines.Len() == 0 {
+				return ast.WalkContinue, nil
+			}
+			start := lines.At(0).Start
+			stop := lines.At(lines.Len() - 1).Stop
+			if typed.HasClosure() && typed.ClosureLine.Stop > stop {
+				stop = typed.ClosureLine.Stop
+			}
+			ranges = append(ranges, byteRange{start: start, stop: stop})
+		case *ast.RawHTML:
+			if typed.Segments.Len() == 0 {
+				return ast.WalkContinue, nil
+			}
+			first := typed.Segments.At(0)
+			last := typed.Segments.At(typed.Segments.Len() - 1)
+			span := byteRange{start: first.Start, stop: last.Stop}
+			ranges = append(ranges, span)
+			name, closing, selfClosing := htmlTag(source[first.Start:last.Stop])
+			if _, literal := literalElements[name]; !literal || selfClosing {
+				return ast.WalkContinue, nil
+			}
+			inline = append(inline, rawTag{span: span, name: name, closing: closing})
+		}
+		return ast.WalkContinue, nil
+	})
+	for open := 0; open < len(inline); open++ {
+		if inline[open].closing {
+			continue
+		}
+		for next := open + 1; next < len(inline); next++ {
+			if inline[next].closing && inline[next].name == inline[open].name {
+				ranges = append(ranges, byteRange{start: inline[open].span.start, stop: inline[next].span.stop})
+				open = next
+				break
+			}
+		}
+	}
+	sort.Slice(ranges, func(left, right int) bool {
+		return ranges[left].start < ranges[right].start
+	})
+	return ranges
+}
+
+// literalElements are the inline HTML elements whose content the browser
+// renders verbatim, so bracket shapes inside them are quoted syntax, never
+// a broken link attempt.
+var literalElements = map[string]bool{
+	"code":     true,
+	"pre":      true,
+	"kbd":      true,
+	"samp":     true,
+	"var":      true,
+	"script":   true,
+	"style":    true,
+	"textarea": true,
+	"title":    true,
+}
+
+// htmlTag parses one raw HTML tag: its lowercased element name, whether it
+// is a closing tag, and whether it closes itself (<br/>).
+func htmlTag(raw []byte) (name string, closing bool, selfClosing bool) {
+	if len(raw) < 3 || raw[0] != '<' {
+		return "", false, false
+	}
+	index := 1
+	if raw[index] == '/' {
+		closing = true
+		index++
+	}
+	start := index
+	for index < len(raw) && raw[index] != '>' && !isASCIISpace(raw[index]) {
+		index++
+	}
+	selfClosing = raw[len(raw)-2] == '/'
+	return asciiLower(string(raw[start:index])), closing, selfClosing
+}
+
 // sourceScanner walks one document's source once, recovering syntax the
 // final AST can no longer represent: uses the parser rejected and fence
 // lines the code block AST strips away. It never re-parses what the AST
@@ -61,6 +161,7 @@ type sourceScanner struct {
 	source     []byte
 	locator    sourceLocator
 	code       []byteRange // AST code ranges, sorted by start
+	rawHTML    []byteRange // AST raw HTML ranges, sorted by start
 	fences     []CodeFence
 	fenceLines []byteRange // the fence opener/closer lines themselves
 }
@@ -74,23 +175,27 @@ type CodeFence struct {
 }
 
 // newSourceScanner prepares a scan over source, skipping the protected code
-// ranges the AST identified.
-func newSourceScanner(source []byte, code []byteRange) *sourceScanner {
+// and raw HTML ranges the AST identified.
+func newSourceScanner(source []byte, code []byteRange, rawHTML []byteRange) *sourceScanner {
 	scanner := &sourceScanner{
 		source:  source,
 		locator: newSourceLocator(source),
 		code:    code,
+		rawHTML: rawHTML,
 	}
 	sort.Slice(scanner.code, func(left, right int) bool {
 		return scanner.code[left].start < scanner.code[right].start
+	})
+	sort.Slice(scanner.rawHTML, func(left, right int) bool {
+		return scanner.rawHTML[left].start < scanner.rawHTML[right].start
 	})
 	scanner.scanFences()
 	return scanner
 }
 
-// protected reports whether offset sits inside a code range or a fence line,
+// inCode reports whether offset sits inside a code range or a fence line,
 // where nothing the scanner looks for can be real syntax.
-func (scanner *sourceScanner) protected(offset int) bool {
+func (scanner *sourceScanner) inCode(offset int) bool {
 	index := sort.Search(len(scanner.code), func(index int) bool {
 		return scanner.code[index].stop > offset
 	})
@@ -103,6 +208,21 @@ func (scanner *sourceScanner) protected(offset int) bool {
 		}
 	}
 	return false
+}
+
+// protected reports whether offset sits anywhere the Markdown parser never
+// interprets brackets: code, fence lines and raw HTML — comment blocks,
+// HTML blocks and inline literal-content elements among it. The syntax
+// candidate scans stop here; the unicode scan is a source-quality scan and
+// keeps a wider domain, using inCode alone.
+func (scanner *sourceScanner) protected(offset int) bool {
+	if scanner.inCode(offset) {
+		return true
+	}
+	index := sort.Search(len(scanner.rawHTML), func(index int) bool {
+		return scanner.rawHTML[index].stop > offset
+	})
+	return index < len(scanner.rawHTML) && scanner.rawHTML[index].start <= offset
 }
 
 // undefinedReferences returns the located reference uses whose labels the
@@ -292,9 +412,26 @@ func (scanner *sourceScanner) reversedLinks() []ReversedLink {
 	return links
 }
 
+// destinationExtensions are the suffixes that make a dot-suffixed token read
+// as a file target. A bare dot is prose far more often than a link — version
+// numbers like v1.2, section numbers like 1.2.3 — so only known extensions
+// count, trading recall for precision like the rest of this heuristic.
+var destinationExtensions = map[string]bool{
+	"md": true, "markdown": true, "mdx": true,
+	"html": true, "htm": true,
+	"pdf": true, "epub": true,
+	"png": true, "jpg": true, "jpeg": true, "gif": true, "svg": true,
+	"webp": true, "bmp": true, "ico": true, "avif": true,
+	"js": true, "mjs": true, "ts": true, "css": true,
+	"json": true, "yaml": true, "yml": true, "toml": true, "xml": true,
+	"csv": true, "tsv": true, "txt": true, "rst": true, "adoc": true, "tex": true,
+	"zip": true, "tar": true, "gz": true, "7z": true,
+	"doc": true, "docx": true, "xls": true, "xlsx": true, "ppt": true, "pptx": true,
+}
+
 // looksLikeDestination reports whether a bracketed value obviously names a
 // link target: a known scheme, an anchor, a rooted or relative path, or a
-// file-like token with an extension.
+// token with a known file extension.
 func looksLikeDestination(destination string) bool {
 	switch {
 	case destination == "":
@@ -316,7 +453,10 @@ func looksLikeDestination(destination string) bool {
 		return true
 	}
 	dot := strings.LastIndex(destination, ".")
-	return dot > 0
+	if dot <= 0 {
+		return false
+	}
+	return destinationExtensions[strings.ToLower(destination[dot+1:])]
 }
 
 // mojibakePatterns are multi-character UTF-8 signatures of text that was
@@ -360,16 +500,18 @@ func alwaysSuspicious(char rune) bool {
 }
 
 // unicodeFindings reports mojibake signatures and suspicious invisible
-// characters outside code. Invisible characters only count in suspicious
-// positions — line start or end, next to whitespace, or in a consecutive
-// run — because legitimate text uses them in far more places than attacks
-// do.
+// characters outside code. Raw HTML is fair game here — the broken bytes
+// ship to the browser inside it too — so the scan skips code alone, a wider
+// domain than the syntax scans' protected(). Invisible characters only
+// count in suspicious positions — line start or end, next to whitespace, or
+// in a consecutive run — because legitimate text uses them in far more
+// places than attacks do.
 func (scanner *sourceScanner) unicodeFindings() ([]Mojibake, []InvisibleCharacter) {
 	mojibake := make([]Mojibake, 0)
 	for _, pattern := range mojibakePatterns {
 		signature := []byte(pattern)
 		for offset := bytes.Index(scanner.source, signature); offset >= 0; {
-			if !scanner.protected(offset) {
+			if !scanner.inCode(offset) {
 				line, column := scanner.locator.locate(offset)
 				mojibake = append(mojibake, Mojibake{Pattern: pattern, Position: Position{Line: line, Column: column}})
 			}
@@ -385,7 +527,7 @@ func (scanner *sourceScanner) unicodeFindings() ([]Mojibake, []InvisibleCharacte
 	source := scanner.source
 	for offset, char := range string(source) {
 		name, tracked := invisibleNames[char]
-		if !tracked || scanner.protected(offset) {
+		if !tracked || scanner.inCode(offset) {
 			continue
 		}
 		if alwaysSuspicious(char) || scanner.suspiciousPosition(offset, char) {

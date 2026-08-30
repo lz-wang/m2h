@@ -299,7 +299,7 @@ func Inspect(source []byte) Inspection {
 	inspection.References = extractReferences(document, source)
 	inspection.ReferenceDefinitions = extractReferenceDefinitions(document, source)
 
-	scanner := newSourceScanner(source, codeRanges(document))
+	scanner := newSourceScanner(source, codeRanges(document), rawHTMLRanges(document, source))
 	inspection.UndefinedReferences = scanner.undefinedReferences(context.missingReferences)
 	inspection.UndefinedFootnotes = scanner.undefinedFootnotes(footnotes)
 	inspection.Footnotes = footnotes

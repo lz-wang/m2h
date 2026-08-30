@@ -191,3 +191,16 @@ func TestInspectInvisibleCharacters(t *testing.T) {
 		})
 	}
 }
+
+func TestInspectUnicodeScansRawHTML(t *testing.T) {
+	t.Parallel()
+
+	// Mojibake and invisible characters are source-quality problems wherever
+	// they sit — the broken bytes ship to the browser inside raw HTML too —
+	// so unlike the syntax scans, the unicode scan keeps reading raw HTML
+	// and only code is off limits.
+	inspection := Inspect([]byte("<!-- CafÃ© -->\n"))
+	if len(inspection.Mojibake) != 1 {
+		t.Fatalf("mojibake = %+v, want one finding inside the comment", inspection.Mojibake)
+	}
+}
