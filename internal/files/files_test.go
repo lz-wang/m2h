@@ -358,6 +358,94 @@ func TestNormalizeRelativePathUsesSlashSeparators(t *testing.T) {
 	}
 }
 
+func TestIsHiddenPathMatchesDotPrefixedComponents(t *testing.T) {
+	t.Parallel()
+
+	for _, hidden := range []string{
+		".env",
+		".env.production",
+		".git/config",
+		".github/workflows/release.yml",
+		".secret/data.json",
+		"foo/.private/file.pdf",
+		"foo/.hidden.md",
+	} {
+		if !IsHiddenPath(hidden) {
+			t.Errorf("IsHiddenPath(%q) = false, want true", hidden)
+		}
+	}
+	for _, visible := range []string{
+		"guide.md",
+		"images/logo.png",
+		"assets/manual.pdf",
+		"download/archive.zip",
+		"a/b.md",
+	} {
+		if IsHiddenPath(visible) {
+			t.Errorf("IsHiddenPath(%q) = true, want false", visible)
+		}
+	}
+}
+
+func TestDiscoverSkipsHiddenPaths(t *testing.T) {
+	root := t.TempDir()
+	for path, contents := range map[string]string{
+		"guide.md":                 "guide",
+		"images/logo.png":          "logo",
+		".env":                     "secret",
+		".hidden.md":               "hidden guide",
+		".git/config":              "git config",
+		".github/workflows/ci.yml": "workflow",
+		".secret/data.json":        "secret data",
+		"foo/.private/file.pdf":    "private pdf",
+	} {
+		writeTestFile(t, filepath.Join(root, filepath.FromSlash(path)), contents)
+	}
+
+	// Without SkipHidden nothing changes: static analysis still sees every
+	// hidden Markdown and asset, so the web policy never narrows check.
+	visible, err := Discover(context.Background(), root, DiscoverOptions{Depth: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := entryPaths(visible.Markdown), []string{".hidden.md", "guide.md"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("SkipHidden=false Markdown = %#v, want %#v", got, want)
+	}
+	if len(visible.Assets) == 0 {
+		t.Fatal("SkipHidden=false discovery lost all assets")
+	}
+
+	// With SkipHidden every dot-prefixed component disappears from both the
+	// Markdown and the asset listings.
+	hidden, err := Discover(context.Background(), root, DiscoverOptions{Depth: 4, SkipHidden: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := entryPaths(hidden.Markdown), []string{"guide.md"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("SkipHidden=true Markdown = %#v, want %#v", got, want)
+	}
+	if got, want := entryPaths(hidden.Assets), []string{"images/logo.png"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("SkipHidden=true Assets = %#v, want %#v", got, want)
+	}
+}
+
+func TestMatchesHonorsSkipHidden(t *testing.T) {
+	t.Parallel()
+
+	options := DiscoverOptions{Depth: 4, SkipHidden: true}
+	if !Matches("guide.md", options) {
+		t.Fatal("visible path rejected under SkipHidden")
+	}
+	for _, hidden := range []string{".hidden.md", ".git/README.md", "foo/.private/notes.md"} {
+		if Matches(hidden, options) {
+			t.Errorf("Matches(%q) = true under SkipHidden", hidden)
+		}
+	}
+	if !Matches(".hidden.md", DiscoverOptions{Depth: 4}) {
+		t.Fatal("Matches() changed default behavior without SkipHidden")
+	}
+}
+
 func TestPathHelpersHandleBoundaries(t *testing.T) {
 	t.Parallel()
 

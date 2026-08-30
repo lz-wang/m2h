@@ -42,7 +42,12 @@ type DiscoverOptions struct {
 	Pattern     string
 	ExcludeRoot string
 	Excludes    []string
-	Log         io.Writer
+	// SkipHidden keeps every dot-prefixed path component out of the results.
+	// Web publishing turns it on so implicitly published directory content
+	// never exposes dotfiles; static analysis leaves it off to keep checking
+	// hidden documents possible.
+	SkipHidden bool
+	Log        io.Writer
 }
 
 // Discovery separates Markdown inputs from other assets.
@@ -156,6 +161,15 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 			return fmt.Errorf("make %q relative to %q: %w", current, input.Path, err)
 		}
 		relative = NormalizeRelativePath(relative)
+		// Hidden components are pruned during the walk, not filtered after it:
+		// SkipDir keeps the walker out of .git/ and friends entirely, so a
+		// large hidden subtree costs nothing.
+		if options.SkipHidden && IsHiddenPath(relative) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		if entry.IsDir() {
 			if directoryDepth(relative) > options.Depth {
 				return filepath.SkipDir
@@ -200,6 +214,9 @@ func Matches(relative string, options DiscoverOptions) bool {
 	if relative == "." || FileDepth(relative) > options.Depth {
 		return false
 	}
+	if options.SkipHidden && IsHiddenPath(relative) {
+		return false
+	}
 	return options.Pattern == "" || doublestar.MatchUnvalidated(options.Pattern, relative)
 }
 
@@ -225,6 +242,20 @@ func NormalizeRelativePath(value string) string {
 func IsMarkdown(value string) bool {
 	extension := filepath.Ext(value)
 	return strings.EqualFold(extension, ".md") || strings.EqualFold(extension, ".markdown")
+}
+
+// IsHiddenPath reports whether a normalized root-relative path crosses a
+// dot-prefixed path component (.git/config, .env, foo/.private/file.pdf).
+// It is a structural rule about publishing boundaries, not a filename
+// blacklist: only the path's own components decide.
+func IsHiddenPath(relative string) bool {
+	relative = NormalizeRelativePath(relative)
+	for segment := range strings.SplitSeq(relative, "/") {
+		if strings.HasPrefix(segment, ".") {
+			return true
+		}
+	}
+	return false
 }
 
 // IsWithin reports whether candidate is root itself or lies beneath root.

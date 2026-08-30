@@ -158,6 +158,44 @@ func TestAllowsDocumentDirectory(t *testing.T) {
 	}
 }
 
+func TestAllowsDocumentHiddenPolicy(t *testing.T) {
+	t.Parallel()
+
+	// The web serving shape: SkipHidden is on, so any dot-prefixed component
+	// makes a document unreachable no matter how deep it sits.
+	serving := rootScope{root: t.TempDir(), discovery: files.DiscoverOptions{Depth: 4, SkipHidden: true}}
+	if !serving.allowsDocument("guide.md") || !serving.allowsDocument("docs/design.md") {
+		t.Fatal("visible documents rejected under SkipHidden")
+	}
+	for _, rejected := range []string{".secret.md", "foo/.secret.md", ".git/README.md", ".github/workflows/doc.md"} {
+		if serving.allowsDocument(rejected) {
+			t.Errorf("serving scope allowed hidden document %q", rejected)
+		}
+	}
+
+	// The check shape: discovery without SkipHidden keeps static analysis over
+	// hidden Markdown working — the web publishing policy must not leak into it.
+	analysis := rootScope{root: t.TempDir(), discovery: files.DiscoverOptions{Depth: 4}}
+	if !analysis.allowsDocument(".secret.md") || !analysis.allowsDocument("foo/.secret.md") {
+		t.Fatal("analysis scope rejected hidden Markdown without SkipHidden")
+	}
+}
+
+func TestAllowsDocumentSingleFileHiddenName(t *testing.T) {
+	t.Parallel()
+
+	// An explicitly named hidden file is an explicit publishing act: the
+	// single-file scope keeps serving it even though directory discovery
+	// would never have surfaced it.
+	scope := rootScope{root: t.TempDir(), file: ".private.md"}
+	if !scope.allowsDocument(".private.md") {
+		t.Fatal("single-file scope rejected its explicit hidden input")
+	}
+	if scope.allowsDocument(".other.md") {
+		t.Fatal("single-file scope admitted another hidden file")
+	}
+}
+
 func TestRootScopeKind(t *testing.T) {
 	t.Parallel()
 

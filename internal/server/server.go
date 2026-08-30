@@ -107,10 +107,15 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	}
 	runContext, cancel := context.WithCancel(ctx)
 	defer cancel()
+	// Web publishing hides dot-prefixed paths: anything under a dot component
+	// of a directory root (.git/, .env, foo/.private/) is not publishable
+	// content. Static analysis (m2h check) keeps its own discovery without
+	// SkipHidden, so this policy never narrows what check can inspect.
 	workspace, err := newWorkspace(inputs, files.DiscoverOptions{
-		Depth:   normalized.Depth,
-		Pattern: normalized.Pattern,
-		Log:     logger,
+		Depth:      normalized.Depth,
+		Pattern:    normalized.Pattern,
+		SkipHidden: true,
+		Log:        logger,
 	})
 	if err != nil {
 		return err

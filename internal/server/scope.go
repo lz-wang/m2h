@@ -89,9 +89,16 @@ func (scope rootScope) discover(ctx context.Context) (files.Discovery, error) {
 
 // allowsDocument reports whether a normalized relative path is reachable
 // through the scope. It is the single authority that guards /api/document.
+// A single-file scope serves its explicit input whatever the file is named —
+// naming a hidden file on the command line is an explicit publishing act, not
+// an accidental exposure by directory discovery. A directory scope honors the
+// discovery's SkipHidden so the file tree and document admission never drift.
 func (scope rootScope) allowsDocument(relative string) bool {
 	if scope.isSingleFile() {
 		return relative == scope.file
+	}
+	if scope.discovery.SkipHidden && files.IsHiddenPath(relative) {
+		return false
 	}
 	return files.IsMarkdown(relative) && files.Matches(relative, scope.discovery)
 }

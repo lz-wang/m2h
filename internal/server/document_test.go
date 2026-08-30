@@ -1199,6 +1199,64 @@ func TestRawMarkdownMultiRootNeverCrossesRoots(t *testing.T) {
 	}
 }
 
+func TestDirectoryServingHidesHiddenPaths(t *testing.T) {
+	root := canonicalDirectory(t, t.TempDir())
+	writeTestFile(t, filepath.Join(root, "guide.md"), "# Guide")
+	writeTestFile(t, filepath.Join(root, ".secret.md"), "# Secret")
+	writeTestFile(t, filepath.Join(root, "foo", ".secret.md"), "# Nested secret")
+
+	// The production workspace shape: discovery carries SkipHidden, so the
+	// tree, the document API, the rendered page and the raw route all refuse
+	// hidden documents through the same admission rule.
+	handler := newDocumentHandler(singleRootWorkspace(rootScope{
+		root:      root,
+		discovery: files.DiscoverOptions{Depth: 4, SkipHidden: true},
+	}), nil, directoryTestUI())
+
+	listing := performRequest(handler, http.MethodGet, "/api/files")
+	if listing.Code != http.StatusOK {
+		t.Fatalf("GET /api/files status = %d", listing.Code)
+	}
+	var payload fileListResponse
+	decodeJSON(t, listing, &payload)
+	if got := payload.Roots[0].Files; len(got) != 1 || got[0].Path != "guide.md" {
+		t.Fatalf("file tree = %+v, want guide.md only", got)
+	}
+
+	if response := performRequest(handler, http.MethodGet, "/api/document?path=guide.md"); response.Code != http.StatusOK {
+		t.Fatalf("visible document status = %d, want 200", response.Code)
+	}
+	for _, target := range []string{
+		"/api/document?path=.secret.md",
+		"/api/document?path=foo/.secret.md",
+	} {
+		assertJSONError(t, performRequest(handler, http.MethodGet, target), http.StatusNotFound)
+	}
+	for _, target := range []string{"/doc/.secret.md", "/doc/foo/.secret.md", "/raw/.secret.md", "/raw/foo/.secret.md"} {
+		if response := performRequest(handler, http.MethodGet, target); response.Code != http.StatusNotFound {
+			t.Errorf("GET %s status = %d, want 404", target, response.Code)
+		}
+	}
+	if response := performRequest(handler, http.MethodGet, "/doc/guide.md"); response.Code != http.StatusOK {
+		t.Fatalf("GET /doc/guide.md status = %d, want 200", response.Code)
+	}
+}
+
+func TestSingleFileServingKeepsExplicitHiddenInput(t *testing.T) {
+	root := canonicalDirectory(t, t.TempDir())
+	source := filepath.Join(root, ".private.md")
+	writeTestFile(t, source, "# Private")
+
+	handler := newDocumentHandler(singleRootWorkspace(rootScope{root: root, file: ".private.md"}), nil, directoryTestUI())
+
+	if response := performRequest(handler, http.MethodGet, "/api/document?path=.private.md"); response.Code != http.StatusOK {
+		t.Fatalf("explicit hidden input status = %d, want 200", response.Code)
+	}
+	if response := performRequest(handler, http.MethodGet, "/raw/.private.md"); response.Code != http.StatusOK {
+		t.Fatalf("raw explicit hidden input status = %d, want 200", response.Code)
+	}
+}
+
 func directoryFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
