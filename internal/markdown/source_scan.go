@@ -2,6 +2,7 @@ package markdown
 
 import (
 	"bytes"
+	"maps"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -438,15 +439,21 @@ func (scanner *sourceScanner) protected(offset int) bool {
 }
 
 // undefinedReferences returns the located reference uses whose labels the
-// parser rejected, in source order. Only the explicit [text][label] and
-// collapsed [text][] forms express clear reference intent; a bare [label]
-// is bracketed prose far more often than a broken shortcut link, so it is
-// deliberately not reported (a defined [label] still resolves and never
-// reaches this list either way).
-func (scanner *sourceScanner) undefinedReferences(missing map[string]struct{}) []ReferenceUse {
+// parser rejected, in source order, at most as many per label as the parser
+// rejected — the scan can find bracket pairs the parser never attempted to
+// resolve (inside a link title, say), and those must not become diagnostics.
+// Only the explicit [text][label] and collapsed [text][] forms express clear
+// reference intent; a bare [label] is bracketed prose far more often than a
+// broken shortcut link, so it is deliberately not reported (a defined
+// [label] still resolves and never reaches this list either way).
+func (scanner *sourceScanner) undefinedReferences(missing map[string]int) []ReferenceUse {
+	remaining := make(map[string]int, len(missing))
+	maps.Copy(remaining, missing)
 	uses := make([]ReferenceUse, 0)
 	for _, candidate := range scanner.referenceUseCandidates() {
-		if _, rejected := missing[NormalizeReferenceLabel(candidate.label)]; rejected {
+		label := NormalizeReferenceLabel(candidate.label)
+		if remaining[label] > 0 {
+			remaining[label]--
 			uses = append(uses, ReferenceUse{Label: candidate.label, Position: candidate.position})
 		}
 	}

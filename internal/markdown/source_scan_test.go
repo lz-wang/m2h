@@ -176,6 +176,24 @@ func TestInspectUndefinedReferenceSkipsRawHTML(t *testing.T) {
 	}
 }
 
+func TestInspectUndefinedReferenceCappedByParserRejections(t *testing.T) {
+	t.Parallel()
+
+	// The source scan can find more bracket pairs than the parser attempted
+	// to resolve — a link title is literal text and never triggers a lookup —
+	// so the reported uses are capped by the parser's actual rejection count
+	// per label: the title's [missing] here must not become a diagnostic.
+	// A collapsed use registers exactly one lookup (its leftover bracket
+	// pair looks up the empty label), leaving no budget for the fake pair.
+	source := []byte("See [missing][] or [a](b \"t [x][missing]\").\n")
+	inspection := Inspect(source)
+
+	want := []ReferenceUse{{Label: "missing", Position: Position{Line: 1, Column: 5}}}
+	if !slices.Equal(inspection.UndefinedReferences, want) {
+		t.Fatalf("undefined references = %+v, want %+v", inspection.UndefinedReferences, want)
+	}
+}
+
 func TestInspectUndefinedFootnoteSkipsRawHTML(t *testing.T) {
 	t.Parallel()
 

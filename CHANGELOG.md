@@ -26,6 +26,8 @@
 
 ### 修复
 
+- 修复 `reference.undefined` 的上报数量可能超过解析器实际拒绝次数的问题：解析器记录的 reference lookup 失败从集合升级为按 label 计数，源扫描产生的 undefined 上报以该计数为上限——链接标题等解析器从不做 inline 解析的区域中与真实失败同名的 `[text][label]` 括号对不再占用诊断名额。
+
 - 修复 `code-fence.language-missing` 与解析器的分歧：fence 的识别与语言判定改由真实 `FencedCodeBlock` AST 给出，此前逐行扫描只认顶层行首的 ```/~~~——blockquote、列表项内的无语言 fence 一直漏报，raw HTML 块内的 ``` 反被误当作 Markdown fence 上报；现在容器内的 fence 正确报告且行列定位到 opener 行，`<div>` 等 HTML 块内的反引号不再参与判定。
 
 - 修复三条默认开启的 error 规则对 raw HTML 内容的误报：`reference.undefined`、`footnote.undefined` 与 `link.reversed` 的源扫描现在跳过 HTML 注释块、行内注释、HTML 块与 `<code>`/`<kbd>` 等字面内容元素——解析器从不解释其中的括号语法，此前 `<!-- [^demo] -->`、注释中的示例链接写法与 `<code>(Guide)[guide.md]</code>` 会被报告为 undefined/reversed 并使 CI 直接失败；`link.reversed` 的 destination 判定同步收紧为 scheme、路径或已知文件扩展名，`(version)[v1.2]` 这类版本号写法不再误报；`unicode.mojibake` 与 `unicode.invisible-character` 检查的是源文件质量，仍扫描 raw HTML，仅代码区域豁免。

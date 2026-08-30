@@ -81,7 +81,8 @@ type ReferenceDefinition struct {
 // ReferenceUse is one explicit reference-style use — [text][label] or
 // [text][] — whose label the parser could not resolve to a definition. The
 // judgement is Goldmark's (see inspectionContext); the source scan only
-// recovers where the rejected use sits. Shortcut [label] alone never
+// recovers where the rejected use sits, and never reports more uses of a
+// label than the parser actually rejected. Shortcut [label] alone never
 // becomes a ReferenceUse: in plain prose a bracketed word is usually text,
 // not a link attempt.
 type ReferenceUse struct {
@@ -244,22 +245,24 @@ func (inspection *Inspection) ShiftLines(delta int) {
 // Goldmark itself decides whether a reference-style link resolves; a failed
 // lookup leaves plain text with no AST trace, so the fact must be recorded
 // while the parse is running. Labels are recorded in Goldmark's normalized
-// form (see NormalizeReferenceLabel) exactly as the parser looked them up.
+// form (see NormalizeReferenceLabel) exactly as the parser looked them up,
+// counted per lookup so the later scan can never report more uses of a
+// label than the parser actually rejected.
 type inspectionContext struct {
 	parser.Context
 
-	missingReferences map[string]struct{}
+	missingReferences map[string]int
 }
 
-// Reference intercepts every label lookup during the parse and records the
-// labels Goldmark rejected. Keeping the judgement inside the real parser is
+// Reference intercepts every label lookup during the parse and counts the
+// rejections per label. Keeping the judgement inside the real parser is
 // what makes the later "undefined" facts exact: escaped brackets, code
 // spans and other constructs never trigger a lookup, so they can never be
 // reported.
 func (context *inspectionContext) Reference(label string) (parser.Reference, bool) {
 	reference, ok := context.Context.Reference(label)
 	if !ok {
-		context.missingReferences[label] = struct{}{}
+		context.missingReferences[label]++
 	}
 	return reference, ok
 }
@@ -286,7 +289,7 @@ func Inspect(source []byte) Inspection {
 	))
 	context := &inspectionContext{
 		Context:           parser.NewContext(parser.WithIDs(newGitHubIDs())),
-		missingReferences: make(map[string]struct{}),
+		missingReferences: make(map[string]int),
 	}
 	document := engine.Parser().Parse(text.NewReader(source), parser.WithContext(context))
 
