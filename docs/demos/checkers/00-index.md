@@ -8,7 +8,7 @@ title: 检查规则演示索引
 文件只触发自己的规则（个别文件会顺带演示规则间的独立性），文件内的
 "预期表现"一节写明命令与逐字输出。
 
-一次性看全部默认开启的规则（11 error + 10 warning）：
+一次性看全部默认开启的规则（12 error + 9 warning）：
 
 ```bash
 m2h check docs/demos/checkers
@@ -26,6 +26,21 @@ m2h check docs/demos/checkers/15-heading-level-skip.md
 ```bash
 m2h check docs/demos/checkers --enable section.empty,link.text-nondescriptive,unicode.mojibake,unicode.invisible-character
 ```
+
+## 选择规则
+
+`--enable` 在默认规则之上追加规则，`--disable` 从中移除规则；两者都支持
+逗号分隔多个规则，`all` 代表全部规则，且 `--disable` 始终优先：
+
+```bash
+m2h check docs --enable section.empty,unicode.mojibake
+m2h check docs --disable image.alt-empty
+m2h check docs --enable all --disable image.alt-empty
+```
+
+因此，`--disable all --enable <规则>` 的结果是一条规则都不运行，而不是只运行
+指定规则。未知规则名会在读取任何文件之前以
+`Error: unknown check rule "foo.bar"` 失败。
 
 `assets/` 是演示辅助目录：`target.md` 自身完全干净、仅被 05 号引用，
 `logo.png` 是真实存在的 1×1 图片。
@@ -72,7 +87,7 @@ m2h check docs/demos/checkers --enable section.empty,link.text-nondescriptive,un
 
 ## 与规则清单的对应
 
-规则语义、等级与默认开关以 README「检查文档」一节的 25 条规则表为准；本
-目录的"预期表现"均按当前实现逐字核对，输出契约为
-`path:line:column: severity [rule]: message`，发现 error（或 `--strict`
-下存在 warning）时退出码为 1。
+本索引集中维护规则名称、等级、默认开关和触发场景；各演示文件的"预期表现"
+按当前实现逐字核对，并补充对应规则的行为边界。输出契约为
+`path:line:column: severity [rule]: message`，发现 error（或 `--strict` 下存在
+warning）时退出码为 1。
