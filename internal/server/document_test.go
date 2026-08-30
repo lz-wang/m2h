@@ -1265,6 +1265,54 @@ func TestSingleFileServingKeepsExplicitHiddenInput(t *testing.T) {
 	}
 }
 
+func TestSymlinkAliasesCannotBypassPublishingPolicy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary on Windows")
+	}
+
+	root := canonicalDirectory(t, t.TempDir())
+	writeTestFile(t, filepath.Join(root, ".secret.md"), "# Secret")
+	writeTestFile(t, filepath.Join(root, "docs", "real.md"), "# Real")
+	// Visible aliases whose canonical targets are hidden: the publishing
+	// policy must apply to both the requested identity and the canonical
+	// target, or a visible symlink becomes a hole in the boundary.
+	if err := os.Symlink(filepath.Join(root, ".secret.md"), filepath.Join(root, "public.md")); err != nil {
+		t.Fatal(err)
+	}
+	// A legal alias: visible name, visible target — stays served, with the
+	// depth/glob semantics still judged by the alias path.
+	if err := os.Symlink(filepath.Join(root, "docs", "real.md"), filepath.Join(root, "alias.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := newDocumentHandler(singleRootWorkspace(rootScope{
+		root:      root,
+		discovery: files.DiscoverOptions{Depth: 4, SkipHidden: true},
+	}), nil, directoryTestUI())
+
+	// The hidden-target alias is unreachable through every document entrance
+	// and never surfaces in the file tree.
+	for _, target := range []string{"/doc/public.md", "/raw/public.md", "/api/document?path=public.md"} {
+		if response := performRequest(handler, http.MethodGet, target); response.Code != http.StatusNotFound {
+			t.Errorf("GET %s status = %d, want 404", target, response.Code)
+		}
+	}
+	listing := performRequest(handler, http.MethodGet, "/api/files")
+	var payload fileListResponse
+	decodeJSON(t, listing, &payload)
+	if containsSummary(payload.Roots[0].Files, "public.md") {
+		t.Fatal("hidden-target alias appeared in the file tree")
+	}
+
+	// The legal alias keeps working end to end.
+	if response := performRequest(handler, http.MethodGet, "/api/document?path=alias.md"); response.Code != http.StatusOK {
+		t.Fatalf("visible-target alias status = %d, want 200", response.Code)
+	}
+	if response := performRequest(handler, http.MethodGet, "/raw/alias.md"); response.Code != http.StatusOK {
+		t.Fatalf("raw visible-target alias status = %d, want 200", response.Code)
+	}
+}
+
 func directoryFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

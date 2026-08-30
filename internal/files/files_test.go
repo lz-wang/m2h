@@ -277,6 +277,50 @@ func TestDiscoverSkipsInternalSymlinkDirectoriesAndEscapes(t *testing.T) {
 	}
 }
 
+func TestDiscoverSkipHiddenAppliesToSymlinkTargets(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary on Windows")
+	}
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, ".secret.md"), "secret")
+	writeTestFile(t, filepath.Join(root, "docs", "real.md"), "real")
+	writeTestFile(t, filepath.Join(root, ".private", "data.json"), "data")
+	writeTestFile(t, filepath.Join(root, "hidden-target.png"), "placeholder")
+	if err := os.Symlink(filepath.Join(root, ".secret.md"), filepath.Join(root, "public.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, ".private", "data.json"), filepath.Join(root, "data-alias.json")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "docs", "real.md"), filepath.Join(root, "alias.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without SkipHidden the aliases stay: check still sees every hidden
+	// document and the links pointing at them.
+	visible, err := Discover(context.Background(), root, DiscoverOptions{Depth: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := entryPaths(visible.Markdown), []string{".secret.md", "alias.md", "docs/real.md", "public.md"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("SkipHidden=false Markdown = %#v, want %#v", got, want)
+	}
+
+	// With SkipHidden every alias whose canonical target is hidden
+	// disappears from both listings; a visible-target alias survives.
+	hidden, err := Discover(context.Background(), root, DiscoverOptions{Depth: 4, SkipHidden: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := entryPaths(hidden.Markdown), []string{"alias.md", "docs/real.md"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("SkipHidden=true Markdown = %#v, want %#v", got, want)
+	}
+	if got, want := entryPaths(hidden.Assets), []string{"hidden-target.png"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("SkipHidden=true Assets = %#v, want %#v", got, want)
+	}
+}
+
 func TestDiscoverExcludesOutputSubtree(t *testing.T) {
 	root := t.TempDir()
 	output := filepath.Join(root, "public")

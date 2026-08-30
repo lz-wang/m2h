@@ -42,12 +42,21 @@ func (handler *assetHandler) ServeHTTP(response http.ResponseWriter, request *ht
 		http.NotFound(response, request)
 		return
 	}
-	target, err := resolveRequestFile(root.scope.root, relative)
+	resolved, err := resolveRequestFile(root.scope.root, relative)
 	if err != nil {
 		http.NotFound(response, request)
 		return
 	}
-	asset, err := os.Open(target)
+	// The publishing policy runs again on the canonical identity: a
+	// harmless-looking alias (safe.txt) whose target is hidden or an active
+	// web document (app.js, page.html) must not slip through the first,
+	// alias-based check. Assets carry no glob/depth semantics, so the same
+	// rule simply applies twice.
+	if !root.scope.allowsAsset(resolved.relative) {
+		http.NotFound(response, request)
+		return
+	}
+	asset, err := os.Open(resolved.target)
 	if err != nil {
 		http.NotFound(response, request)
 		return

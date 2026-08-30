@@ -103,6 +103,19 @@ func (scope rootScope) allowsDocument(relative string) bool {
 	return files.IsMarkdown(relative) && files.Matches(relative, scope.discovery)
 }
 
+// allowsResolvedDocument re-checks only the security property — a hidden
+// canonical target — after filesystem resolution. It deliberately skips the
+// glob/depth rules: those belong to the alias path the reader addressed, so
+// a shallow symlink to a deeper document keeps serving exactly as before.
+// A single-file scope serves its explicitly named input whatever it resolves
+// through, so there is nothing left to refuse.
+func (scope rootScope) allowsResolvedDocument(relative string) bool {
+	if scope.isSingleFile() {
+		return true
+	}
+	return !scope.discovery.SkipHidden || !files.IsHiddenPath(relative)
+}
+
 // allowsAsset reports whether a normalized relative path may be served
 // through /assets. Markdown files belong to the document routes only, hidden
 // paths are never publishable, and active web documents (HTML/JS/CSS) must

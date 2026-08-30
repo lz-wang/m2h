@@ -252,7 +252,10 @@ func fileDisplayTitle(contents []byte, relativePath string) (string, error) {
 // root, root-relative path and absolute file target. It is the one filesystem
 // boundary shared by /api/document and /raw/ so both entrances can never drift
 // apart: unknown roots, filtered or non-Markdown files, traversal and symlink
-// escapes all fail here. Callers keep their own HTTP error shape and rendering.
+// escapes all fail here. A file symlink whose canonical target is hidden is
+// refused here too — the publishing policy runs on the requested identity and
+// again on the canonical one. Callers keep their own HTTP error shape and
+// rendering.
 func (handler *documentHandler) resolveVisibleDocument(virtual string) (workspaceRoot, string, string, error) {
 	root, relative, err := handler.workspace.locate(virtual)
 	if err != nil {
@@ -261,11 +264,14 @@ func (handler *documentHandler) resolveVisibleDocument(virtual string) (workspac
 	if !root.scope.allowsDocument(relative) {
 		return workspaceRoot{}, "", "", fmt.Errorf("document %q is not served by its root", virtual)
 	}
-	target, err := resolveRequestFile(root.scope.root, relative)
+	resolved, err := resolveRequestFile(root.scope.root, relative)
 	if err != nil {
 		return workspaceRoot{}, "", "", err
 	}
-	return root, relative, target, nil
+	if !root.scope.allowsResolvedDocument(resolved.relative) {
+		return workspaceRoot{}, "", "", fmt.Errorf("document %q resolves to a hidden target", virtual)
+	}
+	return root, relative, resolved.target, nil
 }
 
 // serveRawMarkdown streams the original Markdown source of one addressable
@@ -432,25 +438,42 @@ func frontMatterResponseFrom(frontMatter *markdown.FrontMatter) *frontMatterResp
 }
 
 // resolveRequestFile maps a decoded root-relative request path onto the exact
-// file the workspace would serve, applying the shared filesystem boundary:
-// exact-case components, no symlink directories, canonical resolution inside
-// the root and a regular-file requirement.
-func resolveRequestFile(root, relative string) (string, error) {
+// resolvedRequestFile pairs the absolute file the workspace would serve with
+// its canonical target path relative to the root. The two diverge exactly
+// when the request named a file symlink: the requested identity keeps the
+// alias path, the canonical identity names what is actually read. Publishing
+// policy is applied to both, while this resolution itself understands none.
+type resolvedRequestFile struct {
+	target   string
+	relative string
+}
+
+// resolveRequestFile applies the shared filesystem boundary: exact-case
+// components, no symlink directories, canonical resolution inside the root
+// and a regular-file requirement.
+func resolveRequestFile(root, relative string) (resolvedRequestFile, error) {
 	if err := files.RequireExactPath(root, relative); err != nil {
-		return "", err
+		return resolvedRequestFile{}, err
 	}
 	target, err := files.CanonicalPath(filepath.Join(root, filepath.FromSlash(relative)))
 	if err != nil {
-		return "", err
+		return resolvedRequestFile{}, err
 	}
 	if !files.IsWithin(root, target) {
-		return "", fmt.Errorf("resolved path escapes root")
+		return resolvedRequestFile{}, fmt.Errorf("resolved path escapes root")
+	}
+	canonicalRelative, err := filepath.Rel(root, target)
+	if err != nil {
+		return resolvedRequestFile{}, fmt.Errorf("make %q relative to %q: %w", target, root, err)
 	}
 	info, err := os.Stat(target)
 	if err != nil || !info.Mode().IsRegular() {
-		return "", fmt.Errorf("path is not a regular file")
+		return resolvedRequestFile{}, fmt.Errorf("path is not a regular file")
 	}
-	return target, nil
+	return resolvedRequestFile{
+		target:   target,
+		relative: files.NormalizeRelativePath(canonicalRelative),
+	}, nil
 }
 
 type statusResponseWriter struct {

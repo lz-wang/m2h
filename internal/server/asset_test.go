@@ -176,6 +176,45 @@ func TestAssetSymlinkBoundaries(t *testing.T) {
 	}
 }
 
+func TestAssetSymlinksCannotBypassPublishingPolicy(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary on Windows")
+	}
+
+	root := canonicalDirectory(t, t.TempDir())
+	writeTestFile(t, filepath.Join(root, ".private", "report.pdf"), "report")
+	writeTestFile(t, filepath.Join(root, "app.js"), "console.log(1)")
+	writeTestFile(t, filepath.Join(root, "page.html"), "<html></html>")
+	writeTestFile(t, filepath.Join(root, "images", "logo-real.png"), "logo")
+	// Harmless-looking names whose canonical targets are hidden or active
+	// web content: the asset policy must hold for the canonical target too.
+	for link, target := range map[string]string{
+		"public.pdf":    ".private/report.pdf",
+		"safe.js.txt":   "app.js",
+		"safe.html.txt": "page.html",
+		"logo.png":      "images/logo-real.png",
+	} {
+		if err := os.Symlink(filepath.Join(root, filepath.FromSlash(target)), filepath.Join(root, link)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	handler := newAssetHandler(singleRootWorkspace(rootScope{root: root}))
+	for _, refused := range []string{
+		"/assets/public.pdf",
+		"/assets/safe.js.txt",
+		"/assets/safe.html.txt",
+	} {
+		if response := performRequest(handler, http.MethodGet, refused); response.Code != http.StatusNotFound {
+			t.Errorf("GET %s status = %d, want 404 (canonical target must satisfy the asset policy)", refused, response.Code)
+		}
+	}
+	// A visible alias to a visible passive target keeps working.
+	if response := performRequest(handler, http.MethodGet, "/assets/logo.png"); response.Code != http.StatusOK {
+		t.Errorf("GET /assets/logo.png status = %d, want 200", response.Code)
+	}
+}
+
 // writeTestFile is the shared fixture helper for the server package tests.
 func writeTestFile(t *testing.T, name, contents string) {
 	t.Helper()

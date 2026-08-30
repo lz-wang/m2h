@@ -196,6 +196,36 @@ func TestAllowsDocumentSingleFileHiddenName(t *testing.T) {
 	}
 }
 
+func TestAllowsResolvedDocument(t *testing.T) {
+	t.Parallel()
+
+	// The re-check covers only the hidden security property of the canonical
+	// target: glob/depth stay with the alias path, so a shallow alias to a
+	// deeper document is not rejected by depth here.
+	serving := rootScope{root: t.TempDir(), discovery: files.DiscoverOptions{Depth: 0, SkipHidden: true}}
+	if !serving.allowsResolvedDocument("docs/deep.md") {
+		t.Fatal("resolved check applied depth semantics; it must only judge hidden targets")
+	}
+	for _, hidden := range []string{".secret.md", ".git/README.md", "foo/.private/notes.md"} {
+		if serving.allowsResolvedDocument(hidden) {
+			t.Errorf("serving scope allowed hidden canonical target %q", hidden)
+		}
+	}
+
+	// Without SkipHidden (the check semantics) nothing is refused.
+	analysis := rootScope{root: t.TempDir(), discovery: files.DiscoverOptions{Depth: 4}}
+	if !analysis.allowsResolvedDocument(".secret.md") {
+		t.Fatal("analysis scope refused a hidden canonical target without SkipHidden")
+	}
+
+	// A single-file scope serves its explicitly named input whatever it
+	// resolves through — even a hidden-named one.
+	single := rootScope{root: t.TempDir(), file: ".private.md"}
+	if !single.allowsResolvedDocument(".private.md") {
+		t.Fatal("single-file scope refused its own explicit input")
+	}
+}
+
 func TestAllowsAsset(t *testing.T) {
 	t.Parallel()
 

@@ -24,6 +24,8 @@
 
 ### 修复
 
+- 修复可见符号链接可绕过发布边界读取隐藏文件与主动 Web 内容的问题：发布策略此前只作用于请求路径，`public.md -> .secret.md` 这类指向 root 内隐藏目标的别名、以及 `safe.txt -> app.js` 这类伪装扩展名指向主动 Web 内容的别名都能在解析后绕过 hidden/active 策略。现在发布策略同时作用于请求路径与 canonical 解析目标：文档路由对解析结果复检隐藏属性（`--glob`/`--depth` 仍按读者看到的别名路径判定，浅层别名指向深层文档的既有语义不变），附件路由对解析结果重跑完整准入策略，目录扫描同样跳过 canonical 目标隐藏的别名——隐藏目标的别名不再出现在文件树中（此前会泄露其标题）。指向可见普通文件的合法别名（如 `logo.png -> images/logo-real.png`）行为不变；`m2h check` 的静态分析语义不变。
+
 - 修复目录文档服务默认暴露点开头隐藏路径的问题：目录 root 下任何包含 `.` 开头路径段的内容（如 `.env`、`.git/config`、`.github/workflows/`、`foo/.private/file.pdf`）不再出现在文件树与文档 API 中，`/doc`、`/raw` 也不再响应这些路径；隐藏目录在扫描阶段即被跳过，不再进入遍历结果。显式以单文件路径启动（如 `m2h notes/.private.md`）仍正常服务该文件，`m2h check` 的静态分析语义不变，仍可检查隐藏 Markdown。
 
 - 修复 `/assets` 附件路由可提供任意非 Markdown 文件的问题：HTML（`.html`/`.htm`/`.xhtml`）、脚本（`.js`/`.mjs`/`.cjs`）与样式表（`.css`）等主动 Web 内容现在返回 404，避免发布目录内的文件在 m2h origin 下成为同源可执行页面；隐藏路径同样不再可访问。图片、SVG、PDF、压缩包、音视频等普通被动附件不受影响，`Range` 分段请求（`206 Partial Content`）与 symlink 边界行为保持不变。`/assets` 响应统一携带 `Content-Security-Policy: sandbox; default-src 'none'`，直接导航到 SVG 附件时其中的内嵌脚本不会作为文档脚本执行；Markdown 中以 `<img>` 引用的 SVG 展示不受影响。

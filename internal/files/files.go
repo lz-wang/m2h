@@ -180,15 +180,28 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 			return nil
 		}
 
-		info, safe, err := safeFileInfo(input.Path, current, entry, logger, relative)
+		safe, reachable, err := safeFileInfo(input.Path, current, entry, logger, relative)
 		if err != nil {
 			return err
 		}
-		if !safe {
+		if !reachable {
 			return nil
 		}
+		// The hidden rule runs on the canonical target as well: a visible
+		// alias (public.md → .secret.md) would otherwise publish — and even
+		// title-leak — a file the walk never surfaced. Only the security
+		// property is re-checked; glob/depth keep judging the alias path.
+		if options.SkipHidden {
+			resolvedRelative, relErr := filepath.Rel(input.Path, safe.target)
+			if relErr != nil {
+				return fmt.Errorf("make %q relative to %q: %w", safe.target, input.Path, relErr)
+			}
+			if IsHiddenPath(NormalizeRelativePath(resolvedRelative)) {
+				return nil
+			}
+		}
 
-		discovered := Entry{AbsolutePath: current, RelativePath: relative, Mode: info.Mode()}
+		discovered := Entry{AbsolutePath: current, RelativePath: relative, Mode: safe.info.Mode()}
 		if IsMarkdown(relative) {
 			if Matches(relative, options) {
 				result.Markdown = append(result.Markdown, discovered)
@@ -319,37 +332,51 @@ func FileDepth(relative string) int {
 	return strings.Count(relative, "/")
 }
 
-func safeFileInfo(root, current string, entry fs.DirEntry, logger io.Writer, relative string) (fs.FileInfo, bool, error) {
+// safeFile is one safely reachable regular file together with the absolute
+// canonical path it resolves to. For a plain file the target is the path
+// itself; for a file symlink it is the fully resolved destination.
+type safeFile struct {
+	info   fs.FileInfo
+	target string
+}
+
+func safeFileInfo(root, current string, entry fs.DirEntry, logger io.Writer, relative string) (safeFile, bool, error) {
 	if entry.Type()&os.ModeSymlink == 0 {
 		info, err := entry.Info()
 		if err != nil {
-			return nil, false, fmt.Errorf("inspect %q: %w", current, err)
+			return safeFile{}, false, fmt.Errorf("inspect %q: %w", current, err)
 		}
-		return info, info.Mode().IsRegular(), nil
+		if !info.Mode().IsRegular() {
+			return safeFile{}, false, nil
+		}
+		return safeFile{info: info, target: current}, true, nil
 	}
 
 	target, err := filepath.EvalSymlinks(current)
 	if err != nil {
 		_, _ = fmt.Fprintf(logger, "m2h: skip symlink %s: %v\n", relative, err)
-		return nil, false, nil
+		return safeFile{}, false, nil
 	}
 	target, err = filepath.Abs(target)
 	if err != nil {
-		return nil, false, fmt.Errorf("resolve symlink target %q: %w", current, err)
+		return safeFile{}, false, fmt.Errorf("resolve symlink target %q: %w", current, err)
 	}
 	if !IsWithin(root, target) {
 		_, _ = fmt.Fprintf(logger, "m2h: skip symlink %s: target escapes root\n", relative)
-		return nil, false, nil
+		return safeFile{}, false, nil
 	}
 	info, err := os.Stat(target)
 	if err != nil {
 		_, _ = fmt.Fprintf(logger, "m2h: skip symlink %s: %v\n", relative, err)
-		return nil, false, nil
+		return safeFile{}, false, nil
 	}
 	if info.IsDir() {
-		return nil, false, nil
+		return safeFile{}, false, nil
 	}
-	return info, info.Mode().IsRegular(), nil
+	if !info.Mode().IsRegular() {
+		return safeFile{}, false, nil
+	}
+	return safeFile{info: info, target: target}, true, nil
 }
 
 func sortEntries(entries []Entry) {
