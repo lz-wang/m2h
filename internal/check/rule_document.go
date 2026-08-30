@@ -14,6 +14,7 @@ import (
 func checkDocumentRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	diagnostics := make([]Diagnostic, 0)
 	diagnostics = append(diagnostics, checkHeadingRules(current, rules)...)
+	diagnostics = append(diagnostics, checkDuplicateHeadings(current, rules)...)
 	diagnostics = append(diagnostics, checkReferenceRules(current, rules)...)
 	diagnostics = append(diagnostics, checkFootnoteRules(current, rules)...)
 	diagnostics = append(diagnostics, checkTableRules(current, rules)...)
@@ -45,6 +46,44 @@ func checkHeadingRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 				fmt.Sprintf("heading level jumps from H%d to H%d", previous.Level, heading.Level),
 				markdown.Position{Line: heading.Line, Column: 1}))
 		}
+	}
+	return diagnostics
+}
+
+// section is one open heading of the duplicate-heading stack, owning the
+// normalized texts of its direct child headings.
+type section struct {
+	level    int
+	children map[string]struct{}
+}
+
+// checkDuplicateHeadings warns when two sibling headings — direct children
+// of the same section — carry the same normalized visible text. The same
+// text under different sections stays legitimate ("Usage" under both Client
+// and Server), and duplicate H1s are left to document.multiple-h1 so one
+// problem never yields two warnings.
+func checkDuplicateHeadings(current *indexedDocument, rules RuleSet) []Diagnostic {
+	if !rules.Enabled(RuleHeadingDuplicate) {
+		return nil
+	}
+	inspection := &current.inspection
+	diagnostics := make([]Diagnostic, 0)
+	stack := []section{{level: 0, children: make(map[string]struct{})}}
+	for _, heading := range inspection.Headings {
+		for len(stack) > 1 && stack[len(stack)-1].level >= heading.Level {
+			stack = stack[:len(stack)-1]
+		}
+		parent := &stack[len(stack)-1]
+		if heading.Level > 1 {
+			if _, duplicate := parent.children[heading.Text]; duplicate {
+				diagnostics = append(diagnostics, current.diagnosticAt(SeverityWarning, RuleHeadingDuplicate,
+					fmt.Sprintf("duplicate heading %q in the same section", heading.Text),
+					markdown.Position{Line: heading.Line, Column: 1}))
+			} else {
+				parent.children[heading.Text] = struct{}{}
+			}
+		}
+		stack = append(stack, section{level: heading.Level, children: make(map[string]struct{})})
 	}
 	return diagnostics
 }

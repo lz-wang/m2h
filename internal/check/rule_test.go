@@ -389,6 +389,107 @@ func TestCheckLinkReversed(t *testing.T) {
 	}
 }
 
+func TestCheckCodeFenceLanguageMissing(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{
+			name:   "plain fence reports",
+			source: "# Guide\n\n```\necho hi\n```\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 warning %s", RuleCodeFenceLanguageMissing)},
+		},
+		{
+			name:   "named fences stay clean",
+			source: "# Guide\n\n```go\nx\n```\n\n~~~mermaid\nx\n~~~\n\n```text\nx\n```\n",
+			want:   nil,
+		},
+		{
+			name:   "info string with attributes keeps the language",
+			source: "# Guide\n\n```go title=x\ny\n```\n",
+			want:   nil,
+		},
+		{
+			name:   "indented code is not a fence",
+			source: "# Guide\n\n    plain code\n",
+			want:   nil,
+		},
+		{
+			name:   "unclosed fence reports at its opener",
+			source: "# Guide\n\n```\necho hi\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 warning %s", RuleCodeFenceLanguageMissing)},
+		},
+		{
+			name:   "frontmatter shifts the fence",
+			source: "---\ntitle: Guide\n---\n\n```\nx\n```\n",
+			want:   []string{fmt.Sprintf("guide.md:5:1 warning %s", RuleCodeFenceLanguageMissing)},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			expectDiagnostics(t, test.name, test.source, Options{}, test.want)
+		})
+	}
+}
+
+func TestCheckHeadingDuplicate(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{
+			name:   "same text under one parent",
+			source: "# API\n\n## Install\n\n## Install\n",
+			want:   []string{fmt.Sprintf("guide.md:5:1 warning %s", RuleHeadingDuplicate)},
+		},
+		{
+			name:   "same text under different parents stays clean",
+			source: "# Guide\n\n## Client\n\n### Usage\n\n## Server\n\n### Usage\n",
+			want:   nil,
+		},
+		{
+			name:   "deeper nesting closes the section",
+			source: "# API\n\n## Install\n\n### Details\n\n## Install\n",
+			want:   []string{fmt.Sprintf("guide.md:7:1 warning %s", RuleHeadingDuplicate)},
+		},
+		{
+			name:   "duplicate root-level sections without an H1 parent",
+			source: "## Install\n\n## Install\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 warning %s", RuleHeadingDuplicate)},
+		},
+		{
+			name:   "duplicate H1 belongs to multiple-h1 only",
+			source: "# Guide\n\n# Guide\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 warning %s", RuleDocumentMultipleH1)},
+		},
+		{
+			name:   "text compared after whitespace normalization",
+			source: "# API\n\n## Install\n\n##  Install \n",
+			want:   []string{fmt.Sprintf("guide.md:5:1 warning %s", RuleHeadingDuplicate)},
+		},
+		{
+			name:   "frontmatter shifts the duplicate",
+			source: "---\ntitle: Guide\n---\n\n# API\n\n## Install\n\n## Install\n",
+			want:   []string{fmt.Sprintf("guide.md:9:1 warning %s", RuleHeadingDuplicate)},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			expectDiagnostics(t, test.name, test.source, Options{}, test.want)
+		})
+	}
+}
+
 func TestCheckReferenceRulesWorkAlongsideFilesystemChecks(t *testing.T) {
 	t.Parallel()
 

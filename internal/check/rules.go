@@ -78,6 +78,14 @@ const (
 	// RuleLinkReversed: a high-confidence `(text)[destination]` with a
 	// URL- or path-like destination — Markdown link syntax written backwards.
 	RuleLinkReversed = "link.reversed"
+
+	// RuleCodeFenceLanguageMissing: a fenced code block without a language,
+	// so the renderer cannot highlight it.
+	RuleCodeFenceLanguageMissing = "code-fence.language-missing"
+	// RuleHeadingDuplicate: two sibling headings with the same text under
+	// one parent section. Identical headings under different sections stay
+	// legitimate, and duplicate H1s are left to document.multiple-h1.
+	RuleHeadingDuplicate = "heading.duplicate"
 )
 
 // frontMatterDateKeys are the frontmatter fields m2h normalizes into date

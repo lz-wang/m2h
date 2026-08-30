@@ -33,6 +33,8 @@ var ruleDefinitions = []RuleDefinition{
 	{ID: RuleImageAltEmpty, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleDocumentMultipleH1, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleHeadingLevelSkip, Severity: SeverityWarning, DefaultEnabled: true},
+	{ID: RuleHeadingDuplicate, Severity: SeverityWarning, DefaultEnabled: true},
+	{ID: RuleCodeFenceLanguageMissing, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleFrontMatterDateInvalid, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleLinkEmptyDestination, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleReferenceUnused, Severity: SeverityWarning, DefaultEnabled: true},

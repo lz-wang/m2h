@@ -4,8 +4,9 @@ import "fmt"
 
 // checkSyntaxRules reports malformed syntax the renderer passes through or
 // drops: HTML comment blocks that never close and swallow the rest of the
-// document, and reversed Markdown link syntax that renders as literal
-// parentheses.
+// document, reversed Markdown link syntax that renders as literal
+// parentheses, and fenced code blocks without a language, which the
+// highlighter cannot style.
 func checkSyntaxRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	inspection := &current.inspection
 	diagnostics := make([]Diagnostic, 0)
@@ -20,6 +21,14 @@ func checkSyntaxRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 			diagnostics = append(diagnostics, current.diagnosticAt(SeverityError, RuleLinkReversed,
 				fmt.Sprintf("looks like reversed Markdown link syntax; use [%s](%s)", link.Text, link.Destination),
 				link.Position))
+		}
+	}
+	if rules.Enabled(RuleCodeFenceLanguageMissing) {
+		for _, fence := range inspection.CodeFences {
+			if fence.Language == "" {
+				diagnostics = append(diagnostics, current.diagnosticAt(SeverityWarning, RuleCodeFenceLanguageMissing,
+					"fenced code block has no language", fence.Position))
+			}
 		}
 	}
 	return diagnostics
