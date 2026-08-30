@@ -101,4 +101,6 @@ m2h check docs --enable all --disable image.alt-empty
 本索引集中维护规则名称、等级、默认开关和触发场景；各演示文件的"预期表现"
 按当前实现逐字核对，并补充对应规则的行为边界。输出契约为
 `path:line:column: severity [rule]: message`，发现 error（或 `--strict` 下存在
-warning）时退出码为 1。
+warning）时退出码为 1。交互式终端只着色 severity 和总结结果：error 为红色、
+warning 为黄色、全部通过为绿色；重定向、管道、`NO_COLOR` 与 JSON 输出无颜色。
+文本诊断失败仍通过退出码表达，统计摘要是最后一行，不再追加重复的失败描述。

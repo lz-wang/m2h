@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	urfavecli "github.com/urfave/cli/v3"
@@ -72,6 +73,15 @@ func checkFlags() []urfavecli.Flag {
 
 var runCheck = check.Run
 
+var errCheckFailure = errors.New("check found issues")
+
+// IsCheckFailure reports whether err represents a completed check whose
+// diagnostics require a non-zero process exit. The report already contains
+// the details, so the process entrypoint must not print this internal signal.
+func IsCheckFailure(err error) bool {
+	return errors.Is(err, errCheckFailure)
+}
+
 func checkAction(ctx context.Context, command *urfavecli.Command) error {
 	if command.Args().Len() == 0 {
 		return urfavecli.ShowCommandHelp(ctx, command.Root(), command.Name)
@@ -93,27 +103,7 @@ func checkAction(ctx context.Context, command *urfavecli.Command) error {
 		return fmt.Errorf("Error: %w", err)
 	}
 	if result.Errors > 0 || (command.Bool("strict") && result.Warnings > 0) {
-		return fmt.Errorf("Error: check found %s", checkFailureDetails(result))
+		return errCheckFailure
 	}
 	return nil
-}
-
-// checkFailureDetails names what failed in the exit error, reusing the same
-// counting vocabulary as the summary line.
-func checkFailureDetails(result check.Result) string {
-	switch {
-	case result.Warnings == 0:
-		return countNoun(result.Errors, "error", "errors")
-	case result.Errors == 0:
-		return countNoun(result.Warnings, "warning", "warnings")
-	default:
-		return countNoun(result.Errors, "error", "errors") + " and " + countNoun(result.Warnings, "warning", "warnings")
-	}
-}
-
-func countNoun(count int, singular string, plural string) string {
-	if count == 1 {
-		return fmt.Sprintf("%d %s", count, singular)
-	}
-	return fmt.Sprintf("%d %s", count, plural)
 }

@@ -53,37 +53,78 @@ func TestRunReturnsExitCodeAndRoutesOutput(t *testing.T) {
 }
 
 // TestRunCheckExitCodes pins the check subcommand's process-level contract:
-// a clean scope exits 0, diagnostics on stdout fail the process with 1.
+// errors and strict warnings fail silently after the stdout report, while a
+// clean scope and non-strict warnings exit 0.
 func TestRunCheckExitCodes(t *testing.T) {
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide\n\n![missing](nope.png)\n"), 0o644); err != nil {
+	broken := filepath.Join(root, "broken.md")
+	if err := os.WriteFile(broken, []byte("# Broken\n\n![missing](nope.png)\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-
-	var stdout bytes.Buffer
-	var stderr bytes.Buffer
-	if got := run([]string{"m2h", "check", filepath.Join(root, "guide.md")}, webui.Content(), &stdout, &stderr); got != 1 {
-		t.Fatalf("run() exit code = %d, want 1 for broken references", got)
-	}
-	if !strings.Contains(stdout.String(), "error [local-target.missing]") ||
-		!strings.HasSuffix(stdout.String(), "Checked 1 Markdown file: 1 error\n") {
-		t.Fatalf("stdout = %q, want the diagnostic report", stdout.String())
-	}
-	if !strings.HasPrefix(stderr.String(), "Error: check found 1 error\n") {
-		t.Fatalf("stderr = %q, want the failure reason", stderr.String())
-	}
-
-	stdout.Reset()
-	stderr.Reset()
 	clean := filepath.Join(root, "clean.md")
 	if err := os.WriteFile(clean, []byte("# Clean\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := run([]string{"m2h", "check", clean}, webui.Content(), &stdout, &stderr); got != 0 {
-		t.Fatalf("run() exit code = %d, want 0 for a clean document", got)
+	warning := filepath.Join(root, "warning.md")
+	if err := os.WriteFile(warning, []byte("# Warning\n\n![](logo.png)\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	if stdout.String() != "Checked 1 Markdown file: no issues found\n" || stderr.String() != "" {
-		t.Fatalf("stdout = %q stderr = %q, want a clean summary", stdout.String(), stderr.String())
+	if err := os.WriteFile(filepath.Join(root, "logo.png"), []byte("png"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	tests := []struct {
+		name           string
+		args           []string
+		wantCode       int
+		wantDiagnostic string
+		wantSummary    string
+	}{
+		{
+			name:           "error",
+			args:           []string{"m2h", "check", broken},
+			wantCode:       1,
+			wantDiagnostic: "error [local-target.missing]",
+			wantSummary:    "Checked 1 Markdown file: 1 error\n",
+		},
+		{
+			name:        "clean",
+			args:        []string{"m2h", "check", clean},
+			wantCode:    0,
+			wantSummary: "Checked 1 Markdown file: no issues found\n",
+		},
+		{
+			name:           "warning without strict",
+			args:           []string{"m2h", "check", warning},
+			wantCode:       0,
+			wantDiagnostic: "warning [image.alt-empty]",
+			wantSummary:    "Checked 1 Markdown file: 1 warning\n",
+		},
+		{
+			name:           "warning with strict",
+			args:           []string{"m2h", "check", warning, "--strict"},
+			wantCode:       1,
+			wantDiagnostic: "warning [image.alt-empty]",
+			wantSummary:    "Checked 1 Markdown file: 1 warning\n",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			var stdout bytes.Buffer
+			var stderr bytes.Buffer
+			if got := run(test.args, webui.Content(), &stdout, &stderr); got != test.wantCode {
+				t.Fatalf("run() exit code = %d, want %d", got, test.wantCode)
+			}
+			if test.wantDiagnostic != "" && !strings.Contains(stdout.String(), test.wantDiagnostic) {
+				t.Fatalf("stdout = %q, want diagnostic %q", stdout.String(), test.wantDiagnostic)
+			}
+			if !strings.HasSuffix(stdout.String(), test.wantSummary) {
+				t.Fatalf("stdout = %q, want summary %q", stdout.String(), test.wantSummary)
+			}
+			if stderr.String() != "" {
+				t.Fatalf("stderr = %q, want no redundant failure description", stderr.String())
+			}
+		})
 	}
 }
 

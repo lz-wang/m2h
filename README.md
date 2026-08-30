@@ -144,7 +144,10 @@ m2h check docs
 ```
 
 输出遵循 `path:line:column` 约定，便于终端与 IDE 定位；发现 error（或
-`--strict` 下存在 warning）时退出码为 `1`：
+`--strict` 下存在 warning）时退出码为 `1`。交互式终端中只为问题等级和
+总结结果着色：error 为红色、warning 为黄色、全部通过为绿色；重定向、管道、
+`NO_COLOR` 环境变量及 `--format json` 保持无 ANSI 颜色。文本报告以统计摘要
+作为最后一行，不再重复输出 `Error: check found ...`：
 
 ```text
 docs/guide.md:42:17: error [local-target.missing]: target "images/topology.png" does not exist

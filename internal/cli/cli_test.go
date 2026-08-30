@@ -767,8 +767,8 @@ func TestCheckCommandFailsOnDiagnostics(t *testing.T) {
 	}
 
 	stdout, stderr, err := runCommand(t, "check", root)
-	if err == nil || err.Error() != "Error: check found 1 error" {
-		t.Fatalf("check error = %v, want a single-error failure", err)
+	if !IsCheckFailure(err) {
+		t.Fatalf("check error = %v, want a check-failure signal", err)
 	}
 	if !strings.Contains(stdout, "guide.md:3:3: error [local-target.missing]: target \"nope.png\" does not exist\n") ||
 		!strings.HasSuffix(stdout, "Checked 1 Markdown file: 1 error\n") {
@@ -800,8 +800,8 @@ func TestCheckCommandStrictFailsOnWarnings(t *testing.T) {
 	}
 
 	_, _, err = runCommand(t, "check", root, "--strict")
-	if err == nil || err.Error() != "Error: check found 1 warning" {
-		t.Fatalf("check --strict error = %v, want the warning to fail the run", err)
+	if !IsCheckFailure(err) {
+		t.Fatalf("check --strict error = %v, want a check-failure signal", err)
 	}
 }
 

@@ -33,6 +33,9 @@ func runContext(ctx context.Context, args []string, ui fs.FS, stdout, stderr io.
 		err = command.Run(ctx, args)
 	}
 	if err != nil {
+		if appcli.IsCheckFailure(err) {
+			return 1
+		}
 		_, _ = fmt.Fprintln(stderr, err)
 		return 1
 	}

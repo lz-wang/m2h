@@ -1142,6 +1142,60 @@ func TestWriteTextReport(t *testing.T) {
 	}
 }
 
+func TestWriteTextReportColorsOnlySeverityAndSummary(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		result Result
+		want   string
+	}{
+		{
+			name:   "clean",
+			result: Result{Files: 2},
+			want:   "Checked 2 Markdown files: \x1b[32mno issues found\x1b[0m\n",
+		},
+		{
+			name: "errors and warnings",
+			result: Result{
+				Files:    2,
+				Errors:   1,
+				Warnings: 1,
+				Diagnostics: []Diagnostic{
+					{Path: "broken.md", Line: 2, Column: 3, Severity: SeverityError, Rule: "local-target.missing", Message: "target does not exist"},
+					{Path: "warning.md", Line: 4, Column: 1, Severity: SeverityWarning, Rule: "image.alt-empty", Message: "image has no alt text"},
+				},
+			},
+			want: "broken.md:2:3: \x1b[31merror\x1b[0m [local-target.missing]: target does not exist\n" +
+				"warning.md:4:1: \x1b[33mwarning\x1b[0m [image.alt-empty]: image has no alt text\n" +
+				"Checked 2 Markdown files: \x1b[31m1 error\x1b[0m, \x1b[33m1 warning\x1b[0m\n",
+		},
+		{
+			name:   "errors only",
+			result: Result{Files: 1, Errors: 2},
+			want:   "Checked 1 Markdown file: \x1b[31m2 errors\x1b[0m\n",
+		},
+		{
+			name:   "warnings only",
+			result: Result{Files: 1, Warnings: 2},
+			want:   "Checked 1 Markdown file: \x1b[33m2 warnings\x1b[0m\n",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			var output bytes.Buffer
+			if err := writeTextReport(&output, test.result, true); err != nil {
+				t.Fatalf("writeTextReport() returned error: %v", err)
+			}
+			if output.String() != test.want {
+				t.Fatalf("writeTextReport() = %q, want %q", output.String(), test.want)
+			}
+		})
+	}
+}
+
 func TestWriteJSONReportIsDeterministic(t *testing.T) {
 	t.Parallel()
 

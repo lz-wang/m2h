@@ -16,6 +16,8 @@
 
 ### 新增
 
+- `m2h check` 的文本报告在交互式终端中按等级着色：每条诊断只把 error 显示为红色、warning 显示为黄色；最终总结将“全部通过”显示为绿色，并分别为 error/warning 计数使用红色/黄色。路径、行列、规则名、消息、退出码及 JSON schema 不变，重定向、管道、`NO_COLOR` 与 `TERM=dumb` 保持无 ANSI 颜色。
+
 - `m2h check` 新增 `--enable`/`--disable` 规则选择与 15 条新规则，规则总数扩展到 25 条。`--enable` 在默认规则之上追加、`--disable` 从中移除（逗号分隔，`--disable` 优先，`all` 指代全部规则，如 `--enable all --disable section.empty` 运行除该规则外的全部规则）；未知规则名在读取任何文件之前以 `Error: unknown check rule "foo.bar"` 失败。新增七条默认开启的 error：`reference.undefined`（显式 `[text][label]`/`[text][]` 引用无定义，裸 `[label]` 不报）、`footnote.undefined`（`[^label]` 无对应定义）、`footnote.empty`（脚注定义无内容，多行缩进续行不算空）、`table.column-mismatch`（表格行列数与分隔行不符——渲染时会被补空或截断，含表头被补空的情况；表头多于分隔线导致整表被拒绝时直接报告）、`html.comment-unclosed`（`<!--` 未闭合，其后内容整体渲染为注释）、`link.reversed`（高置信度 `(text)[url]` 反转链接写法，`f(x)[0]`、`array[index]` 不报）；新增四条默认开启的 warning：`heading.level-skip`（标题向下跳超过一级）、`heading.duplicate`（同一父 section 下重复标题）、`code-fence.language-missing`（fenced code 无语言）、`reference.unused`、`footnote.unused`（定义从未被引用）；新增四条默认关闭、经 `--enable` 开启的 warning：`section.empty`、`link.text-nondescriptive`、`unicode.mojibake`、`unicode.invisible-character`（后三条按多字符 mojibake 签名、中英文小词表精确匹配与"行首尾/邻接空白/连续出现/bidi 控制"保守触发，emoji 的 ZWJ 与 variation selector 不会误报）。引用与脚注的未定义/未使用判定由实际解析器给出（reference 标签与渲染器同一归一化比较、脚注标签逐字节比较），行内与 fenced 代码中的内容永不参与判定；所有正文诊断的行列号统一含 Frontmatter 偏移。文本与 JSON 输出契约不变，新规则沿用同一 schema。
 
 - 新增 `m2h check` 子命令，检查 Markdown 文档的 Frontmatter、结构、本地引用、文档范围与锚点一致性：`m2h check <file|directory>` 支持 `--depth`/`--glob`（与浏览命令同一文档范围）、`--format text|json` 与 `--strict`。检查六类 error（Frontmatter 无效、本地目标缺失/非普通文件/越过根目录、Markdown 目标不在当前服务范围、锚点不存在）与四类 warning（图片缺 alt、多个 H1、日期字段非有效 ISO 日期、空 destination），行内与 fenced 代码中的 URL 不会误报；本地引用覆盖 Markdown 链接/图片、reference-style 链接与 raw HTML 的 href/src/poster/data。锚点与标题 ID、URL 解码、`/doc` 与 `/assets` 路由判定、symlink 安全边界均与 Web 浏览共用同一实现：图片与 raw HTML 的 src/poster/data 一律按 `/assets` 路由校验，该路由不提供 Markdown 文件，因此指向 `.md` 的此类引用（含 `guide%2Emd` 这类编码写法）会被报告为不可达；`sub%5Cdeep.md`、`images%2F.%2Flogo.png` 这类依赖服务端归一化的路径与浏览行为判定一致；Frontmatter 无法解析的目标文档不会再级联产生 anchor.missing 误报。诊断按 path:line:column 输出（raw HTML 引用定位到具体属性值所在行列，日期字段 warning 定位到该字段在 Frontmatter 中的真实行列）并附带统计摘要，JSON 结构稳定供 CI 消费；单文件模式下诊断路径显示用户输入的路径，symlink 输入不再显示解析后的目标文件名；发现 error（或 --strict 下存在 warning）时退出码为 1。
@@ -25,6 +27,8 @@
 - Mermaid ZenUML 时序图支持：WebUI 与导出 HTML 均可渲染 `zenuml` 图表。此前两端只加载 Mermaid Core，合法的 ZenUML 会退化为 `Syntax error in text`；现在 WebUI 在文档含 zenuml 图表时按需加载二进制内嵌的 mermaid-zenuml 0.2.3 运行时（保留上游 dist 相对路径的 chunks 目录），按 load → register → initialize → render 顺序注册 external diagram 后渲染，导出页面则在产物确含 zenuml 图表时携带同一 release 的 jsDelivr 插件 URL、由内联引导脚本动态导入注册。插件注册按页面单例缓存且失败不缓存 rejected Promise（主题切换重绘可重试）；普通 Mermaid 图表不产生插件下载；WebUI 图表渲染失败时在控制台输出图表类型与原始错误，使插件缺失、资源加载失败与语法错误可区分。
 
 ### 修复
+
+- `m2h check` 在 error（或 `--strict` 下存在 warning）时仍以退出码 1 失败，但文本报告现在以统计摘要作为最后一行，JSON 报告保持以结构化对象结束，二者都不再由进程入口追加重复的 `Error: check found ...`；参数、文件系统与报告写入等真实执行错误仍保留原有错误消息。warning-only 在未启用 `--strict` 时仍保持退出码 0。
 
 - 修复 `reference.undefined` 的上报数量与位置可能偏离解析器实际拒绝的问题：解析器记录的 reference lookup 失败从集合升级为按 label 计数，源扫描产生的 undefined 上报以该计数为上限；同时由真实 AST 标出已接受 inline link 的 destination/title 源范围并排除其中的假括号对，因此即使链接标题里的同名 `[text][label]` 早于真实失败出现，也不会占用诊断名额或把错误位置导向标题。
 

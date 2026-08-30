@@ -4,6 +4,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+)
+
+const (
+	ansiRed    = "\x1b[31m"
+	ansiGreen  = "\x1b[32m"
+	ansiYellow = "\x1b[33m"
+	ansiReset  = "\x1b[0m"
 )
 
 // Format selects the diagnostic output format.
@@ -21,7 +29,7 @@ const (
 func WriteReport(writer io.Writer, result Result, format Format) error {
 	switch format {
 	case FormatText:
-		return writeTextReport(writer, result)
+		return writeTextReport(writer, result, terminalColorsEnabled(writer))
 	case FormatJSON:
 		return writeJSONReport(writer, result)
 	default:
@@ -29,7 +37,7 @@ func WriteReport(writer io.Writer, result Result, format Format) error {
 	}
 }
 
-func writeTextReport(writer io.Writer, result Result) error {
+func writeTextReport(writer io.Writer, result Result, colorsEnabled bool) error {
 	for _, diagnostic := range result.Diagnostics {
 		_, err := fmt.Fprintf(
 			writer,
@@ -37,7 +45,7 @@ func writeTextReport(writer io.Writer, result Result) error {
 			diagnostic.Path,
 			diagnostic.Line,
 			diagnostic.Column,
-			diagnostic.Severity,
+			coloredSeverity(diagnostic.Severity, colorsEnabled),
 			diagnostic.Rule,
 			diagnostic.Message,
 		)
@@ -45,24 +53,58 @@ func writeTextReport(writer io.Writer, result Result) error {
 			return fmt.Errorf("write check report: %w", err)
 		}
 	}
-	_, err := fmt.Fprintf(writer, "Checked %d Markdown %s: %s\n", result.Files, noun(result.Files, "file", "files"), textSummary(result))
+	_, err := fmt.Fprintf(writer, "Checked %d Markdown %s: %s\n", result.Files, noun(result.Files, "file", "files"), textSummary(result, colorsEnabled))
 	if err != nil {
 		return fmt.Errorf("write check report: %w", err)
 	}
 	return nil
 }
 
-func textSummary(result Result) string {
+func textSummary(result Result, colorsEnabled bool) string {
 	switch {
 	case result.Errors == 0 && result.Warnings == 0:
-		return "no issues found"
+		return colorize("no issues found", ansiGreen, colorsEnabled)
 	case result.Warnings == 0:
-		return countNoun(result.Errors, "error", "errors")
+		return colorize(countNoun(result.Errors, "error", "errors"), ansiRed, colorsEnabled)
 	case result.Errors == 0:
-		return countNoun(result.Warnings, "warning", "warnings")
+		return colorize(countNoun(result.Warnings, "warning", "warnings"), ansiYellow, colorsEnabled)
 	default:
-		return countNoun(result.Errors, "error", "errors") + ", " + countNoun(result.Warnings, "warning", "warnings")
+		return colorize(countNoun(result.Errors, "error", "errors"), ansiRed, colorsEnabled) +
+			", " + colorize(countNoun(result.Warnings, "warning", "warnings"), ansiYellow, colorsEnabled)
 	}
+}
+
+func coloredSeverity(severity Severity, colorsEnabled bool) string {
+	switch severity {
+	case SeverityError:
+		return colorize(string(severity), ansiRed, colorsEnabled)
+	case SeverityWarning:
+		return colorize(string(severity), ansiYellow, colorsEnabled)
+	default:
+		return string(severity)
+	}
+}
+
+func colorize(value string, color string, enabled bool) string {
+	if !enabled {
+		return value
+	}
+	return color + value + ansiReset
+}
+
+// terminalColorsEnabled keeps redirected text reports machine-readable while
+// making interactive diagnostics easier to scan. NO_COLOR and TERM=dumb are
+// conventional opt-outs even when stdout is attached to a terminal.
+func terminalColorsEnabled(writer io.Writer) bool {
+	if _, disabled := os.LookupEnv("NO_COLOR"); disabled || os.Getenv("TERM") == "dumb" {
+		return false
+	}
+	file, ok := writer.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := file.Stat()
+	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
 // jsonReport is the stable wire contract of the JSON report: field order and
