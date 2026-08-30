@@ -58,6 +58,23 @@ if "${binary}" check smoke.md > /dev/null 2>&1; then
 	echo "Error: check accepted a not-served sibling Markdown target" >&2
 	exit 1
 fi
+
+# The rule engine must reach the release binary: a default warning, the
+# --strict exit code, and an opt-in rule behind --enable.
+printf '# Title\n\n### Skip\n' > lint.md
+"${binary}" check lint.md > lint.log
+grep -F 'warning [heading.level-skip]' lint.log >/dev/null
+grep -F 'Checked 1 Markdown file: 1 warning' lint.log >/dev/null
+if "${binary}" check lint.md --strict > /dev/null 2>&1; then
+	echo "Error: check --strict did not fail on a warning" >&2
+	exit 1
+fi
+
+printf '# Title\n\n## Empty\n\n## Next\n\ncontent\n' > empty-section.md
+"${binary}" check empty-section.md > empty-section.log
+grep -F 'Checked 1 Markdown file: no issues found' empty-section.log >/dev/null
+"${binary}" check empty-section.md --enable section.empty > opt-in.log
+grep -F 'warning [section.empty]' opt-in.log >/dev/null
 echo "[smoke] check"
 
 port=${M2H_SMOKE_PORT:-18793}

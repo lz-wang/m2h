@@ -729,6 +729,35 @@ func TestCheckCommandForwardsRuleSelection(t *testing.T) {
 	}
 }
 
+func TestCheckCommandEnableRunsOptInRules(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Title\n\n## Empty\n\n## Next\n\ncontent\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	stdout, stderr, err := runCommand(t, "check", root)
+	if err != nil {
+		t.Fatalf("check returned error: %v", err)
+	}
+	if strings.Contains(stdout, "section.empty") || stderr != "" {
+		t.Fatalf("opt-in rule fired without --enable: stdout=%q stderr=%q", stdout, stderr)
+	}
+
+	stdout, _, err = runCommand(t, "check", root, "--enable", "section.empty")
+	if err != nil {
+		t.Fatalf("check --enable returned error: %v", err)
+	}
+	// Warnings alone keep the exit code zero; the diagnostic must appear.
+	if !strings.Contains(stdout, ":3:1: warning [section.empty]: section \"Empty\" has no content\n") {
+		t.Fatalf("check --enable stdout = %q, want the section.empty diagnostic", stdout)
+	}
+	if !strings.HasSuffix(stdout, "Checked 1 Markdown file: 2 warnings\n") {
+		t.Fatalf("check --enable stdout = %q, want two warnings in the summary", stdout)
+	}
+}
+
 func TestCheckCommandFailsOnDiagnostics(t *testing.T) {
 	t.Parallel()
 

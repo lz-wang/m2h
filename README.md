@@ -163,20 +163,51 @@ m2h check docs --format json
 m2h check docs --strict
 ```
 
-检查规则：
+`--enable` 与 `--disable` 选择要运行的规则：默认规则之上追加、或从中移除
+（逗号分隔多个规则，`--disable` 优先于 `--enable`；`all` 指代全部规则）。
+表中标"关"的规则因误报场景客观存在，仅经 `--enable` 显式开启：
 
-| 规则 | 等级 | 说明 |
-| --- | --- | --- |
-| `frontmatter.invalid` | error | Frontmatter YAML 无法解析或根节点不是 mapping |
-| `local-target.missing` | error | 本地链接、图片或附件目标不存在，或经 `/assets` 路由不可达（如指向 `.md` 的图片） |
-| `local-target.not-regular` | error | 引用目标存在，但不是普通文件 |
-| `local-target.outside-root` | error | `../` 或 symlink 使目标越过文档根目录 |
-| `markdown-target.not-served` | error | Markdown 目标存在，但被单文件模式或 `--glob`/`--depth` 排除 |
-| `anchor.missing` | error | `#anchor` 或 `foo.md#anchor` 指向不存在的标题锚点 |
-| `image.alt-empty` | warning | 图片没有 alt 文本 |
-| `document.multiple-h1` | warning | 一个文档包含多个 H1 |
-| `frontmatter.date-invalid` | warning | 已识别的日期字段不是有效 ISO 日期 |
-| `link.empty-destination` | warning | 链接或图片的 destination 为空 |
+```console
+m2h check docs --enable section.empty,unicode.mojibake
+m2h check docs --disable image.alt-empty
+m2h check docs --disable all --enable table.column-mismatch
+```
+
+未知规则名在读取任何文件之前即失败：
+
+```text
+Error: unknown check rule "foo.bar"
+```
+
+检查规则（25 条）：
+
+| 规则 | 等级 | 默认 | 说明 |
+| --- | --- | --- | --- |
+| `frontmatter.invalid` | error | 开 | Frontmatter YAML 无法解析或根节点不是 mapping |
+| `local-target.missing` | error | 开 | 本地链接、图片或附件目标不存在，或经 `/assets` 路由不可达（如指向 `.md` 的图片） |
+| `local-target.not-regular` | error | 开 | 引用目标存在，但不是普通文件 |
+| `local-target.outside-root` | error | 开 | `../` 或 symlink 使目标越过文档根目录 |
+| `markdown-target.not-served` | error | 开 | Markdown 目标存在，但被单文件模式或 `--glob`/`--depth` 排除 |
+| `anchor.missing` | error | 开 | `#anchor` 或 `foo.md#anchor` 指向不存在的标题锚点 |
+| `reference.undefined` | error | 开 | `[text][label]` 或 `[text][]` 引用了不存在的 reference 定义；裸 `[label]` 不报 |
+| `footnote.undefined` | error | 开 | `[^label]` 没有对应定义（按渲染器同一逐字节比较） |
+| `footnote.empty` | error | 开 | 脚注定义没有任何内容（多行缩进续行不算空） |
+| `table.column-mismatch` | error | 开 | 表格行列数与分隔行不一致（渲染时会被补空或截断），或表头与分隔行列数不符导致整表被拒绝 |
+| `html.comment-unclosed` | error | 开 | `<!--` 没有闭合，其后内容整体渲染为注释 |
+| `link.reversed` | error | 开 | 高置信度识别 `(text)[url]` 反转链接写法；`f(x)[0]`、`array[index]` 不报 |
+| `image.alt-empty` | warning | 开 | 图片没有 alt 文本 |
+| `document.multiple-h1` | warning | 开 | 一个文档包含多个 H1 |
+| `heading.level-skip` | warning | 开 | 标题层级向下跳超过一级（向上跳任意级合法） |
+| `heading.duplicate` | warning | 开 | 同一父 section 下出现重复标题文本；不同 section 的同名标题合法 |
+| `code-fence.language-missing` | warning | 开 | fenced code 未指定语言（indented code 不检查） |
+| `footnote.unused` | warning | 开 | 脚注定义从未被引用 |
+| `reference.unused` | warning | 开 | reference 定义从未被引用 |
+| `frontmatter.date-invalid` | warning | 开 | 已识别的日期字段不是有效 ISO 日期 |
+| `link.empty-destination` | warning | 开 | 链接或图片的 destination 为空 |
+| `section.empty` | warning | **关** | 标题与下一个标题之间没有任何渲染内容（父标题只承载子标题是常见合法结构） |
+| `link.text-nondescriptive` | warning | **关** | 链接文本为 `click here`/`点击这里` 等无信息短语（仅精确匹配，仅 Markdown 链接） |
+| `unicode.mojibake` | warning | **关** | 疑似错误编码文本（`CafÃ©`、`â€™` 等多字符签名；单字符不报） |
+| `unicode.invisible-character` | warning | **关** | 可疑不可见字符（仅行首/行尾、邻接空白、连续出现或 bidi 控制字符触发；emoji 的 ZWJ 与 variation selector 不报） |
 
 说明：
 
@@ -187,6 +218,9 @@ m2h check docs --strict
 - 与 Web 浏览行为严格一致：同一 Markdown 解析引擎、同一 URL 解码与
   `/doc`/`/assets` 路由判定（Markdown 文件不会经 `/assets` 提供）、同一
   文档范围与 symlink 安全边界、同一 GitHub 兼容锚点算法
+- 引用与脚注的"未定义/未使用"判定由实际解析器给出（reference 标签按
+  渲染器同一归一化比较、脚注标签逐字节比较），行内与 fenced 代码中的
+  内容永不参与判定；所有正文诊断的行列号已含 Frontmatter 偏移
 - 退出码：发现 error（或 `--strict` 下存在 warning）时返回 `1`
 
 查看全部选项：
