@@ -15,6 +15,7 @@
 - 支持 [Frontmatter 标题与日期元数据](docs/demos/frontmatter/00-index.md)、可排序表格、代码行号与长代码块折叠
 - 图片与 Mermaid 图表支持 Lightbox 查看，可切换、通过工具栏或鼠标滚轮平滑缩放、拖动和旋转
 - 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
+- 输入 root 即发布边界：目录服务隐藏点开头路径，附件路由拒绝 HTML/JS/CSS 等主动 Web 内容，响应携带统一浏览器安全头
 - 可将单个 Markdown 文件导出为 HTML
 - 可检查 Markdown 文档的 Frontmatter、本地引用、锚点与结构问题（[25 条规则与演示](docs/demos/checkers/00-index.md)）
 
@@ -75,11 +76,21 @@ m2h docs,wiki
 
 默认监听 `127.0.0.1:8793` 并自动打开浏览器。
 
-远程提供文档服务：
+直接向局域网提供文档服务：
 
 ```console
 m2h docs --host 0.0.0.0 --no-open
 ```
+
+反向代理部署时建议保持 loopback 监听，仅由代理暴露公网入口：
+
+```console
+m2h /srv/docs --host 127.0.0.1 --port 8793 --no-open
+```
+
+### VPS 部署
+
+通过 Nginx 等反向代理长期运行（systemd、TLS、Tinyauth 认证与健康检查）时，参见 [VPS 部署指南](docs/deployment.md)。
 
 常用选项：
 
