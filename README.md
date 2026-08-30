@@ -170,8 +170,11 @@ m2h check docs --strict
 ```console
 m2h check docs --enable section.empty,unicode.mojibake
 m2h check docs --disable image.alt-empty
-m2h check docs --disable all --enable table.column-mismatch
+m2h check docs --enable all --disable image.alt-empty
 ```
+
+`--disable` 始终优先，因此 `--disable all --enable <规则>` 的实际结果是
+一条规则都不运行，而不是只运行该规则。
 
 未知规则名在读取任何文件之前即失败：
 

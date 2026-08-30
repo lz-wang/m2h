@@ -49,8 +49,8 @@ var ruleDefinitions = []RuleDefinition{
 }
 
 // ruleAll is the special rule name that addresses every known rule, so
-// "--enable all" widens the run and "--disable all --enable section.empty"
-// narrows it to exactly one rule.
+// "--enable all" widens the run and "--enable all --disable foo" narrows
+// it. Disable always wins, so "--disable all --enable foo" runs nothing.
 const ruleAll = "all"
 
 // RuleSet is the resolved selection of rules one check run executes.
