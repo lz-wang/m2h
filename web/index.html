@@ -3,18 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- Keep the browser's scroll restoration enabled: an early release had
-         stored "manual" on this session history entry. The reader itself
-         remembers the exact offset per document (see lib/scroll-position.ts —
-         the native restoration does not fire for this client-rendered shape),
-         and staying out of the browser's way means it can still help wherever
-         it does work. The HTML standard recommends picking the mode as early
-         as possible. -->
-    <script>
-      if ("scrollRestoration" in history) {
-        history.scrollRestoration = "auto";
-      }
-    </script>
+    <!-- No inline scripts: the page ships a strict script-src 'self' CSP, so
+         every script — including the scroll-restoration preference set at the
+         top of src/main.tsx — loads as an external module. -->
     <link rel="icon" type="image/svg+xml" href="/ui/favicon.svg" />
     <link id="m2h-markdown-styles" rel="stylesheet" href="/ui/markdown.css" />
     <title>m2h</title>

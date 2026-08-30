@@ -119,7 +119,11 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 	mux.HandleFunc("/doc/", handler.serveDirectoryIndex)
 	mux.HandleFunc("/raw/", handler.serveRawMarkdown)
 	mux.HandleFunc("/", handler.serveDirectoryIndex)
-	return requestLogger(mux, logger)
+	// requestLogger → securityHeaders → mux: the log sees the final status,
+	// and securityHeaders sits directly above the mux so every response —
+	// pages, APIs, assets, runtime, 404s — gets the same hardening baseline
+	// while handlers keep the ability to override individual headers.
+	return requestLogger(securityHeaders(mux), logger)
 }
 
 func (handler *documentHandler) serveFiles(response http.ResponseWriter, request *http.Request) {

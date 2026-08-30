@@ -215,11 +215,14 @@ test("repaints the ZenUML diagram when the theme switches", async ({
     .locator(".image-lightbox-image")
     .getAttribute("src");
   expect(snapshotSource).not.toBeNull();
-  const snapshotSVG = await page.evaluate(async (source) => {
+  // Decode the data URL with decodeURIComponent instead of fetching it: the
+  // page ships a strict connect-src 'self' CSP, and fetching data: URLs from
+  // the page context would be refused by design.
+  const snapshotSVG = await page.evaluate((source) => {
     if (source === null) {
       return "";
     }
-    return await (await fetch(source)).text();
+    return decodeURIComponent(source.slice(source.indexOf(",") + 1));
   }, snapshotSource);
   expect(snapshotSVG).toContain('data-m2h-zenuml-theme="dark"');
   expect(snapshotSVG).toContain('data-m2h-zenuml-theme-style="dark"');
