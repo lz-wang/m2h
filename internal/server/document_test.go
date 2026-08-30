@@ -848,6 +848,8 @@ func TestWorkspaceDocumentAPIRoutesVirtualPathsPerRoot(t *testing.T) {
 	t.Parallel()
 
 	workspace := multiRootFixture(t)
+	writeTestFile(t, filepath.Join(workspace.roots[0].scope.root, "README.md"), "# Alpha Readme\n\n[Notes](/notes.md)\n![Logo](/images/logo.png)\n[Escape](../r1/README.md)\n")
+	writeTestFile(t, filepath.Join(workspace.roots[1].scope.root, "README.md"), "# Beta Readme\n\n[Readme](/README.md)\n![Logo](/images/logo.png)\n")
 	handler := newDocumentHandler(workspace, nil, directoryTestUI())
 
 	// Identical relative paths in two roots resolve to their own root's file.
@@ -860,6 +862,15 @@ func TestWorkspaceDocumentAPIRoutesVirtualPathsPerRoot(t *testing.T) {
 	if alphaDocument.Title != "Alpha Readme" || alphaDocument.Path != "r0/README.md" {
 		t.Fatalf("alpha document = %+v", alphaDocument)
 	}
+	for _, want := range []string{
+		`href="/doc/r0/notes.md"`,
+		`src="/assets/r0/images/logo.png"`,
+		`href="../r1/README.md"`,
+	} {
+		if !strings.Contains(alphaDocument.HTML, want) {
+			t.Errorf("alpha document HTML missing %q: %s", want, alphaDocument.HTML)
+		}
+	}
 
 	beta := performRequest(handler, http.MethodGet, "/api/document?path=r1/README.md")
 	if beta.Code != http.StatusOK {
@@ -869,6 +880,14 @@ func TestWorkspaceDocumentAPIRoutesVirtualPathsPerRoot(t *testing.T) {
 	decodeJSON(t, beta, &betaDocument)
 	if betaDocument.Title != "Beta Readme" || betaDocument.Path != "r1/README.md" {
 		t.Fatalf("beta document = %+v", betaDocument)
+	}
+	for _, want := range []string{
+		`href="/doc/r1/README.md"`,
+		`src="/assets/r1/images/logo.png"`,
+	} {
+		if !strings.Contains(betaDocument.HTML, want) {
+			t.Errorf("beta document HTML missing %q: %s", want, betaDocument.HTML)
+		}
 	}
 
 	// A multi-root workspace only addresses documents through a known root id.
@@ -975,15 +994,10 @@ func TestWorkspaceDocumentRendersVirtualLinkRouting(t *testing.T) {
 			t.Errorf("document HTML missing %q: %s", want, document.HTML)
 		}
 	}
-	// Climbing past the own document's directory is contained by the virtual
-	// root: two ups land on the unprefixed /doc/README.md, which a multi-root
-	// workspace does not serve (404), and three ups exceed even the virtual
-	// root and stay as authored. Neither can address another root.
-	if !strings.Contains(document.HTML, `href="/doc/README.md"`) {
-		t.Errorf("short escape link was rewritten past the virtual root: %s", document.HTML)
-	}
-	if escaped := performRequest(handler, http.MethodGet, "/api/document?path=README.md"); escaped.Code != http.StatusNotFound {
-		t.Fatalf("short escape target status = %d, want 404", escaped.Code)
+	// Climbing past the current root stays exactly as authored. Neither the
+	// short nor long escape can become an address inside another root.
+	if !strings.Contains(document.HTML, `href="../../README.md"`) {
+		t.Errorf("short escape link was rewritten past the current root: %s", document.HTML)
 	}
 	if !strings.Contains(document.HTML, `href="../../../README.md"`) {
 		t.Errorf("long escape link was rewritten: %s", document.HTML)

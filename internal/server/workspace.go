@@ -94,10 +94,22 @@ func (workspace workspace) kind() workspaceKind {
 // prefixed with the root id only in a multi-root workspace, so single-root
 // URLs (/doc/foo.md, /assets/foo.png) keep their long-standing shape.
 func (workspace workspace) publicPath(rootID, relative string) string {
-	if workspace.rootCount() <= 1 {
+	rootPath := workspace.publicRoot(rootID)
+	if rootPath == "" {
 		return relative
 	}
-	return rootID + "/" + relative
+	return rootPath + "/" + relative
+}
+
+// publicRoot returns the logical URL root used while rendering one root's
+// documents. A single root has no public prefix; each root in a multi-root
+// workspace is anchored by its stable id so root-relative links cannot cross
+// into a sibling root.
+func (workspace workspace) publicRoot(rootID string) string {
+	if workspace.rootCount() <= 1 {
+		return ""
+	}
+	return rootID
 }
 
 // locate maps an addressable (virtual) path back onto its root and the

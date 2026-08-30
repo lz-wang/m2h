@@ -169,6 +169,11 @@ m2h check docs --enable all --disable image.alt-empty
 [检查规则演示索引](docs/demos/checkers/00-index.md)；全部命令选项见
 `m2h check --help`。
 
+本地引用使用与 WebUI 相同的路径语义：`images/logo.png` 相对当前文档，
+`/images/logo.png` 相对当前输入 root（不是宿主机文件系统根目录）；多 root 模式
+始终锚定引用所在的 root。`//cdn.example.com/logo.png` 仍是协议相对网络 URL，
+与带 scheme 的外链一样不会映射到本地文件。
+
 ## Markdown 支持
 
 m2h 支持常用 GFM Markdown，并提供以下扩展：
@@ -178,6 +183,7 @@ m2h 支持常用 GFM Markdown，并提供以下扩展：
 | GitHub 风格 | 语法高亮、标题锚点、脚注、Emoji、GitHub Alerts 与可排序表格 |
 | 富内容 | 数学公式（`$...$` / `$$...$$`，金额保持普通文本）、Mermaid 与 ZenUML |
 | 元数据 | YAML Frontmatter；标题、日期别名和回退规则见 [Frontmatter 演示](docs/demos/frontmatter/00-index.md) |
+| 本地引用 | 当前文档相对路径与 `/` 开头的当前 root 相对路径；检查行为见 [本地目标演示](docs/demos/checkers/02-local-target-missing.md) |
 | 行内扩展 | `==高亮==`、`^^插入^^` 与 [`++ctrl+alt+del++` 键盘按键](docs/demos/pymarkdown/keyboards.md) |
 | 协作标记 | [Critic Markup 行内与块级语法](docs/demos/pymarkdown/critic.md) |
 | WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开，以及图片和 Mermaid Lightbox（支持滚轮平滑缩放） |

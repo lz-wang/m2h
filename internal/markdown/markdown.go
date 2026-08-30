@@ -67,6 +67,7 @@ func (mode URLMode) String() string {
 // RenderOptions configures a single Markdown render.
 type RenderOptions struct {
 	SourcePath string
+	RootPath   string
 	URLMode    URLMode
 }
 
@@ -181,7 +182,19 @@ func normalizeOptions(options RenderOptions) (RenderOptions, error) {
 	if err != nil {
 		return RenderOptions{}, err
 	}
+	normalizedRoot, ok := normalizeLogicalRootPath(options.RootPath)
+	if !ok {
+		return RenderOptions{}, &OptionError{Name: "root path", Value: options.RootPath}
+	}
+	if !withinLogicalRoot(normalizedSource, normalizedRoot) {
+		return RenderOptions{}, &OptionError{
+			Name:   "root path",
+			Value:  options.RootPath,
+			Reason: "must contain the source path",
+		}
+	}
 	options.SourcePath = normalizedSource
+	options.RootPath = normalizedRoot
 	return options, nil
 }
 
@@ -226,7 +239,7 @@ func rewriteDestination(destination []byte, options RenderOptions, image bool) [
 	if !ok {
 		return destination
 	}
-	resolved, ok := ResolveLocalDestination(options.SourcePath, "", local)
+	resolved, ok := ResolveLocalDestination(options.SourcePath, options.RootPath, local)
 	if !ok {
 		return destination
 	}

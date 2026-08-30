@@ -173,6 +173,32 @@ func TestRenderRewritesPreviewAssetsAndPreservesConvertAssets(t *testing.T) {
 	}
 }
 
+func TestRenderKeepsLocalLinksInsideNamedRoot(t *testing.T) {
+	t.Parallel()
+
+	source := []byte("[Root](/guide.md)\n[Parent](../guide.md)\n[Escape](../../r0/secret.md)\n![Logo](/images/logo.png)")
+	result, err := Render(source, RenderOptions{
+		URLMode:    URLWeb,
+		SourcePath: "r1/docs/current.md",
+		RootPath:   "r1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{
+		`href="/doc/r1/guide.md"`,
+		`href="../../r0/secret.md"`,
+		`src="/assets/r1/images/logo.png"`,
+	} {
+		if !strings.Contains(result.Body, want) {
+			t.Errorf("named-root render missing %q: %s", want, result.Body)
+		}
+	}
+	if got := strings.Count(result.Body, `href="/doc/r1/guide.md"`); got != 2 {
+		t.Fatalf("named-root guide link count = %d, want 2: %s", got, result.Body)
+	}
+}
+
 func TestClassifyDestination(t *testing.T) {
 	t.Parallel()
 
@@ -339,6 +365,8 @@ func TestRenderRejectsInvalidOptions(t *testing.T) {
 		{URLMode: URLMode(9), SourcePath: "doc.md"},
 		{SourcePath: "../outside.md"},
 		{SourcePath: "/absolute.md"},
+		{SourcePath: "r0/doc.md", RootPath: "../r0"},
+		{SourcePath: "r1/doc.md", RootPath: "r0"},
 	} {
 		if _, err := Render([]byte("text"), options); err == nil {
 			t.Fatalf("Render() accepted invalid options: %+v", options)

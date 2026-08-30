@@ -14,6 +14,10 @@
 
 ## [未发布]
 
+### 新增
+
+- Markdown 本地引用支持以单个 `/` 开头的当前文档 root 相对路径：`/docs/guide.md` 与 `/images/logo.png` 分别在 WebUI 中统一路由到当前 root 的 `/doc` 与 `/assets` 地址，Markdown 链接/图片及 raw HTML 的 `href`、`src`、`poster`、`data` 使用同一语义；`m2h check` 同步检查目标缺失、非普通文件、越界、symlink、文档服务范围与锚点。该路径绝不映射到宿主机文件系统根目录，多 root 模式始终锚定引用所在 root；`//host/path`、HTTP/HTTPS、`mailto:` 与 `tel:` 保持外部 URL 行为。
+
 ## [0.15.0] - 2026-08-30
 
 ### 新增

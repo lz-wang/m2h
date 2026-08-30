@@ -203,13 +203,13 @@ func (handler *documentHandler) serveDocument(response http.ResponseWriter, requ
 		return
 	}
 	rendered, err := markdown.Render(body, markdown.RenderOptions{
-		URLMode: markdown.URLWeb,
+		URLMode:  markdown.URLWeb,
+		RootPath: handler.workspace.publicRoot(root.id),
 		// Rendering resolves relative Markdown links and attachments against
-		// the virtual (public) path, so the shared rewrite layer routes them
-		// to /doc/<root>/<...> and /assets/<root>/<...> in a multi-root
-		// workspace while a single root keeps its unprefixed URLs. "../"
-		// beyond the virtual root is refused there, which is exactly the
-		// cross-root boundary: links can never leave their own root.
+		// the virtual (public) path. RootPath anchors both document-relative
+		// and workspace-root-relative destinations inside the current root,
+		// routing them through /doc/<root>/<...> or /assets/<root>/<...>
+		// without allowing a sibling root to become the resolution base.
 		SourcePath: virtual,
 	})
 	if err != nil {
