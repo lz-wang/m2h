@@ -94,6 +94,21 @@ func (set RuleSet) Enabled(rule string) bool {
 	return ok
 }
 
+// NeedsReferenceResolution reports whether any enabled rule needs the
+// reference-resolution walk: the target rules that resolve destinations
+// against the filesystem and the per-reference warnings that ride the same
+// walk. When none is enabled the walk is skipped entirely, so a disabled
+// rule means the work does not happen, not just that nothing is reported.
+func (set RuleSet) NeedsReferenceResolution() bool {
+	return set.Enabled(RuleImageAltEmpty) ||
+		set.Enabled(RuleLinkEmptyDestination) ||
+		set.Enabled(RuleAnchorMissing) ||
+		set.Enabled(RuleLocalTargetMissing) ||
+		set.Enabled(RuleLocalTargetNotRegular) ||
+		set.Enabled(RuleLocalTargetOutsideRoot) ||
+		set.Enabled(RuleMarkdownTargetNotServed)
+}
+
 // add enables one named rule, or every rule for the special name "all".
 func (set *RuleSet) add(name string) error {
 	if name == ruleAll {

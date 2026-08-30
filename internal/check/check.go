@@ -127,17 +127,21 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		result.Diagnostics = append(result.Diagnostics, indexed.diagnostics...)
 	}
 
-	// Phase B: resolve every reference against the index and the filesystem.
-	resolver := newTargetResolver(scope.root)
-	for _, current := range scope.documents {
-		if err := ctx.Err(); err != nil {
-			return Result{}, fmt.Errorf("check: %w", err)
+	// Phase B: resolve every reference against the index and the filesystem —
+	// unless no enabled rule needs the walk, in which case skipping it is the
+	// whole point of disabling the rule.
+	if rules.NeedsReferenceResolution() {
+		resolver := newTargetResolver(scope.root)
+		for _, current := range scope.documents {
+			if err := ctx.Err(); err != nil {
+				return Result{}, fmt.Errorf("check: %w", err)
+			}
+			indexed, ok := index[current.relative]
+			if !ok || !indexed.inspectable {
+				continue
+			}
+			result.Diagnostics = append(result.Diagnostics, checkDocumentReferences(scope, index, resolver, indexed, rules)...)
 		}
-		indexed, ok := index[current.relative]
-		if !ok || !indexed.inspectable {
-			continue
-		}
-		result.Diagnostics = append(result.Diagnostics, checkDocumentReferences(scope, index, resolver, indexed, rules)...)
 	}
 
 	sortDiagnostics(result.Diagnostics)

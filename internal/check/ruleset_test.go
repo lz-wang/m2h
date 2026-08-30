@@ -2,6 +2,7 @@ package check
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"testing"
 )
@@ -142,6 +143,60 @@ func TestRunRejectsUnknownRuleNamesBeforeFilesystem(t *testing.T) {
 	if err == nil || err.Error() != `unknown check rule "foo.bar"` {
 		t.Fatalf("Run() error = %v, want the unknown rule error", err)
 	}
+}
+
+func TestRuleSetNeedsReferenceResolution(t *testing.T) {
+	t.Parallel()
+
+	// The reference-resolution walk runs for the target rules and for the
+	// per-reference warnings that ride the same walk, so it is skipped only
+	// when every one of them is disabled.
+	referenceRules := []string{
+		RuleLocalTargetMissing, RuleLocalTargetNotRegular, RuleLocalTargetOutsideRoot,
+		RuleMarkdownTargetNotServed, RuleAnchorMissing,
+		RuleImageAltEmpty, RuleLinkEmptyDestination,
+	}
+	skipped, err := NewRuleSet(nil, referenceRules)
+	if err != nil {
+		t.Fatalf("NewRuleSet() error: %v", err)
+	}
+	if skipped.NeedsReferenceResolution() {
+		t.Fatal("NeedsReferenceResolution() = true, want false with every reference rule disabled")
+	}
+	defaults, err := NewRuleSet(nil, nil)
+	if err != nil {
+		t.Fatalf("NewRuleSet() error: %v", err)
+	}
+	if !defaults.NeedsReferenceResolution() {
+		t.Fatal("NeedsReferenceResolution() = false, want true for the default rules")
+	}
+	for _, rule := range referenceRules {
+		others := slices.DeleteFunc(slices.Clone(referenceRules), func(name string) bool {
+			return name == rule
+		})
+		enabled, err := NewRuleSet([]string{rule}, others)
+		if err != nil {
+			t.Fatalf("NewRuleSet(enable %s) error: %v", rule, err)
+		}
+		if !enabled.NeedsReferenceResolution() {
+			t.Fatalf("NeedsReferenceResolution() = false with %s enabled", rule)
+		}
+	}
+}
+
+func TestRunPerReferenceWarningsWithoutTargetRules(t *testing.T) {
+	t.Parallel()
+
+	// Disabling every target/anchor rule alone must not lose the
+	// per-reference warnings: they ride the same resolution walk, so the
+	// walk keeps running while any of them stays enabled.
+	expectDiagnostics(t, "alt-empty survives target rules disabled",
+		"# Guide\n\n![](missing.png)\n",
+		Options{DisableRules: []string{
+			RuleLocalTargetMissing, RuleLocalTargetNotRegular, RuleLocalTargetOutsideRoot,
+			RuleMarkdownTargetNotServed, RuleAnchorMissing,
+		}},
+		[]string{fmt.Sprintf("guide.md:3:5 warning %s", RuleImageAltEmpty)})
 }
 
 func TestRunDisabledRulesStaySilent(t *testing.T) {
