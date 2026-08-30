@@ -84,8 +84,24 @@ func TestInspectLocatesReferenceStyleLinks(t *testing.T) {
 	inspection := Inspect(source)
 
 	want := []Reference{
-		{Kind: ReferenceLink, Route: ReferenceRouteLink, Destination: "docs/guide.md", Text: "Guide", Line: 1, Column: 2},
-		{Kind: ReferenceLink, Route: ReferenceRouteLink, Destination: "other.md", Text: "collapsed", Line: 1, Column: 21},
+		{
+			Kind:           ReferenceLink,
+			Route:          ReferenceRouteLink,
+			Destination:    "docs/guide.md",
+			Text:           "Guide",
+			ReferenceLabel: "guide",
+			Line:           1,
+			Column:         2,
+		},
+		{
+			Kind:           ReferenceLink,
+			Route:          ReferenceRouteLink,
+			Destination:    "other.md",
+			Text:           "collapsed",
+			ReferenceLabel: "collapsed",
+			Line:           1,
+			Column:         21,
+		},
 	}
 	if !slices.Equal(inspection.References, want) {
 		t.Fatalf("references = %+v, want %+v", inspection.References, want)

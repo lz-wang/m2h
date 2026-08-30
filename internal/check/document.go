@@ -163,23 +163,19 @@ func indexDocument(current document, rules RuleSet) (*indexedDocument, error) {
 	}
 
 	inspection := markdown.Inspect(body)
-	// Reference positions are body-relative; shift them past the frontmatter
-	// block so reported lines match the source file.
-	lineOffset := markdown.FrontMatterLineOffset(source) - 1
-	for index := range inspection.References {
-		inspection.References[index].Line += lineOffset
-	}
+	// Every body fact position is body-relative; shift them past the
+	// frontmatter block once so all downstream rules see file-level lines.
+	inspection.ShiftLines(markdown.FrontMatterLineOffset(source) - 1)
 	anchors := make(map[string]struct{}, len(inspection.Headings))
 	for _, heading := range inspection.Headings {
 		anchors[heading.ID] = struct{}{}
 	}
 
 	diagnostics := make([]Diagnostic, 0)
-	// Heading lines are body-relative too.
 	if inspection.H1Count > 1 && rules.Enabled(RuleDocumentMultipleH1) {
 		diagnostics = append(diagnostics, Diagnostic{
 			Path:     current.display,
-			Line:     secondH1Line(inspection.Headings) + lineOffset,
+			Line:     secondH1Line(inspection.Headings),
 			Column:   1,
 			Severity: SeverityWarning,
 			Rule:     RuleDocumentMultipleH1,

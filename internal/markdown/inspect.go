@@ -8,6 +8,7 @@ import (
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
 	"github.com/yuin/goldmark/text"
+	"github.com/yuin/goldmark/util"
 	"golang.org/x/net/html"
 )
 
@@ -39,31 +40,114 @@ const (
 	ReferenceRouteAsset
 )
 
+// Position is a 1-based source position of one inspection fact.
+type Position struct {
+	Line   int
+	Column int
+}
+
 // Reference is one link, image or raw-HTML URL destination extracted from a
 // document. Destination is kept exactly as the Markdown source wrote it — no
 // sanitization or URL rewriting — and Line/Column locate it 1-based in the
 // source. Text is the link text or image alt text (empty for raw HTML).
+// ReferenceLabel holds the raw label of a reference-style link or image
+// ([text][label], [label][] or the shortcut [label]) and is empty for inline
+// links ([text](dest)), so rules can tell how the destination was written.
 // Inline link and image nodes carry no position of their own, so the
 // position comes from the node's first child segment (the link or alt text)
 // and, when the node has none, from the first literal occurrence of the
 // destination after the previous reference. Raw-HTML URLs instead locate at
 // the attribute value itself inside the tag.
 type Reference struct {
-	Kind        ReferenceKind
-	Route       ReferenceRoute
+	Kind           ReferenceKind
+	Route          ReferenceRoute
+	Destination    string
+	Text           string
+	ReferenceLabel string
+	Line           int
+	Column         int
+}
+
+// ReferenceDefinition is one link reference definition ([label]: destination)
+// the parser accepted. Goldmark keeps the first definition of a label and
+// silently ignores later duplicates, so facts keep the first position too.
+type ReferenceDefinition struct {
+	Label       string
 	Destination string
-	Text        string
-	Line        int
-	Column      int
+	Position    Position
+}
+
+// ReferenceUse is one explicit reference-style use — [text][label] or
+// [text][] — whose label the parser could not resolve to a definition. The
+// judgement is Goldmark's (see inspectionContext); the source scan only
+// recovers where the rejected use sits. Shortcut [label] alone never
+// becomes a ReferenceUse: in plain prose a bracketed word is usually text,
+// not a link attempt.
+type ReferenceUse struct {
+	Label    string
+	Position Position
 }
 
 // Inspection is the check-oriented view of one Markdown document: the same
 // heading anchors the WebUI table of contents shows, every reference the web
-// renderer would rewrite, and how many H1 headings the document contains.
+// renderer would rewrite, reference definitions and the uses the parser
+// rejected, and how many H1 headings the document contains. It reports what
+// the Markdown contains, never what a rule should conclude — rule ids and
+// severities live in the check package.
 type Inspection struct {
-	Headings   []Heading
-	References []Reference
-	H1Count    int
+	Headings             []Heading
+	References           []Reference
+	ReferenceDefinitions []ReferenceDefinition
+	UndefinedReferences  []ReferenceUse
+	CodeFences           []CodeFence
+	H1Count              int
+}
+
+// ShiftLines moves every fact position by delta lines. Callers that inspect
+// the Markdown body after splitting off a frontmatter block pass
+// FrontMatterLineOffset(source)-1 so every body fact enters the rest of the
+// pipeline carrying file-level lines; columns are untouched because the
+// offset is always whole lines.
+func (inspection *Inspection) ShiftLines(delta int) {
+	for index := range inspection.Headings {
+		inspection.Headings[index].Line += delta
+	}
+	for index := range inspection.References {
+		inspection.References[index].Line += delta
+	}
+	for index := range inspection.ReferenceDefinitions {
+		inspection.ReferenceDefinitions[index].Position.Line += delta
+	}
+	for index := range inspection.UndefinedReferences {
+		inspection.UndefinedReferences[index].Position.Line += delta
+	}
+	for index := range inspection.CodeFences {
+		inspection.CodeFences[index].Position.Line += delta
+	}
+}
+
+// inspectionContext wraps the parse context to observe reference lookups.
+// Goldmark itself decides whether a reference-style link resolves; a failed
+// lookup leaves plain text with no AST trace, so the fact must be recorded
+// while the parse is running. Labels are recorded in Goldmark's normalized
+// form (see normalizeReferenceLabel) exactly as the parser looked them up.
+type inspectionContext struct {
+	parser.Context
+
+	missingReferences map[string]struct{}
+}
+
+// Reference intercepts every label lookup during the parse and records the
+// labels Goldmark rejected. Keeping the judgement inside the real parser is
+// what makes the later "undefined" facts exact: escaped brackets, code
+// spans and other constructs never trigger a lookup, so they can never be
+// reported.
+func (context *inspectionContext) Reference(label string) (parser.Reference, bool) {
+	reference, ok := context.Context.Reference(label)
+	if !ok {
+		context.missingReferences[label] = struct{}{}
+	}
+	return reference, ok
 }
 
 // Inspect parses source with the exact engine, extensions and
@@ -72,9 +156,16 @@ type Inspection struct {
 // extraction walks the AST instead of the raw text, URLs inside fenced or
 // inline code never become references, and heading ids always match the
 // anchors Render would emit.
+//
+// The same parse feeds a source scan that recovers what the final AST can
+// no longer represent: reference uses the parser rejected, and the fenced
+// code blocks whose fence lines the AST strips away.
 func Inspect(source []byte) Inspection {
 	engine := newEngine()
-	context := parser.NewContext(parser.WithIDs(newGitHubIDs()))
+	context := &inspectionContext{
+		Context:           parser.NewContext(parser.WithIDs(newGitHubIDs())),
+		missingReferences: make(map[string]struct{}),
+	}
 	document := engine.Parser().Parse(text.NewReader(source), parser.WithContext(context))
 
 	inspection := Inspection{Headings: extractHeadings(document, source)}
@@ -84,6 +175,11 @@ func Inspect(source []byte) Inspection {
 		}
 	}
 	inspection.References = extractReferences(document, source)
+	inspection.ReferenceDefinitions = extractReferenceDefinitions(document, source)
+
+	scanner := newSourceScanner(source, codeRanges(document))
+	inspection.UndefinedReferences = scanner.undefinedReferences(context.missingReferences)
+	inspection.CodeFences = scanner.fences
 	return inspection
 }
 
@@ -117,9 +213,9 @@ func extractReferences(document ast.Node, source []byte) []Reference {
 				collector.searchFrom = end
 			}
 		case *ast.Link:
-			collector.markdownReference(ReferenceLink, ReferenceRouteLink, string(typed.Destination), node)
+			collector.markdownReference(ReferenceLink, ReferenceRouteLink, string(typed.Destination), referenceLabel(typed.Reference), node)
 		case *ast.Image:
-			collector.markdownReference(ReferenceImage, ReferenceRouteAsset, string(typed.Destination), node)
+			collector.markdownReference(ReferenceImage, ReferenceRouteAsset, string(typed.Destination), referenceLabel(typed.Reference), node)
 		case *ast.HTMLBlock:
 			lines := typed.Lines()
 			if lines.Len() == 0 {
@@ -153,12 +249,12 @@ func extractReferences(document ast.Node, source []byte) []Reference {
 // descendant segment — the link or alt text. A childless node (an image with
 // no alt text) has no segment, so its position falls back to the first
 // literal occurrence of the destination after the previous reference.
-func (collector *referenceCollector) markdownReference(kind ReferenceKind, route ReferenceRoute, destination string, node ast.Node) {
+func (collector *referenceCollector) markdownReference(kind ReferenceKind, route ReferenceRoute, destination string, label string, node ast.Node) {
 	offset, ok := nodeOffset(node)
 	if !ok {
 		offset = collector.searchDestination(destination)
 	}
-	collector.record(kind, route, destination, string(node.Text(collector.source)), offset)
+	collector.record(kind, route, destination, string(node.Text(collector.source)), label, offset)
 }
 
 // rawReferences records every URL attribute inside one raw HTML snippet —
@@ -173,26 +269,80 @@ func (collector *referenceCollector) rawReferences(raw []byte, base int) {
 		if found.asset {
 			route = ReferenceRouteAsset
 		}
-		collector.record(ReferenceRawHTML, route, found.destination, "", base+found.offset)
+		collector.record(ReferenceRawHTML, route, found.destination, "", "", base+found.offset)
 	}
 	if base > collector.searchFrom {
 		collector.searchFrom = base
 	}
 }
 
-func (collector *referenceCollector) record(kind ReferenceKind, route ReferenceRoute, destination string, text string, offset int) {
+func (collector *referenceCollector) record(kind ReferenceKind, route ReferenceRoute, destination string, text string, label string, offset int) {
 	if offset > collector.searchFrom {
 		collector.searchFrom = offset
 	}
 	line, column := collector.locator.locate(offset)
 	collector.references = append(collector.references, Reference{
-		Kind:        kind,
-		Route:       route,
-		Destination: destination,
-		Text:        text,
-		Line:        line,
-		Column:      column,
+		Kind:           kind,
+		Route:          route,
+		Destination:    destination,
+		Text:           text,
+		ReferenceLabel: label,
+		Line:           line,
+		Column:         column,
 	})
+}
+
+// referenceLabel returns the raw reference-style label of a link or image —
+// the part inside the second bracket pair of [text][label], the label of a
+// collapsed [label][] use, or the text of a shortcut [label] use — or the
+// empty string for an inline link written as [text](destination).
+func referenceLabel(reference *ast.ReferenceLink) string {
+	if reference == nil {
+		return ""
+	}
+	return string(reference.Value)
+}
+
+// extractReferenceDefinitions collects the reference definitions Goldmark
+// accepted, in document order. Duplicate labels keep the first definition —
+// the one Goldmark resolves uses against — matching the parser's own
+// first-wins rule.
+func extractReferenceDefinitions(document ast.Node, source []byte) []ReferenceDefinition {
+	definitions := make([]ReferenceDefinition, 0)
+	seen := make(map[string]struct{})
+	locator := newSourceLocator(source)
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		definition, ok := node.(*ast.LinkReferenceDefinition)
+		if !ok {
+			return ast.WalkContinue, nil
+		}
+		label := normalizeReferenceLabel(definition.Label)
+		if _, duplicate := seen[label]; duplicate {
+			return ast.WalkContinue, nil
+		}
+		seen[label] = struct{}{}
+		line, column := 1, 1
+		if definition.Lines().Len() > 0 {
+			line, column = locator.locate(definition.Lines().At(0).Start)
+		}
+		definitions = append(definitions, ReferenceDefinition{
+			Label:       string(definition.Label),
+			Destination: string(definition.Destination),
+			Position:    Position{Line: line, Column: column},
+		})
+		return ast.WalkContinue, nil
+	})
+	return definitions
+}
+
+// normalizeReferenceLabel applies Goldmark's link reference normalization —
+// trim, full Unicode case folding, whitespace collapsed to single spaces —
+// so facts and parser lookups can never disagree about label identity.
+func normalizeReferenceLabel(label []byte) string {
+	return util.ToLinkReference(label)
 }
 
 // searchDestination finds the first literal occurrence of destination at or
