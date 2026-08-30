@@ -238,7 +238,7 @@ location /tinyauth {
     proxy_set_header x-forwarded-for $remote_addr;
     proxy_set_header x-real-ip $remote_addr;
     proxy_set_header x-forwarded-proto $scheme;
-    proxy_set_header x-forwarded-host $http_host;
+    proxy_set_header x-forwarded-host $host;
     proxy_set_header x-forwarded-uri $request_uri;
 }
 ```
