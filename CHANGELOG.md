@@ -16,6 +16,8 @@
 
 ### 新增
 
+- WebUI 文档中的跨站 HTTP/HTTPS 链接改为在新标签页打开：Markdown 链接、GFM autolink 与 raw HTML `<a>` 统一在浏览器端按页面 origin 判定，跨 origin（协议或端口不同同样视为跨站）的外链自动附加 `target="_blank"` 与 `rel="noopener"`，作者已有的 `rel` 标记（如 `nofollow`）保留不覆盖；本站链接、锚点与 `mailto:`/`tel:` 保持原有行为。本站判定使用浏览器实际访问的地址而非服务端视角，因此 Nginx 反向代理（HTTPS termination → HTTP upstream）部署下无需任何额外配置。导出 HTML 不受影响。
+
 - `m2h check` 的文本报告在交互式终端中按等级着色：每条诊断只把 error 显示为红色、warning 显示为黄色；最终总结将“全部通过”显示为绿色，并分别为 error/warning 计数使用红色/黄色。路径、行列、规则名、消息、退出码及 JSON schema 不变，重定向、管道、`NO_COLOR` 与 `TERM=dumb` 保持无 ANSI 颜色。
 
 - `m2h check` 新增 `--enable`/`--disable` 规则选择与 15 条新规则，规则总数扩展到 25 条。`--enable` 在默认规则之上追加、`--disable` 从中移除（逗号分隔，`--disable` 优先，`all` 指代全部规则，如 `--enable all --disable section.empty` 运行除该规则外的全部规则）；未知规则名在读取任何文件之前以 `Error: unknown check rule "foo.bar"` 失败。新增七条默认开启的 error：`reference.undefined`（显式 `[text][label]`/`[text][]` 引用无定义，裸 `[label]` 不报）、`footnote.undefined`（`[^label]` 无对应定义）、`footnote.empty`（脚注定义无内容，多行缩进续行不算空）、`table.column-mismatch`（表格行列数与分隔行不符——渲染时会被补空或截断，含表头被补空的情况；表头多于分隔线导致整表被拒绝时直接报告）、`html.comment-unclosed`（`<!--` 未闭合，其后内容整体渲染为注释）、`link.reversed`（高置信度 `(text)[url]` 反转链接写法，`f(x)[0]`、`array[index]` 不报）；新增四条默认开启的 warning：`heading.level-skip`（标题向下跳超过一级）、`heading.duplicate`（同一父 section 下重复标题）、`code-fence.language-missing`（fenced code 无语言）、`reference.unused`、`footnote.unused`（定义从未被引用）；新增四条默认关闭、经 `--enable` 开启的 warning：`section.empty`、`link.text-nondescriptive`、`unicode.mojibake`、`unicode.invisible-character`（后三条按多字符 mojibake 签名、中英文小词表精确匹配与"行首尾/邻接空白/连续出现/bidi 控制"保守触发，emoji 的 ZWJ 与 variation selector 不会误报）。引用与脚注的未定义/未使用判定由实际解析器给出（reference 标签与渲染器同一归一化比较、脚注标签逐字节比较），行内与 fenced 代码中的内容永不参与判定；所有正文诊断的行列号统一含 Frontmatter 偏移。文本与 JSON 输出契约不变，新规则沿用同一 schema。

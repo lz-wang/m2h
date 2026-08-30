@@ -180,7 +180,7 @@ m2h 支持常用 GFM Markdown，并提供以下扩展：
 | 元数据 | YAML Frontmatter；标题、日期别名和回退规则见 [Frontmatter 演示](docs/demos/frontmatter/00-index.md) |
 | 行内扩展 | `==高亮==`、`^^插入^^` 与 [`++ctrl+alt+del++` 键盘按键](docs/demos/pymarkdown/keyboards.md) |
 | 协作标记 | [Critic Markup 行内与块级语法](docs/demos/pymarkdown/critic.md) |
-| WebUI 增强 | 代码复制、行号、长代码块折叠，以及图片和 Mermaid Lightbox（支持滚轮平滑缩放） |
+| WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开，以及图片和 Mermaid Lightbox（支持滚轮平滑缩放） |
 
 ## 许可证
 

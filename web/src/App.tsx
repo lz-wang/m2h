@@ -72,6 +72,7 @@ import {
   collectLightboxState,
   type LightboxState,
 } from "./lib/document-lightbox";
+import { enhanceDocumentLinks } from "./lib/document-links";
 import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 import {
@@ -1075,6 +1076,9 @@ function PreviewContent({
     const generation = ++renderGenerationRef.current;
     const mode = resolvedModeRef.current;
     root.innerHTML = html;
+    // Link policy first, before the rich-content enhancements: external
+    // links must open in a new tab even when a later renderer bails.
+    enhanceDocumentLinks(root);
     renderedModeRef.current = mode;
     void renderRichContent(
       root,
