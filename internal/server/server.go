@@ -25,6 +25,12 @@ const (
 	DefaultPort = 8793
 
 	shutdownTimeout = 3 * time.Second
+	// Slowloris-style protections for a long-running service: header reads
+	// and idle keep-alives must not be allowed to hold connections open
+	// forever, and request headers stay small.
+	readHeaderTimeout = 5 * time.Second
+	idleTimeout       = 60 * time.Second
+	maxHeaderBytes    = 1 << 20
 )
 
 // Options configures a document server.
@@ -121,13 +127,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		return err
 	}
 	handler := newDocumentHandlerWithVersion(workspace, logger, options.UI, normalized.Version)
-	httpServer := &http.Server{
-		Handler: handler,
-		BaseContext: func(net.Listener) context.Context {
-			return runContext
-		},
-		ErrorLog: log.New(logger, "m2h: http: ", 0),
-	}
+	httpServer := newHTTPServer(handler, runContext, logger)
 	requestedAddress := net.JoinHostPort(normalized.Host, strconv.Itoa(normalized.Port))
 	listener, err := deps.listen("tcp", requestedAddress)
 	if err != nil {
@@ -166,6 +166,26 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		runErr = fmt.Errorf("shut down server: %w", err)
 	}
 	return runErr
+}
+
+// newHTTPServer assembles the hardened http.Server every run shares. It is
+// a separate constructor so the lifetime-relevant settings stay in one
+// testable place.
+func newHTTPServer(handler http.Handler, runContext context.Context, logger io.Writer) *http.Server {
+	return &http.Server{
+		Handler:           handler,
+		ReadHeaderTimeout: readHeaderTimeout,
+		IdleTimeout:       idleTimeout,
+		MaxHeaderBytes:    maxHeaderBytes,
+		// WriteTimeout is intentionally unset: /assets streams large PDFs,
+		// videos and archives, and a global write deadline would cut slow
+		// downloads off mid-transfer. Public slow clients are the reverse
+		// proxy's problem (m2h sits behind loopback), not this server's.
+		BaseContext: func(net.Listener) context.Context {
+			return runContext
+		},
+		ErrorLog: log.New(logger, "m2h: http: ", 0),
+	}
 }
 
 func normalizeOptions(options Options) (Options, error) {

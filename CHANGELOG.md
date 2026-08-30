@@ -18,6 +18,8 @@
 
 - Web 文档服务新增统一的浏览器安全响应头：所有响应（页面、API、附件、runtime 资源与 404/405）携带 `Content-Security-Policy`（`script-src 'self'`、`base-uri 'none'`、`object-src 'none'`、`frame-ancestors 'self'`、`form-action 'none'`、`frame-src 'none'` 等）、`X-Content-Type-Options: nosniff`、`Referrer-Policy: same-origin`、`X-Frame-Options: SAMEORIGIN` 与 `Permissions-Policy`（禁用摄像头/麦克风/定位/支付/USB）。`style-src` 暂保留 `'unsafe-inline'`（React、Mermaid 与 KaTeX 均产生内联样式），脚本全部来自本源 `/runtime/`，无需 CDN 或内联脚本；`Referrer-Policy: same-origin` 使点击外链时不会把私人文档地址作为 Referer 发给外部站点。m2h 不设置 HSTS（TLS 由反向代理终结，HSTS 归代理层）。页面因此移除了 WebUI 中唯一的内联脚本（scroll restoration 预设移入应用入口模块），并新增真实 Chromium 回归：Mermaid、ZenUML、KaTeX、可排序表格、SVG 与外部图片在严格 CSP 下全部正常渲染且无任何策略拒绝，恶意 raw HTML 的内联事件脚本（`onerror`）与内联 `<script>` 不再执行。
 
+- HTTP 服务硬化以支持长期常驻运行：`ReadHeaderTimeout`（5s）与 `IdleTimeout`（60s）防止慢速头部与闲置连接无限占用，`MaxHeaderBytes`（1 MiB）限制请求头大小；`WriteTimeout` 刻意不设置，`/assets` 的大文件（PDF/视频/压缩包）下载不会被全局写超时截断，公网慢客户端由反向代理隔离。
+
 ### 修复
 
 - 修复目录文档服务默认暴露点开头隐藏路径的问题：目录 root 下任何包含 `.` 开头路径段的内容（如 `.env`、`.git/config`、`.github/workflows/`、`foo/.private/file.pdf`）不再出现在文件树与文档 API 中，`/doc`、`/raw` 也不再响应这些路径；隐藏目录在扫描阶段即被跳过，不再进入遍历结果。显式以单文件路径启动（如 `m2h notes/.private.md`）仍正常服务该文件，`m2h check` 的静态分析语义不变，仍可检查隐藏 Markdown。

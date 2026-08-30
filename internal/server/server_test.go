@@ -388,6 +388,46 @@ func TestServerURLNormalizesWildcardAndAddressTypes(t *testing.T) {
 	}
 }
 
+func TestNewHTTPServerHardening(t *testing.T) {
+	t.Parallel()
+
+	runContext := t.Context()
+	var logOutput bytes.Buffer
+	handler := http.HandlerFunc(func(http.ResponseWriter, *http.Request) {})
+
+	server := newHTTPServer(handler, runContext, &logOutput)
+	if server.Handler == nil {
+		t.Fatal("hardened server has no handler")
+	}
+	if server.ReadHeaderTimeout != readHeaderTimeout || server.ReadHeaderTimeout == 0 {
+		t.Fatalf("ReadHeaderTimeout = %v, want %v", server.ReadHeaderTimeout, readHeaderTimeout)
+	}
+	if server.IdleTimeout != idleTimeout || server.IdleTimeout == 0 {
+		t.Fatalf("IdleTimeout = %v, want %v", server.IdleTimeout, idleTimeout)
+	}
+	if server.MaxHeaderBytes != maxHeaderBytes || server.MaxHeaderBytes <= 0 {
+		t.Fatalf("MaxHeaderBytes = %d, want %d", server.MaxHeaderBytes, maxHeaderBytes)
+	}
+	// Large attachments stream through /assets; a global write deadline would
+	// truncate slow downloads, so it must stay unset.
+	if server.WriteTimeout != 0 {
+		t.Fatalf("WriteTimeout = %v, want unset", server.WriteTimeout)
+	}
+	if server.BaseContext == nil {
+		t.Fatal("BaseContext is missing")
+	}
+	if contextFromBase(server) != runContext {
+		t.Fatal("BaseContext does not carry the run context")
+	}
+	if server.ErrorLog == nil {
+		t.Fatal("ErrorLog is missing")
+	}
+}
+
+func contextFromBase(server *http.Server) context.Context {
+	return server.BaseContext(nil)
+}
+
 type stringAddress string
 
 func (address stringAddress) Network() string { return "tcp" }
