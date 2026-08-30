@@ -105,6 +105,11 @@ func TestCheckReferenceUndefined(t *testing.T) {
 			want:   []string{fmt.Sprintf("guide.md:3:2 error %s", RuleReferenceUndefined)},
 		},
 		{
+			name:   "inline link title before real use keeps real position",
+			source: "# Guide\n\n[a](# \"example [fake][missing]\") and [Real][missing].\n",
+			want:   []string{fmt.Sprintf("guide.md:3:38 error %s", RuleReferenceUndefined)},
+		},
+		{
 			name:   "defined labels stay clean",
 			source: "# Guide\n\n[Guide][guide] and [collapsed][] and [shortcut].\n\n[guide]: https://example.com/g\n[collapsed]: https://example.com/c\n[shortcut]: https://example.com/s\n",
 			want:   nil,
@@ -433,6 +438,11 @@ func TestCheckCodeFenceLanguageMissing(t *testing.T) {
 			want:   nil,
 		},
 		{
+			name:   "empty fence inside an asterisk list item reports at opener",
+			source: "# Guide\n\n* ```\n  ```\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 warning %s", RuleCodeFenceLanguageMissing)},
+		},
+		{
 			name:   "fence-looking lines inside an html block stay clean",
 			source: "# Guide\n\n<div>\n```\nnot fence\n```\n</div>\n",
 			want:   nil,
@@ -529,6 +539,9 @@ func TestCheckSectionEmptyOptIn(t *testing.T) {
 	expectDiagnostics(t, "enabled", source, enabled,
 		[]string{fmt.Sprintf("guide.md:5:1 warning %s", RuleSectionEmpty)})
 	expectDiagnostics(t, "default off", source, Options{}, nil)
+	expectDiagnostics(t, "thematic break is content",
+		"# Title\n\nIntro.\n\n## Divider\n\n***\n\n## Next\n\ncontent\n",
+		enabled, nil)
 
 	withFrontmatter := Options{EnableRules: []string{RuleSectionEmpty}}
 	expectDiagnostics(t, "frontmatter shifts the heading", "---\ntitle: T\n---\n\n# T\n\n## Empty\n\n## Next\n\ncontent\n",

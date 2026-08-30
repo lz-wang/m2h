@@ -140,6 +140,9 @@ func checkReference(
 		}
 		return diagnostics
 	}
+	if !rules.NeedsTargetResolution() {
+		return diagnostics
+	}
 	if reference.Destination == "#" {
 		return diagnostics
 	}
@@ -263,7 +266,10 @@ func (current *indexedDocument) diagnostic(rule string, message string, referenc
 // this call already carrying file-level lines, so rules never adjust
 // frontmatter offsets themselves.
 func (current *indexedDocument) diagnosticForRule(rule string, message string, position markdown.Position) Diagnostic {
-	definition, _ := ruleDefinition(rule)
+	definition, ok := ruleDefinition(rule)
+	if !ok {
+		panic("unknown internal check rule: " + rule)
+	}
 	return Diagnostic{
 		Path:     current.display,
 		Line:     position.Line,

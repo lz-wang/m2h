@@ -94,15 +94,21 @@ func (set RuleSet) Enabled(rule string) bool {
 	return ok
 }
 
-// NeedsReferenceResolution reports whether any enabled rule needs the
-// reference-resolution walk: the target rules that resolve destinations
-// against the filesystem and the per-reference warnings that ride the same
-// walk. When none is enabled the walk is skipped entirely, so a disabled
-// rule means the work does not happen, not just that nothing is reported.
-func (set RuleSet) NeedsReferenceResolution() bool {
+// NeedsReferenceWalk reports whether any enabled rule inspects individual
+// Markdown references. The walk covers both cheap per-reference warnings and
+// target rules; it can run without constructing a filesystem resolver.
+func (set RuleSet) NeedsReferenceWalk() bool {
 	return set.Enabled(RuleImageAltEmpty) ||
 		set.Enabled(RuleLinkEmptyDestination) ||
-		set.Enabled(RuleAnchorMissing) ||
+		set.NeedsTargetResolution()
+}
+
+// NeedsTargetResolution reports whether any enabled rule resolves a
+// reference destination against document scope, anchors or the filesystem.
+// Keeping this narrower than NeedsReferenceWalk guarantees that leaving only
+// image.alt-empty/link.empty-destination enabled performs no target I/O.
+func (set RuleSet) NeedsTargetResolution() bool {
+	return set.Enabled(RuleAnchorMissing) ||
 		set.Enabled(RuleLocalTargetMissing) ||
 		set.Enabled(RuleLocalTargetNotRegular) ||
 		set.Enabled(RuleLocalTargetOutsideRoot) ||

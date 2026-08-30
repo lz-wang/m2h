@@ -52,22 +52,13 @@ func codeRanges(document ast.Node) []byteRange {
 	return ranges
 }
 
-// rawHTMLRanges collects the byte ranges Goldmark passes through as raw
-// HTML: HTML blocks (comment blocks among them) and inline raw HTML tags.
-// The parser never interprets brackets inside them, so the syntax scans must
-// never report candidates there. Inline literal-content elements — <code>,
-// <kbd>, … — carry Markdown-uninteresting verbatim text between their tags,
-// so each open/close pair's whole span joins the protected ranges; the tags
-// alone would leave that span scannable.
-func rawHTMLRanges(document ast.Node, source []byte) []byteRange {
+// rawHTMLRanges collects the exact byte ranges Goldmark passes through as raw
+// HTML: whole HTML blocks (comment blocks among them) and individual inline
+// raw-HTML tag/comment nodes. Text between inline tags remains ordinary
+// Markdown source and must stay scannable — CommonMark parses, for example,
+// the emphasis in <del>*text*</del> even though the tags themselves are raw.
+func rawHTMLRanges(document ast.Node) []byteRange {
 	ranges := make([]byteRange, 0)
-	// rawTag is one inline raw HTML tag kept for literal-element pairing.
-	type rawTag struct {
-		span    byteRange
-		name    string
-		closing bool
-	}
-	inline := make([]rawTag, 0)
 	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
@@ -90,66 +81,161 @@ func rawHTMLRanges(document ast.Node, source []byte) []byteRange {
 			}
 			first := typed.Segments.At(0)
 			last := typed.Segments.At(typed.Segments.Len() - 1)
-			span := byteRange{start: first.Start, stop: last.Stop}
-			ranges = append(ranges, span)
-			name, closing, selfClosing := htmlTag(source[first.Start:last.Stop])
-			if _, literal := literalElements[name]; !literal || selfClosing {
-				return ast.WalkContinue, nil
-			}
-			inline = append(inline, rawTag{span: span, name: name, closing: closing})
+			ranges = append(ranges, byteRange{start: first.Start, stop: last.Stop})
 		}
 		return ast.WalkContinue, nil
 	})
-	for open := 0; open < len(inline); open++ {
-		if inline[open].closing {
-			continue
-		}
-		for next := open + 1; next < len(inline); next++ {
-			if inline[next].closing && inline[next].name == inline[open].name {
-				ranges = append(ranges, byteRange{start: inline[open].span.start, stop: inline[next].span.stop})
-				open = next
-				break
-			}
-		}
-	}
 	sort.Slice(ranges, func(left, right int) bool {
 		return ranges[left].start < ranges[right].start
 	})
 	return ranges
 }
 
-// literalElements are the inline HTML elements whose content the browser
-// renders verbatim, so bracket shapes inside them are quoted syntax, never
-// a broken link attempt.
-var literalElements = map[string]bool{
-	"code":     true,
-	"pre":      true,
-	"kbd":      true,
-	"samp":     true,
-	"var":      true,
-	"script":   true,
-	"style":    true,
-	"textarea": true,
-	"title":    true,
+// inlineLinkRanges returns the destination/title source ranges of inline
+// links and images the real parser accepted. Those ranges are literal link
+// syntax, not nested Markdown: bracket pairs in a title must never consume a
+// rejected-reference count or become a footnote/reversed-link diagnostic.
+// The AST decides which links are real; source scanning only recovers the
+// range the AST does not retain.
+func inlineLinkRanges(document ast.Node, source []byte) []byteRange {
+	ranges := make([]byteRange, 0)
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if !entering {
+			return ast.WalkContinue, nil
+		}
+		var reference *ast.ReferenceLink
+		switch typed := node.(type) {
+		case *ast.Link:
+			reference = typed.Reference
+		case *ast.Image:
+			reference = typed.Reference
+		default:
+			return ast.WalkContinue, nil
+		}
+		if reference != nil {
+			return ast.WalkContinue, nil
+		}
+		open := node.Pos()
+		if open < 0 || open >= len(source) {
+			return ast.WalkContinue, nil
+		}
+		if source[open] == '!' {
+			open++
+		}
+		if open >= len(source) || source[open] != '[' {
+			return ast.WalkContinue, nil
+		}
+		textClose, found := matchBracket(source, open, true)
+		if !found || textClose+1 >= len(source) || source[textClose+1] != '(' {
+			return ast.WalkContinue, nil
+		}
+		if stop, ok := inlineLinkSyntaxEnd(source, textClose+1); ok {
+			ranges = append(ranges, byteRange{start: textClose + 1, stop: stop})
+		}
+		return ast.WalkContinue, nil
+	})
+	sort.Slice(ranges, func(left, right int) bool {
+		return ranges[left].start < ranges[right].start
+	})
+	return ranges
 }
 
-// htmlTag parses one raw HTML tag: its lowercased element name, whether it
-// is a closing tag, and whether it closes itself (<br/>).
-func htmlTag(raw []byte) (name string, closing bool, selfClosing bool) {
-	if len(raw) < 3 || raw[0] != '<' {
-		return "", false, false
+// inlineLinkSyntaxEnd returns the offset just past an accepted inline link's
+// closing parenthesis. It mirrors Goldmark's destination/title grammar only
+// to recover a position after the AST has already established acceptance.
+func inlineLinkSyntaxEnd(source []byte, open int) (int, bool) {
+	index := skipInlineLinkSpace(source, open+1)
+	if index >= len(source) {
+		return 0, false
 	}
-	index := 1
-	if raw[index] == '/' {
-		closing = true
+	if source[index] == ')' {
+		return index + 1, true
+	}
+
+	if source[index] == '<' {
+		index++
+		closed := false
+		for index < len(source) {
+			switch source[index] {
+			case '\\':
+				index += 2
+			case '>':
+				index++
+				closed = true
+			default:
+				index++
+			}
+			if closed {
+				break
+			}
+		}
+		if !closed {
+			return 0, false
+		}
+	} else {
+		depth := 0
+		for index < len(source) {
+			current := source[index]
+			switch {
+			case current == '\\':
+				index += 2
+			case current == '(':
+				depth++
+				index++
+			case current == ')' && depth == 0:
+				return index + 1, true
+			case current == ')':
+				depth--
+				index++
+			case isASCIISpace(current):
+				goto title
+			default:
+				index++
+			}
+		}
+		return 0, false
+	}
+
+title:
+	index = skipInlineLinkSpace(source, index)
+	if index >= len(source) {
+		return 0, false
+	}
+	if source[index] == ')' {
+		return index + 1, true
+	}
+	opener := source[index]
+	if opener != '\'' && opener != '"' && opener != '(' {
+		return 0, false
+	}
+	closer := opener
+	if opener == '(' {
+		closer = ')'
+	}
+	index++
+	for index < len(source) {
+		if source[index] == '\\' {
+			index += 2
+			continue
+		}
+		if source[index] == closer {
+			index++
+			index = skipInlineLinkSpace(source, index)
+			if index < len(source) && source[index] == ')' {
+				return index + 1, true
+			}
+			return 0, false
+		}
 		index++
 	}
-	start := index
-	for index < len(raw) && raw[index] != '>' && !isASCIISpace(raw[index]) {
+	return 0, false
+}
+
+func skipInlineLinkSpace(source []byte, index int) int {
+	for index < len(source) && isASCIISpace(source[index]) {
 		index++
 	}
-	selfClosing = raw[len(raw)-2] == '/'
-	return asciiLower(string(raw[start:index])), closing, selfClosing
+	return index
 }
 
 // pendingFence is one fenced code block whose opener line the AST gives no
@@ -342,7 +428,7 @@ func containerPrefixLength(line []byte) int {
 	for index < len(line) {
 		current := line[index]
 		switch {
-		case current == ' ' || current == '\t' || current == '>' || current == '-' || current == ')' || current == '.' || (current >= '0' && current <= '9'):
+		case current == ' ' || current == '\t' || current == '>' || current == '-' || current == '+' || current == '*' || current == ')' || current == '.' || (current >= '0' && current <= '9'):
 			index++
 		default:
 			return index
@@ -376,6 +462,7 @@ type sourceScanner struct {
 	locator    sourceLocator
 	code       []byteRange // AST code ranges, sorted by start
 	rawHTML    []byteRange // AST raw HTML ranges, sorted by start
+	linkSyntax []byteRange // accepted inline link destinations/titles, sorted
 	fenceLines []byteRange // the fence opener lines, from the AST fences
 }
 
@@ -388,13 +475,14 @@ type CodeFence struct {
 }
 
 // newSourceScanner prepares a scan over source, skipping the protected code,
-// raw HTML and fence line ranges the AST identified.
-func newSourceScanner(source []byte, code []byteRange, rawHTML []byteRange, fenceLines []byteRange) *sourceScanner {
+// raw HTML, accepted inline-link syntax and fence ranges the AST identified.
+func newSourceScanner(source []byte, code []byteRange, rawHTML []byteRange, linkSyntax []byteRange, fenceLines []byteRange) *sourceScanner {
 	scanner := &sourceScanner{
 		source:     source,
 		locator:    newSourceLocator(source),
 		code:       code,
 		rawHTML:    rawHTML,
+		linkSyntax: linkSyntax,
 		fenceLines: fenceLines,
 	}
 	sort.Slice(scanner.code, func(left, right int) bool {
@@ -402,6 +490,9 @@ func newSourceScanner(source []byte, code []byteRange, rawHTML []byteRange, fenc
 	})
 	sort.Slice(scanner.rawHTML, func(left, right int) bool {
 		return scanner.rawHTML[left].start < scanner.rawHTML[right].start
+	})
+	sort.Slice(scanner.linkSyntax, func(left, right int) bool {
+		return scanner.linkSyntax[left].start < scanner.linkSyntax[right].start
 	})
 	return scanner
 }
@@ -424,10 +515,10 @@ func (scanner *sourceScanner) inCode(offset int) bool {
 }
 
 // protected reports whether offset sits anywhere the Markdown parser never
-// interprets brackets: code, fence lines and raw HTML — comment blocks,
-// HTML blocks and inline literal-content elements among it. The syntax
-// candidate scans stop here; the unicode scan is a source-quality scan and
-// keeps a wider domain, using inCode alone.
+// interprets brackets: code, fence lines, exact raw-HTML nodes, or the
+// destination/title syntax of an accepted inline link. The syntax candidate
+// scans stop here; the unicode scan is a source-quality scan and keeps a
+// wider domain, using inCode alone.
 func (scanner *sourceScanner) protected(offset int) bool {
 	if scanner.inCode(offset) {
 		return true
@@ -435,7 +526,13 @@ func (scanner *sourceScanner) protected(offset int) bool {
 	index := sort.Search(len(scanner.rawHTML), func(index int) bool {
 		return scanner.rawHTML[index].stop > offset
 	})
-	return index < len(scanner.rawHTML) && scanner.rawHTML[index].start <= offset
+	if index < len(scanner.rawHTML) && scanner.rawHTML[index].start <= offset {
+		return true
+	}
+	index = sort.Search(len(scanner.linkSyntax), func(index int) bool {
+		return scanner.linkSyntax[index].stop > offset
+	})
+	return index < len(scanner.linkSyntax) && scanner.linkSyntax[index].start <= offset
 }
 
 // undefinedReferences returns the located reference uses whose labels the

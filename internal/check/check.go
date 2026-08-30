@@ -127,11 +127,14 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		result.Diagnostics = append(result.Diagnostics, indexed.diagnostics...)
 	}
 
-	// Phase B: resolve every reference against the index and the filesystem —
-	// unless no enabled rule needs the walk, in which case skipping it is the
-	// whole point of disabling the rule.
-	if rules.NeedsReferenceResolution() {
-		resolver := newTargetResolver(scope.root)
+	// Phase B: walk references only when a rule needs them. Cheap syntax and
+	// accessibility warnings share the walk, but the filesystem resolver is
+	// constructed only for target/anchor rules.
+	if rules.NeedsReferenceWalk() {
+		var resolver *targetResolver
+		if rules.NeedsTargetResolution() {
+			resolver = newTargetResolver(scope.root)
+		}
 		for _, current := range scope.documents {
 			if err := ctx.Err(); err != nil {
 				return Result{}, fmt.Errorf("check: %w", err)

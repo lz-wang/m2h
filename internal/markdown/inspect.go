@@ -147,9 +147,9 @@ type ReversedLink struct {
 }
 
 // EmptySection is one heading whose section carries no rendered content
-// before the next heading: only blanks, comments, reference definitions or
-// thematic breaks in between. Documents deliberately structure parent
-// sections this way, so the fact exists for an opt-in rule, never a default.
+// before the next heading: only blanks, comments or reference definitions in
+// between. Documents deliberately structure parent sections this way, so the
+// fact exists for an opt-in rule, never a default.
 type EmptySection struct {
 	Level    int
 	Text     string
@@ -303,7 +303,7 @@ func Inspect(source []byte) Inspection {
 	inspection.ReferenceDefinitions = extractReferenceDefinitions(document, source)
 
 	fences, fenceLines := extractFences(document, source)
-	scanner := newSourceScanner(source, codeRanges(document), rawHTMLRanges(document, source), fenceLines)
+	scanner := newSourceScanner(source, codeRanges(document), rawHTMLRanges(document), inlineLinkRanges(document, source), fenceLines)
 	inspection.UndefinedReferences = scanner.undefinedReferences(context.missingReferences)
 	inspection.UndefinedFootnotes = scanner.undefinedFootnotes(footnotes)
 	inspection.Footnotes = footnotes
@@ -320,9 +320,9 @@ func Inspect(source []byte) Inspection {
 // content before the next heading. Every container's direct children are
 // analyzed on their own — the document, blockquotes, list items — so a
 // heading nested in a container is judged among its own siblings, exactly
-// where the renderer places it. Blanks never become nodes; thematic breaks,
-// reference definitions and comment blocks are the only siblings that
-// render nothing, so anything else between headings counts as content.
+// where the renderer places it. Blanks never become nodes; reference
+// definitions and comment blocks are the only siblings that render nothing,
+// so anything else between headings counts as content.
 func extractEmptySections(document ast.Node, source []byte) []EmptySection {
 	sections := make([]EmptySection, 0)
 	locator := newSourceLocator(source)
@@ -365,11 +365,11 @@ func sectionHasContent(heading ast.Node) bool {
 }
 
 // rendersNothing reports whether one block sibling contributes no rendered
-// content of its own: a thematic break, a link reference definition, or an
-// HTML comment block. Any other HTML renders and counts.
+// content of its own: a link reference definition or an HTML comment block.
+// A thematic break renders <hr> and therefore counts as section content.
 func rendersNothing(node ast.Node) bool {
 	switch typed := node.(type) {
-	case *ast.ThematicBreak, *ast.LinkReferenceDefinition:
+	case *ast.LinkReferenceDefinition:
 		return true
 	case *ast.HTMLBlock:
 		return typed.HTMLBlockType == ast.HTMLBlockType2

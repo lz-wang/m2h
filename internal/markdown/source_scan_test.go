@@ -130,10 +130,9 @@ func TestInspectUndefinedReferenceSkipsMixedForms(t *testing.T) {
 func TestInspectUndefinedReferenceSkipsRawHTML(t *testing.T) {
 	t.Parallel()
 
-	// Goldmark never interprets brackets inside raw HTML — comment blocks,
-	// inline comments, HTML blocks and the literal-content elements like
-	// <code> — so however link-like the text there looks, it is prose the
-	// parser never attempted to resolve and can never be undefined.
+	// Goldmark never interprets brackets inside raw HTML blocks/comments or
+	// inside an inline raw-HTML tag token. Text between inline tags is ordinary
+	// Markdown source, however, and must follow the parser's normal semantics.
 	tests := []struct {
 		name   string
 		source string
@@ -155,9 +154,9 @@ func TestInspectUndefinedReferenceSkipsRawHTML(t *testing.T) {
 			want:   []ReferenceUse{},
 		},
 		{
-			name:   "literal code element protects the shape",
+			name:   "content between inline html tags stays markdown",
 			source: "Use <code>[Example][x]</code> verbatim.\n",
-			want:   []ReferenceUse{},
+			want:   []ReferenceUse{{Label: "x", Position: Position{Line: 1, Column: 11}}},
 		},
 	}
 	for _, test := range tests {
@@ -194,12 +193,26 @@ func TestInspectUndefinedReferenceCappedByParserRejections(t *testing.T) {
 	}
 }
 
+func TestInspectUndefinedReferenceSkipsInlineLinkTitleBeforeRealUse(t *testing.T) {
+	t.Parallel()
+
+	// The AST-accepted inline link title is literal link syntax. Its fake
+	// bracket pair appears before the real rejected use and must not consume
+	// that label's parser-rejection count or steal the diagnostic position.
+	source := []byte("[a](b \"example [fake][missing]\") and [Real][missing].\n")
+	inspection := Inspect(source)
+
+	want := []ReferenceUse{{Label: "missing", Position: Position{Line: 1, Column: 38}}}
+	if !slices.Equal(inspection.UndefinedReferences, want) {
+		t.Fatalf("undefined references = %+v, want %+v", inspection.UndefinedReferences, want)
+	}
+}
+
 func TestInspectUndefinedFootnoteSkipsRawHTML(t *testing.T) {
 	t.Parallel()
 
-	// Same boundary as undefined references: a marker inside raw HTML is
-	// displayed verbatim, never parsed as a footnote, so it cannot be
-	// undefined.
+	// Same boundary as undefined references: raw HTML blocks/comments and tag
+	// tokens are protected, while text between inline tags remains Markdown.
 	tests := []struct {
 		name   string
 		source string
@@ -216,8 +229,13 @@ func TestInspectUndefinedFootnoteSkipsRawHTML(t *testing.T) {
 			want:   []FootnoteReference{},
 		},
 		{
-			name:   "literal code element protects the marker",
+			name:   "content between inline html tags stays markdown",
 			source: "Use <code>[^demo]</code> verbatim.\n",
+			want:   []FootnoteReference{{Label: "demo", Position: Position{Line: 1, Column: 11}}},
+		},
+		{
+			name:   "inline link title protects the marker",
+			source: "See [a](b \"example [^demo]\").\n",
 			want:   []FootnoteReference{},
 		},
 	}
@@ -328,6 +346,47 @@ func TestInspectUndefinedFootnotes(t *testing.T) {
 	}
 }
 
+func TestInlineLinkSyntaxEnd(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		wantOK bool
+	}{
+		{name: "empty destination", source: "()", wantOK: true},
+		{name: "spaces before empty destination", source: "(  )", wantOK: true},
+		{name: "bare destination", source: "(docs/guide.md)", wantOK: true},
+		{name: "nested destination parentheses", source: "(docs/(v1)/guide.md)", wantOK: true},
+		{name: "escaped destination parenthesis", source: "(docs/a\\)b.md)", wantOK: true},
+		{name: "angle destination", source: "(<docs/guide.md>)", wantOK: true},
+		{name: "escaped angle destination", source: "(<docs/a\\>b.md>)", wantOK: true},
+		{name: "double quoted title", source: "(guide.md \"title\")", wantOK: true},
+		{name: "single quoted title", source: "(guide.md 'title')", wantOK: true},
+		{name: "parenthesized title", source: "(guide.md (title))", wantOK: true},
+		{name: "escaped title closer", source: "(guide.md \"a\\\"b\")", wantOK: true},
+		{name: "missing source", source: "", wantOK: false},
+		{name: "unclosed angle destination", source: "(<guide.md)", wantOK: false},
+		{name: "unclosed nested destination", source: "(docs/(v1)", wantOK: false},
+		{name: "invalid title opener", source: "(guide.md title)", wantOK: false},
+		{name: "unclosed title", source: "(guide.md \"title)", wantOK: false},
+		{name: "missing outer close after title", source: "(guide.md \"title\"", wantOK: false},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			stop, ok := inlineLinkSyntaxEnd([]byte(test.source), 0)
+			if ok != test.wantOK {
+				t.Fatalf("inlineLinkSyntaxEnd(%q) ok = %v, want %v", test.source, ok, test.wantOK)
+			}
+			if ok && stop != len(test.source) {
+				t.Fatalf("inlineLinkSyntaxEnd(%q) stop = %d, want %d", test.source, stop, len(test.source))
+			}
+		})
+	}
+}
+
 func TestInspectCollectsCodeFences(t *testing.T) {
 	t.Parallel()
 
@@ -394,6 +453,16 @@ func TestInspectCollectsCodeFences(t *testing.T) {
 		{
 			name:   "empty fence inside a blockquote",
 			source: "> ```\n> ```\n",
+			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
+		},
+		{
+			name:   "empty fence inside an asterisk list item",
+			source: "* ```\n  ```\n",
+			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
+		},
+		{
+			name:   "empty fence inside a plus list item",
+			source: "+ ```\n  ```\n",
 			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
 		},
 		{

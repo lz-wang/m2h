@@ -145,41 +145,37 @@ func TestRunRejectsUnknownRuleNamesBeforeFilesystem(t *testing.T) {
 	}
 }
 
-func TestRuleSetNeedsReferenceResolution(t *testing.T) {
+func TestRuleSetReferenceNeeds(t *testing.T) {
 	t.Parallel()
 
-	// The reference-resolution walk runs for the target rules and for the
-	// per-reference warnings that ride the same walk, so it is skipped only
-	// when every one of them is disabled.
-	referenceRules := []string{
+	targetRules := []string{
 		RuleLocalTargetMissing, RuleLocalTargetNotRegular, RuleLocalTargetOutsideRoot,
 		RuleMarkdownTargetNotServed, RuleAnchorMissing,
-		RuleImageAltEmpty, RuleLinkEmptyDestination,
 	}
-	skipped, err := NewRuleSet(nil, referenceRules)
-	if err != nil {
-		t.Fatalf("NewRuleSet() error: %v", err)
+	empty := RuleSet{enabled: map[string]struct{}{}}
+	if empty.NeedsReferenceWalk() || empty.NeedsTargetResolution() {
+		t.Fatal("empty rule set unexpectedly needs reference work")
 	}
-	if skipped.NeedsReferenceResolution() {
-		t.Fatal("NeedsReferenceResolution() = true, want false with every reference rule disabled")
+	for _, rule := range []string{RuleImageAltEmpty, RuleLinkEmptyDestination} {
+		set := RuleSet{enabled: map[string]struct{}{rule: {}}}
+		if !set.NeedsReferenceWalk() {
+			t.Fatalf("NeedsReferenceWalk() = false with %s enabled", rule)
+		}
+		if set.NeedsTargetResolution() {
+			t.Fatalf("NeedsTargetResolution() = true with only %s enabled", rule)
+		}
 	}
 	defaults, err := NewRuleSet(nil, nil)
 	if err != nil {
 		t.Fatalf("NewRuleSet() error: %v", err)
 	}
-	if !defaults.NeedsReferenceResolution() {
-		t.Fatal("NeedsReferenceResolution() = false, want true for the default rules")
+	if !defaults.NeedsReferenceWalk() || !defaults.NeedsTargetResolution() {
+		t.Fatal("default rule set must walk references and resolve targets")
 	}
-	for _, rule := range referenceRules {
-		others := slices.DeleteFunc(slices.Clone(referenceRules), func(name string) bool {
-			return name == rule
-		})
-		enabled, err := NewRuleSet([]string{rule}, others)
-		if err != nil {
-			t.Fatalf("NewRuleSet(enable %s) error: %v", rule, err)
-		}
-		if !enabled.NeedsReferenceResolution() {
-			t.Fatalf("NeedsReferenceResolution() = false with %s enabled", rule)
+	for _, rule := range targetRules {
+		set := RuleSet{enabled: map[string]struct{}{rule: {}}}
+		if !set.NeedsReferenceWalk() || !set.NeedsTargetResolution() {
+			t.Fatalf("target rule %s must walk references and resolve targets", rule)
 		}
 	}
 }
@@ -187,9 +183,8 @@ func TestRuleSetNeedsReferenceResolution(t *testing.T) {
 func TestRunPerReferenceWarningsWithoutTargetRules(t *testing.T) {
 	t.Parallel()
 
-	// Disabling every target/anchor rule alone must not lose the
-	// per-reference warnings: they ride the same resolution walk, so the
-	// walk keeps running while any of them stays enabled.
+	// Disabling every target/anchor rule alone must not lose per-reference
+	// warnings, even though target resolution and filesystem I/O are skipped.
 	expectDiagnostics(t, "alt-empty survives target rules disabled",
 		"# Guide\n\n![](missing.png)\n",
 		Options{DisableRules: []string{

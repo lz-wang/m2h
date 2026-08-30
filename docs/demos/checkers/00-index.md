@@ -45,6 +45,17 @@ m2h check docs --enable all --disable image.alt-empty
 `assets/` 是演示辅助目录：`target.md` 自身完全干净、仅被 05 号引用，
 `logo.png` 是真实存在的 1×1 图片。
 
+## 语义边界
+
+- 引用、脚注和反转链接扫描以真实 Goldmark AST 为边界：行内/块级代码、HTML
+  block、HTML comment 与 inline raw HTML tag token 不参与；inline tag 之间的
+  文本仍是普通 Markdown，会按渲染器相同语义检查。
+- 已被解析器接受的 inline link destination/title 是链接语法而不是嵌套正文，
+  其中看似 reference、脚注或反转链接的括号组合不会产生诊断。
+- `section.empty` 的“内容”指实际渲染节点；thematic break 会生成 `<hr>`，因此
+  计为内容，reference definition、HTML comment 与空白不计。
+- `unicode.*` 检查源文件文本质量，仍扫描 raw HTML，仅代码区域豁免。
+
 ## error 规则（默认开启）
 
 | 演示 | 规则 | 触发场景 |
@@ -80,7 +91,7 @@ m2h check docs --enable all --disable image.alt-empty
 
 | 演示 | 规则 | 触发场景 |
 | --- | --- | --- |
-| [22-section-empty](22-section-empty.md) | `section.empty` | 标题与下一标题之间没有任何渲染内容 |
+| [22-section-empty](22-section-empty.md) | `section.empty` | 标题与下一标题之间没有任何渲染内容（`<hr>` 计为内容） |
 | [23-link-text-nondescriptive](23-link-text-nondescriptive.md) | `link.text-nondescriptive` | 链接文本为 `click here` / `点击这里` 等无信息短语 |
 | [24-unicode-mojibake](24-unicode-mojibake.md) | `unicode.mojibake` | `CafÃ©`、`Itâ€™s` 等多字符错误编码签名 |
 | [25-unicode-invisible-character](25-unicode-invisible-character.md) | `unicode.invisible-character` | 行首零宽空格（U+200B）等可疑不可见字符 |

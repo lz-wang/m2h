@@ -34,11 +34,9 @@ func TestInspectEmptySections(t *testing.T) {
 			},
 		},
 		{
-			name:   "thematic break renders nothing",
+			name:   "thematic break is rendered content",
 			source: "# Guide\n\nIntro.\n\n## Install\n\n***\n\n## Next\n\nbody\n",
-			want: []EmptySection{
-				{Level: 2, Text: "Install", Position: Position{Line: 5, Column: 1}},
-			},
+			want:   nil,
 		},
 		{
 			name:   "lists, tables and code count as content",

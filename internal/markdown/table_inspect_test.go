@@ -269,8 +269,13 @@ func TestInspectReversedLinks(t *testing.T) {
 			want:   nil,
 		},
 		{
-			name:   "literal code element protects the shape",
+			name:   "content between inline html tags stays markdown",
 			source: "Use <code>(Guide)[guide.md]</code> verbatim.\n",
+			want:   []ReversedLink{{Text: "Guide", Destination: "guide.md", Position: Position{Line: 1, Column: 11}}},
+		},
+		{
+			name:   "inline link title protects the shape",
+			source: "See [a](b \"example (Guide)[guide.md]\").\n",
 			want:   nil,
 		},
 	}

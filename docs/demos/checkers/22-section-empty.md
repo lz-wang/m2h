@@ -17,3 +17,5 @@ title: 没有正文的章节
   报告 `5:1` 与 `7:1` 两条 `warning [section.empty]: section … has no content`
   （H1 只承载子标题同样算空）
 - 父章节只做结构、正文全在子章节是常见合法写法，因此本规则默认关闭
+- thematic break（`---`/`***`）会渲染为 `<hr>`，因此计为内容；reference
+  definition、HTML comment 与空白不计为渲染内容

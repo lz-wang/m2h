@@ -26,11 +26,13 @@
 
 ### 修复
 
-- 修复 `reference.undefined` 的上报数量可能超过解析器实际拒绝次数的问题：解析器记录的 reference lookup 失败从集合升级为按 label 计数，源扫描产生的 undefined 上报以该计数为上限——链接标题等解析器从不做 inline 解析的区域中与真实失败同名的 `[text][label]` 括号对不再占用诊断名额。
+- 修复 `reference.undefined` 的上报数量与位置可能偏离解析器实际拒绝的问题：解析器记录的 reference lookup 失败从集合升级为按 label 计数，源扫描产生的 undefined 上报以该计数为上限；同时由真实 AST 标出已接受 inline link 的 destination/title 源范围并排除其中的假括号对，因此即使链接标题里的同名 `[text][label]` 早于真实失败出现，也不会占用诊断名额或把错误位置导向标题。
 
-- 修复 `code-fence.language-missing` 与解析器的分歧：fence 的识别与语言判定改由真实 `FencedCodeBlock` AST 给出，此前逐行扫描只认顶层行首的 ```/~~~——blockquote、列表项内的无语言 fence 一直漏报，raw HTML 块内的 ``` 反被误当作 Markdown fence 上报；现在容器内的 fence 正确报告且行列定位到 opener 行，`<div>` 等 HTML 块内的反引号不再参与判定。
+- 修复 `code-fence.language-missing` 与解析器的分歧：fence 的识别与语言判定改由真实 `FencedCodeBlock` AST 给出，此前逐行扫描只认顶层行首的 ```/~~~——blockquote、列表项内的无语言 fence 一直漏报，raw HTML 块内的 ``` 反被误当作 Markdown fence 上报；现在容器内的 fence 正确报告且行列定位到 opener 行，`<div>` 等 HTML 块内的反引号不再参与判定；无内容与 info string 的空 fence 在 `*`/`+` 列表项中同样定位到 opener，而不是误落到 closing fence。
 
-- 修复三条默认开启的 error 规则对 raw HTML 内容的误报：`reference.undefined`、`footnote.undefined` 与 `link.reversed` 的源扫描现在跳过 HTML 注释块、行内注释、HTML 块与 `<code>`/`<kbd>` 等字面内容元素——解析器从不解释其中的括号语法，此前 `<!-- [^demo] -->`、注释中的示例链接写法与 `<code>(Guide)[guide.md]</code>` 会被报告为 undefined/reversed 并使 CI 直接失败；`link.reversed` 的 destination 判定同步收紧为 scheme、路径或已知文件扩展名，`(version)[v1.2]` 这类版本号写法不再误报；`unicode.mojibake` 与 `unicode.invisible-character` 检查的是源文件质量，仍扫描 raw HTML，仅代码区域豁免。
+- 修复三条默认开启的 error 规则对 raw HTML 的语义边界：`reference.undefined`、`footnote.undefined` 与 `link.reversed` 的源扫描跳过 HTML 注释块、行内注释、HTML 块及 inline raw HTML tag token，避免 `<!-- [^demo] -->` 与 HTML block 内示例被误报；但不再把 `<code>`/`<kbd>` 等一对 inline tag 之间的普通 Markdown 源文本整体豁免——Goldmark 会继续解析这部分内容，检查器现在与渲染语义一致，不再漏报其中的真实问题。`link.reversed` 的 destination 判定同步收紧为 scheme、路径或已知文件扩展名，`(version)[v1.2]` 这类版本号写法不再误报；`unicode.mojibake` 与 `unicode.invisible-character` 检查的是源文件质量，仍扫描 raw HTML，仅代码区域豁免。
+
+- 修复 opt-in `section.empty` 把 thematic break 误判为“无渲染内容”的问题：`---`/`***` 会渲染为 `<hr>`，现在与段落、列表、表格和代码块一样计为章节内容；只有 reference definition、HTML comment 与空白仍不贡献渲染内容。
 
 - 修复不带参数执行 `m2h export` 时输出 "No help topic for 'export'" 并以退出码 3 失败的问题：urfave/cli v3 的 ShowCommandHelp 需要在父命令中按名查找子命令，此前传入命令自身导致帮助从未显示；现在 `m2h export` 与 `m2h check` 不带参数时正常显示各自帮助并以退出码 0 结束。
 
