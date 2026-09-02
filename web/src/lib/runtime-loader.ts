@@ -69,11 +69,87 @@ export interface TablesortConstructor {
   ): TablesortInstance;
 }
 
+// Host-controlled embed options, narrowed to the fields m2h sets. The embed
+// call always passes an explicit options object — renderer policy belongs to
+// the host application, never to the Markdown document — so mode, renderer,
+// and actions are required rather than optional here.
+export interface VegaEmbedOptions {
+  // Always "vega-lite": without it Vega-Embed infers the mode from $schema
+  // and falls back to raw Vega when both are absent.
+  mode: "vega-lite";
+  // SVG keeps charts in the same vector pipeline as Mermaid: theme-aware,
+  // Lightbox-serializable, and crisp when printed or zoomed.
+  renderer: "svg";
+  // Vega-Embed's own Export/Source/Editor menu would both duplicate m2h's UI
+  // and navigate away to the external Vega Editor.
+  actions: false;
+  config?: VegaLiteHostConfig;
+  loader?: VegaLoader;
+  tooltip?: boolean;
+}
+
+// The reader palette overlaid onto every spec: chrome colors only —
+// background, axis/legend/title text and strokes. The author's mark colors
+// and scale ranges are never touched, so a spec's data semantics survive a
+// theme switch unchanged. Values come from the reader theme's CSS variables
+// (computed at call time), keeping the stylesheet the single source of truth.
+export interface VegaLiteHostConfig {
+  background: null;
+  axis: {
+    labelColor: string;
+    titleColor: string;
+    gridColor: string;
+    domainColor: string;
+    tickColor: string;
+  };
+  legend: {
+    labelColor: string;
+    titleColor: string;
+  };
+  title: {
+    color: string;
+  };
+  view: {
+    stroke: null;
+  };
+}
+
+// Vega's dataflow loader: `load` fetches a URI after `sanitize` vetted it.
+// m2h passes a host implementation that rejects every external resource, so
+// specs stay self-contained (data.values only) in the WebUI and exported
+// HTML alike — the same contract with or without a page CSP.
+export interface VegaLoaderRequestOptions {
+  context?: string;
+}
+
+export interface VegaLoader {
+  sanitize?(
+    uri: string,
+    options?: VegaLoaderRequestOptions,
+  ): Promise<{ href: string } | string>;
+  load(uri: string, options?: VegaLoaderRequestOptions): Promise<string>;
+}
+
+// What Vega-Embed resolves with. The compiled Vega View is opaque to m2h —
+// only `finalize` matters: it detaches the view's timers and DOM listeners
+// and must run whenever a chart is re-rendered or its document goes away.
+export interface VegaEmbedResult {
+  view: unknown;
+  finalize(): void;
+}
+
+export type VegaEmbedRuntime = (
+  element: HTMLElement,
+  spec: object,
+  options: VegaEmbedOptions,
+) => Promise<VegaEmbedResult>;
+
 declare global {
   interface Window {
     mermaid?: MermaidRuntime;
     renderMathInElement?: MathAutoRenderer;
     Tablesort?: TablesortConstructor;
+    vegaEmbed?: VegaEmbedRuntime;
   }
 }
 
@@ -276,6 +352,30 @@ export async function loadTablesort(): Promise<TablesortConstructor> {
   const runtime = window.Tablesort;
   if (runtime === undefined) {
     throw new Error("Tablesort runtime did not attach window.Tablesort");
+  }
+  return runtime;
+}
+
+/**
+ * Load the shared Vega-Lite runtime trio and resolve with
+ * `window.vegaEmbed`. The three scripts form a dependency chain — vega
+ * attaches `window.vega`, vega-lite compiles against that runtime,
+ * vega-embed receives both as globals — so they load strictly in sequence,
+ * never concurrently. Like the other loaders, this one only attaches the
+ * scripts: embed options (mode, renderer, actions, loader) are chosen by the
+ * caller on every embed. `injectScript` already caches in-flight loads and
+ * drops failed ones for retry, so no second bookkeeping is needed. Rejects
+ * when a script cannot be fetched or the chain does not attach
+ * `window.vegaEmbed`.
+ */
+export async function loadVegaLite(): Promise<VegaEmbedRuntime> {
+  await injectScript(`${RUNTIME_BASE}vega.min.js`);
+  await injectScript(`${RUNTIME_BASE}vega-lite.min.js`);
+  await injectScript(`${RUNTIME_BASE}vega-embed.min.js`);
+
+  const runtime = window.vegaEmbed;
+  if (runtime === undefined) {
+    throw new Error("Vega Embed runtime did not attach window.vegaEmbed");
   }
   return runtime;
 }

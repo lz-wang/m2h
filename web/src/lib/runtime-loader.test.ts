@@ -6,6 +6,8 @@ import type {
   MermaidExternalDiagramDefinition,
   MermaidRuntime,
   TablesortConstructor,
+  VegaEmbedResult,
+  VegaEmbedRuntime,
 } from "./runtime-loader";
 
 const mermaidRuntime: MermaidRuntime = {
@@ -26,6 +28,20 @@ const zenumlPlugin: MermaidExternalDiagramDefinition = {
 const renderMathInElement: MathAutoRenderer = vi.fn();
 
 const tablesortCtor = vi.fn() as unknown as TablesortConstructor;
+
+const vegaEmbedRuntime: VegaEmbedRuntime = vi.fn(
+  async () =>
+    ({
+      view: {},
+      finalize: vi.fn(),
+    }) as VegaEmbedResult,
+);
+
+const VEGA_SCRIPTS = [
+  "/runtime/vega.min.js",
+  "/runtime/vega-lite.min.js",
+  "/runtime/vega-embed.min.js",
+];
 
 const TABLESORT_SCRIPTS = [
   "/runtime/tablesort.min.js",
@@ -65,6 +81,7 @@ describe("runtime loader", () => {
     delete window.mermaid;
     delete window.renderMathInElement;
     delete window.Tablesort;
+    delete window.vegaEmbed;
     vi.mocked(mermaidRuntime.initialize).mockClear();
     vi.mocked(mermaidRuntime.registerExternalDiagrams).mockClear();
   });
@@ -298,6 +315,110 @@ describe("runtime loader", () => {
     }
 
     await expect(retry).resolves.toBe(tablesortCtor);
+  });
+
+  it("loads the vega trio strictly in dependency order", async () => {
+    const loader = await import("./runtime-loader");
+    const pending = loader.loadVegaLite();
+    const vega = await waitForHeadElement<HTMLScriptElement>(
+      'script[src="/runtime/vega.min.js"]',
+    );
+
+    // vega-lite and vega-embed must not appear before vega resolves: each
+    // script receives its predecessor's window global at evaluation time.
+    expect(
+      document.head.querySelector('script[src="/runtime/vega-lite.min.js"]'),
+    ).toBeNull();
+    expect(
+      document.head.querySelector('script[src="/runtime/vega-embed.min.js"]'),
+    ).toBeNull();
+
+    fire(vega, "load");
+    const vegaLite = await waitForHeadElement<HTMLScriptElement>(
+      'script[src="/runtime/vega-lite.min.js"]',
+    );
+    expect(
+      document.head.querySelector('script[src="/runtime/vega-embed.min.js"]'),
+    ).toBeNull();
+
+    fire(vegaLite, "load");
+    const vegaEmbed = await waitForHeadElement<HTMLScriptElement>(
+      'script[src="/runtime/vega-embed.min.js"]',
+    );
+
+    window.vegaEmbed = vegaEmbedRuntime;
+    fire(vegaEmbed, "load");
+
+    await expect(pending).resolves.toBe(vegaEmbedRuntime);
+  });
+
+  it("deduplicates concurrent vega loads to a single script set", async () => {
+    const loader = await import("./runtime-loader");
+    const first = loader.loadVegaLite();
+    const second = loader.loadVegaLite();
+
+    for (const src of VEGA_SCRIPTS) {
+      const script = await waitForHeadElement<HTMLScriptElement>(
+        `script[src="${src}"]`,
+      );
+      if (src === "/runtime/vega-embed.min.js") {
+        window.vegaEmbed = vegaEmbedRuntime;
+      }
+      fire(script, "load");
+    }
+
+    await Promise.all([first, second]);
+    for (const src of VEGA_SCRIPTS) {
+      expect(
+        document.head.querySelectorAll(`script[src="${src}"]`),
+      ).toHaveLength(1);
+    }
+  });
+
+  it("rejects a failed vega load and allows a retry", async () => {
+    const loader = await import("./runtime-loader");
+    const first = loader.loadVegaLite();
+    const vega = await waitForHeadElement<HTMLScriptElement>(
+      'script[src="/runtime/vega.min.js"]',
+    );
+
+    fire(vega, "error");
+    await expect(first).rejects.toThrow(
+      "load runtime script /runtime/vega.min.js",
+    );
+    expect(
+      document.head.querySelector('script[src="/runtime/vega.min.js"]'),
+    ).toBeNull();
+
+    const retry = loader.loadVegaLite();
+    for (const src of VEGA_SCRIPTS) {
+      const script = await waitForHeadElement<HTMLScriptElement>(
+        `script[src="${src}"]`,
+      );
+      if (src === "/runtime/vega-embed.min.js") {
+        window.vegaEmbed = vegaEmbedRuntime;
+      }
+      fire(script, "load");
+    }
+
+    await expect(retry).resolves.toBe(vegaEmbedRuntime);
+  });
+
+  it("rejects when the vega chain does not attach window.vegaEmbed", async () => {
+    const loader = await import("./runtime-loader");
+    const pending = loader.loadVegaLite();
+
+    for (const src of VEGA_SCRIPTS) {
+      const script = await waitForHeadElement<HTMLScriptElement>(
+        `script[src="${src}"]`,
+      );
+      // Every script reports a successful load, yet the global never appears.
+      fire(script, "load");
+    }
+
+    await expect(pending).rejects.toThrow(
+      "Vega Embed runtime did not attach window.vegaEmbed",
+    );
   });
 });
 
