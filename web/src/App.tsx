@@ -1143,7 +1143,12 @@ function PreviewContent({
       // injected, so a recorded position could address another item than the
       // one under this trigger.
       const root = contentRef.current;
-      const frame = candidate.closest(".m2h-image-frame, .m2h-mermaid-frame");
+      // Image frames and rich-visual frames (Mermaid, and later Vega-Lite)
+      // share the trigger button; the shared class keeps this lookup from
+      // enumerating every visual engine.
+      const frame = candidate.closest(
+        ".m2h-image-frame, .m2h-rich-visual-frame",
+      );
       const selectedItem = frame?.querySelector<HTMLElement>(
         '[data-m2h-lightbox-item="true"]',
       );

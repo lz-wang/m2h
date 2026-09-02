@@ -1,23 +1,28 @@
 // Snapshot collection for the document Lightbox.
 //
 // The Lightbox browses the document's visual items — enhanced images and
-// rendered Mermaid diagrams — and must never hold references to the article's
-// live elements: the body DOM is wholesale replaced on every document load and
-// hot swap (root.innerHTML = html), so a live element reference would go stale
-// the moment the server sends new HTML. Instead, opening the Lightbox
-// snapshots each item's display-relevant data; the component then works
-// purely from data, which also keeps a body refresh free to close it.
+// rendered SVG visuals (Mermaid diagrams) — and must never hold references to
+// the article's live elements: the body DOM is wholesale replaced on every
+// document load and hot swap (root.innerHTML = html), so a live element
+// reference would go stale the moment the server sends new HTML. Instead,
+// opening the Lightbox snapshots each item's display-relevant data; the
+// component then works purely from data, which also keeps a body refresh free
+// to close it.
 //
-// Mermaid diagrams are snapshotted as a serialized SVG data URL: the Lightbox
+// SVG visuals are snapshotted as a serialized SVG data URL: the Lightbox
 // renders everything through <img> — the element type its fit, rotation, and
 // pan-clamp algorithms are built around — and the SVG stays vector-sharp at
 // any zoom level.
 
+// What a snapshot came from. SVG visuals (Mermaid diagrams, Vega-Lite charts)
+// serialize into a data URL; only a bitmap image keeps its original src.
+export type LightboxItemKind = "image" | "mermaid" | "vega-lite";
+
 // One browsable visual item. `kind` records what the snapshot came from so
-// callers (and tests) can distinguish a bitmap image from a diagram without
-// sniffing the src scheme.
+// callers (and tests) can distinguish a bitmap image from an SVG visual
+// without sniffing the src scheme.
 export interface LightboxItem {
-  kind: "image" | "mermaid";
+  kind: LightboxItemKind;
   src: string;
   srcSet: string | null;
   sizes: string | null;
@@ -88,17 +93,21 @@ function snapshotLightboxItem(element: HTMLElement): LightboxItem | null {
       title: element.title || null,
     };
   }
-  return snapshotMermaidDiagram(element);
+  return snapshotSVGVisual(element, "mermaid", "Mermaid 图表");
 }
 
-// Serialize a rendered Mermaid diagram into a self-contained SVG data URL.
-// Mermaid bakes its theme palette into the markup at render time, so the
-// snapshot keeps the exact colors the reader is looking at. Mermaid also
-// commonly sizes the SVG with percentages ("width=100%"), which has no
-// intrinsic size once the SVG stands alone as an <img>; the viewBox carries
-// the diagram's true geometry, so the clone is pinned to its pixel
-// dimensions instead.
-function snapshotMermaidDiagram(container: HTMLElement): LightboxItem | null {
+// Serialize a rendered SVG visual — a Mermaid diagram or a Vega-Lite chart —
+// into a self-contained SVG data URL. Both engines bake their theme palette
+// into the markup at render time, so the snapshot keeps the exact colors the
+// reader is looking at. They also commonly size the SVG with percentages
+// ("width=100%"), which has no intrinsic size once the SVG stands alone as an
+// <img>; the viewBox carries the visual's true geometry, so the clone is
+// pinned to its pixel dimensions instead.
+function snapshotSVGVisual(
+  container: HTMLElement,
+  kind: Exclude<LightboxItemKind, "image">,
+  alt: string,
+): LightboxItem | null {
   const svg = container.querySelector("svg");
   if (svg === null) {
     return null;
@@ -117,11 +126,11 @@ function snapshotMermaidDiagram(container: HTMLElement): LightboxItem | null {
   // truncating or breaking the data URL.
   const markup = new XMLSerializer().serializeToString(clone);
   return {
-    kind: "mermaid",
+    kind,
     src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`,
     srcSet: null,
     sizes: null,
-    alt: "Mermaid 图表",
+    alt,
     title: null,
   };
 }

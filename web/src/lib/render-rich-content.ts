@@ -81,6 +81,27 @@ const SORTABLE_HEADER_SELECTOR =
 // keeps the threshold stable regardless of reader width.
 const CODE_COLLAPSE_LINE_THRESHOLD = 25;
 
+// Fenced code languages whose blocks are replaced by a rendered visual — a
+// Mermaid diagram or a Vega-Lite chart — instead of staying a code block.
+// Every code presentation enhancement (copy button, line-number gutter,
+// collapse fold) skips these blocks: their <pre> is about to be replaced
+// wholesale, so a frame, gutter, or toggle would only flash before dying
+// with the pre.
+const RICH_VISUAL_LANGUAGES = new Set([
+  "language-mermaid",
+  "language-vega-lite",
+  "language-vegalite",
+]);
+
+function isRichVisualCode(code: HTMLElement): boolean {
+  for (const language of RICH_VISUAL_LANGUAGES) {
+    if (code.classList.contains(language)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Monotonic id handed to every collapsed code block so the toggle's
 // aria-controls always points at the <pre> it manages.
 let codeBlockSequence = 0;
@@ -414,9 +435,10 @@ function ensureCodeFrame(pre: HTMLPreElement): HTMLDivElement {
 function addCodeCopyButtons(root: HTMLElement): void {
   for (const pre of root.querySelectorAll<HTMLPreElement>("pre")) {
     const code = directCodeChild(pre);
-    // Mermaid is skipped: its pass replaces the <pre> with a rendered diagram,
-    // so a frame and button would only flash before dying with the pre.
-    if (code === null || code.classList.contains("language-mermaid")) {
+    // Rich-visual blocks are skipped: their pass replaces the <pre> with a
+    // rendered visual, so a frame and button would only flash before dying
+    // with the pre.
+    if (code === null || isRichVisualCode(code)) {
       continue;
     }
     const frame = ensureCodeFrame(pre);
@@ -458,18 +480,18 @@ function setCopyStatus(button: HTMLButtonElement, copied: boolean): void {
 
 // Fold code blocks longer than CODE_COLLAPSE_LINE_THRESHOLD source lines by
 // turning their frame into a collapsible block (the frame gains the
-// m2h-code-block modifier and the collapse toggle). Mermaid blocks are
-// skipped: the Mermaid pass later replaces their <pre> with a rendered
-// container, and a diagram must never be folded behind a toggle. Idempotent:
-// a pre already living in a collapsible frame is left alone, so re-running
-// the enhancement on the same body (e.g. a same-HTML hot swap) stacks nothing.
+// m2h-code-block modifier and the collapse toggle). Rich-visual blocks are
+// skipped: their pass later replaces the <pre> with a rendered container, and
+// a visual must never be folded behind a toggle. Idempotent: a pre already
+// living in a collapsible frame is left alone, so re-running the enhancement
+// on the same body (e.g. a same-HTML hot swap) stacks nothing.
 function addCollapsibleCodeBlocks(root: HTMLElement): void {
   for (const pre of root.querySelectorAll<HTMLPreElement>("pre")) {
     const code = directCodeChild(pre);
     if (code === null) {
       continue;
     }
-    if (code.classList.contains("language-mermaid")) {
+    if (isRichVisualCode(code)) {
       continue;
     }
     if (pre.closest(".m2h-code-block") !== null) {
@@ -489,14 +511,14 @@ function addCollapsibleCodeBlocks(root: HTMLElement): void {
 // live in their own span beside the <code> element, so the source text — and
 // with it the copy control — never contains them, Chroma's token spans stay
 // untouched, and the collapse fold keeps treating the whole <pre> as one
-// visual unit. Mermaid blocks are skipped: their <pre> is replaced by a
-// rendered diagram, so a gutter would only flash before disappearing.
+// visual unit. Rich-visual blocks are skipped: their <pre> is replaced by a
+// rendered visual, so a gutter would only flash before disappearing.
 // Idempotent, like the copy control: re-running the enhancement on the same
 // body (e.g. a same-HTML hot swap) stacks nothing.
 function addCodeLineNumbers(root: HTMLElement): void {
   for (const pre of root.querySelectorAll<HTMLPreElement>("pre")) {
     const code = directCodeChild(pre);
-    if (code === null || code.classList.contains("language-mermaid")) {
+    if (code === null || isRichVisualCode(code)) {
       continue;
     }
     if (pre.querySelector(":scope > .m2h-code-line-numbers") !== null) {
@@ -843,7 +865,7 @@ function syncMermaidLightboxAvailability(target: HTMLElement): void {
   }
 
   const trigger = target
-    .closest(".m2h-mermaid-frame")
+    .closest(".m2h-rich-visual-frame")
     ?.querySelector<HTMLButtonElement>(":scope > .m2h-lightbox-trigger");
 
   if (trigger) {
@@ -880,10 +902,13 @@ async function renderMermaid(
     // Lightbox trigger can never live inside it; the frame keeps the trigger
     // — and any focus on it — alive across every repaint. The trigger starts
     // hidden: until the first paint succeeds there is nothing to enlarge.
+    // The frame carries the shared rich-visual class plus the engine-specific
+    // one, so shared presentation (trigger hover) never has to enumerate each
+    // visual engine while engine-specific geometry stays addressable.
     const trigger = createLightboxTrigger("查看 Mermaid 图表");
     trigger.hidden = true;
     const frame = document.createElement("div");
-    frame.className = "m2h-mermaid-frame";
+    frame.className = "m2h-rich-visual-frame m2h-mermaid-frame";
     pre.replaceWith(frame);
     frame.append(container, trigger);
     targets.push(container);
