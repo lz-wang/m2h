@@ -268,9 +268,11 @@ test("isolates unsupported external resources without leaving the origin", async
   // href sanitization, which is where the target/rel policy lands. The
   // context route fakes the unreachable origin so the popup commits and its
   // URL can be read.
-  await page.context().route("https://example.invalid/**", (route) =>
-    route.fulfill({ status: 200, contentType: "text/html", body: "linked" }),
-  );
+  await page
+    .context()
+    .route("https://example.invalid/**", (route) =>
+      route.fulfill({ status: 200, contentType: "text/html", body: "linked" }),
+    );
   const popupPromise = page.waitForEvent("popup");
   await page
     .locator(".m2h-vega-lite")

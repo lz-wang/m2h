@@ -1164,10 +1164,7 @@ function PreviewContent({
           return;
         }
       }
-      if (
-        renderedModeRef.current !== mode ||
-        paintedModeRef.current === mode
-      ) {
+      if (renderedModeRef.current !== mode || paintedModeRef.current === mode) {
         return;
       }
       await rerenderThemeSensitiveContent(root, mode, () => {
@@ -1179,9 +1176,7 @@ function PreviewContent({
     };
     // The tail catch keeps the queue alive after a failed repaint instead of
     // wedging every later toggle behind a rejected promise.
-    themeQueueRef.current = themeQueueRef.current
-      .then(repaint)
-      .catch(() => {});
+    themeQueueRef.current = themeQueueRef.current.then(repaint).catch(() => {});
   }, [phase, resolvedMode]);
 
   // The magnifier triggers are injected into the article DOM by
