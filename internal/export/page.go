@@ -28,12 +28,17 @@ var exportBootstrapScript = "\n  <script>\n" + runtimeJS + "\n</script>\n"
 // ZenUML shares the Mermaid Core script and only adds its plugin module URL
 // when the rendered body really contains a zenuml diagram; the plugin itself
 // is downloaded by runtime.js, which re-checks the same keyword rule before
-// importing.
+// importing. The Vega-Lite trio loads in dependency order (vega → vega-lite
+// → vega-embed; each script reads its predecessor's window global), so the
+// three script tags are emitted strictly in that sequence.
 const (
 	katexVersion     = "0.18.4"
 	mermaidVersion   = "11.16.1"
 	zenumlVersion    = "0.2.3"
 	tablesortVersion = "5.3.0"
+	vegaVersion      = "6.4.0"
+	vegaLiteVersion  = "6.4.3"
+	vegaEmbedVersion = "7.1.0"
 )
 
 const cdnBase = "https://cdn.jsdelivr.net/npm"
@@ -98,6 +103,9 @@ type runtimeURLs struct {
 	MermaidJS       string
 	ZenUMLJS        string
 	TablesortJS     string
+	VegaJS          string
+	VegaLiteJS      string
+	VegaEmbedJS     string
 }
 
 func newRuntimeURLs() runtimeURLs {
@@ -110,6 +118,9 @@ func newRuntimeURLs() runtimeURLs {
 			"%s/@mermaid-js/mermaid-zenuml@%s/dist/mermaid-zenuml.esm.min.mjs",
 			cdnBase, zenumlVersion),
 		TablesortJS: fmt.Sprintf("%s/tablesort@%s/dist/tablesort.min.js", cdnBase, tablesortVersion),
+		VegaJS:      fmt.Sprintf("%s/vega@%s/build/vega.min.js", cdnBase, vegaVersion),
+		VegaLiteJS:  fmt.Sprintf("%s/vega-lite@%s/build/vega-lite.min.js", cdnBase, vegaLiteVersion),
+		VegaEmbedJS: fmt.Sprintf("%s/vega-embed@%s/build/vega-embed.min.js", cdnBase, vegaEmbedVersion),
 	}
 }
 
@@ -140,6 +151,14 @@ func runtimeFragments(body string) (template.HTML, template.HTML) {
 	if containsSortableTable(body) {
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.TablesortJS)
 	}
+	if containsVegaLite(body) {
+		// Dependency order matters: vega attaches window.vega, vega-lite
+		// compiles against that runtime, and vega-embed receives both as
+		// globals when it evaluates.
+		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.VegaJS)
+		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.VegaLiteJS)
+		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.VegaEmbedJS)
+	}
 	scripts.WriteString(exportBootstrapScript)
 	return template.HTML(head.String()), template.HTML(scripts.String())
 }
@@ -162,6 +181,19 @@ func containsZenUML(body string) bool {
 // deliberately left out of the client-side sorting enhancement.
 func containsSortableTable(body string) bool {
 	return strings.Contains(body, "<table>")
+}
+
+// vegaLiteBlockPattern matches Goldmark's fenced-code class attribute for the
+// canonical `vega-lite` fence and its `vegalite` alias. The closing quote is
+// part of the pattern: prose that merely mentions "vega-lite" (escaped inside
+// another code block's text) never produces a bare class attribute, and a
+// longer language like `vega-lite-extra` fails to close the attribute here.
+var vegaLiteBlockPattern = regexp.MustCompile(`language-vega-lite"|language-vegalite"`)
+
+// containsVegaLite reports whether the rendered body contains a Vega-Lite
+// chart and the exported page therefore needs the runtime trio.
+func containsVegaLite(body string) bool {
+	return vegaLiteBlockPattern.MatchString(body)
 }
 
 // containsMathDelimiter reports whether the rendered body could contain KaTeX

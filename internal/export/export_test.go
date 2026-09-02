@@ -385,6 +385,97 @@ func TestRunExportRegistersZenUMLPluginOnDemand(t *testing.T) {
 	}
 }
 
+func TestRunExportEmbedsVegaLiteRuntimeOnDemand(t *testing.T) {
+	t.Parallel()
+
+	// A chart needs the whole dependency chain: vega attaches the runtime,
+	// vega-lite compiles against it, and vega-embed receives both as globals —
+	// so the page pins all three CDN scripts in exactly that order and the
+	// bootstrap embeds under the same host policy as the WebUI.
+	root := t.TempDir()
+	source := writeFixture(t, root, "chart.md",
+		"# Chart\n\n```vega-lite\n{\"data\":{\"values\":[{\"a\":1}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"a\",\"type\":\"quantitative\"}}}\n```\n")
+	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
+		t.Fatal(err)
+	}
+
+	html, err := os.ReadFile(filepath.Join(root, "chart.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(html)
+	vega := `<script src="https://cdn.jsdelivr.net/npm/vega@6.4.0/build/vega.min.js"></script>`
+	vegaLite := `<script src="https://cdn.jsdelivr.net/npm/vega-lite@6.4.3/build/vega-lite.min.js"></script>`
+	vegaEmbed := `<script src="https://cdn.jsdelivr.net/npm/vega-embed@7.1.0/build/vega-embed.min.js"></script>`
+	for _, want := range []string{
+		`class="language-vega-lite"`,
+		vega, vegaLite, vegaEmbed,
+		"embedVegaLiteCharts",
+		`mode: "vega-lite"`,
+		`renderer: "svg"`,
+		"actions: false",
+		"external Vega-Lite data loading is not supported",
+		"function withoutEmbedOptions(spec)",
+		"vegaLiteHostConfig",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("vega-lite export missing %q", want)
+		}
+	}
+	// The dependency order is load-bearing: each script reads its
+	// predecessor's window global when it evaluates.
+	if !((strings.Index(body, vega) < strings.Index(body, vegaLite)) &&
+		(strings.Index(body, vegaLite) < strings.Index(body, vegaEmbed))) {
+		t.Error("vega CDN scripts are not emitted in dependency order")
+	}
+
+	// The `vegalite` alias drives the same trio through the same detection.
+	aliasRoot := t.TempDir()
+	alias := writeFixture(t, aliasRoot, "alias.md",
+		"# Alias\n\n```vegalite\n{\"data\":{\"values\":[{\"a\":1}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"a\",\"type\":\"quantitative\"}}}\n```\n")
+	if _, err := Run(context.Background(), defaultOptions(alias)); err != nil {
+		t.Fatal(err)
+	}
+	aliasHTML, err := os.ReadFile(filepath.Join(aliasRoot, "alias.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliasBody := string(aliasHTML)
+	if !strings.Contains(aliasBody, `class="language-vegalite"`) {
+		t.Error("alias export missing the vegalite language class")
+	}
+	for _, want := range []string{vega, vegaLite, vegaEmbed} {
+		if !strings.Contains(aliasBody, want) {
+			t.Errorf("alias export missing CDN script %q", want)
+		}
+	}
+
+	// A document that only mentions the string "vega-lite" in plain or fenced
+	// code must not trigger the runtime trio.
+	plainRoot := t.TempDir()
+	plain := writeFixture(t, plainRoot, "plain.md",
+		"# Plain\n\nThe word vega-lite here is prose.\n\n```text\nvega-lite mentioned in code\n```\n\n```html\n<pre><code class=\"language-vega-lite\">escaped</code></pre>\n```\n")
+	if _, err := Run(context.Background(), defaultOptions(plain)); err != nil {
+		t.Fatal(err)
+	}
+	plainHTML, err := os.ReadFile(filepath.Join(plainRoot, "plain.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	plainBody := string(plainHTML)
+	// Goldmark escapes the raw-HTML sample's quotes, so a bare class
+	// attribute never appears; prose and fenced text carry no class at all.
+	for _, unwanted := range []string{
+		`<script src="https://cdn.jsdelivr.net/npm/vega@`,
+		`<script src="https://cdn.jsdelivr.net/npm/vega-lite@`,
+		`<script src="https://cdn.jsdelivr.net/npm/vega-embed@`,
+	} {
+		if strings.Contains(plainBody, unwanted) {
+			t.Errorf("plain vega-lite mention unexpectedly loads %q", unwanted)
+		}
+	}
+}
+
 func TestRunExportWithoutRichContentStaysLean(t *testing.T) {
 	t.Parallel()
 

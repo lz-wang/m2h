@@ -72,6 +72,25 @@ html[data-width="full"] .markdown-body {
 }
 
 /*
+ * Vega-Lite chart containers, injected by the rich-content enhancers in both
+ * the standalone rich-content script and the WebUI. The container keeps the
+ * chart centered and horizontally scrollable like a diagram, and holds the
+ * JSON source text until the embed succeeds (and again after a failed
+ * re-embed). Shared by the export output and the WebUI; the WebUI layers its
+ * frame and Lightbox trigger on top in its own stylesheet.
+ */
+.markdown-body .m2h-vega-lite {
+  margin: 1rem 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.markdown-body .m2h-vega-lite svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/*
  * Code fences are enhanced at runtime in both the standalone rich-content
  * script and the WebUI: every fenced <pre> is wrapped in an .m2h-code-frame,
  * which owns the block's external geometry while the <pre> stays the pure

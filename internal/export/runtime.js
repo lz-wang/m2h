@@ -1,7 +1,12 @@
 // m2h export runtime: the minimal enhancer inlined into every exported page.
-// It renders Mermaid diagrams, KaTeX math, and sortable tables — nothing else.
-// Lightbox, line numbers, code collapse, heading spy, share, and theme
-// switching belong to the WebUI; exported pages deliberately stay this small.
+// It renders Mermaid diagrams, Vega-Lite charts, KaTeX math, and sortable
+// tables — nothing else. Lightbox, line numbers, code collapse, heading spy,
+// share, and theme switching belong to the WebUI; exported pages deliberately
+// stay this small. The chart host policy mirrors the WebUI exactly (mode,
+// renderer, actions, usermeta stripping, deny-network loader) so both surfaces
+// keep one Vega-Lite content contract; the only difference is that the theme
+// is computed once from the page's mode class or the system preference, with
+// no interactive re-render.
 (function () {
   "use strict";
   var DELIMITERS = [
@@ -113,6 +118,119 @@
     });
   }
 
+  // ---- Vega-Lite charts (same host policy as the WebUI) ----
+
+  // Reader chrome only — background, axis/legend/title text and strokes. The
+  // author's mark colors and scale ranges are never touched. Colors resolve
+  // from the page's CSS variables first (the stylesheet stays the single
+  // source of truth); the :root/.dark pairs the WebUI uses are the fallback.
+  function vegaLiteHostConfig(dark) {
+    var styles = getComputedStyle(document.documentElement);
+    function color(name, light, darkColor) {
+      var value = styles.getPropertyValue(name).trim();
+      return value || (dark ? darkColor : light);
+    }
+    var foreground = color("--foreground", "oklch(0.145 0 0)", "oklch(0.985 0 0)");
+    var muted = color("--muted-foreground", "oklch(0.556 0 0)", "oklch(0.708 0 0)");
+    return {
+      background: null,
+      axis: {
+        labelColor: foreground,
+        titleColor: foreground,
+        gridColor: muted,
+        domainColor: muted,
+        tickColor: muted
+      },
+      legend: { labelColor: foreground, titleColor: foreground },
+      title: { color: foreground },
+      view: { stroke: null }
+    };
+  }
+
+  function denyExternalResource() {
+    return Promise.reject(
+      new Error("external Vega-Lite data loading is not supported")
+    );
+  }
+
+  // The host loader denies every external resource (data.url, string config,
+  // string patch): exported pages carry no CSP, so the self-contained spec
+  // contract must hold at the loader exactly as it does in the WebUI.
+  var denyNetworkLoader = {
+    sanitize: function () { return denyExternalResource(); },
+    load: function () { return denyExternalResource(); }
+  };
+
+  // Renderer policy belongs to the host, never the document: Vega-Embed
+  // merges spec.usermeta.embedOptions over the caller's options, so the key
+  // is stripped (a shallow copy — the rest of usermeta is author data).
+  function withoutEmbedOptions(spec) {
+    var usermeta = spec.usermeta;
+    if (typeof usermeta !== "object" || usermeta === null || !("embedOptions" in usermeta)) {
+      return spec;
+    }
+    var sanitized = Object.assign({}, spec, {
+      usermeta: Object.assign({}, usermeta)
+    });
+    delete sanitized.usermeta.embedOptions;
+    return sanitized;
+  }
+
+  // Replace every vega-lite fenced block with its chart container and embed
+  // it under the pinned host policy. Each chart is isolated: one broken spec
+  // keeps its source text (Vega-Embed clears the container before rendering,
+  // so a mid-render failure restores it) and never breaks its neighbours.
+  // Returns a promise that settles when every embed attempt finished, so
+  // KaTeX below never scans chart JSON source.
+  function embedVegaLiteCharts(root, dark) {
+    var embed = typeof window.vegaEmbed === "function" ? window.vegaEmbed : null;
+    var pending = [];
+    root.querySelectorAll("pre > code.language-vega-lite, pre > code.language-vegalite").forEach(function (code) {
+      var pre = code.parentElement;
+      if (!(pre instanceof HTMLPreElement)) {
+        return;
+      }
+      var source = code.textContent || "";
+      var container = document.createElement("div");
+      container.className = "m2h-vega-lite";
+      container.textContent = source;
+      pre.replaceWith(container);
+      if (!embed) {
+        console.warn("Vega-Lite chart present but the embed runtime is unavailable");
+        return;
+      }
+      var spec = null;
+      try {
+        spec = JSON.parse(source);
+      } catch (error) {
+        spec = null;
+      }
+      if (spec === null || typeof spec !== "object" || Array.isArray(spec)) {
+        console.warn(
+          "Failed to render Vega-Lite chart",
+          new Error("Vega-Lite specification must be a JSON object")
+        );
+        return;
+      }
+      pending.push(
+        embed(container, withoutEmbedOptions(spec), {
+          mode: "vega-lite",
+          renderer: "svg",
+          actions: false,
+          tooltip: true,
+          loader: denyNetworkLoader,
+          config: vegaLiteHostConfig(dark)
+        }).catch(function (error) {
+          if (container.querySelector("svg") === null) {
+            container.textContent = source;
+          }
+          console.warn("Failed to render Vega-Lite chart", error);
+        })
+      );
+    });
+    return Promise.all(pending);
+  }
+
   function literalDollarIndexes(source) {
     var singles = [];
     var openers = [];
@@ -167,6 +285,17 @@
     });
   }
 
+  // The resolved theme, computed once: an explicit m2h-mode-* class wins,
+  // otherwise auto follows the system preference. Shared by Mermaid's
+  // official theme and the chart chrome palette.
+  function resolveDark() {
+    var rootClasses = document.documentElement.classList;
+    return rootClasses.contains("m2h-mode-dark") ||
+      (!rootClasses.contains("m2h-mode-light") &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-color-scheme: dark)").matches);
+  }
+
   function enhance() {
     var root = document.querySelector(".markdown-body");
     if (root === null) {
@@ -197,6 +326,11 @@
         nodes.push(container);
       });
     }
+    var dark = resolveDark();
+    // Charts embed in parallel with Mermaid's register → initialize → run
+    // pipeline; KaTeX below waits for both so it never scans chart or diagram
+    // source text.
+    var chartsPending = embedVegaLiteCharts(root, dark);
     var finish = function () {
       if (typeof renderMathInElement === "function") {
         protectLiteralDollars(root);
@@ -218,29 +352,18 @@
     };
     var initializeTheme = function () {
       if (!hasMermaid) {
-        return false;
+        return;
       }
-      var rootClasses = document.documentElement.classList;
-      var dark = rootClasses.contains("m2h-mode-dark") ||
-        (!rootClasses.contains("m2h-mode-light") &&
-          typeof window.matchMedia === "function" &&
-          window.matchMedia("(prefers-color-scheme: dark)").matches);
       mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "default" });
-      return dark;
     };
-    var runDiagrams = function (dark) {
+    var runDiagrams = function () {
       var pending = hasMermaid && typeof mermaid.run === "function" && nodes.length > 0
         ? mermaid.run({ nodes: nodes, suppressErrors: true })
         : null;
-      if (pending && typeof pending.then === "function") {
-        pending.then(function () {
-          applyZenUMLTheme(root, dark);
-          finish();
-        });
-      } else {
+      Promise.resolve(pending).then(function () {
         applyZenUMLTheme(root, dark);
-        finish();
-      }
+        chartsPending.then(finish, finish);
+      });
     };
     var needsZenUML = hasMermaid && nodes.some(function (node) {
       return ZENUML_PREFIX.test(node.textContent || "");
@@ -249,10 +372,12 @@
     // registered before initialize configures the runtime.
     if (needsZenUML) {
       registerZenUML().then(function () {
-        runDiagrams(initializeTheme());
+        initializeTheme();
+        runDiagrams();
       });
     } else {
-      runDiagrams(initializeTheme());
+      initializeTheme();
+      runDiagrams();
     }
   }
   if (document.readyState === "loading") {
