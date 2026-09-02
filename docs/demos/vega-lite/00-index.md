@@ -5,7 +5,7 @@ tags:
   - vega-lite
   - 图表
 create_date: 2026-09-02
-update_date: 2026-09-02
+update_date: 2026-09-03
 ---
 
 # Vega-Lite 统计图表演示索引
@@ -49,7 +49,7 @@ m2h docs/demos/vega-lite
 
 图表 spec 必须自包含：数据写在 `data.values` 中。引用外部数据的 spec（顶层 `data.url`、`datasets` 条目、lookup `from.data`，以及分层/拼接/分面子图表中的同类位置）在嵌入前即被判定为不支持，控制台报 `Vega-Lite specification must be self-contained`，图表按失败隔离处理——保留源码文本、不渲染 SVG、不提供放大按钮。字符串 `config`、字符串 `patch` 与外部图片 URL 则由宿主加载器在加载时拒绝（`external Vega-Lite data loading is not supported`），不会发出任何网络请求。这个契约在 Web 文档服务与导出 HTML 中一致成立——它由宿主策略保证，而不是依赖某个页面的 CSP，因此导出的 HTML 同样不会发出任何外部数据请求。
 
-图表超链接（`href` 编码通道）的点击是导航而不是数据加载，遵循与正文链接相同的阅读器策略：跨 origin 的 HTTP(S) 链接在新标签页打开并带 `noopener`（导出 HTML 额外带 `noreferrer`），同源链接保持浏览器默认行为，`javascript:` 等其他协议一律拒绝——spec 不能把图表 mark 变成脚本执行入口。
+图表超链接（`href` 编码通道）的点击是导航而不是数据加载，遵循与正文链接相同的阅读器策略：跨 origin 的 HTTP(S) 链接在新标签页打开并带 `noopener noreferrer`（图表链接由 Vega 在点击时动态合成，不经正文链接增强，显式 `noreferrer` 是合理的一致防线；WebUI 另有 `Referrer-Policy: same-origin` 响应头），同源链接保持浏览器默认行为，`javascript:` 等其他协议一律拒绝——spec 不能把图表 mark 变成脚本执行入口。
 
 文档不能覆盖宿主渲染策略：spec 中 `usermeta.embedOptions` 会被剥离，`mode`（固定 `vega-lite`）、`renderer`（固定 SVG）、表达式求值路径（固定 AST 解释器，页面 CSP 无需 `unsafe-eval`）与 Vega-Embed 自带的导出/编辑器菜单（关闭）由 m2h 决定。
 
