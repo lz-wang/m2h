@@ -26,6 +26,11 @@ func TestRuntimeHandlerServesEmbeddedAssets(t *testing.T) {
 		{path: "/runtime/mermaid-zenuml/chunks/mermaid-zenuml.esm.min/chunk-PPGA74DV.mjs", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/katex.min.js", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/auto-render.min.js", contentType: "text/javascript; charset=utf-8"},
+		// The Vega-Lite trio loads in dependency order (vega → vega-lite →
+		// vega-embed); all three must stay reachable under /runtime/.
+		{path: "/runtime/vega.min.js", contentType: "text/javascript; charset=utf-8"},
+		{path: "/runtime/vega-lite.min.js", contentType: "text/javascript; charset=utf-8"},
+		{path: "/runtime/vega-embed.min.js", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/tablesort.min.js", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/tablesort.number.js", contentType: "text/javascript; charset=utf-8"},
 		{path: "/runtime/katex.min.css", contentType: "text/css; charset=utf-8"},
@@ -63,6 +68,13 @@ func TestRuntimeHandlerRefusesNonGETAndDirectories(t *testing.T) {
 		status int
 	}{
 		{method: http.MethodPost, path: "/runtime/mermaid.min.js", status: http.StatusMethodNotAllowed},
+		{method: http.MethodPost, path: "/runtime/vega.min.js", status: http.StatusMethodNotAllowed},
+		{method: http.MethodGet, path: "/runtime/", status: http.StatusNotFound},
+		{method: http.MethodGet, path: "/runtime", status: http.StatusNotFound},
+		{method: http.MethodGet, path: "/runtime/fonts", status: http.StatusNotFound},
+		{method: http.MethodGet, path: "/runtime/fonts/", status: http.StatusNotFound},
+		{method: http.MethodGet, path: "/runtime/missing.js", status: http.StatusNotFound},
+		{method: http.MethodGet, path: "/runtime/../../main.go", status: http.StatusNotFound},
 		{method: http.MethodGet, path: "/runtime/", status: http.StatusNotFound},
 		{method: http.MethodGet, path: "/runtime", status: http.StatusNotFound},
 		{method: http.MethodGet, path: "/runtime/fonts", status: http.StatusNotFound},
@@ -80,6 +92,26 @@ func TestRuntimeHandlerRefusesNonGETAndDirectories(t *testing.T) {
 				t.Fatalf("%s %s status = %d, want %d", item.method, item.path, response.Code, item.status)
 			}
 		})
+	}
+}
+
+// TestRuntimeHandlerSupportsHead covers the HEAD path the WebUI and export
+// bootstrap may use to probe an asset: same status and headers as GET, but no
+// body.
+func TestRuntimeHandlerSupportsHead(t *testing.T) {
+	t.Parallel()
+
+	handler := newRuntimeHandler()
+	response := httptest.NewRecorder()
+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodHead, "/runtime/vega-lite.min.js", nil))
+	if response.Code != http.StatusOK {
+		t.Fatalf("HEAD /runtime/vega-lite.min.js status = %d, want %d", response.Code, http.StatusOK)
+	}
+	if got := response.Header().Get("Content-Type"); got != "text/javascript; charset=utf-8" {
+		t.Errorf("HEAD Content-Type = %q, want %q", got, "text/javascript; charset=utf-8")
+	}
+	if response.Body.Len() != 0 {
+		t.Errorf("HEAD returned %d body bytes, want none", response.Body.Len())
 	}
 }
 

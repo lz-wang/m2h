@@ -14,6 +14,9 @@ Tablesort core: the five comparator builds below stay WebUI-only.
 | mermaid-zenuml    | https://github.com/mermaid-js/mermaid (packages/mermaid-zenuml) | 0.2.3 | MIT (`LICENSE.mermaid-zenuml`) |
 | @zenuml/core      | https://github.com/mermaid-js/zenuml (bundled inside mermaid-zenuml) | 3.47.2 | MIT (`LICENSE.zenuml-core`) |
 | Tablesort         | https://github.com/tristen/tablesort  | 5.3.0   | MIT (`LICENSE.tablesort`) |
+| Vega              | https://github.com/vega/vega          | 6.4.0   | BSD-3-Clause (`LICENSE.vega`) |
+| Vega-Lite         | https://github.com/vega/vega-lite     | 6.4.3   | BSD-3-Clause (`LICENSE.vega-lite`) |
+| Vega-Embed        | https://github.com/vega/vega-embed    | 7.1.0   | BSD-3-Clause (`LICENSE.vega-embed`) |
 
 `katex.min.css` references `./fonts/*.woff2` relative to itself, so the
 `fonts/` directory must stay next to `katex.min.css` in every output location.
@@ -54,3 +57,13 @@ that upstream palette unchanged in light mode and appends a constant, SVG-root
 scoped dark palette when the resolved reader mode is dark. The scoped rules are
 part of the SVG itself (including Lightbox snapshots and exported HTML) and do
 not alter host stylesheets or theme variables.
+
+The Vega-Lite runtime is the three flat UMD builds above, refreshed by
+`scripts/update-vega-runtime.sh` from npm package artifacts. They must load in
+dependency order — `vega.min.js` (attaches `window.vega`), then
+`vega-lite.min.js` (`window.vegaLite`, compiled against the Vega runtime), then
+`vega-embed.min.js` (`window.vegaEmbed`, receives both as globals) — so the
+loader never requests them concurrently. Source maps are not vendored. The
+WebUI fetches the trio only when a document actually contains a `vega-lite` /
+`vegalite` fenced block; exported HTML does not embed this copy — the page
+carries the pinned jsDelivr URLs of the same releases.
