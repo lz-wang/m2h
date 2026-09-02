@@ -1028,7 +1028,23 @@ function PreviewContent({
   onErrorCapture,
 }: PreviewContentProps) {
   const contentRef = useRef<HTMLElement>(null);
-  const renderGenerationRef = useRef(0);
+  // Body generation: bumped on every body swap and teardown, never by a
+  // theme switch. It is the freshness token handed to the renderers below —
+  // a slow render that outlives its document must not apply after the body
+  // has moved on — while a theme switch queues behind the initial render
+  // instead of invalidating it (see the theme effect below).
+  const bodyGenerationRef = useRef(0);
+  // The initial enhancement of the current body, awaited by every theme
+  // repaint: Vega-Lite chart containers only exist once the initial render
+  // has created them, so repainting while the runtime is still downloading
+  // would find no targets — and a toggle that invalidated the initial render
+  // instead would leave the raw fenced blocks behind for good.
+  const initialRenderRef = useRef<Promise<void> | null>(null);
+  // Theme repaints of one body run strictly one after another here. vegaEmbed
+  // mutates its target container during the await, so two concurrent repaints
+  // interleave their DOM writes nondeterministically — a freshness check
+  // after the embed resolves cannot un-write what a stale embed already did.
+  const themeQueueRef = useRef<Promise<void>>(Promise.resolve());
   // The lightbox snapshot and its open flag are deliberately separate states:
   // closing only flips the flag, the popup stays mounted through its exit
   // transition, and the snapshot is dropped once the dialog reports the
@@ -1038,11 +1054,14 @@ function PreviewContent({
   const [lightboxOpen, setLightboxOpen] = useState(false);
   // The resolved theme is read through a ref so the body render effect can
   // depend on [html, phase] only and a theme switch never rebuilds the
-  // article. renderedModeRef records which theme the current body — and its
-  // Mermaid SVGs — were last painted in, so the theme effect can skip when
-  // nothing changed and otherwise regenerate only the diagrams.
+  // article. renderedModeRef records the newest theme the theme effect has
+  // claimed — it dedupes effect reruns and lets a superseded queued repaint
+  // skip — while paintedModeRef records the theme the current body's rich
+  // visuals were last painted in, so a repaint whose result is already on
+  // screen never runs.
   const resolvedModeRef = useRef<ResolvedMode>(resolvedMode);
   const renderedModeRef = useRef<ResolvedMode | null>(null);
+  const paintedModeRef = useRef<ResolvedMode | null>(null);
   resolvedModeRef.current = resolvedMode;
 
   // React owns the <article> container; the Markdown body DOM is owned by
@@ -1061,10 +1080,10 @@ function PreviewContent({
   //
   // The separate theme effect below regenerates only the theme-sensitive
   // rich visuals (Mermaid diagrams and Vega-Lite charts), whose colors are
-  // baked into their SVG at render time. The generation guard pairs with the
-  // renderers' freshness checks so a slow render that outlives its document
-  // (or a later theme toggle) is not applied after the body has moved on;
-  // cleanup invalidates the in-flight render and finalizes Vega views.
+  // baked into their SVG at render time. The body generation guard pairs
+  // with the renderers' freshness checks so a slow render that outlives its
+  // document is not applied after the body has moved on; cleanup invalidates
+  // the in-flight render and finalizes Vega views.
   useLayoutEffect(() => {
     if (phase !== "ready") {
       return;
@@ -1078,22 +1097,22 @@ function PreviewContent({
     // document.
     setLightboxOpen(false);
     setLightbox(null);
-    const generation = ++renderGenerationRef.current;
+    const generation = ++bodyGenerationRef.current;
     const mode = resolvedModeRef.current;
     root.innerHTML = html;
     // Link policy first, before the rich-content enhancements: external
     // links must open in a new tab even when a later renderer bails.
     enhanceDocumentLinks(root);
     renderedModeRef.current = mode;
-    void renderRichContent(
+    paintedModeRef.current = mode;
+    initialRenderRef.current = renderRichContent(
       root,
       mode,
-      () => renderGenerationRef.current === generation,
+      () => bodyGenerationRef.current === generation,
     );
     return () => {
-      if (renderGenerationRef.current === generation) {
-        renderGenerationRef.current++;
-      }
+      bodyGenerationRef.current++;
+      initialRenderRef.current = null;
       // Vega views hold timers and document-level listeners that only
       // finalize detaches; this cleanup runs while the old body DOM is still
       // in place, right before the next paint replaces it wholesale.
@@ -1107,6 +1126,15 @@ function PreviewContent({
   // effect above has already painted the current theme, so renderedModeRef
   // matches resolvedMode and this effect is a no-op; it only does work on a
   // subsequent light/dark toggle.
+  //
+  // The repaint is queued, never run inline. Each queued repaint waits for
+  // the initial enhancement of the current body — a toggle while a runtime
+  // is still downloading must not look for chart containers that do not
+  // exist yet — and for any earlier repaint, so one container never has two
+  // embeds in flight. A queued repaint is skipped when a newer toggle has
+  // claimed a different theme (rapid light → dark → light ends with one
+  // light repaint at most), when its result is already on screen, or when
+  // the body it belonged to is gone.
   useEffect(() => {
     if (phase !== "ready") {
       return;
@@ -1119,17 +1147,41 @@ function PreviewContent({
       return;
     }
     renderedModeRef.current = resolvedMode;
-    const generation = ++renderGenerationRef.current;
-    void rerenderThemeSensitiveContent(
-      root,
-      resolvedMode,
-      () => renderGenerationRef.current === generation,
-    );
-    return () => {
-      if (renderGenerationRef.current === generation) {
-        renderGenerationRef.current++;
+    const mode = resolvedMode;
+    const generation = bodyGenerationRef.current;
+    const repaint = async () => {
+      if (bodyGenerationRef.current !== generation) {
+        return;
+      }
+      // The initial render of this body owns the container swap; only once
+      // it has settled (or failed without containers) is there something to
+      // repaint. A load failure is swallowed here so one broken download
+      // cannot poison the queue; the renderer already reported it.
+      const initial = initialRenderRef.current;
+      if (initial !== null) {
+        await initial.catch(() => {});
+        if (bodyGenerationRef.current !== generation) {
+          return;
+        }
+      }
+      if (
+        renderedModeRef.current !== mode ||
+        paintedModeRef.current === mode
+      ) {
+        return;
+      }
+      await rerenderThemeSensitiveContent(root, mode, () => {
+        return bodyGenerationRef.current === generation;
+      });
+      if (bodyGenerationRef.current === generation) {
+        paintedModeRef.current = mode;
       }
     };
+    // The tail catch keeps the queue alive after a failed repaint instead of
+    // wedging every later toggle behind a rejected promise.
+    themeQueueRef.current = themeQueueRef.current
+      .then(repaint)
+      .catch(() => {});
   }, [phase, resolvedMode]);
 
   // The magnifier triggers are injected into the article DOM by

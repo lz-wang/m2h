@@ -296,6 +296,135 @@ test("repaints charts across a light → dark → light round trip", async ({
   ).toBeVisible();
 });
 
+test("repaints charts when the theme flips while the runtime is loading", async ({
+  page,
+}) => {
+  // The race the generation guard alone could not close: a theme toggle that
+  // lands while the initial enhancement is still awaiting the runtime
+  // download. The chart containers do not exist yet, so the naive repaint
+  // found no targets — and a repaint that invalidated the initial render
+  // instead left the raw fenced blocks behind for good. Delaying the runtime
+  // trio keeps that window open long enough to toggle inside it.
+  await page.route("**/runtime/vega*.js", async (route) => {
+    await new Promise((resolve) => {
+      setTimeout(resolve, 800);
+    });
+    await route.continue();
+  });
+  const tracker = trackRequests(page);
+  await openDocument(page, themePath);
+
+  // Prove the toggle below happens inside the loading window: the fenced
+  // block is still raw and no embed runtime has attached yet.
+  await page.waitForFunction(() => {
+    const raw = document.querySelector(
+      "pre > code.language-vega-lite, pre > code.language-vegalite",
+    );
+    return raw !== null && window.vegaEmbed === undefined;
+  });
+
+  await page.getByRole("button", { name: /^显示主题：/ }).click();
+  await pickTheme(page, "深色", true);
+
+  // The initial render survived the toggle: the blocks convert and paint,
+  // then the queued dark repaint re-embeds in the dark palette.
+  await tracker.waitForIdleCharts();
+  await expect(
+    page.locator("pre > code.language-vega-lite, pre > code.language-vegalite"),
+  ).toHaveCount(0);
+  await expect(page.locator(".m2h-vega-lite")).toHaveCount(1);
+  const darkMarks = await page.evaluate(
+    () =>
+      document
+        .querySelector(".m2h-vega-lite")
+        ?.querySelectorAll("g[class~='role-mark'] > *").length ?? 0,
+  );
+  expect(darkMarks).toBeGreaterThan(0);
+  // The Mermaid diagram in the same document repainted alongside the chart.
+  await expect(
+    page.locator(".m2h-mermaid-frame > .mermaid > svg"),
+  ).toBeVisible();
+
+  // Toggling back still repaints (the queue was not wedged by the wait) and
+  // the chart chrome follows the palette again.
+  const darkLabel = await page.evaluate(() => {
+    const label = document.querySelector(
+      ".m2h-vega-lite svg text",
+    ) as SVGTextElement | null;
+    return label?.getAttribute("fill") ?? "";
+  });
+  await pickTheme(page, "浅色", false);
+  const lightLabel = await page.evaluate(() => {
+    const label = document.querySelector(
+      ".m2h-vega-lite svg text",
+    ) as SVGTextElement | null;
+    return label?.getAttribute("fill") ?? "";
+  });
+  expect(lightLabel).not.toBe(darkLabel);
+});
+
+test("ends in the latest palette after a rapid light → dark → light toggle", async ({
+  page,
+}) => {
+  await openUntilChartsSettle(page, themePath);
+
+  const frame = page.locator(".m2h-vega-lite-frame").first();
+  const container = page.locator(".m2h-vega-lite").first();
+  const trigger = frame.locator(":scope > .m2h-lightbox-trigger");
+  const frameElement = await frame.elementHandle();
+  const containerElement = await container.elementHandle();
+  const triggerElement = await trigger.elementHandle();
+  const lightLabel = await page.evaluate(() => {
+    const label = document.querySelector(
+      ".m2h-vega-lite svg text",
+    ) as SVGTextElement | null;
+    return label?.getAttribute("fill") ?? "";
+  });
+
+  // Two picks back to back, no wait between them: the middle dark repaint
+  // must be skipped or run to completion — never overlapped with the light
+  // one on the same container, where interleaved embed writes would corrupt
+  // the chart DOM.
+  await page.getByRole("button", { name: /^显示主题：/ }).click();
+  await page.getByRole("menuitemradio", { name: "深色" }).click();
+  await page.getByRole("menuitemradio", { name: "浅色" }).click();
+
+  await page.waitForFunction(
+    () => !document.documentElement.classList.contains("m2h-mode-dark"),
+  );
+  await waitForBodyQuiet(page);
+
+  // One chart, still converted, in the final light palette.
+  await expect(
+    page.locator("pre > code.language-vega-lite, pre > code.language-vegalite"),
+  ).toHaveCount(0);
+  await expect(page.locator(".m2h-vega-lite")).toHaveCount(1);
+  await expect(page.locator(".m2h-vega-lite-frame")).toHaveCount(1);
+  const marks = await page.evaluate(
+    () =>
+      document
+        .querySelector(".m2h-vega-lite")
+        ?.querySelectorAll("g[class~='role-mark'] > *").length ?? 0,
+  );
+  expect(marks).toBeGreaterThan(0);
+  const finalLabel = await page.evaluate(() => {
+    const label = document.querySelector(
+      ".m2h-vega-lite svg text",
+    ) as SVGTextElement | null;
+    return label?.getAttribute("fill") ?? "";
+  });
+  expect(finalLabel).toBe(lightLabel);
+
+  // DOM identity survived the rapid round trip and nothing stacked.
+  expect(await frameElement?.evaluate((el) => el.isConnected)).toBe(true);
+  expect(await containerElement?.evaluate((el) => el.isConnected)).toBe(true);
+  expect(await triggerElement?.evaluate((el) => el.isConnected)).toBe(true);
+  await expect(page.locator(".vega-actions")).toHaveCount(0);
+  await expect(
+    page.locator("#vg-tooltip-element .vg-tooltip-element"),
+  ).toHaveCount(0);
+});
+
 test("browses charts, diagrams, and images in one lightbox sequence", async ({
   page,
 }) => {
