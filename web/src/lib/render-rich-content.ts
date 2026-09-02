@@ -30,6 +30,7 @@ import {
   type VegaEmbedOptions,
   type VegaEmbedResult,
   type VegaEmbedRuntime,
+  type VegaLiteHostConfig,
   type VegaLoader,
 } from "./runtime-loader";
 
@@ -996,6 +997,27 @@ export async function rerenderMermaid(
 // without re-parsing the document body.
 const vegaLiteSources = new WeakMap<HTMLElement, string>();
 
+// The live embed result per chart container. Unlike Mermaid, a Vega view
+// registers timers and document-level event listeners that only finalize()
+// detaches, so every re-embed and every document teardown must finalize the
+// previous result or the view leaks.
+const vegaLiteViews = new WeakMap<HTMLElement, VegaEmbedResult>();
+
+// Finalize every chart view still alive under `root`. Called before the body
+// DOM is wholesale replaced (document switch, hot swap, unmount): after that
+// the containers are unreachable, and with them the views recorded here.
+export function finalizeVegaLiteViews(root: HTMLElement): void {
+  for (const container of root.querySelectorAll<HTMLElement>(
+    ".m2h-vega-lite",
+  )) {
+    const result = vegaLiteViews.get(container);
+    if (result !== undefined) {
+      result.finalize();
+      vegaLiteViews.delete(container);
+    }
+  }
+}
+
 // Host-controlled loader that denies every external resource. Vega asks the
 // loader for data.url, string config, and string patch values; rejecting at
 // the loader keeps charts self-contained in the WebUI and exported HTML
@@ -1058,6 +1080,62 @@ function parseVegaLiteSpec(source: string): Record<string, unknown> | null {
   return parsed as Record<string, unknown>;
 }
 
+// One reader-theme color, resolved from the live stylesheet so the CSS
+// variables stay the single source of truth (the chart chrome follows the
+// toolbar theme for free). The fallback covers environments where custom
+// properties do not resolve (tests, exotic embedders); each pair mirrors the
+// corresponding :root / .dark value in index.css.
+function themeColor(variable: string, light: string, dark: string): string {
+  const resolved = getComputedStyle(document.documentElement)
+    .getPropertyValue(variable)
+    .trim();
+  if (resolved !== "") {
+    return resolved;
+  }
+  return document.documentElement.classList.contains("dark") ? dark : light;
+}
+
+// The chart palette m2h overlays onto every spec: reader chrome only —
+// background, axis/legend/title text, grid and stroke colors. The author's
+// mark colors and scale ranges are never touched, so a spec's data semantics
+// survive a theme switch unchanged; Vega's own named themes stay unused
+// (upstream marks them experimental). Colors read as computed CSS values so
+// `Markdown reader theme → CSS variables → Vega config` has one source.
+function vegaLiteThemeConfig(): VegaLiteHostConfig {
+  const foreground = themeColor(
+    "--foreground",
+    "oklch(0.145 0 0)",
+    "oklch(0.985 0 0)",
+  );
+  const muted = themeColor(
+    "--muted-foreground",
+    "oklch(0.556 0 0)",
+    "oklch(0.708 0 0)",
+  );
+  return {
+    // null = transparent: the chart sits on the reader's page background,
+    // so a dark document never gets a white chart slab.
+    background: null,
+    axis: {
+      labelColor: foreground,
+      titleColor: foreground,
+      gridColor: muted,
+      domainColor: muted,
+      tickColor: muted,
+    },
+    legend: {
+      labelColor: foreground,
+      titleColor: foreground,
+    },
+    title: {
+      color: foreground,
+    },
+    view: {
+      stroke: null,
+    },
+  };
+}
+
 // Build the host policy every embed call carries. `mode` is pinned to
 // "vega-lite" — without it Vega-Embed infers from $schema and silently falls
 // back to raw Vega when both are absent — the renderer is pinned to SVG (the
@@ -1070,6 +1148,7 @@ function vegaLiteEmbedOptions(): VegaEmbedOptions {
     actions: false,
     tooltip: true,
     loader: denyNetworkLoader,
+    config: vegaLiteThemeConfig(),
   };
 }
 
@@ -1077,14 +1156,21 @@ function vegaLiteEmbedOptions(): VegaEmbedOptions {
 // that fails keeps its JSON source (restored explicitly — Vega-Embed clears
 // the container before rendering, so a late failure would otherwise leave an
 // empty frame), gets no Lightbox marker, and never breaks the next chart.
-// Returns false when the render is no longer current, telling the caller to
-// abort the remaining targets.
+// A re-embed finalizes the previous view first — Vega views hold timers and
+// document-level listeners that leak without it. Returns false when the
+// render is no longer current, telling the caller to abort the remaining
+// targets.
 async function embedVegaLiteTarget(
   embed: VegaEmbedRuntime,
   target: HTMLElement,
   source: string,
   isCurrent?: () => boolean,
 ): Promise<boolean> {
+  const previous = vegaLiteViews.get(target);
+  if (previous !== undefined) {
+    previous.finalize();
+    vegaLiteViews.delete(target);
+  }
   try {
     const spec = parseVegaLiteSpec(source);
     if (spec !== null) {
@@ -1097,11 +1183,16 @@ async function embedVegaLiteTarget(
         result.finalize();
         return false;
       }
+      vegaLiteViews.set(target, result);
     }
   } catch (error) {
-    // Restore the source text: the container is the only place the spec is
-    // visible, and the failure is already reported below.
-    target.textContent = source;
+    // A failure that struck before Vega-Embed touched the container (e.g. a
+    // compile error) leaves the old SVG visible; one that struck mid-render
+    // leaves the container cleared, so the source text is restored — the
+    // container is the only place the spec remains visible.
+    if (target.querySelector("svg") === null) {
+      target.textContent = source;
+    }
     console.warn("Failed to render Vega-Lite chart", { error });
   }
   syncRichVisualLightboxAvailability(target);
@@ -1151,4 +1242,48 @@ async function renderVegaLiteBlocks(
       return;
     }
   }
+}
+
+// Re-embed only existing charts in the new theme, leaving the rest of the
+// document body untouched — the chart twin of rerenderMermaid. The previous
+// view is finalized inside embedVegaLiteTarget before each re-embed, and a
+// chart whose first render failed gets its retry here, mirroring the Mermaid
+// recovery model.
+async function rerenderVegaLite(
+  root: HTMLElement,
+  isCurrent?: () => boolean,
+): Promise<void> {
+  const targets = Array.from(
+    root.querySelectorAll<HTMLElement>(".m2h-vega-lite"),
+  ).filter((target) => vegaLiteSources.has(target));
+
+  if (targets.length === 0) {
+    return;
+  }
+
+  const embed = await loadVegaLite();
+  for (const target of targets) {
+    const source = vegaLiteSources.get(target);
+    if (source === undefined) {
+      continue;
+    }
+    if (!(await embedVegaLiteTarget(embed, target, source, isCurrent))) {
+      return;
+    }
+  }
+}
+
+// The single theme-switch entry point for every rich visual: Mermaid bakes
+// its official palette into the SVG and Vega-Lite reads the reader theme's
+// CSS variables into its config, so both engines re-render on a light/dark
+// toggle while paragraphs, KaTeX, and copy controls keep their DOM identity
+// and focus. Callers stay engine-agnostic — this layer owns which visuals
+// are theme-sensitive.
+export async function rerenderThemeSensitiveContent(
+  root: HTMLElement,
+  mode: ResolvedMode,
+  isCurrent?: () => boolean,
+): Promise<void> {
+  await rerenderMermaid(root, mode, isCurrent);
+  await rerenderVegaLite(root, isCurrent);
 }

@@ -73,7 +73,11 @@ import {
   type LightboxState,
 } from "./lib/document-lightbox";
 import { enhanceDocumentLinks } from "./lib/document-links";
-import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
+import {
+  finalizeVegaLiteViews,
+  renderRichContent,
+  rerenderThemeSensitiveContent,
+} from "./lib/render-rich-content";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 import {
   absoluteURL,
@@ -1055,11 +1059,12 @@ function PreviewContent({
   // body is still painted in the current theme without re-running on toggles.
   // Width and sidebar are likewise excluded.
   //
-  // The separate theme effect below regenerates only the Mermaid diagrams,
-  // whose colors are baked into the SVG at render time. The generation guard
-  // pairs with the renderers' freshness checks so a slow Mermaid render that
-  // outlives its document (or a later theme toggle) is not applied after the
-  // body has moved on; cleanup invalidates the in-flight render.
+  // The separate theme effect below regenerates only the theme-sensitive
+  // rich visuals (Mermaid diagrams and Vega-Lite charts), whose colors are
+  // baked into their SVG at render time. The generation guard pairs with the
+  // renderers' freshness checks so a slow render that outlives its document
+  // (or a later theme toggle) is not applied after the body has moved on;
+  // cleanup invalidates the in-flight render and finalizes Vega views.
   useLayoutEffect(() => {
     if (phase !== "ready") {
       return;
@@ -1089,14 +1094,19 @@ function PreviewContent({
       if (renderGenerationRef.current === generation) {
         renderGenerationRef.current++;
       }
+      // Vega views hold timers and document-level listeners that only
+      // finalize detaches; this cleanup runs while the old body DOM is still
+      // in place, right before the next paint replaces it wholesale.
+      finalizeVegaLiteViews(root);
     };
   }, [html, phase]);
 
-  // A theme switch repaints only the Mermaid diagrams, leaving the article
-  // DOM, KaTeX, copy buttons, and any in-body focus untouched. On the initial
-  // render the body effect above has already painted the current theme, so
-  // renderedModeRef matches resolvedMode and this effect is a no-op; it only
-  // does work on a subsequent light/dark toggle.
+  // A theme switch repaints only the theme-sensitive rich visuals (Mermaid
+  // diagrams and Vega-Lite charts), leaving the article DOM, KaTeX, copy
+  // buttons, and any in-body focus untouched. On the initial render the body
+  // effect above has already painted the current theme, so renderedModeRef
+  // matches resolvedMode and this effect is a no-op; it only does work on a
+  // subsequent light/dark toggle.
   useEffect(() => {
     if (phase !== "ready") {
       return;
@@ -1110,7 +1120,7 @@ function PreviewContent({
     }
     renderedModeRef.current = resolvedMode;
     const generation = ++renderGenerationRef.current;
-    void rerenderMermaid(
+    void rerenderThemeSensitiveContent(
       root,
       resolvedMode,
       () => renderGenerationRef.current === generation,

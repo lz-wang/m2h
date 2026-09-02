@@ -1890,6 +1890,11 @@ describe("Vega-Lite charts", () => {
     vi.resetModules();
     loadVegaLiteMock.mockClear();
     vegaEmbedMock.mockClear();
+    loadMermaidMock.mockClear();
+    mermaidMock.render.mockClear();
+    mermaidMock.render.mockResolvedValue({
+      svg: '<svg data-mock="mermaid"></svg>',
+    });
     vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
       element.innerHTML = '<svg data-mock="vega-lite"></svg>';
       return { view: {}, finalize: vi.fn() };
@@ -2098,5 +2103,161 @@ describe("Vega-Lite charts", () => {
       root.querySelectorAll<HTMLDivElement>("div.m2h-vega-lite");
     // The aborted chart keeps its source text instead of an SVG.
     expect(containers[1]?.textContent).toBe(VALID_SPEC);
+  });
+
+  it("overlays the reader theme chrome without touching data colors", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    const [, , options] = vegaEmbedMock.mock.calls[0] ?? [];
+    const config = options?.config;
+    expect(config).toBeDefined();
+    // Chrome only: a transparent chart surface and themed axis/legend/title
+    // text. Mark colors and scale ranges never appear in the host config.
+    expect(config?.background).toBeNull();
+    expect(config?.view).toEqual({ stroke: null });
+    expect(config?.axis).toMatchObject({
+      labelColor: expect.any(String),
+      titleColor: expect.any(String),
+      gridColor: expect.any(String),
+      domainColor: expect.any(String),
+      tickColor: expect.any(String),
+    });
+    expect(config?.legend).toMatchObject({
+      labelColor: expect.any(String),
+      titleColor: expect.any(String),
+    });
+    expect(config?.title).toEqual({ color: expect.any(String) });
+  });
+
+  it("re-embeds charts on a theme switch, finalizing the previous view", async () => {
+    const { renderRichContent, rerenderThemeSensitiveContent } = await import(
+      "./render-rich-content"
+    );
+    const firstFinalize = vi.fn();
+    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
+      element.innerHTML = '<svg data-mock="vega-lite"></svg>';
+      return { view: {}, finalize: firstFinalize };
+    });
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
+    await renderRichContent(root, "light");
+
+    const frame = root.querySelector(".m2h-vega-lite-frame");
+    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
+    const trigger = frame?.querySelector<HTMLButtonElement>(
+      ":scope > .m2h-lightbox-trigger",
+    );
+    const secondFinalize = vi.fn();
+    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
+      element.innerHTML = '<svg data-mock="vega-lite-dark"></svg>';
+      return { view: {}, finalize: secondFinalize };
+    });
+
+    await rerenderThemeSensitiveContent(root, "dark");
+
+    // The old view was finalized exactly once, the chart re-embedded, and
+    // the frame/container/trigger kept their DOM identity.
+    expect(firstFinalize).toHaveBeenCalledTimes(1);
+    expect(secondFinalize).not.toHaveBeenCalled();
+    expect(vegaEmbedMock).toHaveBeenCalledTimes(2);
+    expect(container?.innerHTML).toContain('data-mock="vega-lite-dark"');
+    expect(root.querySelector(".m2h-vega-lite-frame")).toBe(frame);
+    expect(
+      frame?.querySelector<HTMLButtonElement>(":scope > .m2h-lightbox-trigger"),
+    ).toBe(trigger);
+    expect(container?.dataset.m2hLightboxItem).toBe("true");
+  });
+
+  it("retries a chart whose first render failed on the theme switch", async () => {
+    const { renderRichContent, rerenderThemeSensitiveContent } = await import(
+      "./render-rich-content"
+    );
+    vegaEmbedMock.mockRejectedValueOnce(new Error("compile failed"));
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
+    await renderRichContent(root, "light");
+
+    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
+    expect(container?.textContent).toBe(VALID_SPEC);
+
+    await rerenderThemeSensitiveContent(root, "dark");
+
+    expect(container?.querySelector("svg")).not.toBeNull();
+    expect(container?.dataset.m2hLightboxItem).toBe("true");
+  });
+
+  it("keeps the previous SVG when a theme re-embed fails mid-render", async () => {
+    const { renderRichContent, rerenderThemeSensitiveContent } = await import(
+      "./render-rich-content"
+    );
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
+    await renderRichContent(root, "light");
+
+    // The re-embed clears the container (Vega-Embed renders into it) and
+    // then fails: the source text is restored, never an empty frame.
+    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
+      element.innerHTML = "";
+      throw new Error("renderer crashed");
+    });
+    await rerenderThemeSensitiveContent(root, "dark");
+
+    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
+    expect(container?.textContent).toBe(VALID_SPEC);
+    expect(container?.dataset.m2hLightboxItem).toBeUndefined();
+  });
+
+  it("does not load the Vega runtime on a theme switch without charts", async () => {
+    const { rerenderThemeSensitiveContent } = await import(
+      "./render-rich-content"
+    );
+    const root = document.createElement("div");
+    root.innerHTML = "<p>no visuals at all</p>";
+
+    await rerenderThemeSensitiveContent(root, "dark");
+
+    expect(loadVegaLiteMock).not.toHaveBeenCalled();
+    expect(loadMermaidMock).not.toHaveBeenCalled();
+  });
+
+  it("repaints Mermaid diagrams and Vega-Lite charts together", async () => {
+    const { renderRichContent, rerenderThemeSensitiveContent } = await import(
+      "./render-rich-content"
+    );
+    const root = document.createElement("div");
+    root.innerHTML =
+      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>` +
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+    await renderRichContent(root, "light");
+
+    mermaidMock.render.mockClear();
+    vegaEmbedMock.mockClear();
+    await rerenderThemeSensitiveContent(root, "dark");
+
+    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
+    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("finalizes every view before the body DOM is replaced", async () => {
+    const { renderRichContent, finalizeVegaLiteViews } = await import(
+      "./render-rich-content"
+    );
+    const finalize = vi.fn();
+    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
+      element.innerHTML = '<svg data-mock="vega-lite"></svg>';
+      return { view: {}, finalize };
+    });
+    const root = document.createElement("div");
+    root.innerHTML =
+      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>` +
+      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
+    await renderRichContent(root, "light");
+
+    finalizeVegaLiteViews(root);
+    expect(finalize).toHaveBeenCalledTimes(2);
   });
 });
