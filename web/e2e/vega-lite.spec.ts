@@ -200,41 +200,94 @@ test("isolates invalid charts and keeps valid ones rendering", async ({
   expect(states[2]?.triggerHidden).toBe(false);
 });
 
-test("denies external data URLs at the loader, not via the CSP", async ({
+test("isolates unsupported external resources without leaving the origin", async ({
   page,
 }) => {
-  const denials: string[] = [];
+  const warnings: string[] = [];
   page.on("console", (message) => {
     const text = message.text();
-    if (text.includes("external Vega-Lite data loading")) {
-      denials.push(text);
+    if (text.includes("Failed to render Vega-Lite chart")) {
+      warnings.push(text);
     }
   });
 
   const tracker = await openUntilChartsSettle(page, securityPath);
 
-  // No request ever leaves for the spec's remote data source — the host
-  // loader rejects before any fetch, so the contract holds even where no CSP
-  // exists (exported HTML). The denial itself must be the loader's, not a
-  // CSP block happening to intercept a fetch Vega already issued.
+  // No request ever leaves for the specs' remote resources — neither the
+  // data URLs (rejected up front by the self-contained preflight) nor the
+  // image mark's href (rejected by the host loader before any fetch), so
+  // the contract holds even where no CSP exists (exported HTML).
   const external = tracker
     .urls()
     .filter((url) => !url.startsWith("http://127.0.0.1:"));
   expect(external).toEqual([]);
-  expect(denials.length).toBeGreaterThan(0);
 
-  // Vega renders the denied chart as its empty frame — axis chrome with no
-  // data marks — while the self-contained chart after it drew its bars
-  // (Vega groups data marks under g.role-mark).
-  const dataMarks = await page.evaluate(() =>
+  const states = await page.evaluate(() =>
     Array.from(document.querySelectorAll(".m2h-vega-lite")).map(
-      (container) =>
-        container.querySelectorAll("g[class~='role-mark'] > *").length,
+      (container) => ({
+        hasSVG: container.querySelector("svg") !== null,
+        lightbox: container.dataset.m2hLightboxItem === "true" ? "on" : "off",
+        triggerHidden:
+          container
+            .closest(".m2h-vega-lite-frame")
+            ?.querySelector<HTMLButtonElement>(":scope > .m2h-lightbox-trigger")
+            ?.hidden ?? true,
+        source: container.textContent ?? "",
+        marks: container.querySelectorAll("g[class~='role-mark'] > *").length,
+      }),
     ),
   );
-  expect(dataMarks).toHaveLength(2);
-  expect(dataMarks[0]).toBe(0);
-  expect(dataMarks[1]).toBeGreaterThan(0);
+  expect(states).toHaveLength(5);
+  // The external-data charts (top-level and inside a layer) fail the
+  // self-contained preflight before any embed: source kept, no SVG, no
+  // Lightbox — the ordinary isolated-chart contract, not the empty-frame
+  // "success" Vega produces when only the loader denies the fetch.
+  expect(states[0]?.hasSVG).toBe(false);
+  expect(states[0]?.lightbox).toBe("off");
+  expect(states[0]?.triggerHidden).toBe(true);
+  expect(states[0]?.source).toContain("example.invalid/data.csv");
+  expect(states[1]?.hasSVG).toBe(false);
+  expect(states[1]?.lightbox).toBe("off");
+  expect(states[1]?.source).toContain("example.invalid/nested.json");
+  expect(
+    warnings.filter((text) => text.includes("self-contained")),
+  ).toHaveLength(2);
+
+  // The image-mark chart renders its frame — the external image itself never
+  // loads, but the chart is not an isolated failure.
+  expect(states[2]?.hasSVG).toBe(true);
+  // The hyperlink chart and the plain self-contained chart both drew marks.
+  expect(states[3]?.hasSVG).toBe(true);
+  expect(states[3]?.marks).toBeGreaterThan(0);
+  expect(states[4]?.hasSVG).toBe(true);
+  expect(states[4]?.marks).toBeGreaterThan(0);
+
+  // The chart-generated hyperlink follows the reader-wide link policy: the
+  // cross-origin click opens a new tab — not this tab — with noopener. Vega
+  // synthesizes the anchor on click and routes it through the host loader's
+  // href sanitization, which is where the target/rel policy lands. The
+  // context route fakes the unreachable origin so the popup commits and its
+  // URL can be read.
+  await page.context().route("https://example.invalid/**", (route) =>
+    route.fulfill({ status: 200, contentType: "text/html", body: "linked" }),
+  );
+  const popupPromise = page.waitForEvent("popup");
+  await page
+    .locator(".m2h-vega-lite")
+    .nth(3)
+    .locator("g[class~='role-mark'] > *")
+    .first()
+    .click();
+  const popup = await popupPromise;
+  await popup.waitForLoadState("domcontentloaded");
+  expect(popup.url()).toBe("https://example.invalid/linked");
+  // noopener: the new tab holds no window.opener reference back to the
+  // document (Playwright's popup.opener() tracks the CDP opener instead, so
+  // the probe has to run inside the popup itself).
+  expect(await popup.evaluate(() => window.opener)).toBeNull();
+  await popup.close();
+  // The reader tab stayed on the document the whole time.
+  expect(page.url()).toContain(securityPath);
 });
 
 test("repaints charts across a light → dark → light round trip", async ({

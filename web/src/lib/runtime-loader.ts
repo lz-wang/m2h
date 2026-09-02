@@ -120,18 +120,28 @@ export interface VegaLiteHostConfig {
 }
 
 // Vega's dataflow loader: `load` fetches a URI after `sanitize` vetted it.
-// m2h passes a host implementation that rejects every external resource, so
-// specs stay self-contained (data.values only) in the WebUI and exported
-// HTML alike — the same contract with or without a page CSP.
+// m2h passes a host implementation that rejects every external fetch (data,
+// config, patch, images), so specs stay self-contained (data.values only) in
+// the WebUI and exported HTML alike — the same contract with or without a
+// page CSP. The one exception is the "href" context: Vega sanitizes a chart
+// hyperlink click through the loader too, and the result's keys become
+// attributes on the anchor it synthesizes, so target/rel there is how the
+// host applies its navigation policy.
 export interface VegaLoaderRequestOptions {
   context?: string;
+}
+
+export interface VegaLoaderSanitized {
+  href: string;
+  target?: string;
+  rel?: string;
 }
 
 export interface VegaLoader {
   sanitize?(
     uri: string,
     options?: VegaLoaderRequestOptions,
-  ): Promise<{ href: string } | string>;
+  ): Promise<VegaLoaderSanitized | string>;
   load(uri: string, options?: VegaLoaderRequestOptions): Promise<string>;
 }
 

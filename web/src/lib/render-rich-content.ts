@@ -1018,19 +1018,51 @@ export function finalizeVegaLiteViews(root: HTMLElement): void {
   }
 }
 
-// Host-controlled loader that denies every external resource. Vega asks the
-// loader for data.url, string config, and string patch values; rejecting at
-// the loader keeps charts self-contained in the WebUI and exported HTML
-// alike — the same contract with or without a page CSP, instead of relying
-// on the WebUI's connect-src to block the fetch.
+// Host-controlled loader that denies every external fetch. Vega calls it in
+// three contexts: dataflow (data.url, string config and patch), image (mark
+// images), and href (hyperlink navigation). The first two are refused
+// outright — charts stay self-contained in the WebUI and exported HTML
+// alike, the same contract with or without a page CSP — while a hyperlink
+// click is navigation, not a fetch: it resolves through the same reader-wide
+// policy as Markdown links. Cross-origin HTTP(S) opens a new tab with
+// noopener; same-origin keeps the browser default; every other scheme
+// (javascript:, data:, …) is refused, so a spec can never turn a chart mark
+// into script execution. Vega writes every key of the sanitized result as an
+// attribute on the anchor it synthesizes for the click, which is how the
+// target/rel policy reaches the navigation.
 function denyExternalResource(): Promise<never> {
   return Promise.reject(
     new Error("external Vega-Lite data loading is not supported"),
   );
 }
 
+function sanitizeHyperlink(
+  uri: string,
+): Promise<{ href: string; target?: string; rel?: string }> {
+  let resolved: URL;
+  try {
+    resolved = new URL(uri, window.location.href);
+  } catch {
+    return denyExternalResource();
+  }
+  if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+    return denyExternalResource();
+  }
+  if (resolved.origin === window.location.origin) {
+    return Promise.resolve({ href: resolved.href });
+  }
+  return Promise.resolve({
+    href: resolved.href,
+    target: "_blank",
+    rel: "noopener noreferrer",
+  });
+}
+
 const denyNetworkLoader: VegaLoader = {
-  sanitize: () => denyExternalResource(),
+  sanitize: (uri, options) =>
+    options?.context === "href"
+      ? sanitizeHyperlink(uri)
+      : denyExternalResource(),
   load: () => denyExternalResource(),
 };
 
@@ -1078,6 +1110,98 @@ function parseVegaLiteSpec(source: string): Record<string, unknown> | null {
     return null;
   }
   return parsed as Record<string, unknown>;
+}
+
+// The URL of a Vega-Lite data reference, or null when `value` is not a data
+// reference that points at a URL. Data references are objects with a `url`
+// string; `values`, `name`, `graticule` and `sequence` sources carry none.
+function dataRefUrl(value: unknown): string | null {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return null;
+  }
+  const url = (value as Record<string, unknown>).url;
+  return typeof url === "string" && url !== "" ? url : null;
+}
+
+// Spec keys whose values are arrays of nested unit or composition specs.
+const COMPOSITE_SPEC_KEYS = ["layer", "concat", "hconcat", "vconcat"];
+
+// The first external data URL in a Vega-Lite spec, or null. Only the data
+// source positions Vega itself reads are inspected — the top-level `data`,
+// every entry of `datasets`, the `from.data` of lookup transforms, and the
+// same positions inside composed children (layer/concat/hconcat/vconcat and
+// the `spec` child of facet/repeat). A `url` key anywhere else (mark config,
+// descriptions, usermeta, the image/href encoding channels) is not a data
+// position and stays untouched: those flow through the loader or the link
+// policy instead of this preflight.
+function firstExternalDataUrl(spec: Record<string, unknown>): string | null {
+  const direct = dataRefUrl(spec.data);
+  if (direct !== null) {
+    return direct;
+  }
+  const datasets = spec.datasets;
+  if (typeof datasets === "object" && datasets !== null) {
+    for (const dataset of Object.values(datasets)) {
+      const url = dataRefUrl(dataset);
+      if (url !== null) {
+        return url;
+      }
+    }
+  }
+  const transform = spec.transform;
+  if (Array.isArray(transform)) {
+    for (const entry of transform) {
+      if (typeof entry !== "object" || entry === null) {
+        continue;
+      }
+      const from = (entry as Record<string, unknown>).from;
+      if (typeof from !== "object" || from === null) {
+        continue;
+      }
+      const url = dataRefUrl((from as Record<string, unknown>).data);
+      if (url !== null) {
+        return url;
+      }
+    }
+  }
+  for (const key of COMPOSITE_SPEC_KEYS) {
+    const children = spec[key];
+    if (!Array.isArray(children)) {
+      continue;
+    }
+    for (const child of children) {
+      if (typeof child !== "object" || child === null || Array.isArray(child)) {
+        continue;
+      }
+      const url = firstExternalDataUrl(child as Record<string, unknown>);
+      if (url !== null) {
+        return url;
+      }
+    }
+  }
+  const child = spec.spec;
+  if (typeof child === "object" && child !== null && !Array.isArray(child)) {
+    const url = firstExternalDataUrl(child as Record<string, unknown>);
+    if (url !== null) {
+      return url;
+    }
+  }
+  return null;
+}
+
+// Reject unsupported external data before the embed. The host loader already
+// denies every fetch, but Vega swallows a loader rejection internally and the
+// embed resolves with an empty, mark-less SVG that looks like success — it
+// would even open the Lightbox on a chart that never drew. Turning the same
+// data positions into an up-front failure gives the ordinary isolated-chart
+// contract instead: source kept, no SVG, no Lightbox trigger, one warning.
+function assertSelfContainedSpec(spec: Record<string, unknown>): void {
+  const url = firstExternalDataUrl(spec);
+  if (url !== null) {
+    throw new Error(
+      `Vega-Lite specification must be self-contained: external data.url (${url}) is not supported`,
+    );
+  }
 }
 
 // One reader-theme color, resolved from the live stylesheet so the CSS
@@ -1177,6 +1301,7 @@ async function embedVegaLiteTarget(
   try {
     const spec = parseVegaLiteSpec(source);
     if (spec !== null) {
+      assertSelfContainedSpec(spec);
       const result: VegaEmbedResult = await embed(
         target,
         withoutEmbedOptions(spec),

@@ -37,17 +37,21 @@ m2h docs/demos/vega-lite
 | 分层 / 拼接 / 分面 | 支持 |
 | 交互选择与参数 | 支持 |
 | tooltip | 支持 |
-| 远程 `data.url` | 不支持 |
+| 远程 `data.url` | 不支持（嵌入前判定，按失败隔离） |
 | 本地 `data.url` | 暂不支持 |
+| 外部图片 mark | 不支持（不加载，图表仍渲染） |
+| 图表超链接（`href` 通道） | 支持（跨站新标签打开） |
 | YAML spec | 不支持 |
 | 原生 Vega spec | 不支持 |
 | Vega-Embed 操作菜单 | 关闭（宿主策略） |
 
 ## 安全与自包含契约
 
-图表 spec 必须自包含：数据写在 `data.values` 中，运行时拒绝一切外部资源加载（`data.url`、字符串 `config`、字符串 `patch`），错误信息为 `external Vega-Lite data loading is not supported`。这个契约在 Web 文档服务与导出 HTML 中一致成立——它由宿主提供的加载器保证，而不是依赖某个页面的 CSP，因此导出的 HTML 同样不会发出任何外部数据请求。
+图表 spec 必须自包含：数据写在 `data.values` 中。引用外部数据的 spec（顶层 `data.url`、`datasets` 条目、lookup `from.data`，以及分层/拼接/分面子图表中的同类位置）在嵌入前即被判定为不支持，控制台报 `Vega-Lite specification must be self-contained`，图表按失败隔离处理——保留源码文本、不渲染 SVG、不提供放大按钮。字符串 `config`、字符串 `patch` 与外部图片 URL 则由宿主加载器在加载时拒绝（`external Vega-Lite data loading is not supported`），不会发出任何网络请求。这个契约在 Web 文档服务与导出 HTML 中一致成立——它由宿主策略保证，而不是依赖某个页面的 CSP，因此导出的 HTML 同样不会发出任何外部数据请求。
 
-文档不能覆盖宿主渲染策略：spec 中 `usermeta.embedOptions` 会被剥离，`mode`（固定 `vega-lite`）、`renderer`（固定 SVG）与 Vega-Embed 自带的导出/编辑器菜单（关闭）由 m2h 决定。
+图表超链接（`href` 编码通道）的点击是导航而不是数据加载，遵循与正文链接相同的阅读器策略：跨 origin 的 HTTP(S) 链接在新标签页打开并带 `noopener`（导出 HTML 额外带 `noreferrer`），同源链接保持浏览器默认行为，`javascript:` 等其他协议一律拒绝——spec 不能把图表 mark 变成脚本执行入口。
+
+文档不能覆盖宿主渲染策略：spec 中 `usermeta.embedOptions` 会被剥离，`mode`（固定 `vega-lite`）、`renderer`（固定 SVG）、表达式求值路径（固定 AST 解释器，页面 CSP 无需 `unsafe-eval`）与 Vega-Embed 自带的导出/编辑器菜单（关闭）由 m2h 决定。
 
 ## 主题与 Lightbox
 

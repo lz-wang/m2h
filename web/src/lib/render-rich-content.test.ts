@@ -1960,18 +1960,48 @@ describe("Vega-Lite charts", () => {
     // eval-free.
     expect(options?.ast).toBe(true);
     expect(options?.tooltip).toBe(true);
-    // The deny-network loader rejects external resources instead of relying
+    // The deny-network loader rejects external fetches instead of relying
     // on a page CSP, so the WebUI and exported HTML share one contract.
     const loader = options?.loader;
     expect(loader).toBeDefined();
     await expect(
       loader?.load("https://example.invalid/data.csv"),
     ).rejects.toThrow("external Vega-Lite data loading is not supported");
+    await expect(
+      loader?.load("https://example.invalid/data.csv", {
+        context: "dataflow",
+      }),
+    ).rejects.toThrow("external Vega-Lite data loading is not supported");
     const sanitize = loader?.sanitize;
     expect(sanitize).toBeDefined();
     await expect(sanitize?.("./sales.csv")).rejects.toThrow(
       "external Vega-Lite data loading is not supported",
     );
+    await expect(
+      sanitize?.("./sales.csv", { context: "dataflow" }),
+    ).rejects.toThrow("external Vega-Lite data loading is not supported");
+    await expect(
+      sanitize?.("https://example.invalid/badge.png", { context: "image" }),
+    ).rejects.toThrow("external Vega-Lite data loading is not supported");
+    // Hyperlink clicks are navigation, not fetches: the sanitized result's
+    // keys become the attributes of the anchor Vega synthesizes, which is
+    // how the reader link policy is expressed.
+    await expect(
+      sanitize?.("javascript:alert(1)", { context: "href" }),
+    ).rejects.toThrow("external Vega-Lite data loading is not supported");
+    await expect(
+      sanitize?.("mailto:a@b.c", { context: "href" }),
+    ).rejects.toThrow("external Vega-Lite data loading is not supported");
+    await expect(
+      sanitize?.("/doc/other.md", { context: "href" }),
+    ).resolves.toEqual({ href: `${window.location.origin}/doc/other.md` });
+    await expect(
+      sanitize?.("https://example.invalid/linked", { context: "href" }),
+    ).resolves.toEqual({
+      href: "https://example.invalid/linked",
+      target: "_blank",
+      rel: "noopener noreferrer",
+    });
   });
 
   it("strips usermeta.embedOptions so the document cannot override host policy", async () => {
@@ -2040,6 +2070,142 @@ describe("Vega-Lite charts", () => {
     });
     expect(root.querySelector("div.m2h-vega-lite")?.textContent).toBe(
       "[1, 2, 3]",
+    );
+  });
+
+  it("rejects specs whose data sources point at URLs before embedding", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    // Every data position Vega itself reads: top-level data, datasets
+    // entries, lookup from.data, and the same spots inside composed
+    // children. Vega swallows a loader denial and resolves with an empty
+    // SVG, so the preflight — not the loader — defines the failure contract.
+    const cases: Array<{
+      name: string;
+      spec: Record<string, unknown>;
+      url: string;
+    }> = [
+      {
+        name: "top-level data.url",
+        spec: {
+          data: { url: "https://example.invalid/data.csv" },
+          mark: "bar",
+        },
+        url: "https://example.invalid/data.csv",
+      },
+      {
+        name: "datasets entry url",
+        spec: {
+          datasets: { sales: { url: "https://example.invalid/sales.json" } },
+          data: { name: "sales" },
+          mark: "bar",
+        },
+        url: "https://example.invalid/sales.json",
+      },
+      {
+        name: "layer child data.url",
+        spec: {
+          layer: [
+            {
+              data: { url: "https://example.invalid/layer.csv" },
+              mark: "point",
+            },
+          ],
+        },
+        url: "https://example.invalid/layer.csv",
+      },
+      {
+        name: "concat child data.url",
+        spec: {
+          concat: [
+            {
+              data: { url: "https://example.invalid/concat.csv" },
+              mark: "point",
+            },
+          ],
+        },
+        url: "https://example.invalid/concat.csv",
+      },
+      {
+        name: "facet child data.url",
+        spec: {
+          facet: { field: "a", type: "nominal" },
+          spec: {
+            data: { url: "https://example.invalid/facet.csv" },
+            mark: "point",
+          },
+        },
+        url: "https://example.invalid/facet.csv",
+      },
+      {
+        name: "lookup transform from.data url",
+        spec: {
+          data: { values: [{ a: 1 }] },
+          transform: [
+            {
+              lookup: "a",
+              from: {
+                data: { url: "https://example.invalid/lookup.csv" },
+                key: "a",
+                fields: ["b"],
+              },
+            },
+          ],
+          mark: "point",
+        },
+        url: "https://example.invalid/lookup.csv",
+      },
+    ];
+
+    for (const testCase of cases) {
+      const source = JSON.stringify(testCase.spec);
+      const root = document.createElement("div");
+      root.innerHTML = `<pre><code class="language-vega-lite">${source}</code></pre>`;
+
+      await renderRichContent(root, "light");
+
+      const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
+      expect(container?.querySelector("svg"), testCase.name).toBeNull();
+      expect(container?.dataset.m2hLightboxItem, testCase.name).toBeUndefined();
+      expect(container?.textContent, testCase.name).toBe(source);
+      expect(vegaEmbedMock, testCase.name).not.toHaveBeenCalled();
+      expect(warnSpy, testCase.name).toHaveBeenCalledWith(
+        "Failed to render Vega-Lite chart",
+        {
+          error: new Error(
+            `Vega-Lite specification must be self-contained: external data.url (${testCase.url}) is not supported`,
+          ),
+        },
+      );
+      warnSpy.mockClear();
+    }
+  });
+
+  it("keeps non-data url fields out of the external-data preflight", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    // The image and href encoding channels, descriptions and usermeta may
+    // all carry URLs that are not data sources; those flow through the
+    // loader and the link policy instead of the preflight.
+    const spec = {
+      data: { values: [{ a: 1 }] },
+      mark: { type: "point" },
+      encoding: {
+        x: { field: "a", type: "quantitative" },
+        url: { value: "https://example.invalid/badge.png" },
+        href: { value: "https://example.invalid/linked" },
+      },
+      description: "chart about https://example.invalid/notes",
+      usermeta: { source: "https://example.invalid/source" },
+    };
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-vega-lite">${JSON.stringify(spec)}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
+    expect(root.querySelector("div.m2h-vega-lite svg")).not.toBeNull();
+    expect(warnSpy).not.toHaveBeenCalledWith(
+      "Failed to render Vega-Lite chart",
+      expect.anything(),
     );
   });
 

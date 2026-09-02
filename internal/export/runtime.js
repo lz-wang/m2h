@@ -153,11 +153,42 @@
     );
   }
 
-  // The host loader denies every external resource (data.url, string config,
-  // string patch): exported pages carry no CSP, so the self-contained spec
-  // contract must hold at the loader exactly as it does in the WebUI.
+  // The host loader denies every external fetch (data.url, string config,
+  // string patch, mark images): exported pages carry no CSP, so the
+  // self-contained spec contract must hold at the loader exactly as it does
+  // in the WebUI. Hyperlink clicks are navigation, not fetches: Vega
+  // sanitizes them through the same loader and copies every key of the
+  // result onto the anchor it synthesizes, so the reader link policy is
+  // expressed as target/rel — cross-origin HTTP(S) opens a new tab with
+  // noopener+noreferrer (there is no Referrer-Policy header out here),
+  // same-origin keeps the default, and every other scheme is refused.
+  function sanitizeHyperlink(uri) {
+    var resolved;
+    try {
+      resolved = new URL(uri, window.location.href);
+    } catch (error) {
+      return denyExternalResource();
+    }
+    if (resolved.protocol !== "http:" && resolved.protocol !== "https:") {
+      return denyExternalResource();
+    }
+    if (resolved.origin === window.location.origin) {
+      return Promise.resolve({ href: resolved.href });
+    }
+    return Promise.resolve({
+      href: resolved.href,
+      target: "_blank",
+      rel: "noopener noreferrer"
+    });
+  }
+
   var denyNetworkLoader = {
-    sanitize: function () { return denyExternalResource(); },
+    sanitize: function (uri, options) {
+      if (options && options.context === "href") {
+        return sanitizeHyperlink(uri);
+      }
+      return denyExternalResource();
+    },
     load: function () { return denyExternalResource(); }
   };
 
@@ -174,6 +205,77 @@
     });
     delete sanitized.usermeta.embedOptions;
     return sanitized;
+  }
+
+  // Preflight mirroring the WebUI renderer: reject specs whose data sources
+  // point at URLs before embedding. The loader below denies the fetch anyway,
+  // but Vega swallows a loader rejection and resolves with an empty, mark-less
+  // SVG that looks like success — the preflight restores the ordinary
+  // isolated-failure contract (source kept, one warning) instead. Only the
+  // data positions Vega reads are inspected: top-level `data`, `datasets`
+  // entries, lookup `from.data`, and the same spots inside composed children
+  // (layer/concat/hconcat/vconcat and the `spec` child of facet/repeat).
+  function dataRefUrl(value) {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return null;
+    }
+    return typeof value.url === "string" && value.url !== ""
+      ? value.url
+      : null;
+  }
+
+  var COMPOSITE_SPEC_KEYS = ["layer", "concat", "hconcat", "vconcat"];
+
+  function firstExternalDataUrl(spec) {
+    var direct = dataRefUrl(spec.data);
+    if (direct !== null) {
+      return direct;
+    }
+    if (typeof spec.datasets === "object" && spec.datasets !== null) {
+      var names = Object.keys(spec.datasets);
+      for (var n = 0; n < names.length; n++) {
+        var datasetUrl = dataRefUrl(spec.datasets[names[n]]);
+        if (datasetUrl !== null) {
+          return datasetUrl;
+        }
+      }
+    }
+    if (Array.isArray(spec.transform)) {
+      for (var t = 0; t < spec.transform.length; t++) {
+        var entry = spec.transform[t];
+        var from = entry && typeof entry === "object" ? entry.from : null;
+        if (typeof from !== "object" || from === null) {
+          continue;
+        }
+        var fromUrl = dataRefUrl(from.data);
+        if (fromUrl !== null) {
+          return fromUrl;
+        }
+      }
+    }
+    for (var k = 0; k < COMPOSITE_SPEC_KEYS.length; k++) {
+      var children = spec[COMPOSITE_SPEC_KEYS[k]];
+      if (!Array.isArray(children)) {
+        continue;
+      }
+      for (var c = 0; c < children.length; c++) {
+        var child = children[c];
+        if (typeof child !== "object" || child === null || Array.isArray(child)) {
+          continue;
+        }
+        var childUrl = firstExternalDataUrl(child);
+        if (childUrl !== null) {
+          return childUrl;
+        }
+      }
+    }
+    if (typeof spec.spec === "object" && spec.spec !== null && !Array.isArray(spec.spec)) {
+      var nestedUrl = firstExternalDataUrl(spec.spec);
+      if (nestedUrl !== null) {
+        return nestedUrl;
+      }
+    }
+    return null;
   }
 
   // Replace every vega-lite fenced block with its chart container and embed
@@ -209,6 +311,18 @@
         console.warn(
           "Failed to render Vega-Lite chart",
           new Error("Vega-Lite specification must be a JSON object")
+        );
+        return;
+      }
+      var externalUrl = firstExternalDataUrl(spec);
+      if (externalUrl !== null) {
+        console.warn(
+          "Failed to render Vega-Lite chart",
+          new Error(
+            "Vega-Lite specification must be self-contained: external data.url (" +
+              externalUrl +
+              ") is not supported"
+          )
         );
         return;
       }
