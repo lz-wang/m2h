@@ -67,6 +67,37 @@ async function waitForTreePage(
   );
 }
 
+// Grow the viewport until the tree as currently collapsed fits with margin.
+// The suite used to hard-code 1360/1440-tall viewports calibrated against the
+// fixture directory, but every root-level e2e document adds a sidebar row, so
+// each new fixture eroded the margin until the "collapse → no overflow"
+// precondition quietly broke. Measuring the real shortfall and resizing once
+// keeps the precondition true regardless of how many fixtures exist. The
+// trailing poll confirms the ScrollArea recomputed (a viewport resize is one
+// of Base UI's own recompute triggers) — the same no-overflow state the tests
+// below end in.
+const COLLAPSED_TREE_FIT_MARGIN = 96;
+
+async function fitCollapsedTreeInView(
+  page: import("@playwright/test").Page,
+): Promise<void> {
+  const metrics = await readTreeMetrics(page);
+  const shortfall = metrics.scrollHeight - metrics.clientHeight;
+  if (shortfall > -COLLAPSED_TREE_FIT_MARGIN) {
+    const size = page.viewportSize();
+    if (size === null) {
+      throw new Error("viewport size was not set");
+    }
+    await page.setViewportSize({
+      width: size.width,
+      height: size.height + shortfall + COLLAPSED_TREE_FIT_MARGIN,
+    });
+  }
+  await expect
+    .poll(async () => (await readTreeMetrics(page)).hasOverflowY)
+    .toBe(false);
+}
+
 // Is the active file row back inside the tree viewport (the re-expand reveal)?
 async function activeRowInsideViewport(
   page: import("@playwright/test").Page,
@@ -92,14 +123,16 @@ async function activeRowInsideViewport(
 test("re-measures overflow after a collapse that scrolls and resizes nothing", async ({
   page,
 }) => {
-  // 1440 tall so the fully collapsed tree (the fixture root plus tree-stress's
-  // root notes) fits the viewport with margin — the collapse below must end
-  // in a no-overflow state for the re-measure assertion to be observable. The
-  // height is calibrated against the whole fixture directory: every root-level
-  // e2e document adds a sidebar row, and at 1280 the margin was down to a
-  // single row; the security fixtures added two more rows since.
-  await page.setViewportSize({ width: 1280, height: 1440 });
+  // The collapse below must end in a no-overflow state for the re-measure
+  // assertion to be observable, so the viewport is grown until the fully
+  // collapsed tree (the fixture root plus tree-stress's root notes) fits with
+  // margin — measured at runtime instead of hard-coded, so it cannot rot with
+  // the fixture count.
+  await page.setViewportSize({ width: 1280, height: 900 });
   await waitForTreePage(page, rootFile);
+  // The deep link only expanded the fixture root (rootFile is a direct
+  // child), which is exactly the collapsed end state the test ends in.
+  await fitCollapsedTreeInView(page);
 
   // Expand level-1, then level-2-a: 40 more rows render on top of the other
   // fixtures' rows, guaranteed overflow. Nothing scrolls — every expansion
@@ -206,10 +239,18 @@ test("survives repeated nested collapse and expand cycles", async ({
 test("leaves no text pixels at the sidebar boundary after a collapse", async ({
   page,
 }) => {
-  // Same tall viewport as the re-measure test: after the collapse below the
-  // whole tree fits, so the strip is scrollbar-free.
-  await page.setViewportSize({ width: 1280, height: 1360 });
+  // Same fit-the-collapsed-tree contract as the re-measure test: after the
+  // collapse below the whole tree fits, so the strip is scrollbar-free. The
+  // viewport is calibrated by collapsing the subtree once, growing the
+  // viewport until that end state fits, then deep-linking again to restore
+  // the expanded, scrolled-under-sticky-rows state the shot starts from.
+  await page.setViewportSize({ width: 1280, height: 900 });
   await waitForTreePage(page, deepFile);
+  await page.locator(`[data-tree-path="${level1}"]`).click();
+  await expect(page.locator(`[data-tree-path="${level2a}"]`)).toBeHidden();
+  await fitCollapsedTreeInView(page);
+  await waitForTreePage(page, deepFile);
+  await expect(page.locator(`[data-tree-path="${level3}"]`)).toBeVisible();
 
   // Return to the top, then collapse the whole level-1 subtree in one commit
   // — the operation that used to leave stale fragments along the sidebar's
@@ -233,10 +274,13 @@ test("leaves no text pixels at the sidebar boundary after a collapse", async ({
       }),
   );
 
-  // A 24px vertical strip centred on the sidebar's right boundary, spanning
-  // the tree viewport's height (below the reader toolbar): deliberately
-  // text-free in this state so the baseline stays stable across platforms.
-  const clip = await page.evaluate(() => {
+  // A 24px vertical strip centred on the sidebar's right boundary, below the
+  // reader toolbar: deliberately text-free in this state so the baseline stays
+  // stable across platforms. The strip height is a fixed constant capped at
+  // the viewport — spanning the whole (fixture-count-dependent) viewport would
+  // re-couple the baseline's dimensions to the number of sidebar rows.
+  const STRIP_HEIGHT = 1024;
+  const clip = await page.evaluate((height) => {
     const sidebar = document.querySelector('[data-slot="sidebar-container"]');
     const tree = document.querySelector('[aria-label="Markdown 文件树"]');
     const viewport = tree?.closest<HTMLElement>(
@@ -254,9 +298,9 @@ test("leaves no text pixels at the sidebar boundary after a collapse", async ({
       x: sidebarRect.right - 8,
       y: viewportRect.top + 4,
       width: 24,
-      height: viewportRect.height - 8,
+      height: Math.min(viewportRect.height - 8, height),
     };
-  });
+  }, STRIP_HEIGHT);
 
   await expect(page).toHaveScreenshot("sidebar-boundary-strip.png", {
     clip,
