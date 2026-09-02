@@ -83,6 +83,11 @@ export interface VegaEmbedOptions {
   // Vega-Embed's own Export/Source/Editor menu would both duplicate m2h's UI
   // and navigate away to the external Vega Editor.
   actions: false;
+  // Evaluate chart expressions through the bundled AST interpreter instead
+  // of Vega's generated-code path (new Function). This is what keeps charts
+  // working under the page CSP's script-src 'self' — no 'unsafe-eval' — at
+  // a modest parse/dataflow cost this documentation viewer can afford.
+  ast: true;
   config?: VegaLiteHostConfig;
   loader?: VegaLoader;
   tooltip?: boolean;

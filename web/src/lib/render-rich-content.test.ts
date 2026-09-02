@@ -1956,6 +1956,9 @@ describe("Vega-Lite charts", () => {
     expect(options?.mode).toBe("vega-lite");
     expect(options?.renderer).toBe("svg");
     expect(options?.actions).toBe(false);
+    // Expressions run through the AST interpreter so the strict CSP stays
+    // eval-free.
+    expect(options?.ast).toBe(true);
     expect(options?.tooltip).toBe(true);
     // The deny-network loader rejects external resources instead of relying
     // on a page CSP, so the WebUI and exported HTML share one contract.

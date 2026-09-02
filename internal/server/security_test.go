@@ -91,7 +91,7 @@ func TestDefaultContentSecurityPolicyDirectives(t *testing.T) {
 
 	for _, directive := range []string{
 		"default-src 'self'",
-		"script-src 'self' 'unsafe-eval'",
+		"script-src 'self'",
 		"style-src 'self' 'unsafe-inline'",
 		"img-src 'self' data: blob: http: https:",
 		"media-src 'self' blob: http: https:",
@@ -108,16 +108,16 @@ func TestDefaultContentSecurityPolicyDirectives(t *testing.T) {
 			t.Errorf("default CSP is missing %q: %s", directive, defaultContentSecurityPolicy)
 		}
 	}
-	// 'unsafe-eval' is scoped to script-src alone (the Vega runtime's code
-	// generation) and never widens into style-src; inline scripts stay
-	// blocked everywhere — 'unsafe-inline' must not appear.
-	for _, forbidden := range []string{"default-src 'unsafe-eval'", "script-src 'unsafe-inline'", "style-src 'unsafe-inline' 'self' 'unsafe-eval'"} {
+	// Code evaluation stays forbidden: Vega charts run through the AST
+	// interpreter precisely so no 'unsafe-eval' is needed, and inline scripts
+	// stay blocked everywhere — 'unsafe-inline' must not reach script-src.
+	for _, forbidden := range []string{"script-src 'unsafe-eval'", "default-src 'unsafe-eval'", "script-src 'unsafe-inline'"} {
 		if containsDirective(defaultContentSecurityPolicy, forbidden) {
 			t.Errorf("default CSP must not contain %q", forbidden)
 		}
 	}
-	if !strings.Contains(defaultContentSecurityPolicy, "script-src 'self' 'unsafe-eval'; ") {
-		t.Errorf("default CSP must scope 'unsafe-eval' to script-src only: %s", defaultContentSecurityPolicy)
+	if strings.Contains(defaultContentSecurityPolicy, "unsafe-eval") {
+		t.Errorf("default CSP must not contain 'unsafe-eval' anywhere: %s", defaultContentSecurityPolicy)
 	}
 }
 

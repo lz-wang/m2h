@@ -16,9 +16,7 @@
 
 ### 新增
 
-- 新增 Vega-Lite 统计图表支持：` ```vega-lite `（别名 ` ```vegalite `）围栏代码块中的 JSON spec 在 Web 文档服务与导出 HTML 中渲染为交互式 SVG 图表（Vega 6.4.0 / Vega-Lite 6.4.3 / Vega-Embed 7.1.0，WebUI 从内嵌运行时按需加载，导出从同一版本的 jsDelivr CDN 加载，普通文档不下载任何图表运行时）。spec 必须自包含：数据写在 `data.values`，宿主提供的加载器拒绝一切外部资源（`data.url`、字符串 `config` 与 `patch` 统一报 `external Vega-Lite data loading is not supported`），该契约由加载器而非页面 CSP 保证，导出 HTML 同样不会发出外部数据请求；文档也不能通过 `usermeta.embedOptions` 重开 Vega-Embed 的导出/编辑器菜单或改写渲染器（`mode` 固定 `vega-lite`、`renderer` 固定 SVG）。无效 JSON、非对象 spec 与编译失败的图表逐图隔离——保留源码文本、不提供放大按钮、仅控制台警告，不影响同文档其他图表与 Mermaid、公式。图表外观 chrome（背景透明、坐标轴/图例/标题文字与网格）跟随阅读器主题并从主题 CSS 变量取色，作者定义的数据配色与 scale 不被覆盖，切换主题时外框与放大按钮 DOM 身份保持；图表与图片、Mermaid 按文档顺序共用同一 Lightbox。语法示例与兼容矩阵见 [Vega-Lite 演示索引](docs/demos/vega-lite/00-index.md)。
-
-- Web 文档服务的 `Content-Security-Policy` 在 `script-src` 中增加 `'unsafe-eval'`：Vega 运行时通过生成代码求值图表表达式、mark 编码与排序比较器（其固有架构），无此指令时全部图表渲染失败。`'unsafe-eval'` 只放开 `eval`/`new Function`，不放开内联 `<script>`（需 `'unsafe-inline'`，仍然禁止），Markdown raw HTML 中的内联脚本与事件处理器依旧不可执行；`connect-src 'self'` 网络边界不变，图表自包含由宿主加载器保证而非 CSP fetch 拦截。
+- 新增 Vega-Lite 统计图表支持：` ```vega-lite `（别名 ` ```vegalite `）围栏代码块中的 JSON spec 在 Web 文档服务与导出 HTML 中渲染为交互式 SVG 图表（Vega 6.4.0 / Vega-Lite 6.4.3 / Vega-Embed 7.1.0，WebUI 从内嵌运行时按需加载，导出从同一版本的 jsDelivr CDN 加载，普通文档不下载任何图表运行时）。spec 必须自包含：数据写在 `data.values`，宿主提供的加载器拒绝一切外部资源（`data.url`、字符串 `config` 与 `patch` 统一报 `external Vega-Lite data loading is not supported`），该契约由加载器而非页面 CSP 保证，导出 HTML 同样不会发出外部数据请求；文档也不能通过 `usermeta.embedOptions` 重开 Vega-Embed 的导出/编辑器菜单或改写渲染器（`mode` 固定 `vega-lite`、`renderer` 固定 SVG）。图表表达式通过 Vega-Embed 内嵌的 AST 解释器求值（`ast: true`）而非 Vega 默认的生成代码路径，WebUI 的 `Content-Security-Policy` 因此维持 `script-src 'self'` 不含 `'unsafe-eval'`，Markdown raw HTML 中的内联脚本与事件处理器依旧不可执行，导出 HTML 采用相同解释器策略。无效 JSON、非对象 spec 与编译失败的图表逐图隔离——保留源码文本、不提供放大按钮、仅控制台警告，不影响同文档其他图表与 Mermaid、公式。图表外观 chrome（背景透明、坐标轴/图例/标题文字与网格）跟随阅读器主题并从主题 CSS 变量取色，作者定义的数据配色与 scale 不被覆盖，切换主题时外框与放大按钮 DOM 身份保持；图表与图片、Mermaid 按文档顺序共用同一 Lightbox。语法示例与兼容矩阵见 [Vega-Lite 演示索引](docs/demos/vega-lite/00-index.md)。
 
 ### 修复
 

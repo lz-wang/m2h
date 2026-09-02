@@ -47,6 +47,18 @@ test("renders rich content under the strict CSP without refusals", async ({
   );
   await expect(page.getByText("Syntax error in text")).toHaveCount(0);
 
+  // The Vega-Lite chart draws real data marks through the AST interpreter:
+  // with generated-code evaluation the strict policy (no 'unsafe-eval')
+  // would refuse every expression and the chart would stay source text.
+  await page.waitForFunction(() => {
+    const container = document.querySelector(".m2h-vega-lite");
+    return (
+      container !== null &&
+      container.querySelector("svg") !== null &&
+      container.querySelectorAll("g[class~='role-mark'] > *").length > 0
+    );
+  });
+
   // KaTeX math is rendered, not left as dollar-sign source.
   await expect(page.locator(".katex").first()).toBeVisible();
   await expect(page.getByText("$E = mc^2$")).toHaveCount(0);

@@ -5,20 +5,15 @@ import "net/http"
 // defaultContentSecurityPolicy is the browser policy for m2h's own pages.
 //
 //	script-src 'self'         — every script (app bundle, Mermaid, KaTeX,
-//	                            ZenUML ESM) loads from this origin; no CDN,
-//	                            no inline script, no inline event handlers.
-//	script-src 'unsafe-eval'  — the Vega runtime compiles chart expressions,
-//	                            mark encoders, and sort comparators through
-//	                            generated code (its architecture, not an
-//	                            option); 'unsafe-eval' permits that code
-//	                            generation only. Inline <script> tags and
-//	                            event handlers stay blocked — those need
-//	                            'unsafe-inline', which remains absent — so
-//	                            raw HTML in a Markdown document still cannot
-//	                            execute anything. The network boundary
-//	                            (connect-src 'self') is untouched: charts
-//	                            stay self-contained through the host loader,
-//	                            not through CSP fetch blocking.
+//	                            ZenUML ESM, the Vega trio) loads from this
+//	                            origin; no CDN, no inline script, no inline
+//	                            event handlers, and no 'unsafe-eval': Vega
+//	                            charts run their expressions through the AST
+//	                            interpreter Vega-Embed bundles (embed option
+//	                            ast: true) instead of the runtime's
+//	                            generated-code path, so raw HTML in a
+//	                            Markdown document — or a chart spec — can
+//	                            never gain code evaluation.
 //	style-src 'unsafe-inline' — React, Mermaid and KaTeX all emit element
 //	                            styles, so inline styles stay allowed for now.
 //	img/media-src http(s:)    — Markdown legitimately embeds remote media.
@@ -32,7 +27,7 @@ const defaultContentSecurityPolicy = "default-src 'self'; " +
 	"frame-ancestors 'self'; " +
 	"form-action 'none'; " +
 	"frame-src 'none'; " +
-	"script-src 'self' 'unsafe-eval'; " +
+	"script-src 'self'; " +
 	"style-src 'self' 'unsafe-inline'; " +
 	"img-src 'self' data: blob: http: https:; " +
 	"media-src 'self' blob: http: https:; " +

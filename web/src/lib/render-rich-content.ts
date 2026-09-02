@@ -1140,12 +1140,15 @@ function vegaLiteThemeConfig(): VegaLiteHostConfig {
 // "vega-lite" — without it Vega-Embed infers from $schema and silently falls
 // back to raw Vega when both are absent — the renderer is pinned to SVG (the
 // vector pipeline Mermaid already uses: theme-aware, Lightbox-serializable),
-// and the actions menu (Export/Source/Editor) stays off.
+// and the actions menu (Export/Source/Editor) stays off. `ast` routes
+// expression evaluation through the interpreter Vega-Embed bundles, keeping
+// charts alive under the strict CSP (script-src 'self', no 'unsafe-eval').
 function vegaLiteEmbedOptions(): VegaEmbedOptions {
   return {
     mode: "vega-lite",
     renderer: "svg",
     actions: false,
+    ast: true,
     tooltip: true,
     loader: denyNetworkLoader,
     config: vegaLiteThemeConfig(),

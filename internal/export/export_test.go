@@ -414,6 +414,7 @@ func TestRunExportEmbedsVegaLiteRuntimeOnDemand(t *testing.T) {
 		`mode: "vega-lite"`,
 		`renderer: "svg"`,
 		"actions: false",
+		"ast: true",
 		"external Vega-Lite data loading is not supported",
 		"function withoutEmbedOptions(spec)",
 		"vegaLiteHostConfig",

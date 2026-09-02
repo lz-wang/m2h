@@ -217,6 +217,10 @@
           mode: "vega-lite",
           renderer: "svg",
           actions: false,
+          // Interpret chart expressions instead of letting Vega generate code
+          // (new Function): the same CSP-compatible policy as the WebUI, so
+          // exported pages behave identically wherever a strict CSP applies.
+          ast: true,
           tooltip: true,
           loader: denyNetworkLoader,
           config: vegaLiteHostConfig(dark)
