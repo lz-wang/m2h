@@ -10,6 +10,9 @@ import type {
   MathAutoRenderOptions,
   MermaidRenderResult,
   MermaidRuntime,
+  VegaEmbedOptions,
+  VegaEmbedResult,
+  VegaEmbedRuntime,
 } from "./runtime-loader";
 
 interface MermaidRunOptions {
@@ -42,11 +45,32 @@ const loadKatexMock = vi.hoisted(() =>
 
 const loadTablesortMock = vi.hoisted(() => vi.fn());
 
+// Mirrors the real vegaEmbed contract closely enough for the enhancement
+// layer: the container's content is replaced wholesale with the rendered
+// visual, and the resolved result exposes finalize for lifecycle tests.
+const vegaEmbedMock = vi.hoisted(() =>
+  vi.fn<
+    (
+      element: HTMLElement,
+      spec: object,
+      options: VegaEmbedOptions,
+    ) => Promise<VegaEmbedResult>
+  >(async (element: HTMLElement) => {
+    element.innerHTML = '<svg data-mock="vega-lite"></svg>';
+    return { view: {}, finalize: vi.fn() };
+  }),
+);
+
+const loadVegaLiteMock = vi.hoisted(() =>
+  vi.fn(async (): Promise<VegaEmbedRuntime> => vegaEmbedMock),
+);
+
 vi.mock("./runtime-loader", () => ({
   loadMermaid: loadMermaidMock,
   loadKatex: loadKatexMock,
   loadTablesort: loadTablesortMock,
   ensureZenUMLRegistered: ensureZenUMLRegisteredMock,
+  loadVegaLite: loadVegaLiteMock,
 }));
 
 // The vendored tablesort bundles, concatenated in the same order the runtime
@@ -91,9 +115,15 @@ describe("renderRichContent", () => {
     ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
+    loadVegaLiteMock.mockClear();
+    vegaEmbedMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({
       svg: '<svg data-mock="mermaid"></svg>',
+    });
+    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
+      element.innerHTML = '<svg data-mock="vega-lite"></svg>';
+      return { view: {}, finalize: vi.fn() };
     });
   });
 
@@ -1842,3 +1872,231 @@ function replaceProperty(
     Object.defineProperty(target, property, descriptor);
   };
 }
+
+describe("Vega-Lite charts", () => {
+  const VALID_SPEC = JSON.stringify({
+    $schema: "https://vega.github.io/schema/vega-lite/v6.json",
+    data: { values: [{ month: "Jan", revenue: 120 }] },
+    mark: "bar",
+    encoding: {
+      x: { field: "month", type: "nominal" },
+      y: { field: "revenue", type: "quantitative" },
+    },
+  });
+
+  let warnSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.resetModules();
+    loadVegaLiteMock.mockClear();
+    vegaEmbedMock.mockClear();
+    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
+      element.innerHTML = '<svg data-mock="vega-lite"></svg>';
+      return { view: {}, finalize: vi.fn() };
+    });
+    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warnSpy.mockRestore();
+  });
+
+  it("replaces vega-lite code blocks with an embedded SVG chart", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
+    expect(container).not.toBeNull();
+    expect(container?.innerHTML).toContain('data-mock="vega-lite"');
+    expect(root.querySelector("pre")).toBeNull();
+    expect(root.querySelector("code.language-vega-lite")).toBeNull();
+    // Charts never grow a code frame, gutter, or copy control either.
+    expect(root.querySelector(".m2h-code-frame")).toBeNull();
+
+    const frame = root.querySelector(
+      ".m2h-rich-visual-frame.m2h-vega-lite-frame",
+    );
+    expect(frame).not.toBeNull();
+    const trigger = frame?.querySelector<HTMLButtonElement>(
+      ":scope > .m2h-lightbox-trigger",
+    );
+    expect(trigger?.hidden).toBe(false);
+    expect(container?.dataset.m2hLightboxItem).toBe("true");
+    expect(trigger?.getAttribute("aria-label")).toBe("查看 Vega-Lite 图表");
+  });
+
+  it("renders the vegalite alias through the same path", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-vegalite">${VALID_SPEC}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    expect(root.querySelector("div.m2h-vega-lite svg")).not.toBeNull();
+    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("embeds with pinned host policy options", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
+    const [, , options] = vegaEmbedMock.mock.calls[0] ?? [];
+    expect(options?.mode).toBe("vega-lite");
+    expect(options?.renderer).toBe("svg");
+    expect(options?.actions).toBe(false);
+    expect(options?.tooltip).toBe(true);
+    // The deny-network loader rejects external resources instead of relying
+    // on a page CSP, so the WebUI and exported HTML share one contract.
+    const loader = options?.loader;
+    expect(loader).toBeDefined();
+    await expect(
+      loader?.load("https://example.invalid/data.csv"),
+    ).rejects.toThrow("external Vega-Lite data loading is not supported");
+    const sanitize = loader?.sanitize;
+    expect(sanitize).toBeDefined();
+    await expect(sanitize?.("./sales.csv")).rejects.toThrow(
+      "external Vega-Lite data loading is not supported",
+    );
+  });
+
+  it("strips usermeta.embedOptions so the document cannot override host policy", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const spec = JSON.parse(VALID_SPEC) as Record<string, unknown>;
+    spec.usermeta = {
+      embedOptions: {
+        actions: true,
+        renderer: "canvas",
+        editorUrl: "https://evil.example",
+      },
+      note: "author data",
+    };
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-vega-lite">${JSON.stringify(spec)}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    const [element, embedded] = vegaEmbedMock.mock.calls[0] ?? [];
+    expect(element.classList.contains("m2h-vega-lite")).toBe(true);
+    const embeddedSpec = embedded as Record<string, unknown>;
+    const usermeta = embeddedSpec.usermeta as Record<string, unknown>;
+    expect("embedOptions" in usermeta).toBe(false);
+    expect(usermeta.note).toBe("author data");
+  });
+
+  it("isolates an invalid JSON spec and keeps its source text", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-vega-lite">{ not json</code></pre>' +
+      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    const containers =
+      root.querySelectorAll<HTMLDivElement>("div.m2h-vega-lite");
+    expect(containers).toHaveLength(2);
+    // The broken chart keeps its source, gains no SVG, no marker, and a
+    // hidden trigger; the valid one after it still renders.
+    expect(containers[0]?.textContent).toBe("{ not json");
+    expect(containers[0]?.querySelector("svg")).toBeNull();
+    expect(containers[0]?.dataset.m2hLightboxItem).toBeUndefined();
+    const firstTrigger = containers[0]
+      ?.closest(".m2h-vega-lite-frame")
+      ?.querySelector<HTMLButtonElement>(":scope > .m2h-lightbox-trigger");
+    expect(firstTrigger?.hidden).toBe(true);
+    expect(containers[1]?.querySelector("svg")).not.toBeNull();
+    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
+    expect(warnSpy).toHaveBeenCalledWith("Failed to render Vega-Lite chart", {
+      error: new Error("Vega-Lite specification must be valid JSON"),
+    });
+  });
+
+  it("rejects a JSON array instead of a spec object", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-vega-lite">[1, 2, 3]</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    expect(vegaEmbedMock).not.toHaveBeenCalled();
+    expect(warnSpy).toHaveBeenCalledWith("Failed to render Vega-Lite chart", {
+      error: new Error("Vega-Lite specification must be a JSON object"),
+    });
+    expect(root.querySelector("div.m2h-vega-lite")?.textContent).toBe(
+      "[1, 2, 3]",
+    );
+  });
+
+  it("restores the source and keeps going when the embed rejects", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    vegaEmbedMock.mockRejectedValueOnce(new Error("compile failed"));
+    const root = document.createElement("div");
+    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
+
+    await renderRichContent(root, "light");
+
+    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
+    expect(container?.textContent).toBe(VALID_SPEC);
+    expect(container?.dataset.m2hLightboxItem).toBeUndefined();
+    expect(warnSpy).toHaveBeenCalledWith("Failed to render Vega-Lite chart", {
+      error: new Error("compile failed"),
+    });
+  });
+
+  it("does not load the Vega-Lite runtime without chart blocks", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<pre><code class="language-go">func main()</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    expect(loadVegaLiteMock).not.toHaveBeenCalled();
+  });
+
+  it("does not load the Vega-Lite runtime for Mermaid-only documents", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+
+    await renderRichContent(root, "light");
+
+    expect(loadVegaLiteMock).not.toHaveBeenCalled();
+    expect(vegaEmbedMock).not.toHaveBeenCalled();
+  });
+
+  it("finalizes and aborts remaining charts when the render goes stale", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const finalize = vi.fn();
+    // The document goes away as soon as the first embed settles: the next
+    // freshness check reports stale, so that result is finalized and the
+    // second chart is never embedded.
+    let current = true;
+    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
+      element.innerHTML = '<svg data-mock="vega-lite"></svg>';
+      current = false;
+      return { view: {}, finalize };
+    });
+    const root = document.createElement("div");
+    root.innerHTML =
+      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>` +
+      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
+
+    await renderRichContent(root, "light", () => current);
+
+    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
+    expect(finalize).toHaveBeenCalledTimes(1);
+    const containers =
+      root.querySelectorAll<HTMLDivElement>("div.m2h-vega-lite");
+    // The aborted chart keeps its source text instead of an SVG.
+    expect(containers[1]?.textContent).toBe(VALID_SPEC);
+  });
+});

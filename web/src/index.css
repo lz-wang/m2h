@@ -668,6 +668,34 @@ body,
   height: auto;
 }
 
+/*
+ * Vega-Lite chart frame, injected by render-rich-content.ts around every
+ * rendered chart. Same structure and contract as the Mermaid frame above
+ * (shared m2h-rich-visual-frame class plus this engine-specific one); the
+ * chart container keeps Vega-Embed's output centered and horizontally
+ * scrollable like a diagram, and holds the JSON source text until the embed
+ * succeeds (and again after a failed re-embed).
+ */
+.markdown-body .m2h-vega-lite-frame {
+  position: relative;
+  margin: 1rem 0;
+}
+
+.markdown-body .m2h-vega-lite {
+  margin: 1rem 0;
+  overflow-x: auto;
+  text-align: center;
+}
+
+.markdown-body .m2h-vega-lite-frame > .m2h-vega-lite {
+  margin: 0;
+}
+
+.markdown-body .m2h-vega-lite svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .markdown-body .katex-display {
   overflow-x: auto;
   overflow-y: hidden;

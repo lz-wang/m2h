@@ -1,19 +1,20 @@
 // Rich-content enhancement for rendered Markdown HTML.
 //
 // m2h keeps its Markdown parser on stable GFM/CommonMark semantics; math,
-// diagram, and sortable-table support is an HTML presentation layer applied
-// after the browser receives the body. This module is the single entry point
-// so callers never have to know about KaTeX, Mermaid, or Tablesort
-// individually.
+// diagram, chart, and sortable-table support is an HTML presentation layer
+// applied after the browser receives the body. This module is the single
+// entry point so callers never have to know about KaTeX, Mermaid, Vega-Lite,
+// or Tablesort individually.
 //
-// Mermaid runs before KaTeX so KaTeX never scans raw diagram source code.
-// ZenUML diagrams additionally register Mermaid's external-diagram plugin
-// before anything initializes — Mermaid Core alone does not know the `zenuml`
-// diagram type. Tables sort last so the caller's scroll restore lands on the
-// fully enhanced DOM; the sortable-header geometry itself is reserved
-// statically in the stylesheet, so the enhancement never shifts layout. All
-// runtimes are the shared /runtime/* assets the document server embeds,
-// loaded through the runtime loader only when the document actually uses them.
+// Mermaid and Vega-Lite run before KaTeX so KaTeX never scans raw diagram
+// or chart source code. ZenUML diagrams additionally register Mermaid's
+// external-diagram plugin before anything initializes — Mermaid Core alone
+// does not know the `zenuml` diagram type. Tables sort last so the caller's
+// scroll restore lands on the fully enhanced DOM; the sortable-header
+// geometry itself is reserved statically in the stylesheet, so the
+// enhancement never shifts layout. All runtimes are the shared /runtime/*
+// assets the document server embeds, loaded through the runtime loader only
+// when the document actually uses them.
 
 import type { ResolvedMode } from "../model";
 import { copyText } from "./clipboard";
@@ -22,9 +23,14 @@ import {
   loadKatex,
   loadMermaid,
   loadTablesort,
+  loadVegaLite,
   type MathAutoRenderDelimiter,
   type MermaidRuntime,
   type TablesortConstructor,
+  type VegaEmbedOptions,
+  type VegaEmbedResult,
+  type VegaEmbedRuntime,
+  type VegaLoader,
 } from "./runtime-loader";
 
 const COPY_ICON =
@@ -142,11 +148,23 @@ export async function renderRichContent(
   // Kick the Tablesort download off before awaiting Mermaid/KaTeX so all
   // needed runtimes load in parallel; the tables themselves are enhanced only
   // after those settle. The reserved indicator space is static CSS, so the
-  // enhancement itself never changes table geometry.
+  // enhancement itself never changes table geometry. The Vega-Lite trio
+  // downloads alongside them the same way.
   const tablesortLoad = hasSortableTables(root) ? loadTablesort() : null;
+  const vegaLiteLoad = hasVegaLiteBlocks(root) ? loadVegaLite() : null;
   if (hasMermaidBlocks(root)) {
     const mermaid = await prepareMermaid(mode, hasZenUMLBlocks(root));
     await renderMermaid(mermaid, root, mode, isCurrent);
+  }
+  if (isCurrent !== undefined && !isCurrent()) {
+    return;
+  }
+  if (vegaLiteLoad !== null) {
+    const embed = await vegaLiteLoad;
+    if (isCurrent !== undefined && !isCurrent()) {
+      return;
+    }
+    await renderVegaLiteBlocks(embed, root, isCurrent);
   }
   if (isCurrent !== undefined && !isCurrent()) {
     return;
@@ -171,6 +189,16 @@ export async function renderRichContent(
 
 function hasMermaidBlocks(root: HTMLElement): boolean {
   return root.querySelector("pre > code.language-mermaid") !== null;
+}
+
+// Vega-Lite charts are fenced blocks whose JSON spec must be self-contained
+// (data.values only; the loader below denies every external resource). The
+// canonical fence language is `vega-lite`; `vegalite` is accepted as an alias.
+const VEGA_LITE_CODE_SELECTOR =
+  "pre > code.language-vega-lite, pre > code.language-vegalite";
+
+function hasVegaLiteBlocks(root: HTMLElement): boolean {
+  return root.querySelector(VEGA_LITE_CODE_SELECTOR) !== null;
 }
 
 // Mirrors the official plugin's own detector (/^\s*zenuml/): a diagram counts
@@ -835,7 +863,7 @@ async function paintMermaidTarget(
       error,
     });
   }
-  syncMermaidLightboxAvailability(target);
+  syncRichVisualLightboxAvailability(target);
   return true;
 }
 
@@ -847,15 +875,17 @@ function getMermaidDiagramType(source: string): string {
   return type === "" ? "unknown" : type;
 }
 
-// Whether a diagram may open the Lightbox is a function of its rendered SVG,
+// Whether a visual may open the Lightbox is a function of its rendered SVG,
 // never of the frame's existence. After every paint attempt — success or
 // failure — the marker and the trigger are brought in line with the SVG's
-// presence: a diagram that never rendered offers no magnifier (a click would
+// presence: a visual that never rendered offers no magnifier (a click would
 // snapshot nothing), while a failed theme repaint keeps the previous SVG and
 // with it a still-working Lightbox. This is deliberately more correct than
 // deleting the trigger on failure: it covers the first-render and re-render
-// cases with one rule.
-function syncMermaidLightboxAvailability(target: HTMLElement): void {
+// cases with one rule. Shared by every rich-visual engine: the container
+// sits inside a m2h-rich-visual-frame and holds an SVG exactly when its
+// engine's last paint succeeded.
+function syncRichVisualLightboxAvailability(target: HTMLElement): void {
   const available = target.querySelector("svg") !== null;
 
   if (available) {
@@ -955,6 +985,169 @@ export async function rerenderMermaid(
       continue;
     }
     if (!(await paintMermaidTarget(mermaid, target, source, mode, isCurrent))) {
+      return;
+    }
+  }
+}
+
+// Each chart's JSON source, retained like the Mermaid sources in a WeakMap:
+// the spec text can be long, and keeping it out of data-* attributes lets a
+// theme re-render (see the Vega-Lite rerender in the theme path) re-embed
+// without re-parsing the document body.
+const vegaLiteSources = new WeakMap<HTMLElement, string>();
+
+// Host-controlled loader that denies every external resource. Vega asks the
+// loader for data.url, string config, and string patch values; rejecting at
+// the loader keeps charts self-contained in the WebUI and exported HTML
+// alike — the same contract with or without a page CSP, instead of relying
+// on the WebUI's connect-src to block the fetch.
+function denyExternalResource(): Promise<never> {
+  return Promise.reject(
+    new Error("external Vega-Lite data loading is not supported"),
+  );
+}
+
+const denyNetworkLoader: VegaLoader = {
+  sanitize: () => denyExternalResource(),
+  load: () => denyExternalResource(),
+};
+
+// The embed options are host policy, never document content. Vega-Embed
+// merges spec.usermeta.embedOptions over the caller's options, so leaving
+// that key in place would let a Markdown document reopen the actions menu,
+// switch the renderer, or aim editorUrl/loader at another origin. The rest
+// of usermeta is author data and stays untouched.
+function withoutEmbedOptions(
+  spec: Record<string, unknown>,
+): Record<string, unknown> {
+  const usermeta = spec.usermeta;
+  if (
+    typeof usermeta !== "object" ||
+    usermeta === null ||
+    !("embedOptions" in usermeta)
+  ) {
+    return spec;
+  }
+  const sanitized: Record<string, unknown> = {
+    ...spec,
+    usermeta: { ...(usermeta as Record<string, unknown>) },
+  };
+  delete (sanitized.usermeta as Record<string, unknown>).embedOptions;
+  return sanitized;
+}
+
+// Parse one chart's JSON spec. Returns null when the source is not a JSON
+// object, so the failure isolates to this single block; the warning carries
+// the same shape as the render failures below to keep the console uniform.
+function parseVegaLiteSpec(source: string): Record<string, unknown> | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(source);
+  } catch {
+    console.warn("Failed to render Vega-Lite chart", {
+      error: new Error("Vega-Lite specification must be valid JSON"),
+    });
+    return null;
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    console.warn("Failed to render Vega-Lite chart", {
+      error: new Error("Vega-Lite specification must be a JSON object"),
+    });
+    return null;
+  }
+  return parsed as Record<string, unknown>;
+}
+
+// Build the host policy every embed call carries. `mode` is pinned to
+// "vega-lite" — without it Vega-Embed infers from $schema and silently falls
+// back to raw Vega when both are absent — the renderer is pinned to SVG (the
+// vector pipeline Mermaid already uses: theme-aware, Lightbox-serializable),
+// and the actions menu (Export/Source/Editor) stays off.
+function vegaLiteEmbedOptions(): VegaEmbedOptions {
+  return {
+    mode: "vega-lite",
+    renderer: "svg",
+    actions: false,
+    tooltip: true,
+    loader: denyNetworkLoader,
+  };
+}
+
+// Embed one chart and, like the Mermaid paints, isolate its failure: a chart
+// that fails keeps its JSON source (restored explicitly — Vega-Embed clears
+// the container before rendering, so a late failure would otherwise leave an
+// empty frame), gets no Lightbox marker, and never breaks the next chart.
+// Returns false when the render is no longer current, telling the caller to
+// abort the remaining targets.
+async function embedVegaLiteTarget(
+  embed: VegaEmbedRuntime,
+  target: HTMLElement,
+  source: string,
+  isCurrent?: () => boolean,
+): Promise<boolean> {
+  try {
+    const spec = parseVegaLiteSpec(source);
+    if (spec !== null) {
+      const result: VegaEmbedResult = await embed(
+        target,
+        withoutEmbedOptions(spec),
+        vegaLiteEmbedOptions(),
+      );
+      if (isCurrent !== undefined && !isCurrent()) {
+        result.finalize();
+        return false;
+      }
+    }
+  } catch (error) {
+    // Restore the source text: the container is the only place the spec is
+    // visible, and the failure is already reported below.
+    target.textContent = source;
+    console.warn("Failed to render Vega-Lite chart", { error });
+  }
+  syncRichVisualLightboxAvailability(target);
+  return true;
+}
+
+async function renderVegaLiteBlocks(
+  embed: VegaEmbedRuntime,
+  root: HTMLElement,
+  isCurrent?: () => boolean,
+): Promise<void> {
+  const targets: HTMLElement[] = [];
+  for (const code of root.querySelectorAll<HTMLElement>(
+    VEGA_LITE_CODE_SELECTOR,
+  )) {
+    const pre = code.parentElement;
+    if (!(pre instanceof HTMLPreElement)) {
+      continue;
+    }
+    const source = code.textContent ?? "";
+    const container = document.createElement("div");
+    container.className = "m2h-vega-lite";
+    container.textContent = source;
+    // No Lightbox marker yet: syncRichVisualLightboxAvailability stamps it
+    // only once an embed has really produced an SVG.
+    vegaLiteSources.set(container, source);
+
+    // The same stable frame contract as Mermaid: the container's content is
+    // owned by vegaEmbed (and replaced wholesale on re-embeds), so the
+    // trigger survives every repaint outside the container. It starts
+    // hidden — until the first embed succeeds there is nothing to enlarge.
+    const trigger = createLightboxTrigger("查看 Vega-Lite 图表");
+    trigger.hidden = true;
+    const frame = document.createElement("div");
+    frame.className = "m2h-rich-visual-frame m2h-vega-lite-frame";
+    pre.replaceWith(frame);
+    frame.append(container, trigger);
+    targets.push(container);
+  }
+
+  for (const target of targets) {
+    const source = vegaLiteSources.get(target);
+    if (source === undefined) {
+      continue;
+    }
+    if (!(await embedVegaLiteTarget(embed, target, source, isCurrent))) {
       return;
     }
   }

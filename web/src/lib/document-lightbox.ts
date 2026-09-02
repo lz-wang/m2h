@@ -37,8 +37,9 @@ export interface LightboxState {
 }
 
 // The marker the enhancement layer stamps on every Lightbox-eligible element
-// (an <img> or a rendered .mermaid container). One marker for both kinds keeps
-// the click-time collection a single query in DOM order.
+// (an <img> or a rendered visual container — a Mermaid diagram or a Vega-Lite
+// chart). One marker for all kinds keeps the click-time collection a single
+// query in DOM order.
 const LIGHTBOX_ITEM_SELECTOR = '[data-m2h-lightbox-item="true"]';
 
 // Snapshot the body's Lightbox items in *current* DOM order and locate the
@@ -92,6 +93,11 @@ function snapshotLightboxItem(element: HTMLElement): LightboxItem | null {
       alt: element.alt,
       title: element.title || null,
     };
+  }
+  // Non-image items are the enhanced visual containers; their class names
+  // the engine, which picks the snapshot's kind and alt text.
+  if (element.classList.contains("m2h-vega-lite")) {
+    return snapshotSVGVisual(element, "vega-lite", "Vega-Lite 图表");
   }
   return snapshotSVGVisual(element, "mermaid", "Mermaid 图表");
 }
