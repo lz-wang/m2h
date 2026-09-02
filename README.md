@@ -11,9 +11,9 @@
 - 直接浏览 Markdown 文件、目录或多个文档目录
 - 文件树、搜索、文档目录、主题和正文宽度切换
 - 支持分享文档链接、Markdown 链接和 Markdown 全文
-- 支持 GFM、语法高亮、数学公式、Mermaid、脚注、Emoji 和 GitHub Alerts
+- 支持 GFM、语法高亮、数学公式、Mermaid、Vega-Lite 统计图表、脚注、Emoji 和 GitHub Alerts
 - 支持 [Frontmatter 标题与日期元数据](docs/demos/frontmatter/00-index.md)、可排序表格、代码行号与长代码块折叠
-- 图片与 Mermaid 图表支持 Lightbox 查看，可切换、通过工具栏或鼠标滚轮平滑缩放、拖动和旋转
+- 图片、Mermaid 图表与 Vega-Lite 图表支持 Lightbox 查看，可切换、通过工具栏或鼠标滚轮平滑缩放、拖动和旋转
 - 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
 - 输入 root 即发布边界：目录服务隐藏点开头路径，附件路由拒绝 HTML/JS/CSS 等主动 Web 内容，响应携带统一浏览器安全头
 - 可将单个 Markdown 文件导出为 HTML
@@ -136,7 +136,7 @@ m2h export README.md -o index.html
 m2h export README.md --force
 ```
 
-导出的 HTML 内联 Markdown 页面样式；数学公式、Mermaid 和表格排序等
+导出的 HTML 内联 Markdown 页面样式；数学公式、Mermaid、Vega-Lite 和表格排序等
 增强功能按需加载网络资源。
 
 查看全部选项：
@@ -194,12 +194,12 @@ m2h 支持常用 GFM Markdown，并提供以下扩展：
 | 类别 | 支持内容与演示 |
 | --- | --- |
 | GitHub 风格 | 语法高亮、标题锚点、脚注、Emoji、GitHub Alerts 与可排序表格 |
-| 富内容 | 数学公式（`$...$` / `$$...$$`，金额保持普通文本）、Mermaid 与 ZenUML |
+| 富内容 | 数学公式（`$...$` / `$$...$$`，金额保持普通文本）、Mermaid 与 ZenUML、[Vega-Lite 统计图表](docs/demos/vega-lite/00-index.md)（自包含 JSON spec） |
 | 元数据 | YAML Frontmatter；标题、日期别名和回退规则见 [Frontmatter 演示](docs/demos/frontmatter/00-index.md) |
 | 本地引用 | 当前文档相对路径与 `/` 开头的当前 root 相对路径；检查行为见 [本地目标演示](docs/demos/checkers/02-local-target-missing.md) |
 | 行内扩展 | `==高亮==`、`^^插入^^` 与 [`++ctrl+alt+del++` 键盘按键](docs/demos/pymarkdown/keyboards.md) |
 | 协作标记 | [Critic Markup 行内与块级语法](docs/demos/pymarkdown/critic.md) |
-| WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开，以及图片和 Mermaid Lightbox（支持滚轮平滑缩放） |
+| WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开，以及图片、Mermaid 与 Vega-Lite 图表 Lightbox（支持滚轮平滑缩放） |
 
 ## 许可证
 
