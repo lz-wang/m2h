@@ -57,8 +57,8 @@ beforeEach(() => {
   delete document.documentElement.dataset.mode;
   vi.clearAllMocks();
   initialGates.length = 0;
-  renderRichContentMock.mockImplementation((_root, _mode, isCurrent) => {
-    latestInitialIsCurrent = isCurrent;
+  renderRichContentMock.mockImplementation((_root, options) => {
+    latestInitialIsCurrent = options.isCurrent;
     return new Promise<void>((resolve) => {
       initialGates.push({ resolve });
     });
@@ -139,8 +139,11 @@ describe("theme repaint scheduling", () => {
     });
     expect(rerenderThemeSensitiveContentMock).toHaveBeenCalledWith(
       expect.any(HTMLElement),
-      "dark",
-      expect.any(Function),
+      {
+        mode: "dark",
+        isCurrent: expect.any(Function),
+        onVisualError: expect.any(Function),
+      },
     );
   });
 
@@ -168,8 +171,11 @@ describe("theme repaint scheduling", () => {
     await waitFor(() => {
       expect(rerenderThemeSensitiveContentMock).toHaveBeenCalledWith(
         expect.any(HTMLElement),
-        "dark",
-        expect.any(Function),
+        {
+          mode: "dark",
+          isCurrent: expect.any(Function),
+          onVisualError: expect.any(Function),
+        },
       );
     });
   });
@@ -209,8 +215,11 @@ describe("theme repaint scheduling", () => {
     });
     expect(rerenderThemeSensitiveContentMock).toHaveBeenLastCalledWith(
       expect.any(HTMLElement),
-      "light",
-      expect.any(Function),
+      {
+        mode: "light",
+        isCurrent: expect.any(Function),
+        onVisualError: expect.any(Function),
+      },
     );
   });
 

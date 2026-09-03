@@ -133,7 +133,7 @@ describe("renderRichContent", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const container = root.querySelector("div.mermaid");
     expect(container).not.toBeNull();
@@ -158,7 +158,7 @@ describe("renderRichContent", () => {
     const root = document.createElement("div");
     root.innerHTML = '<pre><code class="language-go">func main()</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(root.querySelector("pre")).not.toBeNull();
     expect(root.querySelector("div.mermaid")).toBeNull();
@@ -174,7 +174,7 @@ describe("renderRichContent", () => {
     const root = document.createElement("div");
     root.innerHTML = "<p>plain text and $math$ only</p>";
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(loadMermaidMock).not.toHaveBeenCalled();
     expect(loadKatexMock).toHaveBeenCalledTimes(1);
@@ -186,7 +186,7 @@ describe("renderRichContent", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(loadMermaidMock).toHaveBeenCalledTimes(1);
     expect(loadKatexMock).not.toHaveBeenCalled();
@@ -197,7 +197,7 @@ describe("renderRichContent", () => {
     const root = document.createElement("div");
     root.innerHTML = "<h2>heading</h2><p>paragraph without delimiters</p>";
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(loadMermaidMock).not.toHaveBeenCalled();
     expect(loadKatexMock).not.toHaveBeenCalled();
@@ -215,7 +215,7 @@ describe("renderRichContent", () => {
       root.innerHTML =
         '<pre><code class="language-go">func main()</code></pre>';
 
-      await renderRichContent(root, "light");
+      await renderRichContent(root, { mode: "light" });
 
       const button = root.querySelector<HTMLButtonElement>(".m2h-code-copy");
       if (button === null) {
@@ -272,7 +272,7 @@ describe("renderRichContent", () => {
       root.innerHTML =
         "<pre><code>first</code></pre><pre><code>second</code></pre>";
 
-      await renderRichContent(root, "light");
+      await renderRichContent(root, { mode: "light" });
 
       const buttons =
         root.querySelectorAll<HTMLButtonElement>(".m2h-code-copy");
@@ -301,7 +301,7 @@ describe("renderRichContent", () => {
     const root = document.createElement("div");
     root.innerHTML = '<code class="language-mermaid">graph TD</code>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(mermaidMock.run).not.toHaveBeenCalled();
     expect(root.querySelector("code.language-mermaid")).not.toBeNull();
@@ -312,7 +312,7 @@ describe("renderRichContent", () => {
     const root = document.createElement("div");
     root.textContent = "$E=mc^2$";
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
     const [element, options] = renderMathInElementMock.mock.calls[0];
@@ -339,7 +339,7 @@ describe("renderRichContent", () => {
       "第一次裸跑，20 分钟花了 $9，公式 $E=mc^2$，第二次 6 小时花了 $200。";
     root.textContent = source;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
     expect(root.textContent).toBe(source);
@@ -369,7 +369,7 @@ describe("renderRichContent", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre><p>$E=mc^2$</p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(order).toEqual(["mermaid", "katex"]);
   });
@@ -380,7 +380,7 @@ describe("renderRichContent", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(mermaidMock.initialize).toHaveBeenCalledWith({
       startOnLoad: false,
@@ -394,13 +394,13 @@ describe("renderRichContent", () => {
     const lightRoot = document.createElement("div");
     lightRoot.innerHTML =
       '<pre><code class="language-mermaid">graph TD</code></pre>';
-    await renderRichContent(lightRoot, "light");
+    await renderRichContent(lightRoot, { mode: "light" });
 
     // Re-rendering the same light theme must not reconfigure Mermaid.
     const lightRepeat = document.createElement("div");
     lightRepeat.innerHTML =
       '<pre><code class="language-mermaid">graph TD</code></pre>';
-    await renderRichContent(lightRepeat, "light");
+    await renderRichContent(lightRepeat, { mode: "light" });
     expect(mermaidMock.initialize).toHaveBeenCalledTimes(1);
 
     // Switching to dark flips the official theme and re-runs initialize so the
@@ -408,7 +408,7 @@ describe("renderRichContent", () => {
     const darkRoot = document.createElement("div");
     darkRoot.innerHTML =
       '<pre><code class="language-mermaid">graph TD</code></pre>';
-    await renderRichContent(darkRoot, "dark");
+    await renderRichContent(darkRoot, { mode: "dark" });
 
     expect(mermaidMock.initialize).toHaveBeenCalledTimes(2);
     expect(mermaidMock.initialize).toHaveBeenNthCalledWith(1, {
@@ -431,7 +431,7 @@ describe("renderRichContent", () => {
 
     // Mermaid runs (the mock resolves), but the render is no longer current, so
     // KaTeX must not scan the now-stale root.
-    await renderRichContent(root, "light", () => false);
+    await renderRichContent(root, { mode: "light", isCurrent: () => false });
 
     expect(mermaidMock.render).toHaveBeenCalledTimes(1);
     expect(renderMathInElementMock).not.toHaveBeenCalled();
@@ -443,7 +443,7 @@ describe("renderRichContent", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre><p>$E=mc^2$</p>';
 
-    await renderRichContent(root, "light", () => true);
+    await renderRichContent(root, { mode: "light", isCurrent: () => true });
 
     expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
   });
@@ -454,7 +454,7 @@ describe("renderRichContent", () => {
     root.innerHTML =
       '<h1 id="title">Title</h1><h2 id="section">Section</h2><h3>no id</h3>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const h1Anchor = root.querySelector<HTMLAnchorElement>(
       "h1#title > .m2h-heading-anchor",
@@ -479,8 +479,8 @@ describe("renderRichContent", () => {
     const root = document.createElement("div");
     root.innerHTML = '<h2 id="install">Install</h2>';
 
-    await renderRichContent(root, "light");
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
+    await renderRichContent(root, { mode: "light" });
 
     expect(
       root.querySelectorAll("h2#install > .m2h-heading-anchor"),
@@ -516,7 +516,7 @@ describe("collapsible code blocks", () => {
       `<pre><code class="language-go">${codeLines(25)}</code></pre>` +
       `<pre><code class="language-go">${codeLines(25)}\n</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(root.querySelectorAll(".m2h-code-block")).toHaveLength(0);
     expect(root.querySelectorAll(".m2h-code-toggle")).toHaveLength(0);
@@ -533,7 +533,7 @@ describe("collapsible code blocks", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-go">${codeLines(26)}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const wrapper = root.querySelector<HTMLElement>(".m2h-code-block");
     expect(wrapper).not.toBeNull();
@@ -563,7 +563,7 @@ describe("collapsible code blocks", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-go">${codeLines(26)}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
     const wrapper = root.querySelector<HTMLElement>(".m2h-code-block");
     const toggle = root.querySelector<HTMLButtonElement>(".m2h-code-toggle");
     if (wrapper === null || toggle === null) {
@@ -586,7 +586,7 @@ describe("collapsible code blocks", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-go">${codeLines(127)}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(
       root.querySelector<HTMLElement>(".m2h-code-block")?.dataset.lineCount,
@@ -601,7 +601,7 @@ describe("collapsible code blocks", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-mermaid">${codeLines(60)}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // The diagram renders and no collapse affordance is created for it.
     expect(root.querySelector("div.mermaid")).not.toBeNull();
@@ -614,8 +614,8 @@ describe("collapsible code blocks", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-go">${codeLines(60)}</code></pre>`;
 
-    await renderRichContent(root, "light");
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
+    await renderRichContent(root, { mode: "light" });
 
     expect(root.querySelectorAll(".m2h-code-block")).toHaveLength(1);
     expect(root.querySelectorAll(".m2h-code-toggle")).toHaveLength(1);
@@ -640,7 +640,7 @@ describe("collapsible code blocks", () => {
       const root = document.createElement("div");
       root.innerHTML = `<pre><code class="language-go">${codeLines(127)}</code></pre>`;
 
-      await renderRichContent(root, "light");
+      await renderRichContent(root, { mode: "light" });
 
       // Collapsing is presentation only: the DOM keeps the whole source …
       const code = root.querySelector("code");
@@ -686,7 +686,7 @@ describe("code line numbers", () => {
     // lines must number as 1–3, not 1–4.
     root.innerHTML = `<pre><code class="language-go">a\nb\nc\n</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const gutter = root.querySelector<HTMLElement>(
       "pre > .m2h-code-line-numbers",
@@ -721,7 +721,7 @@ describe("code line numbers", () => {
       const root = document.createElement("div");
       root.innerHTML = `<pre><code class="language-go">a\nb\n</code></pre>`;
 
-      await renderRichContent(root, "light");
+      await renderRichContent(root, { mode: "light" });
       const copy = root.querySelector<HTMLButtonElement>(".m2h-code-copy");
       if (copy === null) {
         throw new Error("code copy button was not added");
@@ -742,7 +742,7 @@ describe("code line numbers", () => {
     const root = document.createElement("div");
     root.innerHTML = "<pre><code></code></pre><pre><code>\n</code></pre>";
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const gutters = root.querySelectorAll<HTMLElement>(
       "pre > .m2h-code-line-numbers",
@@ -759,7 +759,7 @@ describe("code line numbers", () => {
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>' +
       `<pre><code class="language-go">x\n</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(root.querySelector("div.mermaid")).not.toBeNull();
     expect(root.querySelectorAll("pre > .m2h-code-line-numbers")).toHaveLength(
@@ -772,8 +772,8 @@ describe("code line numbers", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-go">a\nb\nc\n</code></pre>`;
 
-    await renderRichContent(root, "light");
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
+    await renderRichContent(root, { mode: "light" });
 
     expect(
       root.querySelectorAll("pre > .m2h-code-line-numbers > span"),
@@ -785,7 +785,7 @@ describe("code line numbers", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-go">${codeLines(30)}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // The gutter and the fold share one line-count algorithm: they can never
     // disagree about how many lines a block has.
@@ -842,7 +842,7 @@ describe("image lightbox triggers", () => {
     const root = document.createElement("div");
     root.innerHTML = '<p><img src="/a.png" alt="A"></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
     const image = root.querySelector<HTMLImageElement>("img");
@@ -866,7 +866,7 @@ describe("image lightbox triggers", () => {
     const root = document.createElement("div");
     root.innerHTML = '<p><img src="/a.png" alt="architecture"></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // The Markdown image name rides on the frame as a hover tooltip, hidden
     // from the accessibility tree: the <img> alt already carries the name.
@@ -892,7 +892,7 @@ describe("image lightbox triggers", () => {
     const root = document.createElement("div");
     root.innerHTML = '<p><img src="/a.png" alt="architecture"></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // The enhancement pass runs before the browser finished fetching, so the
     // line starts empty and fills when the load event arrives.
@@ -917,7 +917,7 @@ describe("image lightbox triggers", () => {
     Object.defineProperty(image, "naturalWidth", { value: 16 });
     Object.defineProperty(image, "naturalHeight", { value: 16 });
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // A cached image is complete at enhancement time: no load event is coming.
     expect(root.querySelector(".m2h-image-tooltip-meta")?.textContent).toBe(
@@ -931,7 +931,7 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<p><img src="/a.png" alt=""></p><p><img src="/b.png"></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // Without alt text only the metadata row renders — the size/format line
     // is still worth hovering for.
@@ -966,7 +966,7 @@ describe("image lightbox triggers", () => {
       Object.defineProperty(image, "naturalHeight", { value: 10 });
     }
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const meta = (cls: string) =>
       root
@@ -994,8 +994,8 @@ describe("image lightbox triggers", () => {
     const root = document.createElement("div");
     root.innerHTML = '<p><img src="/a.png" alt="A"></p>';
 
-    await renderRichContent(root, "light");
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
+    await renderRichContent(root, { mode: "light" });
 
     expect(root.querySelectorAll(".m2h-image-name-tooltip")).toHaveLength(1);
   });
@@ -1005,7 +1005,7 @@ describe("image lightbox triggers", () => {
     const root = document.createElement("div");
     root.innerHTML = '<p><img src="/assets/broken.png" alt="架构图"></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
     root.querySelector("img")?.dispatchEvent(new Event("error"));
 
     const image = root.querySelector("img");
@@ -1033,7 +1033,7 @@ describe("image lightbox triggers", () => {
     const root = document.createElement("div");
     root.innerHTML = '<p><img src="/assets/broken.png" alt="A"></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
     const image = root.querySelector("img");
     image?.dispatchEvent(new Event("error"));
     image?.dispatchEvent(new Event("error"));
@@ -1056,7 +1056,7 @@ describe("image lightbox triggers", () => {
     Object.defineProperty(image, "complete", { value: true });
     Object.defineProperty(image, "naturalWidth", { value: 0 });
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(image?.getAttribute("src")).toBe("/image-load-failed.svg");
     expect(
@@ -1072,7 +1072,7 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<p><img src="1.png"></p><p><img src="2.png"></p><p><img src="3.png"></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const images = Array.from(root.querySelectorAll<HTMLImageElement>("img"));
     const frames = Array.from(
@@ -1095,8 +1095,8 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<p><img src="1.png"></p><p><img src="2.png"></p><p><img src="3.png"></p>';
 
-    await renderRichContent(root, "light");
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
+    await renderRichContent(root, { mode: "light" });
 
     expect(root.querySelectorAll("img")).toHaveLength(3);
     expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(3);
@@ -1112,7 +1112,7 @@ describe("image lightbox triggers", () => {
     const root = document.createElement("div");
     root.innerHTML = '<p><a href="/target"><img src="/a.png" alt="A"></a></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
     const anchor = root.querySelector<HTMLAnchorElement>("a");
@@ -1135,7 +1135,7 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<p><a href="/target"><span><img src="/a.png" alt="A"></span></a></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // The sole-image anchor is found through closest("a") even when the image
     // sits in a wrapper span, so the frame wraps the anchor — not the image —
@@ -1153,7 +1153,7 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<p><a href="/target"><img src="1.png"><img src="2.png"></a></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // Framing either image would nest the trigger button inside the <a>
     // (invalid interactive content, and Enter would follow the link), so the
@@ -1176,7 +1176,7 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<p><a href="/target"><span><img src="1.png"></span><span><img src="2.png"></span></a></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // The multi-image anchor is detected through closest("a"), so wrapping
     // each image in its own span must not smuggle a button into the link.
@@ -1190,7 +1190,7 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<p><picture><source srcset="dark.png" media="(prefers-color-scheme: dark)"><img src="light.png" alt="L"></picture></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // The frame wraps the <picture> itself: the <img> must stay the
     // picture's direct child next to the <source>, or source selection
@@ -1214,7 +1214,7 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<p><a href="/target"><picture><source srcset="dark.png" media="(prefers-color-scheme: dark)"><img src="light.png" alt="L"></picture></a></p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
     const anchor = root.querySelector<HTMLAnchorElement>("a");
@@ -1235,7 +1235,7 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // The diagram pass owns its frame: a stable wrapper around the container
     // (which mermaid rewrites on every theme switch) carrying the shared
@@ -1272,7 +1272,7 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    const pending = renderRichContent(root, "light");
+    const pending = renderRichContent(root, { mode: "light" });
     await waitFor(() => {
       expect(root.querySelector(".m2h-mermaid-frame")).not.toBeNull();
     });
@@ -1298,16 +1298,26 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">not a diagram [[</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
-    // The failure is isolated to this diagram: the frame stays with its
-    // source text, but the lightbox is not offered.
+    // The failure is isolated to this diagram: the frame stays, the raw
+    // Mermaid source collapses into the shared placeholder (parser
+    // diagnostics never reach the page), and the lightbox is not offered.
     const container = root.querySelector<HTMLElement>("div.mermaid");
     const button = root.querySelector<HTMLButtonElement>(
       ".m2h-mermaid-frame > .m2h-lightbox-trigger",
     );
     expect(container?.querySelector("svg")).toBeNull();
-    expect(container?.textContent).toContain("not a diagram");
+    expect(container?.textContent).not.toContain("not a diagram");
+    const failure = container?.querySelector<HTMLElement>(
+      ".m2h-rich-visual-error",
+    );
+    expect(failure?.querySelector("img")?.getAttribute("src")).toBe(
+      "/image-load-failed.svg",
+    );
+    expect(
+      failure?.querySelector(".m2h-rich-visual-error-title")?.textContent,
+    ).toBe("Mermaid 图表渲染失败");
     expect(container?.dataset.m2hLightboxItem).toBeUndefined();
     expect(button?.hidden).toBe(true);
   });
@@ -1320,7 +1330,7 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
     const container = root.querySelector<HTMLElement>("div.mermaid");
     const button = root.querySelector<HTMLButtonElement>(
       ".m2h-mermaid-frame > .m2h-lightbox-trigger",
@@ -1332,13 +1342,45 @@ describe("image lightbox triggers", () => {
     expect(button.hidden).toBe(false);
 
     // The dark repaint throws: the old SVG stays in place, so the lightbox
-    // keeps working — availability follows the SVG that is still there.
+    // keeps working — availability follows the SVG that is still there. The
+    // failure is still reported through the same stable message.
+    const visualErrors: string[] = [];
     mermaidMock.render.mockRejectedValue(new Error("dark render failed"));
-    await rerenderMermaid(root, "dark");
+    await rerenderMermaid(root, "dark", undefined, (message) => {
+      visualErrors.push(message);
+    });
 
     expect(container.innerHTML).toContain('data-mock="mermaid"');
     expect(container.dataset.m2hLightboxItem).toBe("true");
     expect(button.hidden).toBe(false);
+    expect(visualErrors).toEqual(["Mermaid 图表渲染失败"]);
+  });
+
+  it("reports each visual failure through onVisualError with the stable message", async () => {
+    mermaidMock.render.mockRejectedValue(new Error("invalid syntax"));
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<pre><code class="language-mermaid">not a diagram [[</code></pre>' +
+      `<pre><code class="language-vega-lite">{ broken json</code></pre>`;
+
+    const visualErrors: string[] = [];
+    await renderRichContent(root, {
+      mode: "light",
+      onVisualError: (message) => {
+        visualErrors.push(message);
+      },
+    });
+
+    // One stable, reader-facing message per failed visual, in document order;
+    // the detailed reasons went to the console instead of the page.
+    expect(visualErrors).toEqual([
+      "Mermaid 图表渲染失败",
+      "Vega-Lite 图表渲染失败",
+    ]);
+    expect(root.querySelectorAll(".m2h-rich-visual-error-title").length).toBe(
+      2,
+    );
   });
 
   it("keeps the mermaid frame, marker and trigger across a theme re-render", async () => {
@@ -1349,7 +1391,7 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
     const frame = root.querySelector<HTMLElement>(".m2h-mermaid-frame");
     const container = root.querySelector<HTMLElement>("div.mermaid");
     const button = root.querySelector<HTMLButtonElement>(
@@ -1405,7 +1447,7 @@ describe("image lightbox triggers", () => {
         <tr><td>Beta</td><td><img src="/b.png" alt="B"></td></tr>
       </tbody></table>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // Sort by name descending: the Beta row — and its b.png — moves first.
     const header = root.querySelector<HTMLTableCellElement>("thead th");
@@ -1462,7 +1504,7 @@ describe("rerenderMermaid", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre><p>keep me</p>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const container = root.querySelector<HTMLDivElement>("div.mermaid");
     if (container === null) {
@@ -1509,7 +1551,7 @@ describe("rerenderMermaid", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const container = root.querySelector<HTMLDivElement>("div.mermaid");
     if (container === null) {
@@ -1532,7 +1574,7 @@ describe("rerenderMermaid", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA</code></pre><pre><code class="language-mermaid">graph TD\nB</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
     mermaidMock.render.mockClear();
 
     await rerenderMermaid(root, "dark", () => false);
@@ -1571,7 +1613,7 @@ describe("mermaid external diagrams (ZenUML)", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(loadMermaidMock).toHaveBeenCalledTimes(1);
     expect(ensureZenUMLRegisteredMock).not.toHaveBeenCalled();
@@ -1586,7 +1628,7 @@ describe("mermaid external diagrams (ZenUML)", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">flowchart TD\nA[zenuml inside a label]</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(ensureZenUMLRegisteredMock).not.toHaveBeenCalled();
     expect(mermaidMock.render).toHaveBeenCalledTimes(1);
@@ -1598,7 +1640,7 @@ describe("mermaid external diagrams (ZenUML)", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(ensureZenUMLRegisteredMock).toHaveBeenCalledTimes(1);
     expect(ensureZenUMLRegisteredMock).toHaveBeenCalledWith(mermaidMock);
@@ -1630,7 +1672,7 @@ describe("mermaid external diagrams (ZenUML)", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const lightSVG = root.querySelector<SVGSVGElement>(".mermaid > svg");
     expect(lightSVG?.dataset.m2hZenumlTheme).toBe("light");
@@ -1662,7 +1704,7 @@ describe("mermaid external diagrams (ZenUML)", () => {
       '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>' +
       '<pre><code class="language-mermaid">zenuml\n    Bob->Alice: Hi</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(ensureZenUMLRegisteredMock).toHaveBeenCalledTimes(1);
     expect(mermaidMock.render).toHaveBeenCalledTimes(2);
@@ -1675,7 +1717,7 @@ describe("mermaid external diagrams (ZenUML)", () => {
       '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>' +
       '<pre><code class="language-mermaid">flowchart TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(ensureZenUMLRegisteredMock).toHaveBeenCalledTimes(1);
     expect(mermaidMock.render).toHaveBeenCalledTimes(2);
@@ -1690,7 +1732,7 @@ describe("mermaid external diagrams (ZenUML)", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
     mermaidMock.render.mockClear();
 
     await rerenderMermaid(root, "dark");
@@ -1717,7 +1759,7 @@ describe("mermaid external diagrams (ZenUML)", () => {
     // A plugin that cannot be registered is a runtime failure like a failed
     // mermaid.min.js fetch — the document cannot render its diagrams, so the
     // error surfaces instead of silently skipping every zenuml block.
-    await expect(renderRichContent(root, "light")).rejects.toThrow(
+    await expect(renderRichContent(root, { mode: "light" })).rejects.toThrow(
       "zenuml plugin unavailable",
     );
     expect(mermaidMock.render).not.toHaveBeenCalled();
@@ -1761,7 +1803,7 @@ describe("sortable tables", () => {
       <table class="custom"><thead><tr><th>x</th></tr></thead>
         <tbody><tr><td>1</td></tr><tr><td>2</td></tr></tbody></table>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const plain = root.querySelectorAll<HTMLTableElement>("table")[0];
     const classed = root.querySelectorAll<HTMLTableElement>("table")[1];
@@ -1784,7 +1826,7 @@ describe("sortable tables", () => {
     root.innerHTML =
       "<table><thead><tr><th>only</th></tr></thead><tbody><tr><td>row</td></tr></tbody></table>";
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // The runtime still loads (the selector cannot see row counts), but a
     // one-row table is never wired up: no marker and no sortable header.
@@ -1801,7 +1843,7 @@ describe("sortable tables", () => {
     const root = document.createElement("div");
     root.innerHTML = "<h2>heading</h2><p>paragraph</p>";
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(loadTablesortMock).not.toHaveBeenCalled();
   });
@@ -1811,7 +1853,7 @@ describe("sortable tables", () => {
     const root = document.createElement("div");
     root.innerHTML = `${DEMO_TABLE}<pre><code class="language-mermaid">graph TD</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // Both runtimes are needed, and the loader calls must interleave with the
     // tablesort load kicked off first rather than serialized after mermaid.
@@ -1826,7 +1868,7 @@ describe("sortable tables", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML = DEMO_TABLE;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const header = headerAt(root, 0);
     header.click();
@@ -1839,7 +1881,7 @@ describe("sortable tables", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML = DEMO_TABLE;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     headerAt(root, 4).click();
 
@@ -1851,7 +1893,7 @@ describe("sortable tables", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML = DEMO_TABLE;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     headerAt(root, 2).click();
 
@@ -1863,7 +1905,7 @@ describe("sortable tables", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML = DEMO_TABLE;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     headerAt(root, 3).click();
 
@@ -1878,7 +1920,7 @@ describe("sortable tables", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML = DEMO_TABLE;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     headerAt(root, 1).click();
 
@@ -1890,7 +1932,7 @@ describe("sortable tables", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML = DEMO_TABLE;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const header = headerAt(root, 0);
     header.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
@@ -1908,7 +1950,7 @@ describe("sortable tables", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML = DEMO_TABLE;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const project = headerAt(root, 0);
     expect(project.getAttribute("aria-sort")).toBe("none");
@@ -1938,7 +1980,7 @@ describe("sortable tables", () => {
         <tr><td>guide</td><td>2.0.0</td></tr>
         <tr><td>api</td><td>1.0.0</td></tr>
       </tbody></table>`;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const linkHeader = headerAt(root, 0);
     expect(linkHeader.getAttribute("data-sort-method")).toBe("none");
@@ -1959,8 +2001,8 @@ describe("sortable tables", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML = DEMO_TABLE;
-    await renderRichContent(root, "light");
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
+    await renderRichContent(root, { mode: "light" });
 
     // One click must apply exactly one ascending sort. If the second pass had
     // registered another click handler, this click would toggle the column
@@ -1978,7 +2020,7 @@ describe("sortable tables", () => {
     );
     const root = document.createElement("div");
     root.innerHTML = `${DEMO_TABLE}<pre><code class="language-mermaid">graph TD</code></pre>`;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     headerAt(root, 1).click();
     const before = columnValues(root, 1);
@@ -2070,7 +2112,7 @@ describe("Vega-Lite charts", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
     expect(container).not.toBeNull();
@@ -2097,7 +2139,7 @@ describe("Vega-Lite charts", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-vegalite">${VALID_SPEC}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(root.querySelector("div.m2h-vega-lite svg")).not.toBeNull();
     expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
@@ -2108,7 +2150,7 @@ describe("Vega-Lite charts", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
     const [, , options] = vegaEmbedMock.mock.calls[0] ?? [];
@@ -2177,7 +2219,7 @@ describe("Vega-Lite charts", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-vega-lite">${JSON.stringify(spec)}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const [element, embedded] = vegaEmbedMock.mock.calls[0] ?? [];
     expect(element.classList.contains("m2h-vega-lite")).toBe(true);
@@ -2187,21 +2229,25 @@ describe("Vega-Lite charts", () => {
     expect(usermeta.note).toBe("author data");
   });
 
-  it("isolates an invalid JSON spec and keeps its source text", async () => {
+  it("isolates an invalid JSON spec behind the failure placeholder", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML =
       '<pre><code class="language-vega-lite">{ not json</code></pre>' +
       `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const containers =
       root.querySelectorAll<HTMLDivElement>("div.m2h-vega-lite");
     expect(containers).toHaveLength(2);
-    // The broken chart keeps its source, gains no SVG, no marker, and a
-    // hidden trigger; the valid one after it still renders.
-    expect(containers[0]?.textContent).toBe("{ not json");
+    // The broken chart collapses into the placeholder (never raw JSON on the
+    // page), gains no SVG, no marker, and a hidden trigger; the valid one
+    // after it still renders.
+    expect(containers[0]?.textContent).not.toContain("{ not json");
+    expect(
+      containers[0]?.querySelector(".m2h-rich-visual-error-title")?.textContent,
+    ).toBe("Vega-Lite 图表渲染失败");
     expect(containers[0]?.querySelector("svg")).toBeNull();
     expect(containers[0]?.dataset.m2hLightboxItem).toBeUndefined();
     const firstTrigger = containers[0]
@@ -2221,15 +2267,15 @@ describe("Vega-Lite charts", () => {
     root.innerHTML =
       '<pre><code class="language-vega-lite">[1, 2, 3]</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(vegaEmbedMock).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith("Failed to render Vega-Lite chart", {
       error: new Error("Vega-Lite specification must be a JSON object"),
     });
-    expect(root.querySelector("div.m2h-vega-lite")?.textContent).toBe(
-      "[1, 2, 3]",
-    );
+    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
+    expect(container?.textContent).not.toContain("[1, 2, 3]");
+    expect(container?.querySelector(".m2h-rich-visual-error")).not.toBeNull();
   });
 
   it("rejects specs whose data sources point at URLs before embedding", async () => {
@@ -2320,12 +2366,16 @@ describe("Vega-Lite charts", () => {
       const root = document.createElement("div");
       root.innerHTML = `<pre><code class="language-vega-lite">${source}</code></pre>`;
 
-      await renderRichContent(root, "light");
+      await renderRichContent(root, { mode: "light" });
 
       const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
       expect(container?.querySelector("svg"), testCase.name).toBeNull();
       expect(container?.dataset.m2hLightboxItem, testCase.name).toBeUndefined();
-      expect(container?.textContent, testCase.name).toBe(source);
+      expect(container?.textContent, testCase.name).not.toContain(testCase.url);
+      expect(
+        container?.querySelector(".m2h-rich-visual-error"),
+        testCase.name,
+      ).not.toBeNull();
       expect(vegaEmbedMock, testCase.name).not.toHaveBeenCalled();
       expect(warnSpy, testCase.name).toHaveBeenCalledWith(
         "Failed to render Vega-Lite chart",
@@ -2358,7 +2408,7 @@ describe("Vega-Lite charts", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-vega-lite">${JSON.stringify(spec)}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
     expect(root.querySelector("div.m2h-vega-lite svg")).not.toBeNull();
@@ -2368,16 +2418,17 @@ describe("Vega-Lite charts", () => {
     );
   });
 
-  it("restores the source and keeps going when the embed rejects", async () => {
+  it("collapses into the placeholder and keeps going when the embed rejects", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     vegaEmbedMock.mockRejectedValueOnce(new Error("compile failed"));
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
-    expect(container?.textContent).toBe(VALID_SPEC);
+    expect(container?.textContent).not.toContain(VALID_SPEC);
+    expect(container?.querySelector(".m2h-rich-visual-error")).not.toBeNull();
     expect(container?.dataset.m2hLightboxItem).toBeUndefined();
     expect(warnSpy).toHaveBeenCalledWith("Failed to render Vega-Lite chart", {
       error: new Error("compile failed"),
@@ -2389,7 +2440,7 @@ describe("Vega-Lite charts", () => {
     const root = document.createElement("div");
     root.innerHTML = '<pre><code class="language-go">func main()</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(loadVegaLiteMock).not.toHaveBeenCalled();
   });
@@ -2400,7 +2451,7 @@ describe("Vega-Lite charts", () => {
     root.innerHTML =
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     expect(loadVegaLiteMock).not.toHaveBeenCalled();
     expect(vegaEmbedMock).not.toHaveBeenCalled();
@@ -2423,7 +2474,7 @@ describe("Vega-Lite charts", () => {
       `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>` +
       `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
 
-    await renderRichContent(root, "light", () => current);
+    await renderRichContent(root, { mode: "light", isCurrent: () => current });
 
     expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
     expect(finalize).toHaveBeenCalledTimes(1);
@@ -2438,7 +2489,7 @@ describe("Vega-Lite charts", () => {
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
 
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const [, , options] = vegaEmbedMock.mock.calls[0] ?? [];
     const config = options?.config;
@@ -2472,7 +2523,7 @@ describe("Vega-Lite charts", () => {
     });
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const frame = root.querySelector(".m2h-vega-lite-frame");
     const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
@@ -2485,7 +2536,7 @@ describe("Vega-Lite charts", () => {
       return { view: {}, finalize: secondFinalize };
     });
 
-    await rerenderThemeSensitiveContent(root, "dark");
+    await rerenderThemeSensitiveContent(root, { mode: "dark" });
 
     // The old view was finalized exactly once, the chart re-embedded, and
     // the frame/container/trigger kept their DOM identity.
@@ -2507,13 +2558,16 @@ describe("Vega-Lite charts", () => {
     vegaEmbedMock.mockRejectedValueOnce(new Error("compile failed"));
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
-    expect(container?.textContent).toBe(VALID_SPEC);
+    // The failed first render shows the placeholder, not the JSON source.
+    expect(container?.querySelector(".m2h-rich-visual-error")).not.toBeNull();
 
-    await rerenderThemeSensitiveContent(root, "dark");
+    await rerenderThemeSensitiveContent(root, { mode: "dark" });
 
+    // The theme-switch retry recovers: placeholder out, chart in.
+    expect(container?.querySelector(".m2h-rich-visual-error")).toBeNull();
     expect(container?.querySelector("svg")).not.toBeNull();
     expect(container?.dataset.m2hLightboxItem).toBe("true");
   });
@@ -2524,18 +2578,20 @@ describe("Vega-Lite charts", () => {
     );
     const root = document.createElement("div");
     root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     // The re-embed clears the container (Vega-Embed renders into it) and
-    // then fails: the source text is restored, never an empty frame.
+    // then fails: the slot collapses into the placeholder — never an empty
+    // frame, and never the JSON source back as page content.
     vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
       element.innerHTML = "";
       throw new Error("renderer crashed");
     });
-    await rerenderThemeSensitiveContent(root, "dark");
+    await rerenderThemeSensitiveContent(root, { mode: "dark" });
 
     const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
-    expect(container?.textContent).toBe(VALID_SPEC);
+    expect(container?.querySelector(".m2h-rich-visual-error")).not.toBeNull();
+    expect(container?.textContent).not.toContain(VALID_SPEC);
     expect(container?.dataset.m2hLightboxItem).toBeUndefined();
   });
 
@@ -2546,7 +2602,7 @@ describe("Vega-Lite charts", () => {
     const root = document.createElement("div");
     root.innerHTML = "<p>no visuals at all</p>";
 
-    await rerenderThemeSensitiveContent(root, "dark");
+    await rerenderThemeSensitiveContent(root, { mode: "dark" });
 
     expect(loadVegaLiteMock).not.toHaveBeenCalled();
     expect(loadMermaidMock).not.toHaveBeenCalled();
@@ -2560,11 +2616,11 @@ describe("Vega-Lite charts", () => {
     root.innerHTML =
       `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>` +
       '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     mermaidMock.render.mockClear();
     vegaEmbedMock.mockClear();
-    await rerenderThemeSensitiveContent(root, "dark");
+    await rerenderThemeSensitiveContent(root, { mode: "dark" });
 
     expect(mermaidMock.render).toHaveBeenCalledTimes(1);
     expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
@@ -2583,7 +2639,7 @@ describe("Vega-Lite charts", () => {
     root.innerHTML =
       `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>` +
       `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-    await renderRichContent(root, "light");
+    await renderRichContent(root, { mode: "light" });
 
     finalizeVegaLiteViews(root);
     expect(finalize).toHaveBeenCalledTimes(2);

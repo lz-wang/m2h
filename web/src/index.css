@@ -975,6 +975,34 @@ body,
   opacity: 0.85;
 }
 
+/* The same contract for rich visuals: a Mermaid diagram or Vega-Lite chart
+ * whose first paint failed collapses into the placeholder inside its stable
+ * frame, one short title naming the engine. Source text (a Mermaid grammar,
+ * a chart's JSON) never reappears as page content — diagnostics live in the
+ * console; the top warning carries the same stable message. */
+.markdown-body .m2h-rich-visual-error {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  align-items: center;
+
+  padding: 0.75rem;
+  border: 1px dashed var(--border);
+  border-radius: 0.375rem;
+  background: var(--muted);
+}
+
+.markdown-body .m2h-rich-visual-error-title {
+  color: var(--muted-foreground);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+}
+
+.markdown-body .m2h-rich-visual-error img {
+  width: min(100%, 14rem);
+  opacity: 0.85;
+}
+
 .markdown-body .m2h-image-frame:hover .m2h-lightbox-trigger,
 .markdown-body .m2h-rich-visual-frame:hover .m2h-lightbox-trigger,
 .markdown-body .m2h-lightbox-trigger:focus-visible {

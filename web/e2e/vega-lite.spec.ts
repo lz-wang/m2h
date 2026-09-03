@@ -184,17 +184,22 @@ test("isolates invalid charts and keeps valid ones rendering", async ({
             .closest(".m2h-vega-lite-frame")
             ?.querySelector<HTMLButtonElement>(":scope > .m2h-lightbox-trigger")
             ?.hidden ?? true,
+        placeholder: container.querySelector(".m2h-rich-visual-error") !== null,
         source: container.textContent?.slice(0, 20) ?? "",
       }),
     ),
   );
-  // The two broken charts keep their source text with no SVG, no marker, and
-  // a hidden trigger; the valid chart after them renders normally.
+  // The two broken charts collapse into the shared placeholder (never their
+  // JSON source), with no SVG, no marker, and a hidden trigger; the valid
+  // chart after them renders normally.
   expect(states[0]?.hasSVG).toBe(false);
   expect(states[0]?.lightbox).toBe("off");
   expect(states[0]?.triggerHidden).toBe(true);
+  expect(states[0]?.placeholder).toBe(true);
+  expect(states[0]?.source).not.toContain("{");
   expect(states[1]?.hasSVG).toBe(false);
   expect(states[1]?.lightbox).toBe("off");
+  expect(states[1]?.placeholder).toBe(true);
   expect(states[2]?.hasSVG).toBe(true);
   expect(states[2]?.lightbox).toBe("on");
   expect(states[2]?.triggerHidden).toBe(false);
@@ -239,16 +244,17 @@ test("isolates unsupported external resources without leaving the origin", async
   );
   expect(states).toHaveLength(5);
   // The external-data charts (top-level and inside a layer) fail the
-  // self-contained preflight before any embed: source kept, no SVG, no
-  // Lightbox — the ordinary isolated-chart contract, not the empty-frame
+  // self-contained preflight before any embed: placeholder in, no SVG, no
+  // Lightbox, and their source text (with the remote URLs) stays off the
+  // page — the ordinary isolated-chart contract, not the empty-frame
   // "success" Vega produces when only the loader denies the fetch.
   expect(states[0]?.hasSVG).toBe(false);
   expect(states[0]?.lightbox).toBe("off");
   expect(states[0]?.triggerHidden).toBe(true);
-  expect(states[0]?.source).toContain("example.invalid/data.csv");
+  expect(states[0]?.source).not.toContain("example.invalid/data.csv");
   expect(states[1]?.hasSVG).toBe(false);
   expect(states[1]?.lightbox).toBe("off");
-  expect(states[1]?.source).toContain("example.invalid/nested.json");
+  expect(states[1]?.source).not.toContain("example.invalid/nested.json");
   expect(
     warnings.filter((text) => text.includes("self-contained")),
   ).toHaveLength(2);

@@ -418,8 +418,10 @@ export function App({ api }: AppProps) {
       if (image.dataset.m2hFallback === "true") {
         return;
       }
-      preview.reportAssetError(
-        image.dataset.m2hOriginalSrc ?? image.getAttribute("src") ?? "",
+      const source =
+        image.dataset.m2hOriginalSrc ?? image.getAttribute("src") ?? "";
+      preview.reportVisualError(
+        source === "" ? "图片加载失败。" : `图片加载失败：${source}`,
       );
     }
   };
@@ -578,10 +580,10 @@ export function App({ api }: AppProps) {
 
           <div className="reader-main" ref={readerMainRef}>
             <div className={`reader-canvas reader-canvas-${preview.width}`}>
-              {preview.assetError !== null ? (
+              {preview.visualError !== null ? (
                 <div className="asset-warning" role="status">
                   <ImageOff aria-hidden="true" />
-                  <span>{preview.assetError}</span>
+                  <span>{preview.visualError}</span>
                 </div>
               ) : null}
               <PreviewContent
@@ -594,6 +596,7 @@ export function App({ api }: AppProps) {
                 onClick={handleMarkdownClick}
                 onKeyDown={handleMarkdownKeyDown}
                 onErrorCapture={handleAssetError}
+                onVisualError={preview.reportVisualError}
               />
             </div>
             {/* The desktop rail stays mounted whenever the document has a TOC
@@ -1025,6 +1028,7 @@ interface PreviewContentProps {
   onClick(event: ReactMouseEvent<HTMLElement>): void;
   onKeyDown(event: ReactKeyboardEvent<HTMLElement>): void;
   onErrorCapture(event: SyntheticEvent<HTMLElement>): void;
+  onVisualError(message: string): void;
 }
 
 function PreviewContent({
@@ -1037,6 +1041,7 @@ function PreviewContent({
   onClick,
   onKeyDown,
   onErrorCapture,
+  onVisualError,
 }: PreviewContentProps) {
   const contentRef = useRef<HTMLElement>(null);
   // Body generation: bumped on every body swap and teardown, never by a
@@ -1116,11 +1121,11 @@ function PreviewContent({
     enhanceDocumentLinks(root);
     renderedModeRef.current = mode;
     paintedModeRef.current = mode;
-    initialRenderRef.current = renderRichContent(
-      root,
+    initialRenderRef.current = renderRichContent(root, {
       mode,
-      () => bodyGenerationRef.current === generation,
-    );
+      isCurrent: () => bodyGenerationRef.current === generation,
+      onVisualError,
+    });
     return () => {
       bodyGenerationRef.current++;
       initialRenderRef.current = null;
@@ -1129,7 +1134,7 @@ function PreviewContent({
       // in place, right before the next paint replaces it wholesale.
       finalizeVegaLiteViews(root);
     };
-  }, [html, phase]);
+  }, [html, phase, onVisualError]);
 
   // A theme switch repaints only the theme-sensitive rich visuals (Mermaid
   // diagrams and Vega-Lite charts), leaving the article DOM, KaTeX, copy
@@ -1178,8 +1183,12 @@ function PreviewContent({
       if (renderedModeRef.current !== mode || paintedModeRef.current === mode) {
         return;
       }
-      await rerenderThemeSensitiveContent(root, mode, () => {
-        return bodyGenerationRef.current === generation;
+      await rerenderThemeSensitiveContent(root, {
+        mode,
+        isCurrent: () => {
+          return bodyGenerationRef.current === generation;
+        },
+        onVisualError,
       });
       if (bodyGenerationRef.current === generation) {
         paintedModeRef.current = mode;
@@ -1188,7 +1197,7 @@ function PreviewContent({
     // The tail catch keeps the queue alive after a failed repaint instead of
     // wedging every later toggle behind a rejected promise.
     themeQueueRef.current = themeQueueRef.current.then(repaint).catch(() => {});
-  }, [phase, resolvedMode]);
+  }, [phase, resolvedMode, onVisualError]);
 
   // The magnifier triggers are injected into the article DOM by
   // render-rich-content.ts, outside React's tree. Rather than wiring

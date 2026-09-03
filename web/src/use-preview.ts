@@ -48,7 +48,7 @@ export interface PreviewState {
   toc: boolean;
   phase: PreviewPhase;
   error: string | null;
-  assetError: string | null;
+  visualError: string | null;
   refresh(): Promise<void>;
   select(path: string, hash?: string): Promise<void>;
   // Fetches the open document's original Markdown source on demand (the
@@ -58,7 +58,7 @@ export interface PreviewState {
   setWidth(width: DocumentWidth): void;
   setTOC(toc: boolean): void;
   replaceHash(id: string | null): void;
-  reportAssetError(source: string): void;
+  reportVisualError(message: string): void;
   retry(): Promise<void>;
 }
 
@@ -89,7 +89,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   const [toc, setTOCState] = useState<boolean>(initialRoute.current.toc);
   const [phase, setPhase] = useState<PreviewPhase>("loading-files");
   const [error, setError] = useState<string | null>(null);
-  const [assetError, setAssetError] = useState<string | null>(null);
+  const [visualError, setVisualError] = useState<string | null>(null);
   const filesRef = useRef<FileSummary[]>([]);
   const rootsRef = useRef<RootSummary[]>([]);
   const kindRef = useRef<PreviewKind>("directory");
@@ -134,7 +134,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
       selectedPathRef.current = path;
       setSelectedPath(path);
       setDocumentResponse(null);
-      setAssetError(null);
+      setVisualError(null);
       setError(null);
       setPhase("loading-document");
       writeRoute(path, historyAction, hash);
@@ -184,7 +184,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
       const controller = new AbortController();
       listController.current = controller;
       setError(null);
-      setAssetError(null);
+      setVisualError(null);
       setPhase("loading-files");
       try {
         const loaded = await api.listFiles(controller.signal);
@@ -372,10 +372,12 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     [writeRoute],
   );
 
-  const reportAssetError = useCallback((source: string) => {
-    setAssetError(
-      source === "" ? "有附件加载失败。" : `附件加载失败：${source}`,
-    );
+  // The single funnel for reader-facing content failures: a broken image or a
+  // diagram/chart that never rendered. The message arrives fully formed — the
+  // page shows it verbatim in the top warning — so callers keep control of
+  // what the reader is told.
+  const reportVisualError = useCallback((message: string) => {
+    setVisualError(message === "" ? "部分内容加载失败。" : message);
   }, []);
 
   return {
@@ -391,7 +393,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     toc,
     phase,
     error,
-    assetError,
+    visualError,
     refresh,
     readCurrentMarkdown,
     select,
@@ -399,7 +401,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     setWidth,
     setTOC,
     replaceHash,
-    reportAssetError,
+    reportVisualError,
     retry: refresh,
   };
 }

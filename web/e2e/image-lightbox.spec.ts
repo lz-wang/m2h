@@ -534,10 +534,14 @@ test("hides the magnifier of a diagram that never rendered", async ({
   const invalid = page.locator(".m2h-mermaid-frame").first();
   const valid = page.locator(".m2h-mermaid-frame").nth(1);
 
-  // The invalid container kept its source text and never gained an SVG, the
-  // lightbox marker, or an operable trigger. (svg assertions scope to the
-  // container: the trigger's magnifier icon is an SVG too.)
+  // The invalid container collapsed into the shared failure placeholder (the
+  // raw Mermaid source never shows) and never gained an SVG, the lightbox
+  // marker, or an operable trigger. (svg assertions scope to the container:
+  // the trigger's magnifier icon is an SVG too.)
   await expect(invalid.locator(".mermaid svg")).toHaveCount(0);
+  await expect(invalid.locator(".m2h-rich-visual-error-title")).toHaveText(
+    "Mermaid 图表渲染失败",
+  );
   await expect(invalid.locator('[data-m2h-lightbox-item="true"]')).toHaveCount(
     0,
   );

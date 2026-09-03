@@ -136,11 +136,22 @@ let codeBlockSequence = 0;
  * keeps such a stale render from applying KaTeX to content that no longer
  * belongs to it.
  */
+// Options for one rich-content enhancement pass. `isCurrent` is the freshness
+// check consulted after every async step (see below); `onVisualError` receives
+// a short, reader-facing message for every diagram/chart/image-adjacent visual
+// that failed to render — the detailed reason goes to the console, the page
+// shows the stable placeholder plus this message in the top warning.
+export interface RichContentOptions {
+  mode: ResolvedMode;
+  isCurrent?: () => boolean;
+  onVisualError?: (message: string) => void;
+}
+
 export async function renderRichContent(
   root: HTMLElement,
-  mode: ResolvedMode,
-  isCurrent?: () => boolean,
+  options: RichContentOptions,
 ): Promise<void> {
+  const { mode, isCurrent, onVisualError } = options;
   addHeadingPermalinks(root);
   addCodeCopyButtons(root);
   addCodeLineNumbers(root);
@@ -155,7 +166,7 @@ export async function renderRichContent(
   const vegaLiteLoad = hasVegaLiteBlocks(root) ? loadVegaLite() : null;
   if (hasMermaidBlocks(root)) {
     const mermaid = await prepareMermaid(mode, hasZenUMLBlocks(root));
-    await renderMermaid(mermaid, root, mode, isCurrent);
+    await renderMermaid(mermaid, root, mode, isCurrent, onVisualError);
   }
   if (isCurrent !== undefined && !isCurrent()) {
     return;
@@ -165,7 +176,7 @@ export async function renderRichContent(
     if (isCurrent !== undefined && !isCurrent()) {
       return;
     }
-    await renderVegaLiteBlocks(embed, root, isCurrent);
+    await renderVegaLiteBlocks(embed, root, isCurrent, onVisualError);
   }
   if (isCurrent !== undefined && !isCurrent()) {
     return;
@@ -1015,6 +1026,7 @@ async function paintMermaidTarget(
   source: string,
   mode: ResolvedMode,
   isCurrent?: () => boolean,
+  onVisualError?: (message: string) => void,
 ): Promise<boolean> {
   try {
     const result = await mermaid.render(
@@ -1030,10 +1042,17 @@ async function paintMermaidTarget(
     }
     result.bindFunctions?.(target);
   } catch (error) {
-    // Leave the existing content in place; a single bad diagram is isolated.
-    // The failure is still reported: without the diagram type and the error, a
-    // missing plugin, a failed runtime fetch, and a genuine syntax error all
-    // collapse into the same silent empty frame.
+    // A single bad diagram is isolated. The first paint failed: the container
+    // still shows the raw Mermaid source, which collapses into the shared
+    // placeholder — the page never advertises engine source text, and a
+    // parser's "Syntax error in text …" transcript stays in the console.
+    // A failed repaint (an older SVG sits in the container) keeps that SVG:
+    // one broken theme switch must not erase what the reader is looking at.
+    if (target.querySelector("svg") === null) {
+      renderRichVisualFailure(target, "mermaid", onVisualError);
+    } else {
+      onVisualError?.(RICH_VISUAL_FAILURE_TITLE.mermaid);
+    }
     console.warn("Failed to render Mermaid diagram", {
       diagramType: getMermaidDiagramType(source),
       error,
@@ -1049,6 +1068,43 @@ async function paintMermaidTarget(
 function getMermaidDiagramType(source: string): string {
   const type = source.trimStart().split(/\s+/, 1)[0];
   return type === "" ? "unknown" : type;
+}
+
+// The rich visuals share one failure contract with failed images: the slot
+// collapses into the app-owned placeholder instead of keeping raw engine
+// source text (a Mermaid grammar, a chart's JSON) on the page, and only a
+// short stable title names what failed. Parser details stay in the console —
+// they are diagnostics, not reader content.
+type RichVisualKind = "mermaid" | "vega-lite";
+
+const RICH_VISUAL_FAILURE_TITLE: Record<RichVisualKind, string> = {
+  mermaid: "Mermaid 图表渲染失败",
+  "vega-lite": "Vega-Lite 图表渲染失败",
+};
+
+// Replace a visual container's content with the shared failure UI and report
+// the stable message through the caller's onVisualError. Used on every
+// first-paint failure; a failed *repaint* (an older SVG already sits in the
+// container) keeps that SVG instead — one broken theme switch must not erase
+// a diagram the reader is looking at.
+function renderRichVisualFailure(
+  target: HTMLElement,
+  kind: RichVisualKind,
+  onVisualError?: (message: string) => void,
+): void {
+  const message = RICH_VISUAL_FAILURE_TITLE[kind];
+  const container = document.createElement("div");
+  container.className = "m2h-rich-visual-error";
+  const title = document.createElement("div");
+  title.className = "m2h-rich-visual-error-title";
+  title.textContent = message;
+  const image = document.createElement("img");
+  image.src = IMAGE_FALLBACK_SRC;
+  image.alt = "";
+  image.setAttribute("aria-hidden", "true");
+  container.append(title, image);
+  target.replaceChildren(container);
+  onVisualError?.(message);
 }
 
 // Whether a visual may open the Lightbox is a function of its rendered SVG,
@@ -1084,6 +1140,7 @@ async function renderMermaid(
   root: HTMLElement,
   mode: ResolvedMode,
   isCurrent?: () => boolean,
+  onVisualError?: (message: string) => void,
 ): Promise<void> {
   const targets: HTMLElement[] = [];
   for (const code of root.querySelectorAll<HTMLElement>(
@@ -1125,7 +1182,16 @@ async function renderMermaid(
     if (source === undefined) {
       continue;
     }
-    if (!(await paintMermaidTarget(mermaid, target, source, mode, isCurrent))) {
+    if (
+      !(await paintMermaidTarget(
+        mermaid,
+        target,
+        source,
+        mode,
+        isCurrent,
+        onVisualError,
+      ))
+    ) {
       return;
     }
   }
@@ -1140,6 +1206,7 @@ export async function rerenderMermaid(
   root: HTMLElement,
   mode: ResolvedMode,
   isCurrent?: () => boolean,
+  onVisualError?: (message: string) => void,
 ): Promise<void> {
   const targets = Array.from(
     root.querySelectorAll<HTMLElement>(".mermaid"),
@@ -1160,7 +1227,16 @@ export async function rerenderMermaid(
     if (source === undefined) {
       continue;
     }
-    if (!(await paintMermaidTarget(mermaid, target, source, mode, isCurrent))) {
+    if (
+      !(await paintMermaidTarget(
+        mermaid,
+        target,
+        source,
+        mode,
+        isCurrent,
+        onVisualError,
+      ))
+    ) {
       return;
     }
   }
@@ -1455,11 +1531,12 @@ function vegaLiteEmbedOptions(): VegaEmbedOptions {
 }
 
 // Embed one chart and, like the Mermaid paints, isolate its failure: a chart
-// that fails keeps its JSON source (restored explicitly — Vega-Embed clears
-// the container before rendering, so a late failure would otherwise leave an
-// empty frame), gets no Lightbox marker, and never breaks the next chart.
-// A re-embed finalizes the previous view first — Vega views hold timers and
-// document-level listeners that leak without it. Returns false when the
+// that fails gets the shared placeholder in place of its JSON source (never
+// raw spec text on the page) and no Lightbox marker, and never breaks the
+// next chart. A re-embed finalizes the previous view first — Vega views hold
+// timers and document-level listeners that leak without it. A failed re-embed
+// of a chart that already shows an SVG keeps that SVG — one broken theme
+// switch must not erase what the reader is looking at. Returns false when the
 // render is no longer current, telling the caller to abort the remaining
 // targets.
 async function embedVegaLiteTarget(
@@ -1467,6 +1544,7 @@ async function embedVegaLiteTarget(
   target: HTMLElement,
   source: string,
   isCurrent?: () => boolean,
+  onVisualError?: (message: string) => void,
 ): Promise<boolean> {
   const previous = vegaLiteViews.get(target);
   if (previous !== undefined) {
@@ -1487,14 +1565,22 @@ async function embedVegaLiteTarget(
         return false;
       }
       vegaLiteViews.set(target, result);
+    } else {
+      // The source never parsed: nothing will embed, so the container keeps
+      // showing the JSON unless the failure UI replaces it here.
+      if (target.querySelector("svg") === null) {
+        renderRichVisualFailure(target, "vega-lite", onVisualError);
+      }
     }
   } catch (error) {
     // A failure that struck before Vega-Embed touched the container (e.g. a
-    // compile error) leaves the old SVG visible; one that struck mid-render
-    // leaves the container cleared, so the source text is restored — the
-    // container is the only place the spec remains visible.
+    // compile error) leaves the old SVG visible and stays; one that struck
+    // mid-render clears the container and collapses into the placeholder —
+    // the JSON source never reappears as page content.
     if (target.querySelector("svg") === null) {
-      target.textContent = source;
+      renderRichVisualFailure(target, "vega-lite", onVisualError);
+    } else {
+      onVisualError?.(RICH_VISUAL_FAILURE_TITLE["vega-lite"]);
     }
     console.warn("Failed to render Vega-Lite chart", { error });
   }
@@ -1506,6 +1592,7 @@ async function renderVegaLiteBlocks(
   embed: VegaEmbedRuntime,
   root: HTMLElement,
   isCurrent?: () => boolean,
+  onVisualError?: (message: string) => void,
 ): Promise<void> {
   const targets: HTMLElement[] = [];
   for (const code of root.querySelectorAll<HTMLElement>(
@@ -1541,7 +1628,15 @@ async function renderVegaLiteBlocks(
     if (source === undefined) {
       continue;
     }
-    if (!(await embedVegaLiteTarget(embed, target, source, isCurrent))) {
+    if (
+      !(await embedVegaLiteTarget(
+        embed,
+        target,
+        source,
+        isCurrent,
+        onVisualError,
+      ))
+    ) {
       return;
     }
   }
@@ -1555,6 +1650,7 @@ async function renderVegaLiteBlocks(
 async function rerenderVegaLite(
   root: HTMLElement,
   isCurrent?: () => boolean,
+  onVisualError?: (message: string) => void,
 ): Promise<void> {
   const targets = Array.from(
     root.querySelectorAll<HTMLElement>(".m2h-vega-lite"),
@@ -1570,7 +1666,15 @@ async function rerenderVegaLite(
     if (source === undefined) {
       continue;
     }
-    if (!(await embedVegaLiteTarget(embed, target, source, isCurrent))) {
+    if (
+      !(await embedVegaLiteTarget(
+        embed,
+        target,
+        source,
+        isCurrent,
+        onVisualError,
+      ))
+    ) {
       return;
     }
   }
@@ -1584,9 +1688,9 @@ async function rerenderVegaLite(
 // are theme-sensitive.
 export async function rerenderThemeSensitiveContent(
   root: HTMLElement,
-  mode: ResolvedMode,
-  isCurrent?: () => boolean,
+  options: RichContentOptions,
 ): Promise<void> {
-  await rerenderMermaid(root, mode, isCurrent);
-  await rerenderVegaLite(root, isCurrent);
+  const { mode, isCurrent, onVisualError } = options;
+  await rerenderMermaid(root, mode, isCurrent, onVisualError);
+  await rerenderVegaLite(root, isCurrent, onVisualError);
 }

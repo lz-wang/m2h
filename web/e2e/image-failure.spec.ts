@@ -57,6 +57,6 @@ test("keeps the failed image out of the lightbox and reports the original source
   // The top warning names the asset that actually failed, never the
   // placeholder that replaced it.
   await expect(page.locator(".asset-warning")).toContainText(
-    "附件加载失败：/assets/images/does-not-exist.png",
+    "图片加载失败：/assets/images/does-not-exist.png",
   );
 });
