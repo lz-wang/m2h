@@ -444,7 +444,7 @@ export function App({ api }: AppProps) {
                   type="search"
                   value={searchQuery}
                   aria-label="搜索文档"
-                  placeholder="搜索标题或文件名"
+                  placeholder="搜索文档"
                   onChange={(event) => setSearchQuery(event.target.value)}
                 />
               </div>

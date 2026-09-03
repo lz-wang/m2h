@@ -1147,30 +1147,41 @@ describe("image lightbox triggers", () => {
     expect(anchor?.querySelector("img")?.dataset.m2hLightboxItem).toBe("true");
   });
 
-  it("leaves a multi-image anchor untouched", async () => {
+  it("frames each image of a multi-image anchor without a lightbox trigger", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML =
-      '<p><a href="/target"><img src="1.png"><img src="2.png"></a></p>';
+      '<p><a href="/target"><img src="1.png" alt="A"><img src="2.png" alt="B"></a></p>';
 
     await renderRichContent(root, { mode: "light" });
 
-    // Framing either image would nest the trigger button inside the <a>
+    // Framing the whole anchor would nest the trigger button inside the <a>
     // (invalid interactive content, and Enter would follow the link), so the
-    // raw-HTML structure wins: no frame, no trigger, no lightbox marker.
+    // anchor gets no Lightbox. The per-image presentation — frame, tooltip,
+    // failure fallback — is not a Lightbox concern and applies anyway.
     const anchor = root.querySelector<HTMLAnchorElement>("a");
+    const frames = root.querySelectorAll<HTMLElement>(".m2h-image-frame");
+    expect(anchor?.getAttribute("href")).toBe("/target");
+    expect(frames).toHaveLength(2);
+    const images = root.querySelectorAll("img");
+    for (let i = 0; i < images.length; i += 1) {
+      const image = images[i];
+      const frame = frames[i];
+      if (!image || !frame) {
+        expect.fail("expected two framed images");
+      }
+      expect(image.closest(".m2h-image-frame")).toBe(frame);
+      expect(frame.querySelector(".m2h-image-name-tooltip")).not.toBeNull();
+    }
+    // No Lightbox: no trigger button inside the link, no item marker.
     expect(anchor?.querySelector("button")).toBeNull();
-    expect(
-      anchor?.querySelector("img")?.closest(".m2h-image-frame"),
-    ).toBeNull();
-    expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(0);
     expect(root.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(0);
     expect(
       root.querySelectorAll('[data-m2h-lightbox-item="true"]'),
     ).toHaveLength(0);
   });
 
-  it("leaves images alone when one anchor spans several wrappers", async () => {
+  it("frames images inside a multi-image anchor's wrappers without a lightbox trigger", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML =
@@ -1178,10 +1189,35 @@ describe("image lightbox triggers", () => {
 
     await renderRichContent(root, { mode: "light" });
 
-    // The multi-image anchor is detected through closest("a"), so wrapping
-    // each image in its own span must not smuggle a button into the link.
+    // The multi-image anchor is detected through closest("a"), so the per-image
+    // frames land inside the link's wrappers — and no button may follow them
+    // there.
+    expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(2);
     expect(root.querySelector("a")?.querySelector("button")).toBeNull();
     expect(root.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(0);
+  });
+
+  it("collapses a failed image inside a multi-image anchor into the placeholder", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p><a href="/target"><img src="/assets/broken.png" alt="A"><img src="/b.png" alt="B"></a></p>';
+
+    await renderRichContent(root, { mode: "light" });
+    root.querySelectorAll("img")[0]?.dispatchEvent(new Event("error"));
+
+    const failed = root.querySelectorAll("img")[0];
+    // The failure fallback applies inside a link exactly as it does anywhere
+    // else: the placeholder swap is presentation, not interaction.
+    expect(failed?.getAttribute("src")).toBe("/image-load-failed.svg");
+    expect(failed?.dataset.m2hFallback).toBe("true");
+    expect(failed?.dataset.m2hOriginalSrc).toBe("/assets/broken.png");
+    const frame = failed?.closest(".m2h-image-frame");
+    expect(frame?.classList.contains("m2h-image-failed")).toBe(true);
+    expect(frame?.querySelector(".m2h-image-name-tooltip")).toBeNull();
+    // The sibling image and the link itself stay untouched.
+    expect(root.querySelectorAll("img")[1]?.getAttribute("src")).toBe("/b.png");
+    expect(root.querySelector("a")?.getAttribute("href")).toBe("/target");
   });
 
   it("wraps the picture of a responsive image, keeping source selection", async () => {

@@ -156,7 +156,7 @@ export async function renderRichContent(
   addCodeCopyButtons(root);
   addCodeLineNumbers(root);
   addCollapsibleCodeBlocks(root);
-  addImageLightboxTriggers(root);
+  addImageEnhancements(root);
   // Kick the Tablesort download off before awaiting Mermaid/KaTeX so all
   // needed runtimes load in parallel; the tables themselves are enhanced only
   // after those settle. The reserved indicator space is static CSS, so the
@@ -631,59 +631,85 @@ function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
   frame.append(toggle);
 }
 
-// Give every plain <img> in the body a Lightbox trigger: a magnifier button
-// pinned to the top-right of a wrapper frame, plus the marker the React layer
-// keys its click-time item lookup on. The frame also carries a hover tooltip
-// with the image's alt text, so a sighted reader sees the Markdown image name
-// without opening the Lightbox. No position index is recorded here:
-// DOM order at click time is the only source of truth, so another enhancement
-// that reorders the body (a sortable table moving <tr> rows) cannot desync
-// the Lightbox. Mermaid never appears here as an <img> — its pass turns the
-// source pre into a framed div.mermaid holding an SVG — so plain img scanning
-// excludes it for free, and raw-HTML <img> tags are covered by the same
-// query. Idempotent like every enhancement: an image already carrying the
-// marker is skipped, so re-running on the same body stacks no second frame,
-// button or tooltip. An anchor holding several images is left entirely alone
-// (see imageVisualRoot): raw-HTML semantics win over the enhancement.
-function addImageLightboxTriggers(root: HTMLElement): void {
+// Enhance every plain <img> in the body: a wrapper frame carrying a hover
+// tooltip with the image's alt text and intrinsic size/format, failure
+// tracking that collapses a broken image into the shared placeholder, and —
+// when the image is Lightbox-eligible — a magnifier button plus the marker
+// the React layer keys its click-time item lookup on. No position index is
+// recorded here: DOM order at click time is the only source of truth, so
+// another enhancement that reorders the body (a sortable table moving <tr>
+// rows) cannot desync the Lightbox. Mermaid never appears here as an <img> —
+// its pass turns the source pre into a framed div.mermaid holding an SVG —
+// so plain img scanning excludes it for free, and raw-HTML <img> tags are
+// covered by the same query. Idempotent like every enhancement: an image
+// already inside a frame is skipped, so re-running on the same body stacks
+// no second frame, button or tooltip — a failed image keeps its placeholder
+// frame and is not re-processed either. The Lightbox is the only gated
+// enhancement: a multi-image anchor's per-image frames land inside the link,
+// where a <button> would be invalid interactive content, so those images get
+// everything except the trigger (see imageLightboxTarget).
+function addImageEnhancements(root: HTMLElement): void {
   for (const image of root.querySelectorAll<HTMLImageElement>("img")) {
-    if (image.dataset.m2hLightboxItem === "true") {
+    if (image.closest(".m2h-image-frame") !== null) {
       continue;
     }
-    const target = imageVisualRoot(image);
-    if (target === null) {
-      continue;
-    }
-    image.dataset.m2hLightboxItem = "true";
 
-    const frame = document.createElement("span");
-    frame.className = "m2h-image-frame";
-    target.replaceWith(frame);
-
-    frame.append(target);
-    // The tooltip repeats the alt text and adds the intrinsic size and format
-    // for sighted readers. aria-hidden: the <img> alt already provides the
-    // name to assistive technology, so a second accessible copy adds nothing.
-    // Every image gets one — alt or not — because the size/format line is
-    // useful on its own.
-    const tooltip = document.createElement("span");
-    tooltip.className = "m2h-image-name-tooltip";
-    tooltip.setAttribute("aria-hidden", "true");
-    const name = image.alt.trim();
-    if (name !== "") {
-      const alt = document.createElement("span");
-      alt.className = "m2h-image-tooltip-alt";
-      alt.textContent = name;
-      tooltip.append(alt);
+    const frame = ensureImagePresentationFrame(image);
+    addImageMetadataTooltip(image, frame);
+    if (imageLightboxTarget(image) !== null) {
+      addImageLightbox(image, frame);
     }
-    const meta = document.createElement("span");
-    meta.className = "m2h-image-tooltip-meta";
-    tooltip.append(meta);
-    frame.append(tooltip);
-    trackImageMetadata(image, meta);
-    frame.append(createLightboxTrigger("查看大图"));
     trackImageFailure(image);
   }
+}
+
+// Wrap one image's visual root in the presentation frame every enhancement
+// hangs off. The frame carries the image's external geometry (the pinned
+// magnifier, the hover tooltip), so it wraps the element that visually stands
+// for the image: the <img> itself, its <picture> when one wraps it, or the
+// anchor of a sole-image link — never a multi-image anchor, where each image
+// is framed individually inside the link instead.
+function ensureImagePresentationFrame(image: HTMLImageElement): HTMLElement {
+  const frame = document.createElement("span");
+  frame.className = "m2h-image-frame";
+  const target = imageVisualRoot(image);
+  target.replaceWith(frame);
+  frame.append(target);
+  return frame;
+}
+
+// The frame's hover tooltip: it repeats the alt text and adds the intrinsic
+// size and format for sighted readers. aria-hidden: the <img> alt already
+// provides the name to assistive technology, so a second accessible copy adds
+// nothing. Every image gets one — alt or not — because the size/format line
+// is useful on its own.
+function addImageMetadataTooltip(
+  image: HTMLImageElement,
+  frame: HTMLElement,
+): void {
+  const tooltip = document.createElement("span");
+  tooltip.className = "m2h-image-name-tooltip";
+  tooltip.setAttribute("aria-hidden", "true");
+  const name = image.alt.trim();
+  if (name !== "") {
+    const alt = document.createElement("span");
+    alt.className = "m2h-image-tooltip-alt";
+    alt.textContent = name;
+    tooltip.append(alt);
+  }
+  const meta = document.createElement("span");
+  meta.className = "m2h-image-tooltip-meta";
+  tooltip.append(meta);
+  frame.append(tooltip);
+  trackImageMetadata(image, meta);
+}
+
+// Attach the Lightbox to one framed image: the item marker React's click-time
+// lookup keys on, plus the magnifier button beside the visual root inside the
+// frame.
+function addImageLightbox(image: HTMLImageElement, frame: HTMLElement): void {
+  image.dataset.m2hLightboxItem = "true";
+  frame.append(createLightboxTrigger("查看大图"));
 }
 
 // The placeholder a failed image collapses into. Served from the app's own
@@ -866,25 +892,37 @@ function createLightboxTrigger(ariaLabel: string): HTMLButtonElement {
   return button;
 }
 
-// The element the frame should wrap, or null when the image must not be
-// enhanced at all. A <picture>'s <img> has to stay the picture's direct child
-// for source selection to work, so the picture itself is the visual root. A
-// sole-image anchor becomes the visual root in turn — the frame then wraps
-// the anchor, keeping the trigger button a sibling of the <a> instead of an
-// interactive element nested inside one. An anchor holding several images
-// returns null: it keeps its raw-HTML structure untouched rather than growing
-// an invalid <a><button> nesting (whose Enter press would also follow the
-// link instead of pressing the button).
-function imageVisualRoot(image: HTMLImageElement): HTMLElement | null {
+// The element the frame should wrap. A <picture>'s <img> has to stay the
+// picture's direct child for source selection to work, so the picture itself
+// is the visual root. A sole-image anchor becomes the visual root in turn —
+// the frame then wraps the anchor, keeping a trigger button a sibling of the
+// <a> instead of an interactive element nested inside one. An anchor holding
+// several images is not upgraded: each of its images is framed as itself,
+// inside the link (see imageLightboxTarget for why that forbids the Lightbox).
+function imageVisualRoot(image: HTMLImageElement): HTMLElement {
   let visualRoot: HTMLElement = image;
   if (visualRoot.parentElement instanceof HTMLPictureElement) {
     visualRoot = visualRoot.parentElement;
   }
   const anchor = visualRoot.closest("a");
-  if (anchor === null) {
-    return visualRoot;
+  if (anchor !== null && anchor.querySelectorAll("img").length === 1) {
+    return anchor;
   }
-  return anchor.querySelectorAll("img").length === 1 ? anchor : null;
+  return visualRoot;
+}
+
+// The image's visual root when it may carry a Lightbox, or null when the
+// trigger button would have to land inside an anchor: a multi-image anchor's
+// frames wrap each image inside the link, and a <button> there would be
+// invalid interactive content whose Enter press would follow the link instead
+// of pressing the button. Sole-image anchors upgrade to the visual root
+// itself, so their button stays a sibling of the <a> — outside the link.
+function imageLightboxTarget(image: HTMLImageElement): HTMLElement | null {
+  const target = imageVisualRoot(image);
+  if (target instanceof HTMLAnchorElement) {
+    return target;
+  }
+  return target.closest("a") === null ? target : null;
 }
 
 // Mermaid's official light theme is "default" and dark theme is "dark". The
