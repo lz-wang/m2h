@@ -1202,6 +1202,21 @@ describe("App directory preview", () => {
         "/assets/missing.png",
       ),
     );
+
+    // The in-place placeholder swap lives in the body DOM. Once it ran, the
+    // element reports the fallback asset — a later error event from it (the
+    // placeholder itself failing) must not overwrite the reported source or
+    // double the warning.
+    expect(image.dataset.m2hFallback).toBe("true");
+    expect(image.dataset.m2hOriginalSrc).toBe("/assets/missing.png");
+    expect(image.getAttribute("src")).toBe("/image-load-failed.svg");
+    fireEvent.error(image);
+    await waitFor(() =>
+      expect(document.querySelectorAll(".asset-warning")).toHaveLength(1),
+    );
+    expect(screen.getByRole("status").textContent).toContain(
+      "/assets/missing.png",
+    );
   });
 
   it("shows the empty-document state for blank bodies while keeping frontmatter", async () => {

@@ -961,6 +961,20 @@ body,
   display: none;
 }
 
+/* A failed image collapses into the shared placeholder SVG. The frame keeps
+ * its place in the text flow; the placeholder itself gets a fixed reading
+ * size instead of inheriting the broken image's layout width (a 16px icon
+ * would render the placeholder icon-sized, a full-bleed screenshot would
+ * blow it up), and the muted style marks the slot as not-real-content. */
+.markdown-body .m2h-image-failed {
+  cursor: default;
+}
+
+.markdown-body .m2h-image-failed img {
+  width: min(100%, 18rem);
+  opacity: 0.85;
+}
+
 .markdown-body .m2h-image-frame:hover .m2h-lightbox-trigger,
 .markdown-body .m2h-rich-visual-frame:hover .m2h-lightbox-trigger,
 .markdown-body .m2h-lightbox-trigger:focus-visible {

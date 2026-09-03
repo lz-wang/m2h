@@ -4,6 +4,8 @@
 
 # m2h
 
+[![codecov](https://codecov.io/gh/lz-wang/m2h/graph/badge.svg?token=iNo6LuOlzm)](https://codecov.io/gh/lz-wang/m2h)
+
 `m2h` 是一个轻量、零配置的 Markdown Web 文档浏览与 HTML 导出工具。
 
 ## 特性

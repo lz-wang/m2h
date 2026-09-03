@@ -409,7 +409,18 @@ export function App({ api }: AppProps) {
 
   const handleAssetError = (event: SyntheticEvent<HTMLElement>) => {
     if (event.target instanceof HTMLImageElement) {
-      preview.reportAssetError(event.target.getAttribute("src") ?? "");
+      const image = event.target;
+      // The placeholder collapsing a failed image in place lives in the body
+      // DOM (render-rich-content.ts). Its own load failure arrives here too —
+      // it only means the app itself is broken, not that a second document
+      // asset failed, so it never reports. The reported source is the one
+      // that actually failed, which after the swap no longer equals "src".
+      if (image.dataset.m2hFallback === "true") {
+        return;
+      }
+      preview.reportAssetError(
+        image.dataset.m2hOriginalSrc ?? image.getAttribute("src") ?? "",
+      );
     }
   };
 

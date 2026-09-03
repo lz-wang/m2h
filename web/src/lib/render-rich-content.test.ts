@@ -1000,6 +1000,72 @@ describe("image lightbox triggers", () => {
     expect(root.querySelectorAll(".m2h-image-name-tooltip")).toHaveLength(1);
   });
 
+  it("collapses a failed image into the shared placeholder", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><img src="/assets/broken.png" alt="架构图"></p>';
+
+    await renderRichContent(root, "light");
+    root.querySelector("img")?.dispatchEvent(new Event("error"));
+
+    const image = root.querySelector("img");
+    // The placeholder replaces the broken image in place: same element, same
+    // slot in the text flow, app-owned fallback asset.
+    expect(image?.getAttribute("src")).toBe("/image-load-failed.svg");
+    expect(image?.alt).toBe("图片加载失败");
+    expect(image?.dataset.m2hFallback).toBe("true");
+    // The failed source survives on the element for the top warning to report.
+    expect(image?.dataset.m2hOriginalSrc).toBe("/assets/broken.png");
+
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    expect(frame?.classList.contains("m2h-image-failed")).toBe(true);
+    // A placeholder has no name or size/format rows to hover for …
+    expect(frame?.querySelector(".m2h-image-name-tooltip")).toBeNull();
+    // … and nothing to magnify: the marker is gone and the trigger hides.
+    expect(image?.dataset.m2hLightboxItem).toBeUndefined();
+    expect(
+      frame?.querySelector<HTMLButtonElement>(".m2h-lightbox-trigger")?.hidden,
+    ).toBe(true);
+  });
+
+  it("never loops when the fallback placeholder itself fails", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><img src="/assets/broken.png" alt="A"></p>';
+
+    await renderRichContent(root, "light");
+    const image = root.querySelector("img");
+    image?.dispatchEvent(new Event("error"));
+    image?.dispatchEvent(new Event("error"));
+
+    // The second error is the fallback failing: the marker short-circuits the
+    // replacement, so the element keeps the fallback source and the recorded
+    // original still names the real failure.
+    expect(image?.getAttribute("src")).toBe("/image-load-failed.svg");
+    expect(image?.dataset.m2hOriginalSrc).toBe("/assets/broken.png");
+  });
+
+  it("replaces an image that already failed before enhancement", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><img src="/a.png" alt="A"></p>';
+
+    // complete with a zero natural size is how a cached failure (or an
+    // aborted load) presents at enhancement time; no error event is coming.
+    const image = root.querySelector("img");
+    Object.defineProperty(image, "complete", { value: true });
+    Object.defineProperty(image, "naturalWidth", { value: 0 });
+
+    await renderRichContent(root, "light");
+
+    expect(image?.getAttribute("src")).toBe("/image-load-failed.svg");
+    expect(
+      root
+        .querySelector(".m2h-image-frame")
+        ?.classList.contains("m2h-image-failed"),
+    ).toBe(true);
+  });
+
   it("frames images in document order without baking in position indexes", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");

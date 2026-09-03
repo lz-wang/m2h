@@ -671,6 +671,79 @@ function addImageLightboxTriggers(root: HTMLElement): void {
     frame.append(tooltip);
     trackImageMetadata(image, meta);
     frame.append(createLightboxTrigger("查看大图"));
+    trackImageFailure(image);
+  }
+}
+
+// The placeholder a failed image collapses into. Served from the app's own
+// public assets, so the fallback itself failing can only mean the app is
+// broken — the m2hFallback marker below makes sure that can never loop.
+const IMAGE_FALLBACK_SRC = "/image-load-failed.svg";
+
+// Watch a framed image for a load failure and collapse it into the shared
+// placeholder. The replacement lives here, not in React's error reporting:
+// the frame, the tooltip, the trigger, and now the failure state are all body
+// DOM owned by this layer, while React only surfaces the top warning. Covers
+// both orders — the error may arrive after enhancement, or the image may
+// already have failed (cached failure, aborted load) before it ever ran.
+function trackImageFailure(image: HTMLImageElement): void {
+  if (image.complete && image.naturalWidth === 0) {
+    replaceImageWithFallback(image);
+    return;
+  }
+  image.addEventListener(
+    "error",
+    () => {
+      replaceImageWithFallback(image);
+    },
+    { once: true },
+  );
+}
+
+function replaceImageWithFallback(image: HTMLImageElement): void {
+  // The fallback's own failure must never re-enter this path (the marker is
+  // also how the React layer tells a placeholder error from a real one).
+  if (image.dataset.m2hFallback === "true") {
+    return;
+  }
+  image.dataset.m2hFallback = "true";
+  // Keep the failed source around for the top warning to report — after the
+  // swap, "src" no longer names what failed.
+  image.dataset.m2hOriginalSrc = image.getAttribute("src") ?? "";
+  // A <picture>'s <source> elements would keep feeding the original (missing)
+  // candidates; without them the <img> src swap takes effect.
+  image.parentElement?.querySelectorAll("source").forEach((source) => {
+    source.remove();
+  });
+  image.src = IMAGE_FALLBACK_SRC;
+  image.alt = "图片加载失败";
+  // A broken image is nothing to magnify: withdraw the Lightbox marker and
+  // hide the magnifier, exactly as a visual that never rendered does.
+  syncImageLightboxAvailability(image, false);
+  // The metadata tooltip describes the picture that was supposed to load; a
+  // placeholder has neither a meaningful name nor size/format rows.
+  const frame = image.closest(".m2h-image-frame");
+  frame?.querySelector(":scope > .m2h-image-name-tooltip")?.remove();
+  frame?.classList.add("m2h-image-failed");
+}
+
+// The image counterpart of syncRichVisualLightboxAvailability: whether an
+// image may open the Lightbox is a function of it showing real content, and
+// after every state change the marker and the trigger are brought in line.
+function syncImageLightboxAvailability(
+  image: HTMLImageElement,
+  available: boolean,
+): void {
+  if (available) {
+    image.dataset.m2hLightboxItem = "true";
+  } else {
+    delete image.dataset.m2hLightboxItem;
+  }
+  const trigger = image
+    .closest(".m2h-image-frame")
+    ?.querySelector<HTMLButtonElement>(":scope > .m2h-lightbox-trigger");
+  if (trigger) {
+    trigger.hidden = !available;
   }
 }
 
@@ -754,7 +827,10 @@ function imageFormatFromExtension(extension: string): string | null {
 function imageFormatFromMime(mime: string): string | null {
   // Data URLs may carry parameters ("image/svg+xml;charset=…", the implicit
   // ";base64") — the subtype alone decides the label.
-  const subtype = mime.toLowerCase().replace(/^image\//, "").split(";")[0];
+  const subtype = mime
+    .toLowerCase()
+    .replace(/^image\//, "")
+    .split(";")[0];
   if (subtype === "" || subtype === undefined) {
     return null;
   }
