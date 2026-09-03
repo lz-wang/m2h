@@ -197,7 +197,7 @@ m2h 支持常用 GFM Markdown，并提供以下扩展：
 | --- | --- |
 | GitHub 风格 | 语法高亮、标题锚点、脚注、Emoji、GitHub Alerts 与可排序表格 |
 | 富内容 | 数学公式（`$...$` / `$$...$$`，金额保持普通文本）、Mermaid 与 ZenUML、[Vega-Lite 统计图表](docs/demos/vega-lite/00-index.md)（自包含 JSON spec） |
-| 元数据 | YAML Frontmatter；标题、日期别名和回退规则见 [Frontmatter 演示](docs/demos/frontmatter/00-index.md) |
+| 元数据 | YAML Frontmatter；标题、日期别名、描述（description）与回退规则见 [Frontmatter 演示](docs/demos/frontmatter/00-index.md) |
 | 本地引用 | 当前文档相对路径与 `/` 开头的当前 root 相对路径；检查行为见 [本地目标演示](docs/demos/checkers/02-local-target-missing.md) |
 | 行内扩展 | `==高亮==`、`^^插入^^` 与 [`++ctrl+alt+del++` 键盘按键](docs/demos/pymarkdown/keyboards.md) |
 | 协作标记 | [Critic Markup 行内与块级语法](docs/demos/pymarkdown/critic.md) |

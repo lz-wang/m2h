@@ -77,6 +77,62 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	}
 }
 
+func TestDirectoryFilesAPICarriesDescription(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	canonical := canonicalDirectory(t, root)
+	writeTestFile(t, filepath.Join(root, "with.md"),
+		"---\ntitle: With\ndescription: 一句话介绍\n---\n# With\n")
+	writeTestFile(t, filepath.Join(root, "without.md"), "# Without\n")
+	writeTestFile(t, filepath.Join(root, "invalid.md"),
+		"---\ntitle: [unclosed\n---\n# Invalid\n")
+	options := files.DiscoverOptions{Depth: 2, Pattern: "**/*.md"}
+	handler := newDocumentHandler(singleRootWorkspace(rootScope{root: canonical, discovery: options}), nil, directoryTestUI())
+
+	response := performRequest(handler, http.MethodGet, "/api/files")
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /api/files status = %d, body = %s", response.Code, response.Body.String())
+	}
+
+	// description is omitempty: the raw JSON for a document without one must
+	// not carry the key at all.
+	body := response.Body.String()
+	if !strings.Contains(body, `"description":"一句话介绍"`) {
+		t.Fatalf("declared description missing from response: %s", body)
+	}
+	if strings.Count(body, `"description"`) != 1 {
+		t.Fatalf("description key present more than once (omit empty broken): %s", body)
+	}
+
+	var payload fileListResponse
+	decodeJSON(t, response, &payload)
+	files := payload.Roots[0].Files
+	if got := descriptionFor(files, "with.md"); got != "一句话介绍" {
+		t.Errorf("with.md description = %q, want %q", got, "一句话介绍")
+	}
+	if got := descriptionFor(files, "without.md"); got != "" {
+		t.Errorf("without.md description = %q, want empty", got)
+	}
+	// The invalid frontmatter block must not fail the listing; the entry
+	// keeps its title fallback and carries no description.
+	if got := descriptionFor(files, "invalid.md"); got != "" {
+		t.Errorf("invalid.md description = %q, want empty", got)
+	}
+	if titleFor(files, "invalid.md") == "" {
+		t.Errorf("invalid.md lost its fallback title")
+	}
+}
+
+func descriptionFor(summaries []fileSummary, relative string) string {
+	for _, summary := range summaries {
+		if summary.Path == relative {
+			return summary.Description
+		}
+	}
+	return ""
+}
+
 func TestDirectoryFilesAPIDepthGlobRefresh(t *testing.T) {
 	root := directoryFixture(t)
 	canonical := canonicalDirectory(t, root)

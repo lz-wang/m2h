@@ -7,6 +7,10 @@ export interface FileSummary {
   path: string;
   name: string;
   title: string;
+  // The frontmatter description, when the document declares one. Absent —
+  // not empty — is the "no description" state, so the sidebar tooltip and
+  // the search filter can treat it uniformly.
+  description?: string;
 }
 
 // RootSummary groups one preview root's documents. Files carry root-relative
@@ -155,7 +159,18 @@ function parseFileSummary(value: unknown): FileSummary {
   ) {
     throw new Error("文件条目响应格式无效");
   }
-  return { path: value.path, name: value.name, title: value.title };
+  const summary: FileSummary = {
+    path: value.path,
+    name: value.name,
+    title: value.title,
+  };
+  if (value.description !== undefined) {
+    if (typeof value.description !== "string") {
+      throw new Error("文件条目响应格式无效");
+    }
+    summary.description = value.description;
+  }
+  return summary;
 }
 
 // A missing or unrecognized kind falls back to directory so the WebUI keeps

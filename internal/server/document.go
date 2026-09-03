@@ -23,9 +23,10 @@ import (
 )
 
 type fileSummary struct {
-	Path  string `json:"path"`
-	Name  string `json:"name"`
-	Title string `json:"title"`
+	Path        string `json:"path"`
+	Name        string `json:"name"`
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
 }
 
 // rootSummary groups one workspace root's documents. Files carry root-relative
@@ -154,15 +155,16 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 				writeJSONError(response, http.StatusInternalServerError, "read Markdown file")
 				return
 			}
-			title, err := fileDisplayTitle(contents, entry.RelativePath)
+			metadata, err := fileDisplayMetadata(contents, entry.RelativePath)
 			if err != nil {
 				writeJSONError(response, http.StatusInternalServerError, "extract Markdown title")
 				return
 			}
 			summaries = append(summaries, fileSummary{
-				Path:  entry.RelativePath,
-				Name:  path.Base(entry.RelativePath),
-				Title: title,
+				Path:        entry.RelativePath,
+				Name:        path.Base(entry.RelativePath),
+				Title:       metadata.Title,
+				Description: metadata.Description,
 			})
 		}
 		roots = append(roots, rootSummary{
@@ -231,21 +233,34 @@ func (handler *documentHandler) serveDocument(response http.ResponseWriter, requ
 	})
 }
 
-// fileDisplayTitle resolves one file-list entry's display title: a valid
-// frontmatter title outranks the first H1. An invalid frontmatter block must
-// not fail the whole listing — opening that document surfaces the 422, the
+// fileDisplayInfo is the file-list entry's display metadata, resolved in one
+// frontmatter parse: the title (a valid frontmatter title outranks the first
+// H1) and the description tooltip text. An invalid frontmatter block must not
+// fail the whole listing — opening that document surfaces the 422, the
 // sidebar should still list it — so the invalid block falls back to plain
-// first-H1/filename extraction over the full source.
-func fileDisplayTitle(contents []byte, relativePath string) (string, error) {
+// first-H1/filename extraction over the full source, with no description.
+type fileDisplayInfo struct {
+	Title       string
+	Description string
+}
+
+func fileDisplayMetadata(contents []byte, relativePath string) (fileDisplayInfo, error) {
 	body, frontMatter, err := markdown.ParseFrontMatter(contents)
 	if err != nil {
-		return markdown.Title(contents, relativePath)
+		title, titleErr := markdown.Title(contents, relativePath)
+		return fileDisplayInfo{Title: title}, titleErr
 	}
 	fallback, err := markdown.Title(body, relativePath)
 	if err != nil {
-		return "", err
+		return fileDisplayInfo{}, err
 	}
-	return markdown.PreferredTitle(frontMatter, fallback), nil
+	metadata := fileDisplayInfo{
+		Title: markdown.PreferredTitle(frontMatter, fallback),
+	}
+	if frontMatter != nil {
+		metadata.Description = frontMatter.Description
+	}
+	return metadata, nil
 }
 
 // resolveVisibleDocument maps an addressable (virtual) document path onto its

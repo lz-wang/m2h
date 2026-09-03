@@ -19,6 +19,7 @@ import (
 type FrontMatter struct {
 	Entries     []FrontMatterEntry
 	Title       string
+	Description string
 	CreatedDate string
 	UpdatedDate string
 	Date        string
@@ -159,6 +160,8 @@ func parseFrontMatterYAML(raw []byte) (*FrontMatter, error) {
 		switch key {
 		case "title":
 			meta.Title = normalizeFrontMatterTitle(valueNode)
+		case "description":
+			meta.Description = normalizeFrontMatterDescription(valueNode)
 		case "date":
 			meta.Date = normalizeFrontMatterDate(valueNode)
 		case "tags":
@@ -232,6 +235,17 @@ func formatFrontMatterValue(node *yaml.Node) (string, error) {
 // document's display title, which would otherwise surface re-serialized YAML
 // as a heading.
 func normalizeFrontMatterTitle(node *yaml.Node) string {
+	if node.Kind != yaml.ScalarNode {
+		return ""
+	}
+	return strings.TrimSpace(node.Value)
+}
+
+// normalizeFrontMatterDescription mirrors the title rule: a scalar string,
+// trimmed, and nothing else. A mapping or sequence description (or a missing
+// one) leaves the field empty — re-serialized YAML must never surface as the
+// sidebar's description tooltip.
+func normalizeFrontMatterDescription(node *yaml.Node) string {
 	if node.Kind != yaml.ScalarNode {
 		return ""
 	}

@@ -1,5 +1,6 @@
 ---
 title: Frontmatter 演示索引
+description: frontmatter 元数据的读取规则与人工验证入口，覆盖日期别名、标题来源与描述字段
 ---
 
 # Frontmatter 演示索引
@@ -39,3 +40,9 @@ m2h web docs/demos
 | 16-h1-text-normalized | 剥离行内标记、解码实体、折叠空白 | 快速 开始 & 部署 |
 | 17-filename-fallback | 无 H1 时文件名兜底（保留扩展名） | 17-filename-fallback.md |
 | 18-invalid-frontmatter | 非法 YAML：侧边栏降级列出，打开返回 422 | 侧边栏：非法 Frontmatter 的降级；正文：错误态 |
+
+## 描述（description）
+
+`description` 是文档的一句话描述，随 `/api/files` 下发：悬停侧栏条目时显示在文件名与标题下方，侧栏搜索同时匹配标题、文件名、路径与描述。规则与标题一致——只接受标量字符串并去除首尾空白；序列/映射值不成为描述（仍在 Frontmatter 表格原样展示），缺失或为空时侧栏 tooltip 不显示描述行。
+
+本索引文档的 frontmatter 即携带一个 `description`：启动 `m2h web docs/demos` 后悬停侧栏中的"Frontmatter 演示索引"即可对照验证。

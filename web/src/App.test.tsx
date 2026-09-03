@@ -495,6 +495,48 @@ describe("App directory preview", () => {
     expect(screen.getByText("没有匹配的文档")).toBeTruthy();
   });
 
+  it("matches the sidebar search against the document description", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/doc/README.md");
+    const api = createAPI({
+      listFiles: vi.fn().mockResolvedValue({
+        kind: "directory",
+        version: "0.9.1",
+        roots: [
+          {
+            id: "r0",
+            name: "docs",
+            files: [
+              {
+                path: "a.md",
+                name: "a.md",
+                title: "A",
+                description: "vps deployment guide",
+              },
+              { path: "b.md", name: "b.md", title: "B" },
+            ],
+          },
+        ],
+      }),
+      getDocument: vi.fn().mockImplementation(async (path: string) => ({
+        path,
+        title: "Title",
+        html: `<p>Body for ${path}</p>`,
+        frontmatter: null,
+        toc: [],
+      })),
+    });
+    render(<App api={api} />);
+    await screen.findByText("Body for README.md");
+
+    // The description is searchable metadata: a query that matches only
+    // a.md's description surfaces it and drops b.md.
+    const search = screen.getByRole("searchbox", { name: "搜索文档" });
+    await user.type(search, "deployment");
+    expect(screen.getByRole("button", { name: "A，a.md" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "B，b.md" })).toBeNull();
+  });
+
   it("restores a dark deep link and expands the selected directory", async () => {
     window.history.replaceState(
       null,

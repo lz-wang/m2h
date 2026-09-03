@@ -290,6 +290,63 @@ func TestParseFrontMatterTitle(t *testing.T) {
 	}
 }
 
+func TestParseFrontMatterDescription(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		name   string
+		source string
+		want   string
+	}{
+		{
+			name:   "scalar description",
+			source: "---\ndescription: 一句话介绍这份文档\n---\n# Heading\n",
+			want:   "一句话介绍这份文档",
+		},
+		{
+			name:   "quoted empty description",
+			source: "---\ndescription: \"\"\n---\n# Heading\n",
+			want:   "",
+		},
+		{
+			name:   "blank description",
+			source: "---\ndescription:\n---\n# Heading\n",
+			want:   "",
+		},
+		{
+			name:   "surrounding whitespace trimmed",
+			source: "---\ndescription: '  padded  '\n---\n",
+			want:   "padded",
+		},
+		{
+			name:   "sequence description ignored",
+			source: "---\ndescription:\n  - foo\n  - bar\n---\n",
+			want:   "",
+		},
+		{
+			name:   "mapping description ignored",
+			source: "---\ndescription:\n  foo: bar\n---\n",
+			want:   "",
+		},
+		{
+			name:   "missing description stays empty",
+			source: "---\ntitle: m2h\n---\n# Heading\n",
+			want:   "",
+		},
+	}
+
+	for _, tc := range cases {
+		_, frontMatter, err := ParseFrontMatter([]byte(tc.source))
+		if err != nil {
+			t.Errorf("%s: unexpected error: %v", tc.name, err)
+			continue
+		}
+		if frontMatter.Description != tc.want {
+			t.Errorf("%s: Description = %q, want %q", tc.name, frontMatter.Description, tc.want)
+		}
+	}
+}
+
 func TestParseFrontMatterTitleStillListedAsEntry(t *testing.T) {
 	t.Parallel()
 

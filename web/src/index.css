@@ -425,6 +425,18 @@ body,
   white-space: nowrap;
 }
 
+/* The frontmatter description, when the document declares one: prose, not a
+ * label, so it wraps inside the tooltip instead of truncating like the
+ * single-line name/title rows above. */
+.tree-tooltip-description {
+  max-width: 100%;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
 .toolbar-actions {
   display: flex;
   flex-shrink: 0;

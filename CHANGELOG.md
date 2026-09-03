@@ -14,6 +14,10 @@
 
 ## [未发布]
 
+### 新增
+
+- Frontmatter 新增 `description`（一句话描述）字段：标量字符串且去除首尾空白，序列/映射值不成为描述（仍在 Frontmatter 表格原样展示），缺失或为空时不展示。它随 `/api/files` 一起下发（`description` 字段，空缺时省略），WebUI 侧栏悬停提示在文件名与标题下方显示描述，侧栏搜索同时匹配描述；服务端在与标题同一次 frontmatter 解析中同时得到两者，不额外解析，非法 frontmatter 仍按既有降级规则列出文件（无描述）。
+
 ### 修复
 
 - 修复 Lightbox 中 Mermaid 图表与 Vega-Lite 图表的画布不随阅读主题变化的问题：图表查看画布现在跟随主题（浅色纯白、深色纯黑，通过 Lightbox stage 的 `data-visual-kind` 标记与 `--m2h-lightbox-diagram-bg` 主题变量实现），普通图片的查看背景与 Lightbox 半透明遮罩保持不变；同时以真实浏览器回归固定既有契约——Lightbox 中图表始终为 `data:image/svg+xml` 矢量快照，从 1x 到 5x 的缩放全程快照逐字节不变（不重新序列化、不栅格化，缩放始终矢量渲染）。

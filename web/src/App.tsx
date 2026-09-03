@@ -174,7 +174,8 @@ export function App({ api }: AppProps) {
             (file) =>
               file.name.toLocaleLowerCase().includes(query) ||
               file.title.toLocaleLowerCase().includes(query) ||
-              file.path.toLocaleLowerCase().includes(query),
+              file.path.toLocaleLowerCase().includes(query) ||
+              (file.description?.toLocaleLowerCase().includes(query) ?? false),
           ),
         };
       })

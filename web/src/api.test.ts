@@ -239,6 +239,82 @@ describe("browser API", () => {
     await expect(browserAPI.getDocument("a.md")).rejects.toThrow(
       "文档响应格式无效",
     );
+
+    // The description rides along when present, but must be a string — a
+    // non-string value is a contract breach, not something to coerce.
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          version: "1",
+          roots: [
+            {
+              id: "r0",
+              name: "docs",
+              files: [
+                {
+                  path: "README.md",
+                  name: "README.md",
+                  title: "Readme",
+                  description: 42,
+                },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.listFiles()).rejects.toThrow(
+      "文件条目响应格式无效",
+    );
+  });
+
+  it("carries the optional description on file summaries", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          kind: "directory",
+          version: "1",
+          roots: [
+            {
+              id: "r0",
+              name: "docs",
+              files: [
+                {
+                  path: "README.md",
+                  name: "README.md",
+                  title: "Readme",
+                  description: "m2h documentation",
+                },
+                { path: "bare.md", name: "bare.md", title: "Bare" },
+              ],
+            },
+          ],
+        }),
+        { status: 200 },
+      ),
+    );
+
+    // Present on the first file, absent (not empty) on the second.
+    await expect(browserAPI.listFiles()).resolves.toEqual({
+      kind: "directory",
+      version: "1",
+      roots: [
+        {
+          id: "r0",
+          name: "docs",
+          files: [
+            {
+              path: "README.md",
+              name: "README.md",
+              title: "Readme",
+              description: "m2h documentation",
+            },
+            { path: "bare.md", name: "bare.md", title: "Bare" },
+          ],
+        },
+      ],
+    });
   });
 
   it("fetches raw Markdown through the encoded /raw/ address", async () => {

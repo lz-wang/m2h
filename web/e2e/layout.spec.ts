@@ -199,6 +199,16 @@ test("opens the root README from the bare workspace address", async ({
     "README.md",
   );
 
+  // Hovering the entry in the sidebar reveals its tooltip: name, title, and
+  // — when the document declares one — the frontmatter description wrapping
+  // underneath.
+  await page.locator('[aria-current="page"]').hover();
+  await expect(page.locator(".tree-tooltip-name")).toHaveText("README.md");
+  await expect(page.locator(".tree-tooltip-title")).toHaveText("工作区入口");
+  await expect(page.locator(".tree-tooltip-description")).toContainText(
+    "e2e 固定目录的入口文档",
+  );
+
   // Picking a document from the tree still opens it under /doc/ (expanding
   // the collapsed directories on the way).
   await page.locator('[data-tree-path="a"]').click();

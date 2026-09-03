@@ -382,6 +382,12 @@ function FileItem({
           <>
             <span className="tree-tooltip-name">{node.name}</span>
             <span className="tree-tooltip-title">{node.file.title}</span>
+            {node.file.description !== undefined &&
+            node.file.description !== "" ? (
+              <span className="tree-tooltip-description">
+                {node.file.description}
+              </span>
+            ) : null}
           </>
         ),
       }}
