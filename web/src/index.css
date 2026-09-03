@@ -1038,6 +1038,25 @@ body,
  * carries live zoom/rotate/pan and must never transition (a transition there
  * would lag pointer pans and blur the zoom/pan clamp).
  */
+/* The diagram canvas inside the Lightbox: SVG visuals (Mermaid diagrams,
+ * Vega-Lite charts) bake a white (light) / black (dark) page into their
+ * palette, so their stage mirrors that canvas instead of showing the
+ * semi-transparent backdrop through the diagram's transparent background.
+ * Ordinary bitmap images keep the transparent stage. The backdrop itself is
+ * unchanged — this colors the stage area only, not the whole modal. */
+:root {
+  --m2h-lightbox-diagram-bg: #fff;
+}
+
+.dark {
+  --m2h-lightbox-diagram-bg: #000;
+}
+
+.image-lightbox-stage[data-visual-kind="mermaid"],
+.image-lightbox-stage[data-visual-kind="vega-lite"] {
+  background: var(--m2h-lightbox-diagram-bg);
+}
+
 .image-lightbox-backdrop {
   position: fixed;
   inset: 0;

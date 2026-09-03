@@ -430,7 +430,11 @@ export function DocumentLightbox({
            * The enter/exit fade and scale ride on the stage (never on the
            * image below, whose transform carries live zoom/rotate/pan and
            * must never transition). */}
-          <div className="image-lightbox-stage" ref={handleStageRef}>
+          <div
+            className="image-lightbox-stage"
+            data-visual-kind={item.kind}
+            ref={handleStageRef}
+          >
             <img
               ref={handleImageRef}
               className="image-lightbox-image"

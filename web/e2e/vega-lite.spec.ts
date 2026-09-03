@@ -513,6 +513,24 @@ test("browses charts, diagrams, and images in one lightbox sequence", async ({
     '.image-lightbox-counter > span[aria-hidden="true"]',
   );
   await expect(counter).toHaveText("3 / 3");
+
+  // The chart lightbox shows the serialized SVG snapshot on the light
+  // theme's white diagram canvas, keyed by the stage's kind marker.
+  const stageState = await page.evaluate(() => {
+    const stage = document.querySelector<HTMLElement>(".image-lightbox-stage");
+    const image = document.querySelector<HTMLImageElement>(
+      ".image-lightbox-image",
+    );
+    return {
+      kind: stage?.dataset.visualKind,
+      background: stage === null ? "" : getComputedStyle(stage).backgroundColor,
+      src: image?.getAttribute("src") ?? "",
+    };
+  });
+  expect(stageState.kind).toBe("vega-lite");
+  expect(stageState.background).toBe("rgb(255, 255, 255)");
+  expect(stageState.src.startsWith("data:image/svg+xml")).toBe(true);
+
   await page.getByRole("button", { name: "上一项" }).click();
   await expect(counter).toHaveText("2 / 3");
   await page.getByRole("button", { name: "上一项" }).click();

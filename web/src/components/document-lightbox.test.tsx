@@ -100,6 +100,77 @@ describe("DocumentLightbox", () => {
     expect(screen.getByText("第 2 项，共 3 项")).toBeTruthy();
   });
 
+  it("marks the stage with the item kind for the theme-aware diagram canvas", () => {
+    const items: LightboxItem[] = [
+      {
+        kind: "image",
+        src: "/img.png",
+        srcSet: null,
+        sizes: null,
+        alt: "A",
+        title: null,
+      },
+      {
+        kind: "mermaid",
+        src: "data:image/svg+xml,%3Csvg%3E%3C/svg%3E",
+        srcSet: null,
+        sizes: null,
+        alt: "Mermaid 图表",
+        title: null,
+      },
+      {
+        kind: "vega-lite",
+        src: "data:image/svg+xml,%3Csvg%3E%3C/svg%3E",
+        srcSet: null,
+        sizes: null,
+        alt: "Vega-Lite 图表",
+        title: null,
+      },
+    ];
+
+    const view = render(
+      <DocumentLightbox
+        items={items}
+        index={0}
+        open
+        onIndexChange={() => {}}
+        onClose={() => {}}
+        onClosed={() => {}}
+      />,
+    );
+    const stage = () =>
+      screen
+        .getByRole("dialog")
+        .querySelector<HTMLElement>(".image-lightbox-stage");
+    // A bitmap image keeps the transparent stage…
+    expect(stage()?.dataset.visualKind).toBe("image");
+
+    // … while both SVG visual kinds are marked, which is what the stylesheet
+    // keys the white/black diagram canvas on.
+    view.rerender(
+      <DocumentLightbox
+        items={items}
+        index={1}
+        open
+        onIndexChange={() => {}}
+        onClose={() => {}}
+        onClosed={() => {}}
+      />,
+    );
+    expect(stage()?.dataset.visualKind).toBe("mermaid");
+    view.rerender(
+      <DocumentLightbox
+        items={items}
+        index={2}
+        open
+        onIndexChange={() => {}}
+        onClose={() => {}}
+        onClosed={() => {}}
+      />,
+    );
+    expect(stage()?.dataset.visualKind).toBe("vega-lite");
+  });
+
   it("navigates to the previous and next item through the toolbar", async () => {
     const items = makeItems(3);
     const { onIndexChange } = renderLightbox(items, 1);

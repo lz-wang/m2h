@@ -494,9 +494,68 @@ test("rotates, zooms, pans and closes a mermaid diagram without moving the docum
   await expectInvariantsUnchanged(page, before);
 });
 
+// The diagram lightbox is a vector snapshot on a theme-aware canvas: the src
+// stays a serialized SVG data URL (byte-identical across the whole zoom
+// range — no re-serialization, no rasterization) while the stage behind it
+// renders white in the light theme and black in the dark one. Bitmap images
+// keep the transparent stage; the modal backdrop is unchanged.
+test("renders the mermaid lightbox as a vector snapshot on a theme-aware canvas", async ({
+  page,
+}) => {
+  await openMermaidDocument(page);
+  await openMermaidLightbox(page);
+  await waitForFittedImage(page, 100);
+
+  const readLightbox = () =>
+    page.evaluate(() => {
+      const stage = document.querySelector<HTMLElement>(
+        ".image-lightbox-stage",
+      );
+      const image = document.querySelector<HTMLImageElement>(
+        ".image-lightbox-image",
+      );
+      if (stage === null || image === null) {
+        throw new Error("lightbox stage was not rendered");
+      }
+      return {
+        kind: stage.dataset.visualKind,
+        background: getComputedStyle(stage).backgroundColor,
+        src: image.getAttribute("src") ?? "",
+      };
+    });
+
+  // Light theme: the diagram canvas is white and the snapshot is a real SVG
+  // data URL.
+  const light = await readLightbox();
+  expect(light.kind).toBe("mermaid");
+  expect(light.background).toBe("rgb(255, 255, 255)");
+  expect(light.src.startsWith("data:image/svg+xml")).toBe(true);
+
+  // Zoom from 1x to the 5x cap: the src never changes.
+  const zoomIn = page.getByRole("button", { name: "放大图片" });
+  while (await zoomIn.isEnabled()) {
+    await zoomIn.click();
+  }
+  expect((await readLightbox()).src).toBe(light.src);
+  await page.getByRole("button", { name: "关闭视觉内容预览" }).click();
+  await expect(page.locator(".image-lightbox")).toBeHidden();
+
+  // Dark theme: a fresh (dark-palette) snapshot, black canvas.
+  await page.goto(`${mermaidDocumentPath}?mode=dark`);
+  await page.waitForFunction(
+    () =>
+      document.documentElement.classList.contains("dark") &&
+      document.querySelector(".m2h-mermaid-frame svg") !== null,
+  );
+  await page.locator(".m2h-mermaid-frame").hover();
+  await page.locator(".m2h-mermaid-frame .m2h-lightbox-trigger").click();
+  const dark = await readLightbox();
+  expect(dark.background).toBe("rgb(0, 0, 0)");
+  expect(dark.src.startsWith("data:image/svg+xml")).toBe(true);
+});
+
 // --- Diagrams whose render never produced an SVG -----------------------------
-//
-// Lightbox availability is a function of the SVG's real presence, not of the
+//// Lightbox availability is a function of the SVG's real presence, not of the
 // frame's existence: an invalid diagram keeps its frame (and source text) but
 // must offer no magnifier — neither clickable nor keyboard-reachable — while
 // a valid diagram in the same document behaves exactly as before.
