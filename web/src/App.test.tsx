@@ -2379,6 +2379,7 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
       }
       return `# Raw source of ${path}\n`;
     }),
+    search: vi.fn().mockResolvedValue({ query: "", results: [] }),
     ...overrides,
   };
 }

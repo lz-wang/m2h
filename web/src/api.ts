@@ -65,6 +65,31 @@ export interface DocumentResponse {
   toc: TocItem[];
 }
 
+// SearchHeading locates the section a full-text match belongs to. The id is
+// the same anchor id the rendered document uses, so a hit can deep-link to
+// the exact heading.
+export interface SearchHeading {
+  id: string;
+  text: string;
+}
+
+// SearchResult is the single best match of one document. Path carries the
+// addressable (virtual) document path — the same identity /doc/ and the
+// sidebar use — so the WebUI can select it without composing root ids.
+// Snippet is a plain-text excerpt (empty for metadata-only matches) and
+// heading is omitted when the match has no section.
+export interface SearchResult {
+  path: string;
+  title: string;
+  snippet?: string;
+  heading?: SearchHeading;
+}
+
+export interface SearchResponse {
+  query: string;
+  results: SearchResult[];
+}
+
 export interface PreviewAPI {
   listFiles(signal?: AbortSignal): Promise<FileListResponse>;
   getDocument(path: string, signal?: AbortSignal): Promise<DocumentResponse>;
@@ -72,6 +97,9 @@ export interface PreviewAPI {
   // from /raw/<virtual-path> on demand — sharing keeps it out of every
   // /api/document response until the reader actually asks for the full text.
   getMarkdown(path: string, signal?: AbortSignal): Promise<string>;
+  // Runs a workspace-wide full-text query. The server scans the publishable
+  // files at request time; the caller aborts superseded queries via signal.
+  search(query: string, signal?: AbortSignal): Promise<SearchResponse>;
 }
 
 export class APIError extends Error {
@@ -285,6 +313,44 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+function parseSearchResponse(payload: unknown): SearchResponse {
+  if (
+    !isRecord(payload) ||
+    typeof payload.query !== "string" ||
+    !Array.isArray(payload.results)
+  ) {
+    throw new Error("搜索响应格式无效");
+  }
+  const results = payload.results.map((value) => {
+    if (
+      !isRecord(value) ||
+      typeof value.path !== "string" ||
+      typeof value.title !== "string"
+    ) {
+      throw new Error("搜索响应格式无效");
+    }
+    const result: SearchResult = { path: value.path, title: value.title };
+    if (value.snippet !== undefined && value.snippet !== null) {
+      if (typeof value.snippet !== "string") {
+        throw new Error("搜索响应格式无效");
+      }
+      result.snippet = value.snippet;
+    }
+    if (value.heading !== undefined && value.heading !== null) {
+      if (
+        !isRecord(value.heading) ||
+        typeof value.heading.id !== "string" ||
+        typeof value.heading.text !== "string"
+      ) {
+        throw new Error("搜索响应格式无效");
+      }
+      result.heading = { id: value.heading.id, text: value.heading.text };
+    }
+    return result;
+  });
+  return { query: payload.query, results };
+}
+
 export const browserAPI: PreviewAPI = {
   async listFiles(signal) {
     return parseFileList(await requestJSON("/api/files", signal));
@@ -297,5 +363,11 @@ export const browserAPI: PreviewAPI = {
   },
   async getMarkdown(path, signal) {
     return requestText(markdownURL(path), signal);
+  },
+  async search(query, signal) {
+    const params = new URLSearchParams({ q: query });
+    return parseSearchResponse(
+      await requestJSON(`/api/search?${params.toString()}`, signal),
+    );
   },
 };

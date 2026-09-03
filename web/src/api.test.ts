@@ -355,6 +355,77 @@ describe("browser API", () => {
     });
   });
 
+  it("validates search responses and encodes the query", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          query: "goldmark",
+          results: [
+            {
+              path: "docs/markdown.md",
+              title: "Markdown Rendering",
+              snippet: "…Goldmark AST parser…",
+              heading: { id: "parser", text: "Parser" },
+            },
+            {
+              path: "README.md",
+              title: "Readme",
+            },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    const response = await browserAPI.search("goldmark 搜索");
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `/api/search?${new URLSearchParams({ q: "goldmark 搜索" }).toString()}`,
+    );
+    expect(response.query).toBe("goldmark");
+    expect(response.results).toEqual([
+      {
+        path: "docs/markdown.md",
+        title: "Markdown Rendering",
+        snippet: "…Goldmark AST parser…",
+        heading: { id: "parser", text: "Parser" },
+      },
+      { path: "README.md", title: "Readme" },
+    ]);
+  });
+
+  it("surfaces search HTTP errors and malformed payloads", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "search query is too long" }), {
+        status: 400,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(browserAPI.search("x")).rejects.toMatchObject({
+      name: "APIError",
+      status: 400,
+    });
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ query: "q", results: "nope" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    await expect(browserAPI.search("q")).rejects.toThrow("搜索响应格式无效");
+
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          query: "q",
+          results: [
+            { path: "a.md", title: "A", heading: { id: 3, text: "x" } },
+          ],
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      ),
+    );
+    await expect(browserAPI.search("q")).rejects.toThrow("搜索响应格式无效");
+  });
+
   it("accepts null, missing, and malformed frontmatter", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(

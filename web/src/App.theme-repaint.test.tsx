@@ -85,6 +85,7 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
       };
     }),
     getMarkdown: vi.fn().mockResolvedValue("# raw"),
+    search: vi.fn().mockResolvedValue({ query: "", results: [] }),
     ...overrides,
   };
 }
