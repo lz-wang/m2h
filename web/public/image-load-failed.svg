@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-labelledby="title description">
+  <title id="title">图片加载失败</title>
+  <desc id="description">图片加载失败时显示的占位图</desc>
+  <rect width="640" height="360" fill="#f4f4f5"/>
+  <rect x="164" y="84" width="312" height="192" rx="12" fill="none" stroke="#a1a1aa" stroke-width="8"/>
+  <path d="M188 244l76-76 48 48 52-52 88 80" fill="none" stroke="#a1a1aa" stroke-linecap="round" stroke-linejoin="round" stroke-width="8"/>
+  <circle cx="382" cy="136" r="20" fill="#a1a1aa"/>
+  <path d="M452 96l64 64m0-64l-64 64" fill="none" stroke="#ef4444" stroke-linecap="round" stroke-width="10"/>
+  <text x="320" y="322" fill="#71717a" font-family="system-ui, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif" font-size="22" text-anchor="middle">此图片加载失败</text>
+</svg>
