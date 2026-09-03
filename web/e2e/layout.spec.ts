@@ -171,6 +171,56 @@ test("does not create page-level horizontal overflow in full width without TOC",
   expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
 });
 
+test("collapses the width ladder on mobile viewports without touching the preference", async ({
+  page,
+}) => {
+  // Below 768px the sidebar is off-canvas, so the reader owns the viewport.
+  await page.setViewportSize({ width: 375, height: 720 });
+  // A non-default width (`wide`): it survives the round trip untouched.
+  await page.goto("/doc/layout-frontmatter.md?width=wide");
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".markdown-body p, .markdown-body h2") !== null,
+  );
+
+  // The reader's configured width survives: pure CSS collapses the ladder,
+  // never the URL or the stored preference.
+  expect(await page.evaluate(() => window.location.search)).toBe("?width=wide");
+  await expect(page.locator(".document-width-control")).toBeHidden();
+  // The title's frontmatter summary hides; the full inspection panel stays.
+  await expect(page.locator(".document-meta")).toBeHidden();
+  await expect(page.locator(".reader-frontmatter")).toBeVisible();
+
+  // The article spans the full viewport with no side gutter.
+  const geometry = await page.evaluate(() => {
+    const article = document.querySelector(".reader-document");
+    if (article === null) {
+      throw new Error("reader document was not rendered");
+    }
+    return {
+      viewport: document.documentElement.clientWidth,
+      left: article.getBoundingClientRect().left,
+      width: article.getBoundingClientRect().width,
+    };
+  });
+  expect(geometry.left).toBe(0);
+  expect(geometry.width).toBe(geometry.viewport);
+
+  // Widening the window restores the wide cap (and the menu) with the same
+  // URL still in place.
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const article = document.querySelector(".reader-document");
+        return article === null ? -1 : article.getBoundingClientRect().width;
+      }),
+    )
+    .toBeLessThanOrEqual(1280);
+  expect(await page.evaluate(() => window.location.search)).toBe("?width=wide");
+  await expect(page.locator(".document-width-control")).toBeVisible();
+});
+
 test("opens the root README from the bare workspace address", async ({
   page,
 }) => {

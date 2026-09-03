@@ -1566,6 +1566,13 @@ body,
   }
 }
 
+/* Mobile viewport (<768px, the same breakpoint the sidebar's useIsMobile
+ * uses): the width ladder collapses — every mode renders full width, so the
+ * three content blocks share the full-mode contract. This is pure responsive
+ * presentation: `?width=` and the user's stored preference stay untouched,
+ * so widening the window restores the configured mode, and the width menu —
+ * a control with nothing left to adjust — hides along with the title's
+ * frontmatter summary (the full inspection panel in the body stays). */
 @media (max-width: 767px) {
   .reader-toolbar {
     gap: 0.25rem;
@@ -1576,13 +1583,23 @@ body,
     font-size: 0.78rem;
   }
 
+  .document-meta {
+    display: none;
+  }
+
+  .document-width-control {
+    display: none;
+  }
+
   .reader-frontmatter {
     padding: 15px 15px 0;
   }
 
-  .reader-canvas-full .reader-document,
-  .reader-canvas-full .asset-warning,
-  .reader-canvas-full .reader-frontmatter {
+  .reader-canvas .reader-document,
+  .reader-canvas .asset-warning,
+  .reader-canvas .reader-frontmatter {
+    width: auto;
+    max-width: none;
     margin-right: 0;
     margin-left: 0;
   }

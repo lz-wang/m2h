@@ -893,6 +893,7 @@ function DocumentWidthMenu({
                 <Button
                   variant="ghost"
                   size="icon-sm"
+                  className="document-width-control"
                   aria-label={`文档宽度：${current.label}`}
                 />
               }
