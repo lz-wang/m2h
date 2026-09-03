@@ -35,11 +35,12 @@ import {
   useState,
 } from "react";
 
-import type { FrontMatter, PreviewAPI, TocItem } from "./api";
+import type { FrontMatter, PreviewAPI, SearchResult, TocItem } from "./api";
 import { DocumentLightbox } from "./components/document-lightbox";
 import { DocumentTree } from "./components/document-tree";
 import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
 import { ReaderNavigation } from "./components/reader-navigation";
+import { SearchDialog } from "./components/search-dialog";
 import {
   TableOfContentsPanel,
   TableOfContentsSheet,
@@ -84,6 +85,7 @@ import {
   type DocumentWidth,
   decodeHeadingHash,
   documentURL,
+  encodeHeadingHash,
   type Mode,
   markdownURL,
   type ResolvedMode,
@@ -92,6 +94,7 @@ import {
 import { useHeadingNavigation } from "./use-heading-navigation";
 import { useHeadingSpy } from "./use-heading-spy";
 import { usePreview } from "./use-preview";
+import { useSearch } from "./use-search";
 
 interface AppProps {
   api?: PreviewAPI;
@@ -106,6 +109,12 @@ const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
 const layoutStorageKey = "m2h.preview.layout";
 const repositoryURL = "https://github.com/lz-wang/m2h";
 const releaseVersionPattern = /^\d+\.\d+\.\d+$/;
+
+// The tooltip shows the platform's actual shortcut modifier; the handler
+// below accepts both modifiers on every platform.
+const searchShortcutHint = /mac|iphone|ipad/i.test(navigator.userAgent)
+  ? "⌘K"
+  : "Ctrl+K";
 
 // True when this page load came from a reload or a history traversal: the
 // reader should return to the exact pixel offset saved for the document (see
@@ -154,12 +163,17 @@ export function App({ api }: AppProps) {
   const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
   const [sidebarOpen, setSidebarOpen] = useState(initialLayout.sidebarOpen);
   const [sidebarResizing, setSidebarResizing] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
+  // The sidebar input filters the file tree by name/title/path/description;
+  // full-text search lives in the SearchDialog below. The two share nothing
+  // but the magnifier icon — different capabilities, different entries.
+  const [fileFilterQuery, setFileFilterQuery] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const search = useSearch(api);
   // Search stays global across the whole workspace: results keep their root
   // grouping (two roots may both hold a README.md), and matching a root's
   // name surfaces every document under it.
   const filteredRoots = useMemo(() => {
-    const query = searchQuery.trim().toLocaleLowerCase();
+    const query = fileFilterQuery.trim().toLocaleLowerCase();
     if (query === "") {
       return preview.roots;
     }
@@ -180,7 +194,7 @@ export function App({ api }: AppProps) {
         };
       })
       .filter((root) => root.files.length > 0);
-  }, [preview.roots, searchQuery]);
+  }, [preview.roots, fileFilterQuery]);
   const filteredCount = useMemo(
     () => filteredRoots.reduce((total, root) => total + root.files.length, 0),
     [filteredRoots],
@@ -205,6 +219,20 @@ export function App({ api }: AppProps) {
     },
     [],
   );
+  // Global search shortcut. The workspace-level search is available before
+  // any document is selected — single file, directory and multi-root
+  // workspaces alike. Toolbar and shortcut are two entries to the same
+  // dialog; mobile has no keyboard, so the toolbar button is not optional.
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
+        event.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
   // The scroll spy follows every heading (H1–H6) so the URL can reflect the
   // reading position even with the TOC panel hidden; the right-hand TOC still
   // lists H2–H4 only (the first H1 is the toolbar title, H5/H6 are too deep for
@@ -250,6 +278,30 @@ export function App({ api }: AppProps) {
     readerMainRef,
     preview.replaceHash,
   );
+  // Search-result activation mirrors Markdown-link navigation exactly: a hit
+  // in the already-open document scrolls in place (never refetching, so
+  // Mermaid/Vega/图片 etc. are not re-rendered), a hit in another document
+  // goes through the normal select path with the section hash encoded by the
+  // one canonical encoder. A metadata-only hit on the current document just
+  // clears the fragment and returns to the top.
+  const handleSearchSelect = (result: SearchResult) => {
+    if (result.path === preview.selectedPath) {
+      if (result.heading !== undefined) {
+        navigateToHeading(result.heading.id, {
+          behavior: "smooth",
+          updateURL: true,
+        });
+      } else {
+        preview.replaceHash(null);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      }
+      return;
+    }
+    void preview.select(
+      result.path,
+      result.heading !== undefined ? encodeHeadingHash(result.heading.id) : "",
+    );
+  };
   // Landing: position the reader once a document commits.
   // - Initial load after a reload/traversal: restore the pixel offset saved
   //   for this document (the browser's native restoration does not fire for a
@@ -442,10 +494,10 @@ export function App({ api }: AppProps) {
                 <Search aria-hidden="true" />
                 <Input
                   type="search"
-                  value={searchQuery}
-                  aria-label="搜索文档"
-                  placeholder="搜索文档"
-                  onChange={(event) => setSearchQuery(event.target.value)}
+                  value={fileFilterQuery}
+                  aria-label="筛选文件"
+                  placeholder="筛选文件"
+                  onChange={(event) => setFileFilterQuery(event.target.value)}
                 />
               </div>
             </SidebarHeader>
@@ -486,7 +538,7 @@ export function App({ api }: AppProps) {
                             rootBase={root.id}
                             rootLabel={root.name}
                             onCopyStatus={announceCopyStatus}
-                            searching={searchQuery.trim() !== ""}
+                            searching={fileFilterQuery.trim() !== ""}
                             selectedPath={preview.selectedPath}
                             visible={sidebarOpen}
                             onSelect={(path) => void preview.select(path)}
@@ -496,7 +548,7 @@ export function App({ api }: AppProps) {
                         <DocumentTree
                           files={filteredRoots[0]?.files ?? []}
                           onCopyStatus={announceCopyStatus}
-                          searching={searchQuery.trim() !== ""}
+                          searching={fileFilterQuery.trim() !== ""}
                           selectedPath={preview.selectedPath}
                           visible={sidebarOpen}
                           onSelect={(path) => void preview.select(path)}
@@ -506,7 +558,7 @@ export function App({ api }: AppProps) {
                       <p className="tree-placeholder">
                         {loading
                           ? "正在加载文件…"
-                          : searchQuery.trim() !== ""
+                          : fileFilterQuery.trim() !== ""
                             ? "没有匹配的文档"
                             : "目录中没有 Markdown 文件"}
                       </p>
@@ -547,6 +599,24 @@ export function App({ api }: AppProps) {
               frontmatter={preview.document?.frontmatter ?? null}
             />
             <div className="toolbar-actions">
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="toolbar-search-trigger"
+                      aria-label="全文搜索"
+                      onClick={() => setSearchOpen(true)}
+                    >
+                      <Search aria-hidden="true" />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">
+                  全文搜索（{searchShortcutHint}）
+                </TooltipContent>
+              </Tooltip>
               <ShareMenu
                 path={preview.selectedPath}
                 readMarkdown={preview.readCurrentMarkdown}
@@ -624,6 +694,15 @@ export function App({ api }: AppProps) {
               {copyStatus}
             </div>
           ) : null}
+          {/* The workspace-level full-text search overlay. Always mounted so
+           * the shortcut and toolbar trigger work from any reading state;
+           * Base UI renders nothing while closed. */}
+          <SearchDialog
+            open={searchOpen}
+            onOpenChange={setSearchOpen}
+            search={search}
+            onSelect={handleSearchSelect}
+          />
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>

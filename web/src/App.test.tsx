@@ -388,7 +388,7 @@ describe("App directory preview", () => {
       expect.any(AbortSignal),
     );
     expect(screen.queryByRole("button", { name: "切换文件导航" })).toBeNull();
-    expect(screen.queryByRole("searchbox", { name: "搜索文档" })).toBeNull();
+    expect(screen.queryByRole("searchbox", { name: "筛选文件" })).toBeNull();
     // Shared toolbar controls remain available in single-file mode.
     expect(screen.getByRole("button", { name: "文档宽度：标准" })).toBeTruthy();
     expect(
@@ -475,7 +475,7 @@ describe("App directory preview", () => {
 
     // Search stays global across roots but keeps the root grouping: matching
     // a root's name surfaces every document under it.
-    const search = screen.getByRole("searchbox", { name: "搜索文档" });
+    const search = screen.getByRole("searchbox", { name: "筛选文件" });
     await user.clear(search);
     await user.type(search, "beta");
     expect(
@@ -531,7 +531,7 @@ describe("App directory preview", () => {
 
     // The description is searchable metadata: a query that matches only
     // a.md's description surfaces it and drops b.md.
-    const search = screen.getByRole("searchbox", { name: "搜索文档" });
+    const search = screen.getByRole("searchbox", { name: "筛选文件" });
     await user.type(search, "deployment");
     expect(screen.getByRole("button", { name: "A，a.md" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "B，b.md" })).toBeNull();
@@ -874,7 +874,7 @@ describe("App directory preview", () => {
     render(<App api={api} />);
     await screen.findByText("Body for README.md");
 
-    const search = screen.getByRole("searchbox", { name: "搜索文档" });
+    const search = screen.getByRole("searchbox", { name: "筛选文件" });
     await user.type(search, "setup api");
     expect(
       screen.getByRole("button", {
