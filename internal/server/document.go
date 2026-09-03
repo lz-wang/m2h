@@ -112,6 +112,7 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 	mux.HandleFunc("/healthz", handler.serveHealth)
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
+	mux.HandleFunc("/api/search", requireGET(handler.serveSearch))
 	mux.HandleFunc("/api/", jsonNotFound)
 	mux.Handle("/assets/", newAssetHandler(handler.workspace))
 	mux.Handle("/runtime/", newRuntimeHandler())
