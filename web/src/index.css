@@ -1609,6 +1609,124 @@ body,
   }
 }
 
+/* Global search dialog (search-dialog.tsx). The popup geometry — near-full
+ * width on phones, 640px cap, internal scrolling — rides on the shared
+ * ui/dialog wrapper; these rules shape the query row, the result list and
+ * the transient states. */
+.search-dialog-input-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+}
+
+.search-dialog-input-row > svg {
+  position: absolute;
+  left: 0.85rem;
+  width: 1rem;
+  height: 1rem;
+  color: var(--muted-foreground);
+  pointer-events: none;
+}
+
+.search-dialog-input-row input {
+  width: 100%;
+  padding: 0.8rem 2.75rem 0.8rem 2.4rem;
+  border: 0;
+  background: transparent;
+  font-size: 0.95rem;
+  color: inherit;
+  outline: none;
+}
+
+.search-dialog-input-row input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.search-dialog-results {
+  flex: 1 1 auto;
+  min-height: 4.5rem;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.search-dialog-results ul {
+  margin: 0;
+  padding: 0.35rem;
+  list-style: none;
+}
+
+.search-dialog-results button {
+  display: block;
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 0;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.search-dialog-results button[data-active] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
+.search-dialog-result-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.search-dialog-result-name {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.search-dialog-result-heading {
+  flex-shrink: 0;
+  padding: 0.1rem 0.5rem;
+  border-radius: 999px;
+  background: var(--muted);
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.search-dialog-result-path {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--muted-foreground);
+  font-size: 0.75rem;
+}
+
+.search-dialog-result-snippet {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  margin-top: 0.2rem;
+  color: var(--muted-foreground);
+  font-size: 0.8rem;
+  line-height: 1.35;
+}
+
+.search-dialog-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 2.2rem 1rem;
+  color: var(--muted-foreground);
+  font-size: 0.875rem;
+  text-align: center;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -1628,7 +1746,9 @@ body,
   .reader-toc,
   .reader-navigation,
   .image-lightbox-backdrop,
-  .image-lightbox-stage {
+  .image-lightbox-stage,
+  [data-slot="dialog-overlay"],
+  [data-slot="dialog-content"] {
     transition: none;
   }
 
