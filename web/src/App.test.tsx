@@ -2352,6 +2352,130 @@ describe("image lightbox integration", () => {
   });
 });
 
+describe("App global full-text search", () => {
+  // Opens the dialog (the caller has already fired the shortcut), types a
+  // query into the debounced state machine, and returns the dialog scope —
+  // result buttons are looked up inside it because their accessible name
+  // ("标题，路径") is deliberately identical to the sidebar's row buttons.
+  async function searchFor(
+    user: ReturnType<typeof userEvent.setup>,
+    query: string,
+  ): Promise<HTMLElement> {
+    const dialog = await screen.findByRole("dialog", { name: "全文搜索" });
+    await user.type(
+      within(dialog).getByRole("searchbox", { name: "全文搜索" }),
+      query,
+    );
+    return dialog;
+  }
+
+  it("opens the workspace search with Ctrl+K and Meta+K", async () => {
+    const api = createAPI();
+    render(<App api={api} />);
+    await screen.findByText("Body for README.md");
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    expect(screen.getByRole("dialog", { name: "全文搜索" })).toBeTruthy();
+
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    expect(screen.getByRole("dialog", { name: "全文搜索" })).toBeTruthy();
+  });
+
+  it("opens the search from the toolbar trigger", async () => {
+    const api = createAPI();
+    render(<App api={api} />);
+    await screen.findByText("Body for README.md");
+
+    // The toolbar entry is the only keyboard-free one — mobile readers
+    // depend on it, so it must exist and open the same dialog. (The shortcut
+    // case cannot be combined here: while the modal dialog is open Base UI
+    // marks everything outside it aria-hidden.)
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "全文搜索" }));
+    expect(screen.getByRole("dialog", { name: "全文搜索" })).toBeTruthy();
+  });
+
+  it("selects a cross-document result through the normal navigation", async () => {
+    const user = userEvent.setup();
+    const api = createAPI({
+      search: vi.fn().mockResolvedValue({
+        query: "needle",
+        results: [{ path: "guides/setup.md", title: "Setup API Title" }],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByText("Body for README.md");
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const dialog = await searchFor(user, "needle");
+    await user.click(
+      await within(dialog).findByRole("button", {
+        name: "Setup API Title，guides/setup.md",
+      }),
+    );
+
+    expect(api.getDocument).toHaveBeenLastCalledWith(
+      "guides/setup.md",
+      expect.any(AbortSignal),
+    );
+    expect(window.location.pathname).toBe("/doc/guides/setup.md");
+    await screen.findByText("Body for guides/setup.md");
+  });
+
+  it("navigates in place when the hit is in the current document", async () => {
+    const user = userEvent.setup();
+    const api = createAPI({
+      search: vi.fn().mockResolvedValue({
+        query: "needle",
+        results: [
+          {
+            path: "README.md",
+            title: "Readme API Title",
+            heading: { id: "section-two", text: "Section Two" },
+          },
+        ],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByText("Body for README.md");
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const dialog = await searchFor(user, "needle");
+    await user.click(
+      await within(dialog).findByRole("button", {
+        name: "Readme API Title，README.md",
+      }),
+    );
+
+    // The current document is never refetched; only the fragment moves.
+    expect(api.getDocument).toHaveBeenCalledTimes(1);
+    expect(window.location.hash).toBe("#section-two");
+  });
+
+  it("returns the reader to the top for a metadata-only hit", async () => {
+    const user = userEvent.setup();
+    const api = createAPI({
+      search: vi.fn().mockResolvedValue({
+        query: "needle",
+        results: [{ path: "README.md", title: "Readme API Title" }],
+      }),
+    });
+    render(<App api={api} />);
+    await screen.findByText("Body for README.md");
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const dialog = await searchFor(user, "needle");
+    await user.click(
+      await within(dialog).findByRole("button", {
+        name: "Readme API Title，README.md",
+      }),
+    );
+
+    expect(api.getDocument).toHaveBeenCalledTimes(1);
+    expect(window.location.hash).toBe("");
+  });
+});
+
 function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
   return {
     listFiles: vi.fn().mockResolvedValue(initialFiles),

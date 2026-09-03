@@ -214,7 +214,7 @@ test("a deep link with a fragment survives a reload into the same root", async (
     .toBe(encodeURI("#目标章节"));
 });
 
-test("search matches a root's name and keeps results grouped by root", async ({
+test("filter matches a root's name and keeps the tree grouped by root", async ({
   page,
 }) => {
   await openWorkspace(page);
@@ -224,7 +224,7 @@ test("search matches a root's name and keeps results grouped by root", async ({
 
   // Matching the second root's name surfaces every document under it and
   // nothing from the first root.
-  const search = page.getByRole("searchbox", { name: "搜索文档" });
+  const search = page.getByRole("searchbox", { name: "筛选文件" });
   await search.fill("root-b");
   await expect(
     page.getByRole("button", { name: "Root B Readme，r1/README.md" }),
