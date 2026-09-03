@@ -143,19 +143,63 @@ export function rootFiles(roots: RootSummary[]): FileSummary[] {
   );
 }
 
-// The one document a workspace opens by itself: the single file of a
-// single-file preview. Its sidebar is hidden, so without the auto-open there
-// would be no way to reach the document at all. Directory and multi-root
-// workspaces open nothing — which document to read is the user's decision,
-// expressed by a click or an explicit /doc/... address; the URL stays "/".
+// The document a workspace opens by itself when the URL names none:
+// - a single-file preview opens its only document (its sidebar is hidden, so
+//   without the auto-open there would be no way to reach it at all);
+// - a directory or multi-root workspace opens the first root's README,
+//   falling back to index, then to the first root-level Markdown file in the
+//   same natural order the file tree uses — so "/" lands on an entry document
+//   instead of an empty reader. Only root-level files qualify (docs/README.md
+//   never wins) and only the first root is consulted; the second root's
+//   README is not a fallback for the first.
+// An explicit /doc/... address always beats this pick — the caller resolves
+// the requested path before consulting autoOpenDocument.
 export function autoOpenDocument(
-  files: FileSummary[],
+  roots: RootSummary[],
   kind: PreviewKind,
 ): string | null {
-  if (kind === "single" && files.length > 0) {
-    return files[0]?.path ?? null;
+  const root = roots[0];
+  if (root === undefined) {
+    return null;
   }
-  return null;
+  if (kind === "single") {
+    return root.files[0]?.path ?? null;
+  }
+  const multiRoot = roots.length > 1;
+  const rootLevel = root.files.filter((file) => !file.path.includes("/"));
+  const named = ["readme", "index"] as const;
+  for (const stem of named) {
+    const match = rootLevel.find((file) => fileStem(file.name) === stem);
+    if (match !== undefined) {
+      return virtualRootFilePath(root, match, multiRoot);
+    }
+  }
+  const first = [...rootLevel].sort((left, right) =>
+    left.name.localeCompare(right.name, undefined, { numeric: true }),
+  )[0];
+  return first === undefined
+    ? null
+    : virtualRootFilePath(root, first, multiRoot);
+}
+
+// The lowercase basename without its extension, so README.md, Readme.md and
+// readme.markdown all match the same entry-document name. Titles never
+// participate: the file name is the convention, the title is metadata.
+function fileStem(name: string): string {
+  const dot = name.lastIndexOf(".");
+  const stem = dot > 0 ? name.slice(0, dot) : name;
+  return stem.toLowerCase();
+}
+
+// Documents are addressed by their virtual key: a multi-root workspace
+// prefixes the root id, a single root keeps the bare root-relative path (see
+// rootFiles). One helper so the pick above cannot drift from that rule.
+function virtualRootFilePath(
+  root: RootSummary,
+  file: FileSummary,
+  multiRoot: boolean,
+): string {
+  return multiRoot ? `${root.id}/${file.path}` : file.path;
 }
 
 export function buildTree(files: FileSummary[]): TreeNode[] {

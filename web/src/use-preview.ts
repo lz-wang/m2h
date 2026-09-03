@@ -91,6 +91,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   const [error, setError] = useState<string | null>(null);
   const [assetError, setAssetError] = useState<string | null>(null);
   const filesRef = useRef<FileSummary[]>([]);
+  const rootsRef = useRef<RootSummary[]>([]);
   const kindRef = useRef<PreviewKind>("directory");
   const selectedPathRef = useRef<string | null>(null);
   const modeRef = useRef<Mode>(initialRoute.current.mode);
@@ -195,16 +196,17 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         // bare relative paths (see model.ts rootFiles).
         const flattened = rootFiles(loaded.roots);
         filesRef.current = flattened;
+        rootsRef.current = loaded.roots;
         kindRef.current = loaded.kind;
         setFiles(flattened);
         setRoots(loaded.roots);
         setKind(loaded.kind);
         setVersion(loaded.version);
-        // Only an explicit /doc/... address or the single-file preview's one
-        // auto-open picks a document here; directory and multi-root
-        // workspaces start unselected — the server no longer has an opinion
-        // about what the reader should open first.
-        const target = requested ?? autoOpenDocument(flattened, loaded.kind);
+        // Only an explicit /doc/... address picks a specific document here;
+        // otherwise the workspace's own default (single file, or the first
+        // root's README/index/first root-level document) opens. The URL then
+        // canonicalizes to that /doc/... address via the replace below.
+        const target = requested ?? autoOpenDocument(loaded.roots, loaded.kind);
         if (target === null) {
           settleWithoutDocument();
           return;
@@ -244,7 +246,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
       setWidthState(route.width);
       setTOCState(route.toc);
       const target =
-        route.path ?? autoOpenDocument(filesRef.current, kindRef.current);
+        route.path ?? autoOpenDocument(rootsRef.current, kindRef.current);
       if (target === null) {
         settleWithoutDocument();
         return;

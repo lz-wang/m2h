@@ -23,6 +23,16 @@ const files: FileSummary[] = [
   { path: "guide/part2.md", name: "part2.md", title: "Part 2" },
 ];
 
+// autoOpenDocument fixtures: a one-line file summary and a one-root workspace.
+function file(path: string): FileSummary {
+  const name = path.split("/").pop() ?? path;
+  return { path, name, title: name };
+}
+
+function directoryRoot(rootFiles: FileSummary[]): RootSummary {
+  return { id: "r0", name: "docs", files: rootFiles };
+}
+
 describe("route model", () => {
   it("reads, normalizes, and writes document routes", () => {
     expect(
@@ -95,18 +105,119 @@ describe("route model", () => {
     );
   });
 
-  it("auto-opens only the single-file preview's one document", () => {
+  it("auto-opens the single-file preview's one document", () => {
     // A single-file preview has no sidebar to pick from: its only document
-    // opens by itself.
-    expect(autoOpenDocument(files, "single")).toBe("z.md");
-    expect(autoOpenDocument([files[1] ?? files[0]], "single")).toBe(
-      "guide/part10.md",
-    );
-    // Directory and multi-root workspaces never pick for the reader, and an
-    // empty workspace has nothing to open.
-    expect(autoOpenDocument(files, "directory")).toBeNull();
-    expect(autoOpenDocument(files, "workspace")).toBeNull();
+    // opens by itself, wherever it lives.
+    expect(autoOpenDocument([directoryRoot(files)], "single")).toBe("z.md");
+    expect(
+      autoOpenDocument([directoryRoot([files[1] ?? files[0]])], "single"),
+    ).toBe("guide/part10.md");
     expect(autoOpenDocument([], "single")).toBeNull();
+  });
+
+  it("picks the first root's README over index and any other document", () => {
+    expect(
+      autoOpenDocument(
+        [directoryRoot([file("a.md"), file("index.md"), file("README.md")])],
+        "directory",
+      ),
+    ).toBe("README.md");
+    expect(
+      autoOpenDocument(
+        [directoryRoot([file("a.md"), file("index.md")])],
+        "directory",
+      ),
+    ).toBe("index.md");
+  });
+
+  it("matches README and index case-insensitively and by name only", () => {
+    // Title casing and uppercase extensions do not hide an entry document…
+    expect(
+      autoOpenDocument(
+        [directoryRoot([file("Readme.MD"), file("a.md")])],
+        "directory",
+      ),
+    ).toBe("Readme.MD");
+    expect(
+      autoOpenDocument(
+        [directoryRoot([file("INDEX.md"), file("a.md")])],
+        "directory",
+      ),
+    ).toBe("INDEX.md");
+    // … but a same-stem title never promotes a non-README name.
+    expect(
+      autoOpenDocument(
+        [directoryRoot([{ ...file("a.md"), title: "README" }])],
+        "directory",
+      ),
+    ).toBe("a.md");
+  });
+
+  it("falls back to the first root-level file in natural name order", () => {
+    // b.md before a.md as served is irrelevant: the pick sorts by name, and
+    // numeric order keeps numbered notes in reading sequence.
+    expect(
+      autoOpenDocument(
+        [directoryRoot([file("b.md"), file("a.md")])],
+        "directory",
+      ),
+    ).toBe("a.md");
+    expect(
+      autoOpenDocument(
+        [
+          directoryRoot([
+            file("10-extra.md"),
+            file("02-guide.md"),
+            file("01-intro.md"),
+          ]),
+        ],
+        "directory",
+      ),
+    ).toBe("01-intro.md");
+  });
+
+  it("never picks a subdirectory README or index", () => {
+    // docs/README.md is not the workspace's entry document…
+    expect(
+      autoOpenDocument(
+        [directoryRoot([file("docs/README.md"), file("a.md")])],
+        "directory",
+      ),
+    ).toBe("a.md");
+    // … and when only nested documents exist, nothing opens.
+    expect(
+      autoOpenDocument([directoryRoot([file("docs/index.md")])], "directory"),
+    ).toBeNull();
+  });
+
+  it("opens nothing for an empty root", () => {
+    expect(autoOpenDocument([directoryRoot([])], "directory")).toBeNull();
+    expect(autoOpenDocument([], "directory")).toBeNull();
+    expect(autoOpenDocument([], "workspace")).toBeNull();
+  });
+
+  it("consults only the first root of a multi-root workspace and returns virtual paths", () => {
+    // The first root's README wins over the second root's index.
+    expect(
+      autoOpenDocument(
+        [
+          { id: "root-a", name: "root-a", files: [file("README.md")] },
+          { id: "root-b", name: "root-b", files: [file("index.md")] },
+        ],
+        "workspace",
+      ),
+    ).toBe("root-a/README.md");
+    // A first root without root-level documents never falls through to the
+    // second root's README.
+    expect(
+      autoOpenDocument(
+        [
+          { id: "root-a", name: "root-a", files: [file("nested/guide.md")] },
+          { id: "root-b", name: "root-b", files: [file("README.md")] },
+        ],
+        "workspace",
+      ),
+    ).toBeNull();
   });
 });
 

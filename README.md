@@ -8,7 +8,7 @@
 
 ## 特性
 
-- 直接浏览 Markdown 文件、目录或多个文档目录
+- 直接浏览 Markdown 文件、目录或多个文档目录（打开目录时自动进入 README/index 或第一个根级文档）
 - 文件树、搜索、文档目录、主题和正文宽度切换
 - 支持分享文档链接、Markdown 链接和 Markdown 全文
 - 支持 GFM、语法高亮、数学公式、Mermaid、Vega-Lite 统计图表、脚注、Emoji 和 GitHub Alerts

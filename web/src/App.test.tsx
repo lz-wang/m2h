@@ -30,8 +30,9 @@ const initialFiles: FileListResponse = {
 beforeEach(() => {
   window.localStorage.clear();
   window.sessionStorage.clear();
-  // Directory workspaces no longer auto-open a document: the default URL for
-  // these tests is an explicit /doc deep link, which still opens directly.
+  // The default URL for these tests is an explicit /doc deep link: an
+  // address that names a document always opens it directly, no matter what
+  // the workspace's own default document would have been.
   window.history.replaceState(null, "", "/doc/README.md");
   document.documentElement.className = "";
   delete document.documentElement.dataset.mode;
@@ -46,27 +47,80 @@ beforeEach(() => {
 });
 
 describe("App directory preview", () => {
-  it("starts a directory preview unselected at the workspace root", async () => {
+  it("opens the root README when the address names no document", async () => {
     window.history.replaceState(null, "", "/");
     const api = createAPI();
     render(<App api={api} />);
 
-    // Documents exist but none was chosen: the tree renders and no document
-    // is ever fetched. The URL keeps meaning "the workspace", not a document.
-    await screen.findByText("请选择要查看的文件");
+    // The workspace picks its own entry document: the first root's README.
+    // The address canonicalizes to that document so a refresh and a share
+    // both land on the same reading state.
+    await screen.findByText("Body for README.md");
     expect(api.listFiles).toHaveBeenCalledTimes(1);
-    expect(api.getDocument).not.toHaveBeenCalled();
-    expect(window.location.pathname + window.location.search).toBe("/");
+    expect(api.getDocument).toHaveBeenCalledWith(
+      "README.md",
+      expect.any(AbortSignal),
+    );
+    expect(window.location.pathname + window.location.search).toBe(
+      "/doc/README.md",
+    );
     expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Readme API Title，README.md" }),
     ).toBeTruthy();
-    // The single-root tree presents its first level ready to browse.
-    expect(
-      screen
-        .getByRole("button", { name: "guides" })
-        .getAttribute("aria-expanded"),
-    ).toBe("true");
+  });
+
+  it("falls back past README to index and to the first root-level document", async () => {
+    window.history.replaceState(null, "", "/");
+    const api = createAPI({
+      listFiles: vi.fn().mockResolvedValue({
+        kind: "directory",
+        version: "0.9.1",
+        roots: [
+          {
+            id: "r0",
+            name: "docs",
+            files: [
+              { path: "b.md", name: "b.md", title: "B" },
+              { path: "a.md", name: "a.md", title: "A" },
+            ],
+          },
+        ],
+      }),
+      getDocument: vi.fn().mockImplementation(async (path: string) => ({
+        path,
+        title: path === "a.md" ? "A" : "B",
+        html: `<p>Body for ${path}</p>`,
+        frontmatter: null,
+        toc: [],
+      })),
+    });
+    render(<App api={api} />);
+
+    // No README, no index: the alphabetically first root-level note opens,
+    // regardless of the order the listing served.
+    await screen.findByText("Body for a.md");
+    expect(api.getDocument).toHaveBeenCalledWith(
+      "a.md",
+      expect.any(AbortSignal),
+    );
+    expect(window.location.pathname).toBe("/doc/a.md");
+  });
+
+  it("never auto-opens a document when the address names one explicitly", async () => {
+    const api = createAPI();
+    render(<App api={api} />);
+
+    // The deep link wins over the workspace default: /doc/guides/setup.md
+    // opens setup.md even though a README exists.
+    await screen.findByText("Body for README.md");
+    window.history.replaceState(null, "", "/doc/guides/setup.md");
+    window.dispatchEvent(new PopStateEvent("popstate"));
+    await screen.findByText("Body for guides/setup.md");
+    expect(api.getDocument).toHaveBeenLastCalledWith(
+      "guides/setup.md",
+      expect.any(AbortSignal),
+    );
   });
 
   it("opens an explicit deep link and uses API title metadata", async () => {
@@ -163,7 +217,7 @@ describe("App directory preview", () => {
     expect(window.location.pathname).toBe("/doc/deleted.md");
   });
 
-  it("starts a multi-root workspace at / with every root collapsed", async () => {
+  it("auto-opens the first root's README in a multi-root workspace", async () => {
     window.history.replaceState(null, "", "/");
     const api = createAPI({
       listFiles: vi.fn().mockResolvedValue({
@@ -196,16 +250,60 @@ describe("App directory preview", () => {
     });
     render(<App api={api} />);
 
+    // Only the first root is consulted: r0's README opens under its virtual
+    // path and r1's same-named README stays closed.
+    await screen.findByText("Body for r0/README.md");
+    expect(api.getDocument).toHaveBeenCalledTimes(1);
+    expect(api.getDocument).toHaveBeenCalledWith(
+      "r0/README.md",
+      expect.any(AbortSignal),
+    );
+    expect(window.location.pathname).toBe("/doc/r0/README.md");
+    // The non-selected root reads as a compact collapsed entry.
+    expect(
+      screen
+        .getByRole("button", { name: "beta" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
+  });
+
+  it("does not open the second root when the first has no root-level documents", async () => {
+    window.history.replaceState(null, "", "/");
+    const api = createAPI({
+      listFiles: vi.fn().mockResolvedValue({
+        kind: "workspace",
+        version: "0.9.1",
+        roots: [
+          {
+            id: "r0",
+            name: "alpha",
+            files: [
+              { path: "nested/guide.md", name: "guide.md", title: "Guide" },
+            ],
+          },
+          {
+            id: "r1",
+            name: "beta",
+            files: [
+              { path: "README.md", name: "README.md", title: "Beta Readme" },
+            ],
+          },
+        ],
+      }),
+      getDocument: vi.fn().mockImplementation(async (path: string) => ({
+        path,
+        title: "Title",
+        html: `<p>Body for ${path}</p>`,
+        frontmatter: null,
+        toc: [],
+      })),
+    });
+    render(<App api={api} />);
+
+    // The first root only holds a nested document, so it has no entry
+    // document: nothing auto-opens, not even the second root's README.
     await screen.findByText("请选择要查看的文件");
     expect(api.getDocument).not.toHaveBeenCalled();
-    // Parallel roots read as a compact collapsed list until one is opened.
-    for (const label of ["alpha", "beta"]) {
-      expect(
-        screen
-          .getByRole("button", { name: label })
-          .getAttribute("aria-expanded"),
-      ).toBe("false");
-    }
     expect(window.location.pathname).toBe("/");
   });
 

@@ -171,7 +171,7 @@ test("does not create page-level horizontal overflow in full width without TOC",
   expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
 });
 
-test("opens the workspace root unselected without fetching a document", async ({
+test("opens the root README from the bare workspace address", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
@@ -183,28 +183,25 @@ test("opens the workspace root unselected without fetching a document", async ({
   });
 
   await page.goto("/");
-  await expect(
-    page.getByRole("status").filter({ hasText: "请选择要查看的文件" }),
-  ).toBeVisible();
-  // The root URL means the workspace, not a document: nothing was fetched and
-  // the address stays put.
-  expect(documentRequests).toHaveLength(0);
-  expect(await page.evaluate(() => window.location.pathname)).toBe("/");
-
-  // The unselected single-root tree presents its first level ready to browse,
-  // while the second level stays collapsed.
-  for (const name of ["a", "tree"]) {
-    await expect(
-      page.getByRole("button", { name, exact: true }),
-    ).toHaveAttribute("aria-expanded", "true");
-  }
-  await expect(page.locator('[data-tree-path="a/b"]')).toHaveAttribute(
-    "aria-expanded",
-    "false",
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".markdown-body p, .markdown-body h2") !== null,
   );
 
-  // Picking a document from the tree opens it under /doc/ (expanding the
-  // collapsed second level on the way).
+  // The workspace picks its own entry document: exactly one document fetch,
+  // the address canonicalizes to the README's /doc/ URL (so refresh and share
+  // land on the same reading state), and the tree marks it current.
+  expect(documentRequests).toHaveLength(1);
+  expect(await page.evaluate(() => window.location.pathname)).toBe(
+    "/doc/README.md",
+  );
+  await expect(page.locator('[aria-current="page"]')).toContainText(
+    "README.md",
+  );
+
+  // Picking a document from the tree still opens it under /doc/ (expanding
+  // the collapsed directories on the way).
+  await page.locator('[data-tree-path="a"]').click();
   await page.locator('[data-tree-path="a/b"]').click();
   await page.getByRole("button", { name: "笔记 A-01，a/b/a-01.md" }).click();
   await expect(page.locator(".markdown-body")).toBeVisible();
