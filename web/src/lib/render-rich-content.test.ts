@@ -875,8 +875,11 @@ describe("image lightbox triggers", () => {
       ":scope > .m2h-image-name-tooltip",
     );
     expect(tooltip).not.toBeNull();
-    expect(tooltip?.textContent).toBe("architecture");
     expect(tooltip?.getAttribute("aria-hidden")).toBe("true");
+    const alt = tooltip?.querySelector<HTMLElement>(
+      ":scope > .m2h-image-tooltip-alt",
+    );
+    expect(alt?.textContent).toBe("architecture");
     // The tooltip sits between the image and the trigger, all frame children.
     expect(tooltip?.previousElementSibling?.tagName).toBe("IMG");
     expect(tooltip?.nextElementSibling?.classList).toContain(
@@ -884,7 +887,45 @@ describe("image lightbox triggers", () => {
     );
   });
 
-  it("omits the name tooltip when the image has no alt text", async () => {
+  it("fills the metadata line with intrinsic size and format on load", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><img src="/a.png" alt="architecture"></p>';
+
+    await renderRichContent(root, "light");
+
+    // The enhancement pass runs before the browser finished fetching, so the
+    // line starts empty and fills when the load event arrives.
+    const meta = root.querySelector<HTMLElement>(".m2h-image-tooltip-meta");
+    expect(meta?.textContent).toBe("");
+
+    const image = root.querySelector("img");
+    Object.defineProperty(image, "naturalWidth", { value: 1920 });
+    Object.defineProperty(image, "naturalHeight", { value: 1080 });
+    image?.dispatchEvent(new Event("load"));
+
+    expect(meta?.textContent).toBe("1920 × 1080 · PNG");
+  });
+
+  it("reads the metadata line from the already-complete image", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><img src="/a.png" alt="A"></p>';
+
+    const image = root.querySelector("img");
+    Object.defineProperty(image, "complete", { value: true });
+    Object.defineProperty(image, "naturalWidth", { value: 16 });
+    Object.defineProperty(image, "naturalHeight", { value: 16 });
+
+    await renderRichContent(root, "light");
+
+    // A cached image is complete at enhancement time: no load event is coming.
+    expect(root.querySelector(".m2h-image-tooltip-meta")?.textContent).toBe(
+      "16 × 16 · PNG",
+    );
+  });
+
+  it("keeps the tooltip for an image without alt text", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML =
@@ -892,8 +933,60 @@ describe("image lightbox triggers", () => {
 
     await renderRichContent(root, "light");
 
+    // Without alt text only the metadata row renders — the size/format line
+    // is still worth hovering for.
     expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(2);
-    expect(root.querySelectorAll(".m2h-image-name-tooltip")).toHaveLength(0);
+    expect(root.querySelectorAll(".m2h-image-name-tooltip")).toHaveLength(2);
+    expect(root.querySelectorAll(".m2h-image-tooltip-alt")).toHaveLength(0);
+    expect(root.querySelectorAll(".m2h-image-tooltip-meta")).toHaveLength(2);
+  });
+
+  it("derives the display format from extension and data URL MIME", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <p>
+        <img class="jpg" src="/photos/shot.jpeg">
+        <img class="jpg-upper" src="/photos/SHOT.JPG">
+        <img class="svg" src="/diagrams/flow.svg">
+        <img class="webp" src="/photos/shot.webp">
+        <img class="query" src="/photos/shot.png?width=640">
+        <img class="data" src="data:image/svg+xml,%3Csvg%3E%3C/svg%3E">
+        <img class="data-jpeg" src="data:image/jpeg;base64,AAAA">
+        <img class="unknown" src="/files/plot.xyz">
+        <img class="no-extension" src="/render">
+      </p>
+    `;
+
+    // Every fixture image reports as already fetched: the metadata line fills
+    // synchronously at enhancement time instead of waiting for a load event.
+    for (const image of root.querySelectorAll("img")) {
+      Object.defineProperty(image, "complete", { value: true });
+      Object.defineProperty(image, "naturalWidth", { value: 10 });
+      Object.defineProperty(image, "naturalHeight", { value: 10 });
+    }
+
+    await renderRichContent(root, "light");
+
+    const meta = (cls: string) =>
+      root
+        .querySelector(`img.${cls}`)
+        ?.closest(".m2h-image-frame")
+        ?.querySelector(".m2h-image-tooltip-meta")?.textContent;
+    // JPEG normalizes to JPG regardless of source spelling; the query string
+    // never leaks into the extension.
+    expect(meta("jpg")).toBe("10 × 10 · JPG");
+    expect(meta("jpg-upper")).toBe("10 × 10 · JPG");
+    expect(meta("svg")).toBe("10 × 10 · SVG");
+    expect(meta("webp")).toBe("10 × 10 · WEBP");
+    expect(meta("query")).toBe("10 × 10 · PNG");
+    // Data URLs report their MIME, not a file name.
+    expect(meta("data")).toBe("10 × 10 · SVG");
+    expect(meta("data-jpeg")).toBe("10 × 10 · JPG");
+    // Unknown extensions pass through uppercased; extension-less sources
+    // show the size alone.
+    expect(meta("unknown")).toBe("10 × 10 · XYZ");
+    expect(meta("no-extension")).toBe("10 × 10");
   });
 
   it("does not stack a second tooltip on repeated enhancement", async () => {

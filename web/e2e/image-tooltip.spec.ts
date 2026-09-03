@@ -110,3 +110,17 @@ test("reveals the tooltip on frame hover", async ({ page }) => {
   await expect(tooltip).toHaveCSS("opacity", "1");
   await expect(tooltip).toBeVisible();
 });
+
+test("shows intrinsic size and format in the metadata row", async ({
+  page,
+}) => {
+  await openDocument(page);
+
+  // The metadata row reports the image's own pixels and its source format,
+  // independent of how small the page renders it.
+  for (const tooltip of await page.locator(".m2h-image-name-tooltip").all()) {
+    await expect(tooltip.locator(".m2h-image-tooltip-meta")).toHaveText(
+      "16 × 16 · PNG",
+    );
+  }
+});

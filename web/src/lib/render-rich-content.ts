@@ -650,19 +650,118 @@ function addImageLightboxTriggers(root: HTMLElement): void {
     target.replaceWith(frame);
 
     frame.append(target);
-    // The tooltip repeats the alt text for sighted readers. aria-hidden: the
-    // <img> alt already provides the name to assistive technology, so a
-    // second accessible copy adds nothing.
+    // The tooltip repeats the alt text and adds the intrinsic size and format
+    // for sighted readers. aria-hidden: the <img> alt already provides the
+    // name to assistive technology, so a second accessible copy adds nothing.
+    // Every image gets one — alt or not — because the size/format line is
+    // useful on its own.
+    const tooltip = document.createElement("span");
+    tooltip.className = "m2h-image-name-tooltip";
+    tooltip.setAttribute("aria-hidden", "true");
     const name = image.alt.trim();
     if (name !== "") {
-      const tooltip = document.createElement("span");
-      tooltip.className = "m2h-image-name-tooltip";
-      tooltip.textContent = name;
-      tooltip.setAttribute("aria-hidden", "true");
-      frame.append(tooltip);
+      const alt = document.createElement("span");
+      alt.className = "m2h-image-tooltip-alt";
+      alt.textContent = name;
+      tooltip.append(alt);
     }
+    const meta = document.createElement("span");
+    meta.className = "m2h-image-tooltip-meta";
+    tooltip.append(meta);
+    frame.append(tooltip);
+    trackImageMetadata(image, meta);
     frame.append(createLightboxTrigger("查看大图"));
   }
+}
+
+// Fill the tooltip's metadata line with the image's intrinsic size and format.
+// The enhancement pass usually runs before the browser finished fetching, so
+// the first fill happens on the load event; a cached image is already complete
+// and reads out immediately. A failed image simply never fills the line — the
+// alt row still says what the picture was meant to show.
+function trackImageMetadata(
+  image: HTMLImageElement,
+  meta: HTMLSpanElement,
+): void {
+  const apply = () => {
+    const format = imageFormat(image);
+    const size =
+      image.naturalWidth > 0
+        ? `${image.naturalWidth} × ${image.naturalHeight}`
+        : null;
+    meta.textContent =
+      size === null
+        ? (format ?? "")
+        : format === null
+          ? size
+          : `${size} · ${format}`;
+  };
+  if (image.complete && image.naturalWidth > 0) {
+    apply();
+    return;
+  }
+  image.addEventListener("load", apply, { once: true });
+}
+
+// The display format of an image, derived from its URL extension or data URL
+// MIME — never from a network probe: the bytes are already fetched, so the
+// URL is all the metadata that comes for free. JPEG normalizes to "JPG".
+export function imageFormat(image: HTMLImageElement): string | null {
+  const source = image.currentSrc || image.src;
+  if (source === "") {
+    return null;
+  }
+  if (source.startsWith("data:")) {
+    const comma = source.indexOf(",");
+    const mime = comma === -1 ? source.slice(5) : source.slice(5, comma);
+    return imageFormatFromMime(mime);
+  }
+  try {
+    const url = new URL(source, window.location.href);
+    const extension = url.pathname.slice(url.pathname.lastIndexOf(".") + 1);
+    return url.pathname.includes(".")
+      ? imageFormatFromExtension(extension)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function imageFormatFromExtension(extension: string): string | null {
+  switch (extension.toLowerCase()) {
+    case "jpg":
+    case "jpeg":
+    case "jpe":
+      return "JPG";
+    case "png":
+      return "PNG";
+    case "svg":
+    case "svgz":
+      return "SVG";
+    case "webp":
+      return "WEBP";
+    case "gif":
+      return "GIF";
+    case "avif":
+      return "AVIF";
+    case "":
+      return null;
+    default:
+      return extension.toUpperCase();
+  }
+}
+
+function imageFormatFromMime(mime: string): string | null {
+  // Data URLs may carry parameters ("image/svg+xml;charset=…", the implicit
+  // ";base64") — the subtype alone decides the label.
+  const subtype = mime.toLowerCase().replace(/^image\//, "").split(";")[0];
+  if (subtype === "" || subtype === undefined) {
+    return null;
+  }
+  if (subtype === "svg+xml") {
+    return "SVG";
+  }
+  return imageFormatFromExtension(subtype.replace(/[^a-z0-9]/g, ""));
 }
 
 // Build the magnifier control every Lightbox frame carries — the image frame

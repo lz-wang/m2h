@@ -871,6 +871,10 @@ body,
   left: 50%;
   z-index: 2;
 
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+
   width: max-content;
   max-width: min(20rem, calc(100vw - 2rem));
   padding: 0.3rem 0.5rem;
@@ -884,14 +888,28 @@ body,
 
   font-size: 0.75rem;
   line-height: 1rem;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 
   opacity: 0;
   pointer-events: none;
 
   transform: translateX(-50%);
   transition: opacity 120ms ease;
+}
+
+/* Each row shrinks inside the capped tooltip on its own: the alt row wraps at
+ * the cap with an ellipsis, the metadata row (intrinsic size · format) never
+ * wraps at all — it is short by construction and reads as one unit. */
+.markdown-body .m2h-image-tooltip-alt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.markdown-body .m2h-image-tooltip-meta {
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 0.875rem;
+  white-space: nowrap;
 }
 
 .markdown-body .m2h-image-frame:hover .m2h-image-name-tooltip,
