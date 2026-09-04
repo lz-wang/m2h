@@ -283,27 +283,45 @@ describe("DocumentLightbox", () => {
   ])("uses the mouse wheel to zoom the %s", (_label, item) => {
     renderLightbox([item], 0);
 
-    const image = currentVisual();
+    const visual = currentVisual();
     const zoomInEvent = new WheelEvent("wheel", {
       bubbles: true,
       cancelable: true,
       deltaY: -10,
     });
-    fireEvent(image, zoomInEvent);
+    fireEvent(visual, zoomInEvent);
 
     expect(zoomInEvent.defaultPrevented).toBe(true);
-    expect(currentScale(image)).toBeCloseTo(Math.exp(0.008), 5);
-    expect(currentScale(image)).toBeLessThan(1.01);
+    if (item.kind === "image") {
+      expect(currentScale(visual)).toBeCloseTo(Math.exp(0.008), 5);
+      expect(currentScale(visual)).toBeLessThan(1.01);
+    } else {
+      const vector = screen
+        .getByRole("dialog")
+        .querySelector<HTMLElement>(".image-lightbox-vector");
+      expect(Number.parseFloat(vector?.style.width ?? "")).toBeCloseTo(
+        100 * Math.exp(0.008),
+        5,
+      );
+      expect(visual.style.transform).not.toContain("scale");
+    }
 
     const zoomOutEvent = new WheelEvent("wheel", {
       bubbles: true,
       cancelable: true,
       deltaY: 10,
     });
-    fireEvent(image, zoomOutEvent);
+    fireEvent(visual, zoomOutEvent);
 
     expect(zoomOutEvent.defaultPrevented).toBe(true);
-    expect(currentScale(image)).toBeCloseTo(1, 5);
+    if (item.kind === "image") {
+      expect(currentScale(visual)).toBeCloseTo(1, 5);
+    } else {
+      const vector = screen
+        .getByRole("dialog")
+        .querySelector<HTMLElement>(".image-lightbox-vector");
+      expect(vector?.style.width).toBe("100px");
+    }
   });
 
   it("caps one large wheel event below a ten-percent zoom jump", () => {

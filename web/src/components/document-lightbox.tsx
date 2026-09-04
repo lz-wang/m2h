@@ -234,22 +234,31 @@ export function DocumentLightbox({
   }, [index]);
 
   const rotated = rotation === 90 || rotation === 270;
+  const visualLayout =
+    item?.kind === "image"
+      ? layout
+      : {
+          width: item?.intrinsicWidth ?? 0,
+          height: item?.intrinsicHeight ?? 0,
+        };
   const geometryKnown =
     stage.width > 0 &&
     stage.height > 0 &&
-    layout.width > 0 &&
-    layout.height > 0;
+    visualLayout.width > 0 &&
+    visualLayout.height > 0;
   // The stylesheet already contains-fits the unrotated layout (max-width /
   // max-height), so the unrotated base is 1; a 90° turn swaps the visual axes,
   // and the base shrinks so the rotated image fits again.
   const fitScale = geometryKnown
     ? Math.min(
         1,
-        stage.width / (rotated ? layout.height : layout.width),
-        stage.height / (rotated ? layout.width : layout.height),
+        stage.width / (rotated ? visualLayout.height : visualLayout.width),
+        stage.height / (rotated ? visualLayout.width : visualLayout.height),
       )
     : 1;
   const scale = fitScale * zoom;
+  const renderedWidth = visualLayout.width * scale;
+  const renderedHeight = visualLayout.height * scale;
 
   // How far the image may be dragged before its edges would leave the
   // viewport. With no measured geometry there is nothing to clamp against, so
@@ -257,13 +266,13 @@ export function DocumentLightbox({
   const maxPanX = geometryKnown
     ? Math.max(
         0,
-        ((rotated ? layout.height : layout.width) * scale - stage.width) / 2,
+        ((rotated ? renderedHeight : renderedWidth) - stage.width) / 2,
       )
     : Number.POSITIVE_INFINITY;
   const maxPanY = geometryKnown
     ? Math.max(
         0,
-        ((rotated ? layout.width : layout.height) * scale - stage.height) / 2,
+        ((rotated ? renderedWidth : renderedHeight) - stage.height) / 2,
       )
     : Number.POSITIVE_INFINITY;
 
@@ -452,12 +461,12 @@ export function DocumentLightbox({
             ) : item.markup.trimStart().startsWith("<svg") ? (
               <div
                 ref={handleVisualRef}
-                className="image-lightbox-vector"
+                className="image-lightbox-vector-transform"
                 role="img"
                 aria-label={item.alt}
                 title={item.title ?? undefined}
                 style={{
-                  transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg) scale(${scale})`,
+                  transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg)`,
                   cursor: panning ? "grabbing" : undefined,
                 }}
                 data-panning={panning ? "true" : undefined}
@@ -465,8 +474,16 @@ export function DocumentLightbox({
                 onPointerMove={handleVisualPointerMove}
                 onPointerUp={handleVisualPointerEnd}
                 onPointerCancel={handleVisualPointerEnd}
-                dangerouslySetInnerHTML={{ __html: item.markup }}
-              />
+              >
+                <div
+                  className="image-lightbox-vector"
+                  style={{
+                    width: `${renderedWidth}px`,
+                    height: `${renderedHeight}px`,
+                  }}
+                  dangerouslySetInnerHTML={{ __html: item.markup }}
+                />
+              </div>
             ) : null}
           </div>
           <div className="image-lightbox-toolbar">

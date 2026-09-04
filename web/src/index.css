@@ -1150,6 +1150,35 @@ body,
   cursor: grabbing;
 }
 
+/* Rendered diagrams stay as inline SVG. Their inner box changes dimensions for
+ * zoom so vector primitives repaint at the target size; the wrapper keeps pan
+ * and rotation separate from that size change. */
+.image-lightbox-vector-transform {
+  display: block;
+  flex: none;
+  user-select: none;
+  touch-action: none;
+  pointer-events: auto;
+  cursor: grab;
+}
+
+.image-lightbox-vector-transform[data-panning="true"] {
+  cursor: grabbing;
+}
+
+.image-lightbox-vector {
+  display: block;
+  flex: none;
+}
+
+.image-lightbox-vector > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+  max-height: none;
+}
+
 /* Bottom toolbar: one translucent, blurred pill with icon buttons and the
  * position counter. Control layer of the popup — always above the stage's
  * zoomed image (see the stage rule above). */
