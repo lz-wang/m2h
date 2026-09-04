@@ -481,6 +481,7 @@ export function DocumentLightbox({
                     width: `${renderedWidth}px`,
                     height: `${renderedHeight}px`,
                   }}
+                  // biome-ignore lint/security/noDangerouslySetInnerHtml: markup is serialized from the rendered SVG selected from the current document DOM.
                   dangerouslySetInnerHTML={{ __html: item.markup }}
                 />
               </div>
