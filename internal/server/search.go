@@ -80,11 +80,26 @@ func (handler *documentHandler) serveSearch(response http.ResponseWriter, reques
 			if request.Context().Err() != nil {
 				return
 			}
-			document, err := searchDocument(entry)
+			// Discovery only records candidates; the read re-enters the same
+			// resolveVisibleDocument boundary /api/document and /raw use, so
+			// an entry that vanished, was re-hidden or now escapes its root
+			// after discovery is simply absent from this scan — exactly the
+			// answer the document routes give for the same file.
+			virtual := handler.workspace.publicPath(root.id, entry.RelativePath)
+			_, relative, target, err := handler.resolveVisibleDocument(virtual)
+			if err != nil {
+				continue
+			}
+			contents, err := os.ReadFile(target)
 			if err != nil {
 				if errors.Is(err, fs.ErrNotExist) {
 					continue
 				}
+				writeJSONError(response, http.StatusInternalServerError, "search Markdown documents")
+				return
+			}
+			document, err := searchDocument(contents, relative)
+			if err != nil {
 				writeJSONError(response, http.StatusInternalServerError, "search Markdown documents")
 				return
 			}
@@ -138,29 +153,26 @@ func searchQuery(request *http.Request, response http.ResponseWriter) (string, b
 	return query, true
 }
 
-// searchDocument reads one discovered entry and turns it into a searchable
-// Document. Invalid frontmatter must not fail the whole scan: the sidebar
+// searchDocument turns one document's bytes — already read through the
+// shared resolveVisibleDocument boundary — into a searchable Document.
+// Invalid frontmatter must not fail the whole scan: the sidebar
 // still lists such documents (and /api/document answers 422 for them), so
 // the projection degrades to the full source with empty description and
 // tags and the frontmatter-derived title preference off — the document
 // stays searchable, and opening it still lands on the existing 422 page.
-func searchDocument(entry files.Entry) (search.Document, error) {
-	contents, err := os.ReadFile(entry.AbsolutePath)
-	if err != nil {
-		return search.Document{}, err
-	}
+func searchDocument(contents []byte, relativePath string) (search.Document, error) {
 	source := contents
 	var frontMatter *markdown.FrontMatter
 	if body, metadata, err := markdown.ParseFrontMatter(contents); err == nil {
 		source = body
 		frontMatter = metadata
 	}
-	projection, err := markdown.ProjectForSearch(source, entry.RelativePath)
+	projection, err := markdown.ProjectForSearch(source, relativePath)
 	if err != nil {
 		return search.Document{}, err
 	}
 	document := search.Document{
-		Path:   entry.RelativePath,
+		Path:   relativePath,
 		Title:  markdown.PreferredTitle(frontMatter, projection.Title),
 		Chunks: projection.Chunks,
 	}

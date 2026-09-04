@@ -7,6 +7,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strings"
 	"testing"
 
@@ -220,6 +222,21 @@ func TestSearchHonorsPublishingScope(t *testing.T) {
 		}
 	})
 
+	// The hidden rule must hold without a glob narrowing the scope first:
+	// SkipHidden alone keeps dot-prefixed documents out of search.
+	t.Run("hidden files are not searchable without a glob", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		writeTestFile(t, filepath.Join(root, "public.md"), "# Public\n\nhidden-token\n")
+		writeTestFile(t, filepath.Join(root, ".hidden.md"), "# Hidden\n\nhidden-token\n")
+		handler := searchHandler(t, root, files.DiscoverOptions{Depth: 2, SkipHidden: true})
+
+		payload := searchResultsFor(t, handler, "hidden-token")
+		if len(payload.Results) != 1 || payload.Results[0].Path != "public.md" {
+			t.Fatalf("results = %+v, want exactly public.md", payload.Results)
+		}
+	})
+
 	t.Run("single-file scope searches only its document", func(t *testing.T) {
 		t.Parallel()
 		root := t.TempDir()
@@ -249,6 +266,100 @@ func TestSearchHonorsPublishingScope(t *testing.T) {
 			t.Fatalf("results = %+v, want exactly shallow.md", payload.Results)
 		}
 	})
+}
+
+// Search answers with exactly the publishing boundary /api/document and /raw
+// enforce: an alias whose canonical target is hidden, and one escaping the
+// root, never become a leak channel, while a legal visible alias keeps
+// working under its requested identity.
+func TestSearchSymlinkAliasesHonorPublishingBoundary(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary on Windows")
+	}
+	t.Parallel()
+
+	root := canonicalDirectory(t, t.TempDir())
+	outside := canonicalDirectory(t, t.TempDir())
+	writeTestFile(t, filepath.Join(root, ".secret.md"), "# Secret\n\nhidden-target-token\n")
+	writeTestFile(t, filepath.Join(outside, "secret.md"), "# Secret\n\nescape-target-token\n")
+	writeTestFile(t, filepath.Join(root, "docs", "real.md"), "# Real\n\nalias-token\n")
+	if err := os.Symlink(filepath.Join(root, ".secret.md"), filepath.Join(root, "hidden-alias.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret.md"), filepath.Join(root, "escape-alias.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "docs", "real.md"), filepath.Join(root, "visible-alias.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	handler := searchHandler(t, root, files.DiscoverOptions{Depth: 4, SkipHidden: true})
+
+	for _, leak := range []struct{ query, reason string }{
+		{"hidden-target-token", "hidden-target alias"},
+		{"escape-target-token", "outside-root alias"},
+	} {
+		if payload := searchResultsFor(t, handler, leak.query); len(payload.Results) != 0 {
+			t.Fatalf("%s leaked: %+v", leak.reason, payload.Results)
+		}
+	}
+
+	// The legal alias stays served, addressed by its requested identity —
+	// both the alias and its target are publishable documents in their own
+	// right, so each answers on its own path, exactly as /api/document does.
+	payload := searchResultsFor(t, handler, "alias-token")
+	paths := make([]string, 0, len(payload.Results))
+	for _, result := range payload.Results {
+		paths = append(paths, result.Path)
+	}
+	sort.Strings(paths)
+	if len(paths) != 2 || paths[0] != "docs/real.md" || paths[1] != "visible-alias.md" {
+		t.Fatalf("results = %v, want exactly docs/real.md and visible-alias.md", paths)
+	}
+}
+
+// A symlink swapped between discovery and the read must not leak its new
+// target: search re-enters resolveVisibleDocument before reading, so the
+// swapped alias is refused exactly like /api/document refuses it.
+func TestSearchRechecksBoundaryAfterDiscovery(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary on Windows")
+	}
+	t.Parallel()
+
+	root := canonicalDirectory(t, t.TempDir())
+	outside := canonicalDirectory(t, t.TempDir())
+	writeTestFile(t, filepath.Join(outside, "secret.md"), "# Secret\n\nswap-token\n")
+	writeTestFile(t, filepath.Join(root, "public.md"), "# Public\n\npublic-token\n")
+	alias := filepath.Join(root, "alias.md")
+	if err := os.Symlink(filepath.Join(root, "public.md"), alias); err != nil {
+		t.Fatal(err)
+	}
+
+	scope := rootScope{root: root, discovery: files.DiscoverOptions{Depth: 2}}
+	handler := &documentHandler{workspace: singleRootWorkspace(scope), ui: directoryTestUI()}
+	handler.discover = func(ctx context.Context, scope rootScope) (files.Discovery, error) {
+		discovered, err := scope.discover(ctx)
+		// The filesystem mutates the instant discovery returns: the alias
+		// now points outside the root, like a racing symlink swap.
+		if err == nil {
+			if removeErr := os.Remove(alias); removeErr != nil {
+				t.Errorf("remove alias: %v", removeErr)
+			}
+			if linkErr := os.Symlink(filepath.Join(outside, "secret.md"), alias); linkErr != nil {
+				t.Errorf("re-link alias: %v", linkErr)
+			}
+		}
+		return discovered, err
+	}
+
+	response := performRequest(handler.routes(nil), http.MethodGet, "/api/search?q=swap-token")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", response.Code, response.Body.String())
+	}
+	if payload := decodeSearch(t, response); len(payload.Results) != 0 {
+		t.Fatalf("search leaked the swapped alias target: %+v", payload.Results)
+	}
 }
 
 func TestSearchMultiRootIdentity(t *testing.T) {
