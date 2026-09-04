@@ -599,9 +599,9 @@ test("zooms a mermaid diagram with a real wheel gesture without scrolling", asyn
   const svg = page.locator(".image-lightbox-vector > svg");
   await expect(svg).toHaveCount(1);
 
-  // The pan wrapper owns the wheel listener; the snapshot svg itself is
-  // pointer-transparent at this stage of the interaction contract, so hover
-  // (and the wheel that follows) targets the wrapper the events bubble to.
+  // The wheel listener lives on the pan wrapper and svg events bubble to it,
+  // so hovering the wrapper (not any single text or shape inside) places the
+  // pointer wherever the wheel that follows is guaranteed to be claimed.
   await page.locator(".image-lightbox-vector").hover();
   const before = await waitForVectorSvgBox(page);
   const scrollBefore = await page.evaluate(() => ({

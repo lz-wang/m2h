@@ -492,8 +492,9 @@ test("browses charts, diagrams, and images in one lightbox sequence", async ({
   await openUntilChartsSettle(page, lightboxPath);
 
   // A rendered Vega-Lite SVG can carry an href-bearing mark. The Lightbox
-  // snapshots that real SVG; the body keeps this link interactive while the
-  // snapshot must make it inert so pointer gestures reach the pan wrapper.
+  // snapshots that real SVG: the body keeps the link navigable while the
+  // snapshot keeps it hittable and selectable, with only its navigation
+  // blocked (the component intercepts link clicks in the capture phase).
   const injectChartLink = () =>
     page.locator(".markdown-body .m2h-vega-lite svg").evaluate((svg) => {
       const namespace = "http://www.w3.org/2000/svg";
@@ -519,8 +520,14 @@ test("browses charts, diagrams, and images in one lightbox sequence", async ({
   await page.evaluate(() => {
     history.replaceState(null, "", location.pathname);
   });
+  // Following the in-document anchor routes the reader through a full
+  // document reload (/api/document), so the chart SVG — and with it the
+  // injected link — is rebuilt from scratch. Re-inject and pin the count
+  // before opening the Lightbox, whose snapshot then carries exactly one.
   await waitForBodyQuiet(page);
+  await expect(bodyChartLink).toHaveCount(0);
   await injectChartLink();
+  await expect(bodyChartLink).toHaveCount(1);
 
   // Three visual items in document order: image → Mermaid → Vega-Lite.
   const markers = await page.evaluate(() =>

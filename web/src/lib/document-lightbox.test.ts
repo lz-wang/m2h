@@ -251,9 +251,9 @@ describe("collectLightboxState", () => {
     expect(snapshot.querySelector("svg")?.id).toBe(
       "m2h-lightbox-0-m2h-mermaid-1",
     );
-    expect(
-      snapshot.querySelector("linearGradient")?.id,
-    ).toBe("m2h-lightbox-0-gradient");
+    expect(snapshot.querySelector("linearGradient")?.id).toBe(
+      "m2h-lightbox-0-gradient",
+    );
   });
 
   it("snapshots enhanced images in DOM order and indexes the selected one", () => {
