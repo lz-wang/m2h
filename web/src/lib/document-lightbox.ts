@@ -9,26 +9,35 @@
 // component then works purely from data, which also keeps a body refresh free
 // to close it.
 //
-// SVG visuals are snapshotted as a serialized SVG data URL: the Lightbox
-// renders everything through <img> — the element type its fit, rotation, and
-// pan-clamp algorithms are built around — and the SVG stays vector-sharp at
-// any zoom level.
+// SVG visuals retain their serialized markup. The Lightbox can therefore mount
+// them as inline SVG and change their rendered dimensions without routing a
+// diagram through an <img> compositor layer.
 
-// What a snapshot came from. SVG visuals (Mermaid diagrams, Vega-Lite charts)
-// serialize into a data URL; only a bitmap image keeps its original src.
 export type LightboxItemKind = "image" | "mermaid" | "vega-lite";
 
-// One browsable visual item. `kind` records what the snapshot came from so
-// callers (and tests) can distinguish a bitmap image from an SVG visual
-// without sniffing the src scheme.
-export interface LightboxItem {
-  kind: LightboxItemKind;
-  src: string;
-  srcSet: string | null;
-  sizes: string | null;
+interface LightboxItemBase {
   alt: string;
   title: string | null;
 }
+
+export interface ImageLightboxItem extends LightboxItemBase {
+  kind: "image";
+  src: string;
+  srcSet: string | null;
+  sizes: string | null;
+}
+
+export interface SVGLightboxItem extends LightboxItemBase {
+  kind: "mermaid" | "vega-lite";
+  markup: string;
+  viewBox: string;
+  intrinsicWidth: number;
+  intrinsicHeight: number;
+}
+
+// The discriminant deliberately prevents an SVG visual from accidentally
+// returning to the bitmap <img> rendering path.
+export type LightboxItem = ImageLightboxItem | SVGLightboxItem;
 
 // The opened Lightbox: the body's item snapshots plus the item being viewed.
 export interface LightboxState {
@@ -102,40 +111,50 @@ function snapshotLightboxItem(element: HTMLElement): LightboxItem | null {
   return snapshotSVGVisual(element, "mermaid", "Mermaid 图表");
 }
 
-// Serialize a rendered SVG visual — a Mermaid diagram or a Vega-Lite chart —
-// into a self-contained SVG data URL. Both engines bake their theme palette
-// into the markup at render time, so the snapshot keeps the exact colors the
-// reader is looking at. They also commonly size the SVG with percentages
-// ("width=100%"), which has no intrinsic size once the SVG stands alone as an
-// <img>; the viewBox carries the visual's true geometry, so the clone is
-// pinned to its pixel dimensions instead.
+interface Size {
+  width: number;
+  height: number;
+}
+
+function getSVGIntrinsicSize(svg: SVGSVGElement): Size {
+  const viewBox = svg.viewBox.baseVal;
+  if (viewBox.width > 0 && viewBox.height > 0) {
+    return { width: viewBox.width, height: viewBox.height };
+  }
+
+  const width = svg.width.baseVal.value;
+  const height = svg.height.baseVal.value;
+  if (width > 0 && height > 0) {
+    return { width, height };
+  }
+
+  const rect = svg.getBoundingClientRect();
+  if (rect.width > 0 && rect.height > 0) {
+    return { width: rect.width, height: rect.height };
+  }
+
+  return { width: 1, height: 1 };
+}
+
+// Snapshot only the rendered SVG element. Mermaid and Vega-Lite bake the
+// active palette into this markup, preserving it across a body replacement.
 function snapshotSVGVisual(
   container: HTMLElement,
   kind: Exclude<LightboxItemKind, "image">,
   alt: string,
 ): LightboxItem | null {
-  const svg = container.querySelector("svg");
+  const svg = container.querySelector<SVGSVGElement>("svg");
   if (svg === null) {
     return null;
   }
-  const clone = svg.cloneNode(true);
-  const viewBox = (svg.getAttribute("viewBox") ?? "").trim().split(/[\s,]+/);
-  if (
-    clone instanceof SVGElement &&
-    viewBox.length === 4 &&
-    viewBox.every((value) => Number.isFinite(Number(value)))
-  ) {
-    clone.setAttribute("width", viewBox[2]);
-    clone.setAttribute("height", viewBox[3]);
-  }
-  // encodeURIComponent keeps '#' (every theme color) and '<'/'>' from
-  // truncating or breaking the data URL.
-  const markup = new XMLSerializer().serializeToString(clone);
+  const { width, height } = getSVGIntrinsicSize(svg);
+  const markup = new XMLSerializer().serializeToString(svg);
   return {
     kind,
-    src: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(markup)}`,
-    srcSet: null,
-    sizes: null,
+    markup,
+    viewBox: svg.getAttribute("viewBox") ?? `0 0 ${width} ${height}`,
+    intrinsicWidth: width,
+    intrinsicHeight: height,
     alt,
     title: null,
   };
