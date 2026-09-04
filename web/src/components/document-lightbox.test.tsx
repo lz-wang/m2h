@@ -351,6 +351,24 @@ describe("DocumentLightbox", () => {
     }
   });
 
+  it("claims a horizontal-only wheel gesture without zooming", () => {
+    renderLightbox(makeItems(1), 0);
+
+    const image = currentItem();
+    const event = new WheelEvent("wheel", {
+      bubbles: true,
+      cancelable: true,
+      deltaX: -30,
+      deltaY: 0,
+    });
+    fireEvent(image, event);
+
+    // The gesture belongs to the Lightbox (never native scrolling), but a
+    // horizontal delta is not reinterpreted as zoom.
+    expect(event.defaultPrevented).toBe(true);
+    expect(currentScale(image)).toBeCloseTo(1, 5);
+  });
+
   it("caps one large wheel event below a ten-percent zoom jump", () => {
     renderLightbox(makeItems(1), 0);
 

@@ -441,6 +441,82 @@ test("namespaces Mermaid SVG identifiers in its Lightbox snapshot", async ({
   expect(lightboxIDs.some((id) => sourceIDs.includes(id))).toBe(false);
 });
 
+// Playwright derives an element's box from Chromium content quads, which can
+// transiently come back empty while the stage's enter transition is mid
+// transform-animation; a settled poll reads the real geometry. Measuring the
+// root <svg> itself is the point of these tests: a wrapper that grows around
+// a diagram pinned by Mermaid's own inline max-width (width="100%" +
+// `max-width: <natural>px`) is exactly the regression that wrapper-level
+// assertions cannot see.
+async function waitForVectorSvgBox(page: Page) {
+  const svg = page.locator(".image-lightbox-vector > svg");
+  await expect
+    .poll(async () => (await svg.boundingBox())?.width ?? 0, {
+      timeout: 5_000,
+    })
+    .toBeGreaterThan(0);
+  const box = await svg.boundingBox();
+  if (box === null) {
+    throw new Error("lightbox svg was not rendered");
+  }
+  return box;
+}
+
+test("zooms the real mermaid svg around the stage center", async ({ page }) => {
+  await openMermaidDocument(page);
+  await openMermaidLightbox(page);
+  const svg = page.locator(".image-lightbox-vector > svg");
+  await expect(svg).toHaveCount(1);
+
+  const before = await waitForVectorSvgBox(page);
+  await page.getByRole("button", { name: "放大图片" }).click();
+  const after = await waitForVectorSvgBox(page);
+
+  // The root <svg> itself grows by the zoom step (not merely the wrapper)…
+  expect(after.width / before.width).toBeCloseTo(1.25, 1);
+  expect(after.height / before.height).toBeCloseTo(1.25, 1);
+  // …and with pan/rotation at rest the growth stays centered — a wrapper-only
+  // regression shows up as sideways drift instead.
+  expect(
+    Math.abs(after.x + after.width / 2 - (before.x + before.width / 2)),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(after.y + after.height / 2 - (before.y + before.height / 2)),
+  ).toBeLessThanOrEqual(1);
+});
+
+// The wheel listener is attached directly on the pan wrapper (React's root
+// wheel listener is passive), so only a real browser wheel event proves the
+// gesture zooms while being claimed away from native scrolling — including a
+// document locked under the modal overlay.
+test("zooms a mermaid diagram with a real wheel gesture without scrolling", async ({
+  page,
+}) => {
+  await openMermaidDocument(page);
+  await openMermaidLightbox(page);
+  const svg = page.locator(".image-lightbox-vector > svg");
+  await expect(svg).toHaveCount(1);
+
+  // The pan wrapper owns the wheel listener; the snapshot svg itself is
+  // pointer-transparent at this stage of the interaction contract, so hover
+  // (and the wheel that follows) targets the wrapper the events bubble to.
+  await page.locator(".image-lightbox-vector").hover();
+  const before = await waitForVectorSvgBox(page);
+  const scrollBefore = await page.evaluate(() => ({
+    x: window.scrollX,
+    y: window.scrollY,
+  }));
+
+  await page.mouse.wheel(0, -120);
+  await page.mouse.wheel(0, -120);
+
+  const after = await waitForVectorSvgBox(page);
+  expect(after.width).toBeGreaterThan(before.width);
+  expect(after.height).toBeGreaterThan(before.height);
+  expect(await page.evaluate(() => window.scrollX)).toBe(scrollBefore.x);
+  expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore.y);
+});
+
 test("rotates, zooms, pans and closes a mermaid diagram without moving the document", async ({
   page,
 }) => {

@@ -16,6 +16,8 @@
 
 ### 修复
 
+- 修复 Lightbox 中 Mermaid 与 Vega-Lite 图表点击放大或滚轮缩放时图表本身不放大、外层容器单独变大导致图表看似左右漂移的问题：Mermaid 默认输出 `width="100%"` 并内联 `max-width: <原始宽度>px`，内联样式优先级高于样式表，把图表钉在原始尺寸。现在打开 Lightbox 时快照统一接管根 SVG 的视口几何：保留（缺失时按内在尺寸补齐）`viewBox`，移除 `width`/`height` 属性，并以 `!important` 内联固定 `width`/`height` 与 max/min 尺寸约束，任何渲染器留下的尺寸声明都不再参与 Lightbox 布局。同时 Lightbox 舞台以 `overflow: hidden` 裁切真实放大的布局盒，滚轮手势对纯横向滚动增量也一并认领（不解释为缩放），不再泄漏给浏览器产生横向滚动或历史导航手势。
+
 - 修复 Lightbox 中 Mermaid 与 Vega-Lite 图表在 2–5 倍放大时可能因 `data:image/svg+xml` 的 `<img>` 合成层而变模糊的问题：图表现在保留为已渲染的内联 SVG，缩放直接改变实际渲染尺寸并使浏览器重绘矢量图元；平移和旋转仍由外层 transform 承担，普通位图图片继续使用原有的合成层缩放路径。
 - 修复 Lightbox 将 Mermaid、Vega-Lite 等 SVG 图表作为内联快照插回正文时可能与原图产生重复 DOM ID 的问题：快照会为本地 ID 及其 `url(#…)`、片段链接和辅助描述引用建立独立命名空间，避免 marker、clipPath、gradient 等定义错误地解析到正文图表。
 

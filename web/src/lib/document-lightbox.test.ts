@@ -101,6 +101,77 @@ describe("collectLightboxState", () => {
     );
   });
 
+  it("hands the snapshot's viewport geometry to the Lightbox", () => {
+    // Mermaid's useMaxWidth shape: width="100%" plus an inline max-width pins
+    // the diagram to its natural size and would survive any stylesheet rule,
+    // so the normalization must land on the snapshot's own inline style.
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <div class="mermaid" data-m2h-lightbox-item="true">
+        <svg viewBox="0 0 700 400" width="100%" style="max-width: 700px">
+          <path d="M0 0"></path>
+        </svg>
+      </div>
+    `;
+    const selected = root.querySelector<HTMLElement>(".mermaid");
+    if (selected === null) throw new Error("Mermaid container was not created");
+
+    const state = collectLightboxState(root, selected);
+    const item = state?.items[0];
+    if (item?.kind === "image" || item === undefined) {
+      throw new Error("expected an SVG Lightbox item");
+    }
+    const snapshot = new DOMParser().parseFromString(
+      item.markup,
+      "image/svg+xml",
+    );
+    const svg = snapshot.querySelector("svg");
+    if (svg === null) throw new Error("snapshot svg was not serialized");
+
+    // The intrinsic size stays in viewBox; the viewport belongs to the
+    // Lightbox alone.
+    expect(svg.getAttribute("viewBox")).toBe("0 0 700 400");
+    expect(svg.hasAttribute("width")).toBe(false);
+    expect(svg.hasAttribute("height")).toBe(false);
+    const style = svg.getAttribute("style") ?? "";
+    expect(style).toContain("width: 100% !important");
+    expect(style).toContain("height: 100% !important");
+    expect(style).toContain("max-width: none !important");
+    expect(style).toContain("max-height: none !important");
+    expect(style).toMatch(/min-width:\s*0(px)? !important/);
+    expect(style).toMatch(/min-height:\s*0(px)? !important/);
+    expect(style).not.toContain("max-width: 700px");
+  });
+
+  it("adds a viewBox when the source SVG carries none", () => {
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <div class="mermaid" data-m2h-lightbox-item="true">
+        <svg width="400" height="200"><path d="M0 0"></path></svg>
+      </div>
+    `;
+    const selected = root.querySelector<HTMLElement>(".mermaid");
+    if (selected === null) throw new Error("Mermaid container was not created");
+
+    const state = collectLightboxState(root, selected);
+    const item = state?.items[0];
+    if (item?.kind === "image" || item === undefined) {
+      throw new Error("expected an SVG Lightbox item");
+    }
+    const snapshot = new DOMParser().parseFromString(
+      item.markup,
+      "image/svg+xml",
+    );
+    const svg = snapshot.querySelector("svg");
+    // The attribute-derived intrinsic size becomes the viewBox, so a future
+    // renderer emitting bare width/height still zooms as a true vector.
+    expect(svg?.getAttribute("viewBox")).toBe("0 0 400 200");
+    expect(svg?.hasAttribute("width")).toBe(false);
+    expect(svg?.hasAttribute("height")).toBe(false);
+    expect(item.intrinsicWidth).toBe(400);
+    expect(item.intrinsicHeight).toBe(200);
+  });
+
   it("snapshots enhanced images in DOM order and indexes the selected one", () => {
     const root = enhancedRoot();
     const selected = root.querySelectorAll<HTMLImageElement>("img")[1];

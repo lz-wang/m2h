@@ -1112,6 +1112,11 @@ body,
   display: flex;
   align-items: center;
   justify-content: center;
+  /* The stage is the viewport a zoomed visual may never leave: vector zoom
+   * grows the real layout box (unlike the bitmap's compositor transform), and
+   * an unclipped box would extend the fixed overlay's scrollable overflow —
+   * the source of stray horizontal pan gestures on trackpads. */
+  overflow: hidden;
 
   pointer-events: none;
 

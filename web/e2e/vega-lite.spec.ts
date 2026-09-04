@@ -574,12 +574,35 @@ test("browses charts, diagrams, and images in one lightbox sequence", async ({
   );
   await expect(page).not.toHaveURL(/#vega-lite-chart-link$/);
 
-  const vector = page.locator(".image-lightbox-vector");
-  const before = await vector.boundingBox();
+  // The zoom contract lives on the real root <svg>, not the wrapper: a
+  // wrapper that grows around a diagram pinned by its own inline max-width
+  // must fail here. With pan and rotation at rest the growth also stays
+  // centered instead of drifting sideways. (The settle poll rides out the
+  // stage's enter transition, during which Chromium can transiently report
+  // empty content quads.)
+  const svg = page.locator(".image-lightbox-vector > svg");
+  await expect
+    .poll(async () => (await svg.boundingBox())?.width ?? 0, {
+      timeout: 5_000,
+    })
+    .toBeGreaterThan(0);
+  const before = await svg.boundingBox();
+  if (before === null) {
+    throw new Error("lightbox svg was not rendered");
+  }
   await page.getByRole("button", { name: "放大图片" }).click();
-  const after = await vector.boundingBox();
-  expect(after?.width).toBeGreaterThan(before?.width ?? 0);
-  expect(after?.height).toBeGreaterThan(before?.height ?? 0);
+  const after = await svg.boundingBox();
+  if (after === null) {
+    throw new Error("lightbox svg was not rendered");
+  }
+  expect(after.width / before.width).toBeCloseTo(1.25, 1);
+  expect(after.height / before.height).toBeCloseTo(1.25, 1);
+  expect(
+    Math.abs(after.x + after.width / 2 - (before.x + before.width / 2)),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(after.y + after.height / 2 - (before.y + before.height / 2)),
+  ).toBeLessThanOrEqual(1);
   await expect(
     page.locator(".image-lightbox-vector-transform"),
   ).not.toHaveAttribute("style", /scale\(/);

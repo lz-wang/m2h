@@ -123,14 +123,26 @@ interface Size {
   height: number;
 }
 
+// Intrinsic length from a width/height attribute. Only unitless and px values
+// describe the intrinsic size; percentages and other units say nothing about
+// it, so they read as unknown (0) and the caller falls through to measurement.
+function getSVGLengthAttribute(svg: SVGSVGElement, name: string): number {
+  const raw = svg.getAttribute(name);
+  if (raw === null) {
+    return 0;
+  }
+  const match = /^\s*([\d.]+)\s*(px)?\s*$/i.exec(raw);
+  return match === null ? 0 : Number(match[1]);
+}
+
 function getSVGIntrinsicSize(svg: SVGSVGElement): Size {
   const viewBox = svg.viewBox.baseVal;
   if (viewBox.width > 0 && viewBox.height > 0) {
     return { width: viewBox.width, height: viewBox.height };
   }
 
-  const width = svg.width.baseVal.value;
-  const height = svg.height.baseVal.value;
+  const width = getSVGLengthAttribute(svg, "width");
+  const height = getSVGLengthAttribute(svg, "height");
   if (width > 0 && height > 0) {
     return { width, height };
   }
@@ -141,6 +153,28 @@ function getSVGIntrinsicSize(svg: SVGSVGElement): Size {
   }
 
   return { width: 1, height: 1 };
+}
+
+// Take ownership of the snapshot's root viewport geometry. Renderers emit
+// their own sizing — Mermaid's useMaxWidth ships `width="100%"` plus an inline
+// `max-width: <diagram-width>px`, which inline beats any stylesheet rule and
+// would pin the diagram to its natural size inside an ever-growing Lightbox
+// box. The Lightbox alone decides the viewport: the intrinsic size lives in
+// viewBox (added when a renderer omitted it), and every viewport-affecting
+// style is pinned with !important on the snapshot itself so no future
+// renderer's inline or scoped styles can reclaim it.
+function normalizeSVGSnapshotGeometry(svg: SVGSVGElement, size: Size): void {
+  if (!svg.hasAttribute("viewBox")) {
+    svg.setAttribute("viewBox", `0 0 ${size.width} ${size.height}`);
+  }
+  svg.removeAttribute("width");
+  svg.removeAttribute("height");
+  svg.style.setProperty("width", "100%", "important");
+  svg.style.setProperty("height", "100%", "important");
+  svg.style.setProperty("max-width", "none", "important");
+  svg.style.setProperty("max-height", "none", "important");
+  svg.style.setProperty("min-width", "0", "important");
+  svg.style.setProperty("min-height", "0", "important");
 }
 
 function rewriteSVGIDReferences(
@@ -226,9 +260,9 @@ function snapshotSVGVisual(
     return null;
   }
   const { width, height } = getSVGIntrinsicSize(svg);
-  const markup = new XMLSerializer().serializeToString(
-    rewriteSVGIDReferences(svg, snapshotIndex),
-  );
+  const snapshot = rewriteSVGIDReferences(svg, snapshotIndex);
+  normalizeSVGSnapshotGeometry(snapshot, { width, height });
+  const markup = new XMLSerializer().serializeToString(snapshot);
   return {
     kind,
     markup,

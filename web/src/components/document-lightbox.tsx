@@ -148,17 +148,23 @@ export function DocumentLightbox({
   const dragRef = useRef<PanDragState | null>(null);
 
   const handleImageWheel = useCallback((event: WheelEvent) => {
-    if (event.deltaY === 0) {
+    if (event.deltaX === 0 && event.deltaY === 0) {
       return;
     }
     // React delegates wheel events through a passive root listener, where
     // preventDefault cannot stop native scrolling. This handler is attached
     // directly to the visual item with passive:false below so the wheel belongs
-    // to the preview while the pointer is over it. Scale continuously from the
-    // normalized delta: trackpad gestures stay fine-grained, large mouse-wheel
-    // deltas cannot jump straight through the 1–5x range, and inverse deltas
-    // retrace the same multiplicative path.
+    // to the preview while the pointer is over it. Vertical wheel zooms;
+    // horizontal wheel only belongs to the Lightbox (the zoomed visual can
+    // overflow the stage, and an unclaimed horizontal gesture would scroll or
+    // trigger history navigation), so it is claimed but never reinterpreted as
+    // zoom. Scale continuously from the normalized delta: trackpad gestures
+    // stay fine-grained, large mouse-wheel deltas cannot jump straight through
+    // the 1–5x range, and inverse deltas retrace the same multiplicative path.
     event.preventDefault();
+    if (event.deltaY === 0) {
+      return;
+    }
     const scaleFactor = Math.exp(
       -normalizedWheelDelta(event) * WHEEL_ZOOM_SENSITIVITY,
     );
