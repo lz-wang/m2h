@@ -445,6 +445,16 @@ body,
   margin-left: auto;
 }
 
+.project-footer {
+  container-type: inline-size;
+}
+
+@container (max-width: 14rem) {
+  .project-footer-version {
+    display: none;
+  }
+}
+
 .theme-menu-positioner {
   z-index: 50;
   outline: none;

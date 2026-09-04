@@ -2,19 +2,16 @@ import { Menu } from "@base-ui/react/menu";
 import {
   Check,
   Columns3,
-  Copy,
   FileQuestion,
   FileText,
+  Funnel,
   ImageOff,
   Inbox,
-  Link,
   LoaderCircle,
   Maximize2,
   Moon,
   RefreshCw,
   Scaling,
-  Search,
-  Share2,
   Sun,
   SunMoon,
   TriangleAlert,
@@ -68,7 +65,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
-import { copyText } from "./lib/clipboard";
 import {
   collectLightboxState,
   type LightboxState,
@@ -81,13 +77,10 @@ import {
 } from "./lib/render-rich-content";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 import {
-  absoluteURL,
   type DocumentWidth,
   decodeHeadingHash,
-  documentURL,
   encodeHeadingHash,
   type Mode,
-  markdownURL,
   type ResolvedMode,
   readRoute,
 } from "./model";
@@ -110,11 +103,23 @@ const layoutStorageKey = "m2h.preview.layout";
 const repositoryURL = "https://github.com/lz-wang/m2h";
 const releaseVersionPattern = /^\d+\.\d+\.\d+$/;
 
-// The tooltip shows the platform's actual shortcut modifier; the handler
-// below accepts both modifiers on every platform.
-const searchShortcutHint = /mac|iphone|ipad/i.test(navigator.userAgent)
-  ? "⌘K"
-  : "Ctrl+K";
+// Browser-provided client hints identify the operating system without parsing
+// the user agent. navigator.platform is retained only as a fallback for older
+// browsers that have not implemented User-Agent Client Hints yet.
+export function searchShortcutModifier(): "Cmd" | "Ctrl" {
+  const clientNavigator = navigator as Navigator & {
+    userAgentData?: { platform?: string };
+  };
+  const platform =
+    clientNavigator.userAgentData?.platform ??
+    navigator.platform ??
+    navigator.userAgent;
+  return /mac|iphone|ipad|ipod/i.test(platform) ? "Cmd" : "Ctrl";
+}
+
+// The sidebar hint shows the client's usual modifier; the keyboard handler
+// below continues to accept both modifiers everywhere.
+const searchShortcutHint = `${searchShortcutModifier()}+K`;
 
 // True when this page load came from a reload or a history traversal: the
 // reader should return to the exact pixel offset saved for the document (see
@@ -202,8 +207,8 @@ export function App({ api }: AppProps) {
   const multiRoot = preview.roots.length > 1;
   const loading =
     preview.phase === "loading-files" || preview.phase === "loading-document";
-  // Transient "已复制……" feedback for every share-menu copy. One status line
-  // at a time, cleared by a timer; role=status announces it politely.
+  // Transient feedback for document-tree copy actions. One status line at a
+  // time, cleared by a timer; role=status announces it politely.
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const copyStatusTimer = useRef(0);
   const announceCopyStatus = useCallback((message: string) => {
@@ -491,12 +496,12 @@ export function App({ api }: AppProps) {
           <Sidebar collapsible="offcanvas" resizing={sidebarResizing}>
             <SidebarHeader>
               <div className="sidebar-search">
-                <Search aria-hidden="true" />
+                <Funnel aria-hidden="true" />
                 <Input
                   type="search"
                   value={fileFilterQuery}
                   aria-label="筛选文件"
-                  placeholder="筛选文件"
+                  placeholder={`筛选文件（${searchShortcutHint}全文搜索）`}
                   onChange={(event) => setFileFilterQuery(event.target.value)}
                 />
               </div>
@@ -599,29 +604,6 @@ export function App({ api }: AppProps) {
               frontmatter={preview.document?.frontmatter ?? null}
             />
             <div className="toolbar-actions">
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      className="toolbar-search-trigger"
-                      aria-label="全文搜索"
-                      onClick={() => setSearchOpen(true)}
-                    >
-                      <Search aria-hidden="true" />
-                    </Button>
-                  }
-                />
-                <TooltipContent side="bottom">
-                  全文搜索（{searchShortcutHint}）
-                </TooltipContent>
-              </Tooltip>
-              <ShareMenu
-                path={preview.selectedPath}
-                readMarkdown={preview.readCurrentMarkdown}
-                onStatus={announceCopyStatus}
-              />
               <DocumentWidthMenu
                 width={preview.width}
                 onChange={preview.setWidth}
@@ -717,7 +699,7 @@ function ProjectFooter({ version }: { version: string }) {
     : `${repositoryURL}/releases`;
 
   return (
-    <SidebarFooter className="flex-row items-center justify-start gap-1 px-3 py-2">
+    <SidebarFooter className="project-footer flex-row shrink-0 flex-nowrap items-center justify-start gap-1 px-3 py-2">
       <a
         href={repositoryURL}
         target="_blank"
@@ -741,7 +723,7 @@ function ProjectFooter({ version }: { version: string }) {
           rel="noreferrer"
           aria-label={`在新页面打开 m2h ${versionLabel} 发布信息`}
           title="查看发布信息"
-          className="rounded-md px-2 py-1 font-mono text-[11px] tabular-nums text-sidebar-foreground/55 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
+          className="project-footer-version shrink-0 rounded-md px-2 py-1 font-mono text-[11px] whitespace-nowrap tabular-nums text-sidebar-foreground/55 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
         >
           {versionLabel}
         </a>
@@ -839,115 +821,6 @@ function SidebarResizeHandle({
       onPointerDown={handlePointerDown}
       onClick={(event) => event.preventDefault()}
     />
-  );
-}
-
-// The toolbar share menu: the open document's two shareable identities — the
-// rendered page URL and the raw Markdown URL — plus its full source text, each
-// copied to the clipboard. Share URLs are share-shaped: the current heading
-// hash is kept (a shared link lands on the section being read) while
-// mode/width/toc, the sender's personal UI preferences, never enter the link.
-// The full text is fetched lazily from /raw/ so opening a document never pays
-// for a copy that may never happen.
-function ShareMenu({
-  path,
-  readMarkdown,
-  onStatus,
-}: {
-  path: string | null;
-  readMarkdown(): Promise<string | null>;
-  onStatus(message: string): void;
-}) {
-  const copyValue = async (value: string, success: string) => {
-    onStatus((await copyText(value)) ? success : "复制失败");
-  };
-
-  const copyDocumentURL = () => {
-    if (path === null) {
-      return;
-    }
-    // Read the hash at click time — it tracks the reader's live position.
-    void copyValue(
-      absoluteURL(
-        documentURL(path, window.location.hash),
-        window.location.origin,
-      ),
-      "已复制文档链接",
-    );
-  };
-
-  const copyMarkdownURL = () => {
-    if (path === null) {
-      return;
-    }
-    void copyValue(
-      absoluteURL(markdownURL(path), window.location.origin),
-      "已复制 Markdown 链接",
-    );
-  };
-
-  const copyMarkdownText = async () => {
-    const markdown = await readMarkdown();
-    if (markdown === null) {
-      onStatus("复制失败");
-      return;
-    }
-    await copyValue(markdown, "已复制 Markdown");
-  };
-
-  return (
-    // Non-modal: toolbar dropdowns must not trap focus or lock document scroll.
-    <Menu.Root modal={false}>
-      <Tooltip>
-        <Menu.Trigger
-          render={
-            <TooltipTrigger
-              render={
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label="分享文档"
-                  disabled={path === null}
-                />
-              }
-            />
-          }
-        >
-          <Share2 aria-hidden="true" />
-        </Menu.Trigger>
-        <TooltipContent side="bottom">分享</TooltipContent>
-      </Tooltip>
-      <Menu.Portal>
-        <Menu.Positioner
-          className="theme-menu-positioner"
-          align="end"
-          sideOffset={6}
-        >
-          <Menu.Popup className="theme-menu-popup">
-            <Menu.Group>
-              <Menu.GroupLabel className="theme-menu-label">
-                分享
-              </Menu.GroupLabel>
-              <Menu.Item className="theme-menu-item" onClick={copyDocumentURL}>
-                <Link aria-hidden="true" />
-                <span>复制文档网页链接</span>
-              </Menu.Item>
-              <Menu.Item className="theme-menu-item" onClick={copyMarkdownURL}>
-                <FileText aria-hidden="true" />
-                <span>复制 Markdown 链接</span>
-              </Menu.Item>
-              <Menu.Item
-                className="theme-menu-item"
-                onClick={() => void copyMarkdownText()}
-              >
-                <Copy aria-hidden="true" />
-                <span>复制 Markdown 全文</span>
-              </Menu.Item>
-            </Menu.Group>
-          </Menu.Popup>
-        </Menu.Positioner>
-      </Menu.Portal>
-    </Menu.Root>
   );
 }
 

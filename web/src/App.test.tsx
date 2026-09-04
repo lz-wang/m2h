@@ -8,7 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { App } from "./App";
+import { App, searchShortcutModifier } from "./App";
 import { APIError, type FileListResponse, type PreviewAPI } from "./api";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 
@@ -44,6 +44,38 @@ beforeEach(() => {
   stylesheet.rel = "stylesheet";
   stylesheet.href = "/ui/markdown.css";
   document.head.append(stylesheet);
+});
+
+describe("search shortcut hint", () => {
+  it("uses the operating system reported by User-Agent Client Hints", () => {
+    const originalUserAgentData = Object.getOwnPropertyDescriptor(
+      navigator,
+      "userAgentData",
+    );
+    try {
+      Object.defineProperty(navigator, "userAgentData", {
+        configurable: true,
+        value: { platform: "macOS" },
+      });
+      expect(searchShortcutModifier()).toBe("Cmd");
+
+      Object.defineProperty(navigator, "userAgentData", {
+        configurable: true,
+        value: { platform: "Windows" },
+      });
+      expect(searchShortcutModifier()).toBe("Ctrl");
+    } finally {
+      if (originalUserAgentData === undefined) {
+        Reflect.deleteProperty(navigator, "userAgentData");
+      } else {
+        Object.defineProperty(
+          navigator,
+          "userAgentData",
+          originalUserAgentData,
+        );
+      }
+    }
+  });
 });
 
 describe("App directory preview", () => {
@@ -331,7 +363,14 @@ describe("App directory preview", () => {
     expect(footer?.classList).toContain("justify-start");
     expect(footer?.classList).toContain("gap-1");
     expect(footer?.classList).not.toContain("justify-between");
+    expect(footer?.classList).toContain("flex-nowrap");
     expect(repository.nextElementSibling).toBe(release);
+    expect(release.classList).toContain("project-footer-version");
+    expect(
+      footer?.contains(
+        screen.getByRole("button", { name: "显示主题：跟随系统" }),
+      ),
+    ).toBe(false);
     expect(release.getAttribute("href")).toBe(
       "https://github.com/lz-wang/m2h/releases/tag/v0.9.1",
     );
@@ -791,81 +830,12 @@ describe("App directory preview", () => {
     const themeToggle = screen.getByRole("button", {
       name: "显示主题：跟随系统",
     });
+    expect(themeToggle.closest(".toolbar-actions")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "分享文档" })).toBeNull();
     expect(
       tocToggle.compareDocumentPosition(themeToggle) &
         Node.DOCUMENT_POSITION_PRECEDING,
     ).toBe(Node.DOCUMENT_POSITION_PRECEDING);
-  });
-
-  it("shares the open document from the toolbar with clean links and raw source", async () => {
-    const user = userEvent.setup();
-    window.history.replaceState(
-      null,
-      "",
-      "/doc/README.md?mode=dark&width=wide#install",
-    );
-    // jsdom has no clipboard and no execCommand: capture the fallback path's
-    // textarea content so every copied value is asserted verbatim.
-    const copied: string[] = [];
-    Object.defineProperty(document, "execCommand", {
-      configurable: true,
-      value: () => {
-        copied.push(document.querySelector("textarea")?.value ?? "");
-        return true;
-      },
-    });
-    const api = createAPI();
-    try {
-      render(<App api={api} />);
-      await screen.findByText("Body for README.md");
-
-      // The share trigger sits left of the width menu.
-      const share = screen.getByRole("button", { name: "分享文档" });
-      const width = screen.getByRole("button", { name: "文档宽度：宽" });
-      expect(
-        share.compareDocumentPosition(width) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
-
-      const openMenu = async () => {
-        await user.click(screen.getByRole("button", { name: "分享文档" }));
-        await screen.findByRole("menuitem", { name: "复制文档网页链接" });
-      };
-      const copyFromMenu = async (name: string) => {
-        await openMenu();
-        await user.click(screen.getByRole("menuitem", { name }));
-      };
-
-      // Document page link: the current heading hash is kept, the sender's
-      // mode/width preferences are not.
-      await copyFromMenu("复制文档网页链接");
-      await waitFor(() =>
-        expect(copied.at(-1)).toBe("http://localhost/doc/README.md#install"),
-      );
-      expect((await screen.findByRole("status")).textContent).toBe(
-        "已复制文档链接",
-      );
-
-      await copyFromMenu("复制 Markdown 链接");
-      await waitFor(() =>
-        expect(copied.at(-1)).toBe("http://localhost/raw/README.md"),
-      );
-      expect((await screen.findByRole("status")).textContent).toBe(
-        "已复制 Markdown 链接",
-      );
-
-      // Full text is fetched lazily from /raw/ only at click time.
-      expect(api.getMarkdown).not.toHaveBeenCalled();
-      await copyFromMenu("复制 Markdown 全文");
-      expect(api.getMarkdown).toHaveBeenCalledWith("README.md");
-      await waitFor(() =>
-        expect(copied.at(-1)).toBe("# Raw source of README.md\n"),
-      );
-      expect((await screen.findByRole("status")).textContent).toBe(
-        "已复制 Markdown",
-      );
-    } finally {
-      Reflect.deleteProperty(document, "execCommand");
-    }
   });
 
   it("filters documents locally by title and file name", async () => {
@@ -875,6 +845,9 @@ describe("App directory preview", () => {
     await screen.findByText("Body for README.md");
 
     const search = screen.getByRole("searchbox", { name: "筛选文件" });
+    expect(search.getAttribute("placeholder")).toBe(
+      "筛选文件（Ctrl+K全文搜索）",
+    );
     await user.type(search, "setup api");
     expect(
       screen.getByRole("button", {
@@ -2373,25 +2346,12 @@ describe("App global full-text search", () => {
     const api = createAPI();
     render(<App api={api} />);
     await screen.findByText("Body for README.md");
+    expect(screen.queryByRole("button", { name: "全文搜索" })).toBeNull();
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
     expect(screen.getByRole("dialog", { name: "全文搜索" })).toBeTruthy();
 
     fireEvent.keyDown(window, { key: "k", metaKey: true });
-    expect(screen.getByRole("dialog", { name: "全文搜索" })).toBeTruthy();
-  });
-
-  it("opens the search from the toolbar trigger", async () => {
-    const api = createAPI();
-    render(<App api={api} />);
-    await screen.findByText("Body for README.md");
-
-    // The toolbar entry is the only keyboard-free one — mobile readers
-    // depend on it, so it must exist and open the same dialog. (The shortcut
-    // case cannot be combined here: while the modal dialog is open Base UI
-    // marks everything outside it aria-hidden.)
-    const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "全文搜索" }));
     expect(screen.getByRole("dialog", { name: "全文搜索" })).toBeTruthy();
   });
 
