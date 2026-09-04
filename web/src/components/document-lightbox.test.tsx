@@ -29,7 +29,7 @@ function renderLightbox(
 ) {
   const onIndexChange = handlers?.onIndexChange ?? vi.fn();
   const onClose = handlers?.onClose ?? vi.fn();
-  render(
+  const view = render(
     <DocumentLightbox
       items={items}
       index={index}
@@ -39,7 +39,7 @@ function renderLightbox(
       onClosed={vi.fn()}
     />,
   );
-  return { onIndexChange, onClose };
+  return { onIndexChange, onClose, unmount: view.unmount };
 }
 
 // The parent's actual shape: closing flips `open`, and the snapshot state is
@@ -124,7 +124,6 @@ describe("DocumentLightbox", () => {
       {
         kind: "mermaid",
         markup: '<svg viewBox="0 0 100 50"></svg>',
-        viewBox: "0 0 100 50",
         intrinsicWidth: 100,
         intrinsicHeight: 50,
         alt: "Mermaid 图表",
@@ -133,7 +132,6 @@ describe("DocumentLightbox", () => {
       {
         kind: "vega-lite",
         markup: '<svg viewBox="0 0 100 50"></svg>',
-        viewBox: "0 0 100 50",
         intrinsicWidth: 100,
         intrinsicHeight: 50,
         alt: "Vega-Lite 图表",
@@ -189,6 +187,36 @@ describe("DocumentLightbox", () => {
     expect(
       stage()?.querySelectorAll(".image-lightbox-vector > svg"),
     ).toHaveLength(1);
+  });
+
+  it("observes the stage but not an SVG visual's layout", async () => {
+    const observed: Element[] = [];
+    vi.stubGlobal(
+      "ResizeObserver",
+      class {
+        observe(target: Element): void {
+          observed.push(target);
+        }
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    const item: LightboxItem = {
+      kind: "mermaid",
+      markup: '<svg viewBox="0 0 100 50"></svg>',
+      intrinsicWidth: 100,
+      intrinsicHeight: 50,
+      alt: "Mermaid 图表",
+      title: null,
+    };
+
+    const view = renderLightbox([item], 0);
+    await waitFor(() => expect(observed).toHaveLength(1));
+    expect(observed[0]?.classList.contains("image-lightbox-stage")).toBe(true);
+    expect(observed).not.toContain(currentVisual());
+
+    view.unmount();
+    vi.unstubAllGlobals();
   });
 
   it("navigates to the previous and next item through the toolbar", async () => {
@@ -273,7 +301,6 @@ describe("DocumentLightbox", () => {
       {
         kind: "mermaid" as const,
         markup: '<svg viewBox="0 0 100 50"></svg>',
-        viewBox: "0 0 100 50",
         intrinsicWidth: 100,
         intrinsicHeight: 50,
         alt: "Mermaid 图表",

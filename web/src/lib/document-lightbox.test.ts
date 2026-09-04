@@ -76,7 +76,6 @@ describe("collectLightboxState", () => {
     }
     expect(mermaid).toMatchObject({
       kind: "mermaid",
-      viewBox: "0 0 800 400",
       intrinsicWidth: 800,
       intrinsicHeight: 400,
       alt: "Mermaid 图表",
@@ -84,7 +83,6 @@ describe("collectLightboxState", () => {
     });
     expect(vegaLite).toMatchObject({
       kind: "vega-lite",
-      viewBox: "0 0 600 300",
       intrinsicWidth: 600,
       intrinsicHeight: 300,
       alt: "Vega-Lite 图表",

@@ -131,7 +131,10 @@ export function DocumentLightbox({
   // before the ResizeObserver reports; the transform math then falls back to
   // the neutral fit and skips pan clamping rather than collapsing it.
   const [stage, setStage] = useState<Size>({ width: 0, height: 0 });
-  const [layout, setLayout] = useState<Size>({ width: 0, height: 0 });
+  const [imageLayout, setImageLayout] = useState<Size>({
+    width: 0,
+    height: 0,
+  });
 
   // The dialog's portaled content mounts on a later commit than the component
   // itself, so the geometry observer must attach through callback refs: an
@@ -139,6 +142,7 @@ export function DocumentLightbox({
   // again, which would silently leave the fit and the pan clamp without
   // measurements in a real browser.
   const stageNodeRef = useRef<HTMLDivElement | null>(null);
+  const imageNodeRef = useRef<HTMLImageElement | null>(null);
   const visualNodeRef = useRef<HTMLElement | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const dragRef = useRef<PanDragState | null>(null);
@@ -171,8 +175,8 @@ export function DocumentLightbox({
           };
           if (entry.target === stageNodeRef.current) {
             setStage(size);
-          } else if (entry.target === visualNodeRef.current) {
-            setLayout(size);
+          } else if (entry.target === imageNodeRef.current) {
+            setImageLayout(size);
           }
         }
       });
@@ -196,18 +200,31 @@ export function DocumentLightbox({
 
   const handleVisualRef = useCallback(
     (node: HTMLElement | null) => {
-      const observer = observerRef.current;
-      if (visualNodeRef.current !== null && observer !== null) {
-        observer.unobserve(visualNodeRef.current);
-      }
       visualNodeRef.current?.removeEventListener("wheel", handleImageWheel);
       visualNodeRef.current = node;
       if (node !== null) {
-        ensureObserver().observe(node);
         node.addEventListener("wheel", handleImageWheel, { passive: false });
       }
     },
-    [ensureObserver, handleImageWheel],
+    [handleImageWheel],
+  );
+
+  const handleImageRef = useCallback(
+    (node: HTMLImageElement | null) => {
+      const observer = observerRef.current;
+      const previousImage = imageNodeRef.current;
+      if (previousImage !== null && observer !== null) {
+        observer.unobserve(previousImage);
+      }
+      imageNodeRef.current = node;
+      if (node !== null) {
+        ensureObserver().observe(node);
+        handleVisualRef(node);
+      } else if (visualNodeRef.current === previousImage) {
+        handleVisualRef(null);
+      }
+    },
+    [ensureObserver, handleVisualRef],
   );
 
   useEffect(
@@ -231,12 +248,13 @@ export function DocumentLightbox({
     setZoom(MIN_ZOOM);
     setRotation(0);
     setPan({ x: 0, y: 0 });
+    setImageLayout({ width: 0, height: 0 });
   }, [index]);
 
   const rotated = rotation === 90 || rotation === 270;
   const visualLayout =
     item?.kind === "image"
-      ? layout
+      ? imageLayout
       : {
           width: item?.intrinsicWidth ?? 0,
           height: item?.intrinsicHeight ?? 0,
@@ -440,7 +458,7 @@ export function DocumentLightbox({
           >
             {item.kind === "image" ? (
               <img
-                ref={handleVisualRef}
+                ref={handleImageRef}
                 className="image-lightbox-image"
                 src={item.src}
                 srcSet={item.srcSet ?? undefined}

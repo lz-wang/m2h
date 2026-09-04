@@ -349,8 +349,8 @@ test("keeps the linked image's anchor while its trigger opens the lightbox", asy
 //
 // The mermaid fixture interleaves image → diagram → image, so these tests
 // verify the two visual kinds really browse as ONE sequence with the shared
-// toolbar, and that a diagram snapshot (a serialized SVG data URL) survives
-// the same zoom / rotate / pan / close round a plain image goes through.
+// toolbar, and that an inline diagram snapshot survives the same zoom /
+// rotate / pan / close round a plain image goes through.
 
 const mermaidDocumentPath = "/doc/mermaid-lightbox.md";
 
@@ -441,10 +441,9 @@ test("rotates, zooms, pans and closes a mermaid diagram without moving the docum
     return visual?.style.transform.includes("rotate(90deg)") ?? false;
   });
 
-  // Zoom to the 5x cap, then drag far past every edge. The pan must follow
-  // the drag direction and stay clamped inside the fitted stage: bounded by
-  // half the zoomed diagram's natural size along whichever axis the rotation
-  // leaves there (max() of both natural dimensions covers the swap).
+  // Zoom to the 5x cap, then drag far past every edge. The pan must stop at
+  // the exact rotated-stage boundary, calculated from the dimensions the
+  // Lightbox itself uses rather than an arbitrary safety bound.
   const zoomIn = page.getByRole("button", { name: "放大图片" });
   while (await zoomIn.isEnabled()) {
     await zoomIn.click();
@@ -464,20 +463,42 @@ test("rotates, zooms, pans and closes a mermaid diagram without moving the docum
   );
   await page.mouse.up();
 
-  const pan = await page.evaluate(() => {
-    const visual = document.querySelector<HTMLElement>(
+  const { pan, geometry } = await page.evaluate(() => {
+    const transform = document.querySelector<HTMLElement>(
       ".image-lightbox-vector-transform",
     );
-    const match = visual?.style.transform.match(
+    const vector = document.querySelector<HTMLElement>(
+      ".image-lightbox-vector",
+    );
+    const stage = document.querySelector<HTMLElement>(".image-lightbox-stage");
+    if (transform === null || vector === null || stage === null) {
+      throw new Error("lightbox geometry was not rendered");
+    }
+    const match = transform.style.transform.match(
       /translate3d\((-?[\d.]+)px, (-?[\d.]+)px, 0px\)/,
     );
-    return { x: Number(match?.[1] ?? 0), y: Number(match?.[2] ?? 0) };
+    const vectorStyle = getComputedStyle(vector);
+    const stageRect = stage.getBoundingClientRect();
+    return {
+      pan: { x: Number(match?.[1] ?? 0), y: Number(match?.[2] ?? 0) },
+      geometry: {
+        stageWidth: stageRect.width,
+        stageHeight: stageRect.height,
+        renderedWidth: Number.parseFloat(vectorStyle.width),
+        renderedHeight: Number.parseFloat(vectorStyle.height),
+      },
+    };
   });
-  const bound = 10_000;
-  expect(pan.x).toBeLessThanOrEqual(0);
-  expect(pan.y).toBeLessThanOrEqual(0);
-  expect(pan.x).toBeGreaterThanOrEqual(-bound);
-  expect(pan.y).toBeGreaterThanOrEqual(-bound);
+  const maxPanX = Math.max(
+    0,
+    (geometry.renderedHeight - geometry.stageWidth) / 2,
+  );
+  const maxPanY = Math.max(
+    0,
+    (geometry.renderedWidth - geometry.stageHeight) / 2,
+  );
+  expect(pan.x).toBeCloseTo(-maxPanX, 1);
+  expect(pan.y).toBeCloseTo(-maxPanY, 1);
 
   // Still closable at max zoom: the close button stays on top and works.
   const close = page.getByRole("button", { name: "关闭视觉内容预览" });
@@ -501,11 +522,11 @@ test("rotates, zooms, pans and closes a mermaid diagram without moving the docum
   await expectInvariantsUnchanged(page, before);
 });
 
-// The diagram lightbox is a vector snapshot on a theme-aware canvas: the src
-// stays a serialized SVG data URL (byte-identical across the whole zoom
-// range — no re-serialization, no rasterization) while the stage behind it
-// renders white in the light theme and black in the dark one. Bitmap images
-// keep the transparent stage; the modal backdrop is unchanged.
+// The diagram lightbox is an inline vector snapshot on a theme-aware canvas:
+// its markup stays byte-identical across the whole zoom range — no
+// re-serialization or rasterization — while the stage behind it renders white
+// in the light theme and black in the dark one. Bitmap images keep the
+// transparent stage; the modal backdrop is unchanged.
 test("renders the mermaid lightbox as a vector snapshot on a theme-aware canvas", async ({
   page,
 }) => {

@@ -30,7 +30,6 @@ export interface ImageLightboxItem extends LightboxItemBase {
 export interface SVGLightboxItem extends LightboxItemBase {
   kind: "mermaid" | "vega-lite";
   markup: string;
-  viewBox: string;
   intrinsicWidth: number;
   intrinsicHeight: number;
 }
@@ -152,7 +151,6 @@ function snapshotSVGVisual(
   return {
     kind,
     markup,
-    viewBox: svg.getAttribute("viewBox") ?? `0 0 ${width} ${height}`,
     intrinsicWidth: width,
     intrinsicHeight: height,
     alt,
