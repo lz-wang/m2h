@@ -1097,13 +1097,13 @@ body,
  * rotation fit, and the pan clamp: it insets the viewport to reserve the
  * bottom toolbar zone, so a rotated image re-fitting the stage can never
  * reach under the toolbar. It is pointer-transparent — blank-area presses
- * pass through to the popup's close-on-press handler — while the image opts
+ * pass through to the popup's close-on-press handler — while a visual opts
  * back into pointer events for panning. Its z-index is the bottom of the
- * popup's explicit layering contract: the zoom transform lets the image
- * paint far past its layout box (and form its own stacking context), so the
- * controls below carry a higher z-index instead of relying on the close
- * button's DOM position, which precedes the stage. The enter/exit motion
- * rides here (96% + transparent → 100% + opaque), not on the image. */
+ * popup's explicit layering contract: a zoomed bitmap may paint far past its
+ * layout box (and form its own stacking context), so the controls below carry
+ * a higher z-index instead of relying on the close button's DOM position,
+ * which precedes the stage. The enter/exit motion rides here (96% +
+ * transparent → 100% + opaque), not on a visual. */
 .image-lightbox-stage {
   position: absolute;
   inset: 1rem 1rem 6rem;
@@ -1129,8 +1129,8 @@ body,
   transform: scale(0.96);
 }
 
-/* The fitted baseline the zoom transform scales from: the image contains into
- * the stage (the viewport minus the toolbar reserve).
+/* The fitted baseline the zoom transform scales from: a bitmap image contains
+ * into the stage (the viewport minus the toolbar reserve).
  * touch-action none hands all touch drags to the pointer-pan handlers, and the
  * transform (never width/height) carries zoom/rotate/pan so dragging stays
  * compositor-only. */
@@ -1160,6 +1160,7 @@ body,
   touch-action: none;
   pointer-events: auto;
   cursor: grab;
+  will-change: transform;
 }
 
 .image-lightbox-vector-transform[data-panning="true"] {
