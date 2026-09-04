@@ -14,12 +14,12 @@ import (
 )
 
 // Field weights. The numbers are internal constants, not an API contract —
-// only their order is: an exact title beats a partial title, which beats a
-// path hit, then tags, the description, a heading, body prose and finally
-// code. The description outranks ordinary prose because frontmatter declares
-// it the document's summary, not a random paragraph.
+// only their order is: a partial title beats a path hit, then tags, the
+// description, a heading, body prose and finally code. An exact title is
+// not a weight at all: it is a document-level flag that sorts ahead of
+// every scored result. The description outranks ordinary prose because
+// frontmatter declares it the document's summary, not a random paragraph.
 const (
-	scoreTitleExact    = 1000
 	scoreTitleContains = 800
 	scorePath          = 650
 	scoreTag           = 600
@@ -51,8 +51,8 @@ type Document struct {
 // excerpt around the best matching content (empty for metadata-only matches
 // that carry no description), and HeadingID/HeadingText locate the matching
 // section — both empty when the document matched only on metadata or on
-// content before its first anchored heading. Score is internal: it orders
-// results but is never exposed to clients.
+// content before its first anchored heading. Score and exactTitle are
+// internal: they order results but are never exposed to clients.
 type Result struct {
 	Path        string
 	Title       string
@@ -60,7 +60,8 @@ type Result struct {
 	HeadingID   string
 	HeadingText string
 
-	score int
+	score      int
+	exactTitle bool
 }
 
 // Match reports whether the document satisfies every query token, and the
@@ -79,15 +80,21 @@ func Match(document Document, query string) (Result, bool) {
 	descriptionLower := strings.ToLower(document.Description)
 	descriptionHit := false
 
+	// An exact title is a document-level signal, compared on
+	// whitespace-normalized forms: a query like "markdown rendering" must
+	// rank the title "Markdown Rendering" above "Markdown Rendering Guide"
+	// no matter how the per-token field scores add up. Field weights stay
+	// per token; only the exact flag rides above them.
+	normalizedQuery := strings.Join(tokens, " ")
+	normalizedTitle := strings.Join(strings.Fields(titleLower), " ")
+	exactTitle := normalizedTitle == normalizedQuery
+
 	total := 0
 	chunkHits := make([]bool, len(document.Chunks))
 	for _, token := range tokens {
 		best := 0
 		if strings.Contains(titleLower, token) {
 			best = scoreTitleContains
-			if len(tokens) == 1 && titleLower == token {
-				best = scoreTitleExact
-			}
 		}
 		if strings.Contains(pathLower, token) && best < scorePath {
 			best = scorePath
@@ -118,9 +125,10 @@ func Match(document Document, query string) (Result, bool) {
 	}
 
 	result := Result{
-		Path:  document.Path,
-		Title: document.Title,
-		score: total,
+		Path:       document.Path,
+		Title:      document.Title,
+		score:      total,
+		exactTitle: exactTitle,
 	}
 	section, bestChunk, bestTotal := bestSection(document.Chunks, chunkHits, tokens)
 	if bestTotal > 0 {
@@ -138,10 +146,15 @@ func Match(document Document, query string) (Result, bool) {
 	return result, true
 }
 
-// SortResults orders matched results strongest-first, with the path as a
-// deterministic tie-break so equal scores never flip between requests.
+// SortResults orders matched results strongest-first: an exact title always
+// leads, whatever its relevance score, then the scored results, with the
+// path as a deterministic tie-break so equal scores never flip between
+// requests.
 func SortResults(results []Result) {
 	sort.Slice(results, func(i, j int) bool {
+		if results[i].exactTitle != results[j].exactTitle {
+			return results[i].exactTitle
+		}
 		if results[i].score != results[j].score {
 			return results[i].score > results[j].score
 		}

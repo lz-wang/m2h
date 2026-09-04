@@ -110,6 +110,76 @@ func TestMatchFieldRankingOrder(t *testing.T) {
 	}
 }
 
+// An exact title is a document-level signal, not one token's field score:
+// with several tokens, the document whose whole title equals the query must
+// outrank one that merely contains it — even when the contains-title wins
+// the path tie-break.
+func TestMatchExactTitleBeatsContainsTitleAcrossTokens(t *testing.T) {
+	t.Parallel()
+
+	exact := Document{
+		Path:  "zz-exact.md",
+		Title: "Markdown Rendering",
+		Chunks: []markdown.SearchChunk{
+			textChunk("正文：markdown rendering", "", ""),
+		},
+	}
+	contains := Document{
+		Path:  "aa-guide.md",
+		Title: "Markdown Rendering Guide",
+		Chunks: []markdown.SearchChunk{
+			textChunk("正文：markdown rendering", "", ""),
+		},
+	}
+	results := make([]Result, 0, 2)
+	for _, document := range []Document{exact, contains} {
+		result, matched := Match(document, "markdown rendering")
+		if !matched {
+			t.Fatalf("document %s should match", document.Path)
+		}
+		results = append(results, result)
+	}
+	SortResults(results)
+
+	if results[0].Path != "zz-exact.md" {
+		t.Fatalf("first result = %q, want the exact title zz-exact.md", results[0].Path)
+	}
+}
+
+// The exact comparison runs on whitespace-normalized forms, so a title that
+// differs from the query only in internal spacing still counts as exact.
+func TestMatchExactTitleIgnoresWhitespaceDifferences(t *testing.T) {
+	t.Parallel()
+
+	exact := Document{
+		Path:  "z-lucky.md",
+		Title: "Goldmark  解析指南",
+		Chunks: []markdown.SearchChunk{
+			textChunk("正文：goldmark 解析指南", "", ""),
+		},
+	}
+	contains := Document{
+		Path:  "a.md",
+		Title: "Goldmark 解析指南 附注",
+		Chunks: []markdown.SearchChunk{
+			textChunk("正文：goldmark 解析指南", "", ""),
+		},
+	}
+	results := make([]Result, 0, 2)
+	for _, document := range []Document{exact, contains} {
+		result, matched := Match(document, "goldmark 解析指南")
+		if !matched {
+			t.Fatalf("document %s should match", document.Path)
+		}
+		results = append(results, result)
+	}
+	SortResults(results)
+
+	if results[0].Path != "z-lucky.md" {
+		t.Fatalf("first result = %q, want the whitespace-variant exact title z-lucky.md", results[0].Path)
+	}
+}
+
 func TestMatchBestSectionOnly(t *testing.T) {
 	t.Parallel()
 

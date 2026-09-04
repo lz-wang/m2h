@@ -175,9 +175,12 @@ func (projection *SearchProjection) appendCode(lines *text.Segments, source []by
 
 // inlineText collects the visible text of an inline subtree. Text nodes and
 // String nodes (code span content, emoji) contribute; inline raw HTML markup
-// and autolink URLs are dropped, while regular links contribute their text
-// and images their alt text — destinations are node fields, never children,
-// so they cannot leak into the collected text.
+// is dropped, while regular links contribute their text and images their alt
+// text — destinations are node fields, never children, so they cannot leak
+// into the collected text. An autolink contributes its label: `<https://…>`
+// and Linkify URLs render the URL itself as the text the reader sees, which
+// is also what heading.Text collects for a heading, keeping the search
+// projection's fallback title identical to the rendered one.
 func inlineText(node ast.Node, source []byte) string {
 	var builder strings.Builder
 	_ = ast.Walk(node, func(current ast.Node, entering bool) (ast.WalkStatus, error) {
@@ -188,14 +191,19 @@ func inlineText(node ast.Node, source []byte) string {
 		case *ast.Text:
 			segment := typed.Segment
 			builder.Write(segment.Value(source))
-			if typed.SoftLineBreak() {
+			// Both break kinds separate the lines the reader sees; without
+			// the space a hard break would glue its two words together.
+			if typed.SoftLineBreak() || typed.HardLineBreak() {
 				builder.WriteByte(' ')
 			}
 			return ast.WalkSkipChildren, nil
 		case *ast.String:
 			builder.Write(typed.Value)
 			return ast.WalkSkipChildren, nil
-		case *ast.RawHTML, *ast.AutoLink:
+		case *ast.RawHTML:
+			return ast.WalkSkipChildren, nil
+		case *ast.AutoLink:
+			builder.Write(typed.Label(source))
 			return ast.WalkSkipChildren, nil
 		case *emojiast.Emoji:
 			// newEngine renders emoji as Unicode characters; the searched

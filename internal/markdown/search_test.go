@@ -75,6 +75,26 @@ func TestProjectForSearchInvalidSourcePath(t *testing.T) {
 	}
 }
 
+// The fallback title must mean what the reader sees: an autolink heading
+// renders its label (the URL itself) as the heading text, so the search
+// projection's fallback title is that same label — not the file name.
+func TestProjectForSearchAutolinkHeadingTitleMatchesRender(t *testing.T) {
+	t.Parallel()
+
+	source := "# <https://example.com/guide>\n\n正文"
+	projection := projectForSearchSource(t, source)
+	rendered, err := Render([]byte(source), RenderOptions{SourcePath: "doc.md"})
+	if err != nil {
+		t.Fatalf("Render() returned error: %v", err)
+	}
+	if rendered.Title != "https://example.com/guide" {
+		t.Fatalf("rendered title = %q, want the autolink label", rendered.Title)
+	}
+	if projection.Title != rendered.Title {
+		t.Errorf("Title = %q, want %q (identical to the rendered title)", projection.Title, rendered.Title)
+	}
+}
+
 // Frontmatter is not the projection's concern: callers split it before
 // projecting the body (invalid frontmatter keeps the whole source
 // searchable, per the server contract). A source that still contains the
@@ -177,10 +197,24 @@ func TestProjectForSearchChunks(t *testing.T) {
 			},
 		},
 		{
-			name:   "autolink URL is not searchable text",
+			name:   "autolink label is searchable display text",
 			source: "访问 <https://example.com/goldmark> 了解更多",
 			want: []SearchChunk{
-				{Kind: SearchChunkText, Text: "访问 了解更多"},
+				{Kind: SearchChunkText, Text: "访问 https://example.com/goldmark 了解更多"},
+			},
+		},
+		{
+			name:   "soft line break becomes a space",
+			source: "第一行\n第二行",
+			want: []SearchChunk{
+				{Kind: SearchChunkText, Text: "第一行 第二行"},
+			},
+		},
+		{
+			name:   "hard line break becomes a space",
+			source: "第一行  \n第二行",
+			want: []SearchChunk{
+				{Kind: SearchChunkText, Text: "第一行 第二行"},
 			},
 		},
 		{
