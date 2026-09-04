@@ -11,9 +11,7 @@ export type SearchPhase = "idle" | "searching" | "ready" | "error";
 // Keystrokes settle for this long before a request goes out.
 const searchDebounceMs = 200;
 // The server accepts a single rune; the client only auto-sends two or more
-// so one stray CJK character does not scan the whole workspace. A one-rune
-// query can still be sent deliberately by pressing Enter — the API keeps
-// the full contract.
+// so one stray CJK character does not scan the whole workspace.
 const minAutoSearchRunes = 2;
 
 export interface UseSearchState {
