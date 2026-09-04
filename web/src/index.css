@@ -1178,6 +1178,10 @@ body,
   height: 100%;
   max-width: none;
   max-height: none;
+  /* The body SVG may contain interactive marks (for example Vega href
+   * channels). In the Lightbox it is a visual snapshot: gestures belong to
+   * the pan wrapper and must never reactivate those embedded interactions. */
+  pointer-events: none;
 }
 
 /* Bottom toolbar: one translucent, blurred pill with icon buttons and the

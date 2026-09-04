@@ -491,6 +491,37 @@ test("browses charts, diagrams, and images in one lightbox sequence", async ({
 }) => {
   await openUntilChartsSettle(page, lightboxPath);
 
+  // A rendered Vega-Lite SVG can carry an href-bearing mark. The Lightbox
+  // snapshots that real SVG; the body keeps this link interactive while the
+  // snapshot must make it inert so pointer gestures reach the pan wrapper.
+  const injectChartLink = () =>
+    page.locator(".markdown-body .m2h-vega-lite svg").evaluate((svg) => {
+      const namespace = "http://www.w3.org/2000/svg";
+      const link = document.createElementNS(namespace, "a");
+      link.setAttribute("href", "#vega-lite-chart-link");
+      const target = document.createElementNS(namespace, "rect");
+      const viewBox = svg.viewBox.baseVal;
+      target.setAttribute("x", String(viewBox.x));
+      target.setAttribute("y", String(viewBox.y));
+      target.setAttribute("width", String(viewBox.width));
+      target.setAttribute("height", String(viewBox.height));
+      target.setAttribute("fill", "transparent");
+      link.append(target);
+      svg.append(link);
+    });
+  await injectChartLink();
+  const bodyChartLink = page.locator(
+    ".markdown-body .m2h-vega-lite a[href='#vega-lite-chart-link']",
+  );
+  await expect(bodyChartLink).toHaveCount(1);
+  await bodyChartLink.first().click();
+  await expect(page).toHaveURL(/#vega-lite-chart-link$/);
+  await page.evaluate(() => {
+    history.replaceState(null, "", location.pathname);
+  });
+  await waitForBodyQuiet(page);
+  await injectChartLink();
+
   // Three visual items in document order: image → Mermaid → Vega-Lite.
   const markers = await page.evaluate(() =>
     Array.from(
@@ -528,6 +559,20 @@ test("browses charts, diagrams, and images in one lightbox sequence", async ({
   expect(stageState.background).toBe("rgb(255, 255, 255)");
   expect(stageState.svgCount).toBe(1);
   await expect(page.locator(".image-lightbox-image")).toHaveCount(0);
+
+  const lightboxChartLink = page.locator(
+    ".image-lightbox-vector a[href='#vega-lite-chart-link']",
+  );
+  await expect(lightboxChartLink).toHaveCount(1);
+  const linkBox = await lightboxChartLink.first().boundingBox();
+  if (linkBox === null) {
+    throw new Error("lightbox chart link was not rendered");
+  }
+  await page.mouse.click(
+    linkBox.x + linkBox.width / 2,
+    linkBox.y + linkBox.height / 2,
+  );
+  await expect(page).not.toHaveURL(/#vega-lite-chart-link$/);
 
   const vector = page.locator(".image-lightbox-vector");
   const before = await vector.boundingBox();
