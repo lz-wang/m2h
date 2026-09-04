@@ -139,7 +139,7 @@ export function DocumentLightbox({
   // again, which would silently leave the fit and the pan clamp without
   // measurements in a real browser.
   const stageNodeRef = useRef<HTMLDivElement | null>(null);
-  const imageNodeRef = useRef<HTMLImageElement | null>(null);
+  const visualNodeRef = useRef<HTMLElement | null>(null);
   const observerRef = useRef<ResizeObserver | null>(null);
   const dragRef = useRef<PanDragState | null>(null);
 
@@ -171,7 +171,7 @@ export function DocumentLightbox({
           };
           if (entry.target === stageNodeRef.current) {
             setStage(size);
-          } else if (entry.target === imageNodeRef.current) {
+          } else if (entry.target === visualNodeRef.current) {
             setLayout(size);
           }
         }
@@ -194,14 +194,14 @@ export function DocumentLightbox({
     [ensureObserver],
   );
 
-  const handleImageRef = useCallback(
-    (node: HTMLImageElement | null) => {
+  const handleVisualRef = useCallback(
+    (node: HTMLElement | null) => {
       const observer = observerRef.current;
-      if (imageNodeRef.current !== null && observer !== null) {
-        observer.unobserve(imageNodeRef.current);
+      if (visualNodeRef.current !== null && observer !== null) {
+        observer.unobserve(visualNodeRef.current);
       }
-      imageNodeRef.current?.removeEventListener("wheel", handleImageWheel);
-      imageNodeRef.current = node;
+      visualNodeRef.current?.removeEventListener("wheel", handleImageWheel);
+      visualNodeRef.current = node;
       if (node !== null) {
         ensureObserver().observe(node);
         node.addEventListener("wheel", handleImageWheel, { passive: false });
@@ -314,9 +314,7 @@ export function DocumentLightbox({
     setRotation((value) => ((value + 270) % 360) as Rotation);
   };
 
-  const handleImagePointerDown = (
-    event: ReactPointerEvent<HTMLImageElement>,
-  ) => {
+  const handleVisualPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.pointerType === "mouse" && event.button !== 0) {
       return;
     }
@@ -338,9 +336,7 @@ export function DocumentLightbox({
     setPanning(true);
   };
 
-  const handleImagePointerMove = (
-    event: ReactPointerEvent<HTMLImageElement>,
-  ) => {
+  const handleVisualPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     const drag = dragRef.current;
     if (drag === null || drag.pointerId !== event.pointerId) {
       return;
@@ -352,9 +348,7 @@ export function DocumentLightbox({
     setPan(next);
   };
 
-  const handleImagePointerEnd = (
-    event: ReactPointerEvent<HTMLImageElement>,
-  ) => {
+  const handleVisualPointerEnd = (event: ReactPointerEvent<HTMLElement>) => {
     if (dragRef.current?.pointerId !== event.pointerId) {
       return;
     }
@@ -435,25 +429,45 @@ export function DocumentLightbox({
             data-visual-kind={item.kind}
             ref={handleStageRef}
           >
-            <img
-              ref={handleImageRef}
-              className="image-lightbox-image"
-              src={item.src}
-              srcSet={item.srcSet ?? undefined}
-              sizes={item.sizes ?? undefined}
-              alt={item.alt}
-              title={item.title ?? undefined}
-              draggable={false}
-              style={{
-                transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg) scale(${scale})`,
-                cursor: panning ? "grabbing" : undefined,
-              }}
-              data-panning={panning ? "true" : undefined}
-              onPointerDown={handleImagePointerDown}
-              onPointerMove={handleImagePointerMove}
-              onPointerUp={handleImagePointerEnd}
-              onPointerCancel={handleImagePointerEnd}
-            />
+            {item.kind === "image" ? (
+              <img
+                ref={handleVisualRef}
+                className="image-lightbox-image"
+                src={item.src}
+                srcSet={item.srcSet ?? undefined}
+                sizes={item.sizes ?? undefined}
+                alt={item.alt}
+                title={item.title ?? undefined}
+                draggable={false}
+                style={{
+                  transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg) scale(${scale})`,
+                  cursor: panning ? "grabbing" : undefined,
+                }}
+                data-panning={panning ? "true" : undefined}
+                onPointerDown={handleVisualPointerDown}
+                onPointerMove={handleVisualPointerMove}
+                onPointerUp={handleVisualPointerEnd}
+                onPointerCancel={handleVisualPointerEnd}
+              />
+            ) : item.markup.trimStart().startsWith("<svg") ? (
+              <div
+                ref={handleVisualRef}
+                className="image-lightbox-vector"
+                role="img"
+                aria-label={item.alt}
+                title={item.title ?? undefined}
+                style={{
+                  transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg) scale(${scale})`,
+                  cursor: panning ? "grabbing" : undefined,
+                }}
+                data-panning={panning ? "true" : undefined}
+                onPointerDown={handleVisualPointerDown}
+                onPointerMove={handleVisualPointerMove}
+                onPointerUp={handleVisualPointerEnd}
+                onPointerCancel={handleVisualPointerEnd}
+                dangerouslySetInnerHTML={{ __html: item.markup }}
+              />
+            ) : null}
           </div>
           <div className="image-lightbox-toolbar">
             <button

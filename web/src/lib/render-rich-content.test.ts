@@ -1507,7 +1507,9 @@ describe("image lightbox triggers", () => {
         : collectLightboxState(root, selected);
     expect(state?.index).toBe(0);
     expect(
-      (state?.items ?? []).map((item) => new URL(item.src).pathname),
+      (state?.items ?? []).map((item) =>
+        item.kind === "image" ? new URL(item.src).pathname : item.kind,
+      ),
     ).toEqual(["/b.png", "/a.png"]);
   });
 });

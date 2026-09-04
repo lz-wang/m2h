@@ -80,8 +80,19 @@ function currentItem(): HTMLImageElement {
   return image;
 }
 
-function currentScale(image: HTMLImageElement): number {
-  const match = image.style.transform.match(/scale\(([^)]+)\)/);
+function currentVisual(): HTMLElement {
+  const dialog = screen.getByRole("dialog");
+  const visual = dialog.querySelector<HTMLElement>(
+    ".image-lightbox-image, .image-lightbox-vector",
+  );
+  if (visual === null) {
+    throw new Error("lightbox visual was not rendered");
+  }
+  return visual;
+}
+
+function currentScale(visual: HTMLElement): number {
+  const match = visual.style.transform.match(/scale\(([^)]+)\)/);
   if (match === null) {
     throw new Error("lightbox image scale was not rendered");
   }
@@ -112,17 +123,19 @@ describe("DocumentLightbox", () => {
       },
       {
         kind: "mermaid",
-        src: "data:image/svg+xml,%3Csvg%3E%3C/svg%3E",
-        srcSet: null,
-        sizes: null,
+        markup: '<svg viewBox="0 0 100 50"></svg>',
+        viewBox: "0 0 100 50",
+        intrinsicWidth: 100,
+        intrinsicHeight: 50,
         alt: "Mermaid 图表",
         title: null,
       },
       {
         kind: "vega-lite",
-        src: "data:image/svg+xml,%3Csvg%3E%3C/svg%3E",
-        srcSet: null,
-        sizes: null,
+        markup: '<svg viewBox="0 0 100 50"></svg>',
+        viewBox: "0 0 100 50",
+        intrinsicWidth: 100,
+        intrinsicHeight: 50,
         alt: "Vega-Lite 图表",
         title: null,
       },
@@ -158,6 +171,10 @@ describe("DocumentLightbox", () => {
       />,
     );
     expect(stage()?.dataset.visualKind).toBe("mermaid");
+    expect(
+      stage()?.querySelectorAll(".image-lightbox-vector > svg"),
+    ).toHaveLength(1);
+    expect(stage()?.querySelectorAll(".image-lightbox-image")).toHaveLength(0);
     view.rerender(
       <DocumentLightbox
         items={items}
@@ -169,6 +186,9 @@ describe("DocumentLightbox", () => {
       />,
     );
     expect(stage()?.dataset.visualKind).toBe("vega-lite");
+    expect(
+      stage()?.querySelectorAll(".image-lightbox-vector > svg"),
+    ).toHaveLength(1);
   });
 
   it("navigates to the previous and next item through the toolbar", async () => {
@@ -252,9 +272,10 @@ describe("DocumentLightbox", () => {
       "Mermaid 图表",
       {
         kind: "mermaid" as const,
-        src: "data:image/svg+xml,%3Csvg%3E%3C/svg%3E",
-        srcSet: null,
-        sizes: null,
+        markup: '<svg viewBox="0 0 100 50"></svg>',
+        viewBox: "0 0 100 50",
+        intrinsicWidth: 100,
+        intrinsicHeight: 50,
         alt: "Mermaid 图表",
         title: null,
       },
@@ -262,7 +283,7 @@ describe("DocumentLightbox", () => {
   ])("uses the mouse wheel to zoom the %s", (_label, item) => {
     renderLightbox([item], 0);
 
-    const image = currentItem();
+    const image = currentVisual();
     const zoomInEvent = new WheelEvent("wheel", {
       bubbles: true,
       cancelable: true,
