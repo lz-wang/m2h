@@ -203,6 +203,59 @@ describe("collectLightboxState", () => {
     expect(anchor?.getAttribute("tabindex")).toBe("-1");
   });
 
+  it("rewrites the renderer's root-id CSS scope inside embedded styles", () => {
+    // Mermaid scopes its palette to the root SVG id it rendered with; after
+    // the root is namespaced the selectors must follow, or the Lightbox copy
+    // silently loses its styles.
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <div class="mermaid" data-m2h-lightbox-item="true">
+        <svg id="m2h-mermaid-1" viewBox="0 0 100 50">
+          <style>
+            #m2h-mermaid-1{font-family:"trebuchet ms",verdana;fill:#333;}
+            #m2h-mermaid-1 .node rect{fill:red;}
+            #m2h-mermaid-1-suffix .edge{stroke:blue;}
+            .plain { fill: url(#gradient); }
+          </style>
+          <defs>
+            <linearGradient id="gradient"><stop offset="0"></stop></linearGradient>
+            <g id="m2h-mermaid-1-suffix"></g>
+          </defs>
+          <g class="node"><rect fill="url(#gradient)"></rect></g>
+        </svg>
+      </div>
+    `;
+    const selected = root.querySelector<HTMLElement>(".mermaid");
+    if (selected === null) throw new Error("Mermaid container was not created");
+
+    const state = collectLightboxState(root, selected);
+    const item = state?.items[0];
+    if (item?.kind === "image" || item === undefined) {
+      throw new Error("expected an SVG Lightbox item");
+    }
+    const snapshot = new DOMParser().parseFromString(
+      item.markup,
+      "image/svg+xml",
+    );
+    const styleText = snapshot.querySelector("style")?.textContent ?? "";
+
+    // Every root-id scope follows the renamed root…
+    expect(styleText).toContain("#m2h-lightbox-0-m2h-mermaid-1{");
+    expect(styleText).toContain("#m2h-lightbox-0-m2h-mermaid-1 .node rect");
+    expect(styleText).not.toContain("#m2h-mermaid-1{");
+    expect(styleText).not.toContain("#m2h-mermaid-1 .node");
+    // …including the suffixed element id, without clobbering longer ids…
+    expect(styleText).toContain("#m2h-lightbox-0-m2h-mermaid-1-suffix .edge");
+    // …and url() references still resolve after both passes.
+    expect(styleText).toContain("url(#m2h-lightbox-0-gradient)");
+    expect(snapshot.querySelector("svg")?.id).toBe(
+      "m2h-lightbox-0-m2h-mermaid-1",
+    );
+    expect(
+      snapshot.querySelector("linearGradient")?.id,
+    ).toBe("m2h-lightbox-0-gradient");
+  });
+
   it("snapshots enhanced images in DOM order and indexes the selected one", () => {
     const root = enhancedRoot();
     const selected = root.querySelectorAll<HTMLImageElement>("img")[1];

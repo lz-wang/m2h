@@ -502,6 +502,47 @@ test("namespaces Mermaid SVG identifiers in its Lightbox snapshot", async ({
   expect(lightboxIDs.some((id) => sourceIDs.includes(id))).toBe(false);
 });
 
+// Renaming the snapshot's root id must carry the renderer's scoped CSS with
+// it: Mermaid keys its palette rules on the root id (`#m2h-mermaid-N { … }`),
+// and a missed selector silently strips the diagram's font and colors in the
+// Lightbox. The computed styles of the body diagram and its snapshot must
+// therefore agree exactly.
+test("keeps the snapshot's scoped styles equivalent to the body diagram", async ({
+  page,
+}) => {
+  await openMermaidDocument(page);
+  await openMermaidLightbox(page);
+  await expect(page.locator(".image-lightbox-vector > svg")).toHaveCount(1);
+
+  const styles = await page.evaluate(() => {
+    const read = (svg: Element | null) => {
+      if (svg === null) {
+        throw new Error("svg was not rendered");
+      }
+      const root = getComputedStyle(svg);
+      const shape = svg.querySelector("path, rect, polygon, circle, line");
+      const shapeStyle =
+        shape === null ? null : getComputedStyle(shape as Element);
+      return {
+        fontFamily: root.fontFamily,
+        fill: root.fill,
+        shapeFill: shapeStyle?.fill ?? "",
+        shapeStroke: shapeStyle?.stroke ?? "",
+      };
+    };
+    return {
+      body: read(document.querySelector(".m2h-mermaid-frame svg")),
+      lightbox: read(document.querySelector(".image-lightbox-vector > svg")),
+    };
+  });
+
+  expect(styles.lightbox.fontFamily).toBe(styles.body.fontFamily);
+  expect(styles.lightbox.fontFamily).not.toBe("");
+  expect(styles.lightbox.fill).toBe(styles.body.fill);
+  expect(styles.lightbox.shapeFill).toBe(styles.body.shapeFill);
+  expect(styles.lightbox.shapeStroke).toBe(styles.body.shapeStroke);
+});
+
 // Playwright derives an element's box from Chromium content quads, which can
 // transiently come back empty while the stage's enter transition is mid
 // transform-animation; a settled poll reads the real geometry. Measuring the

@@ -16,6 +16,7 @@
 
 ### 修复
 
+- 修复 Lightbox 中 Mermaid 图表快照丢失自身样式的问题：Mermaid 将图表配色与字体规则以根 SVG id 作用域化（`#m2h-mermaid-N { … }`），快照为隔离 DOM 而重命名根 id 后这些选择器不再命中，Lightbox 中的图表静默回退到默认字体与颜色。现在快照内嵌 `<style>` 中引用旧 id 的 CSS 选择器会随 id 一起重写，正文图表与 Lightbox 快照的计算样式保持一致（新增等价性 E2E 锁定）。
 - 修复 Lightbox 中 Mermaid 与 Vega-Lite 图表文字无法选择的问题：此前为禁用 SVG 内嵌链接而整体关闭了快照 SVG 的命中测试与文字选择。现在快照 SVG 恢复完整命中测试，鼠标按在图表文字（`<text>`/`<tspan>` 或 foreignObject 内 HTML 标签）上时交给浏览器原生文字选择，按在形状或空白区域时仍是拖动平移，触屏拖动始终平移；嵌入链接保持可见与可命中但点击不再导航（快照中的链接带 `tabindex="-1"` 不进入 Tab 焦点，组件在捕获阶段拦截链接点击），未放大、没有可平移空间时不再接管按下动作；光标按区域区分（文字为 text、图形为 grab、拖动中为 grabbing）。
 
 - 修复 Lightbox 中 Mermaid 与 Vega-Lite 图表点击放大或滚轮缩放时图表本身不放大、外层容器单独变大导致图表看似左右漂移的问题：Mermaid 默认输出 `width="100%"` 并内联 `max-width: <原始宽度>px`，内联样式优先级高于样式表，把图表钉在原始尺寸。现在打开 Lightbox 时快照统一接管根 SVG 的视口几何：保留（缺失时按内在尺寸补齐）`viewBox`，移除 `width`/`height` 属性，并以 `!important` 内联固定 `width`/`height` 与 max/min 尺寸约束，任何渲染器留下的尺寸声明都不再参与 Lightbox 布局。同时 Lightbox 舞台以 `overflow: hidden` 裁切真实放大的布局盒，滚轮手势对纯横向滚动增量也一并认领（不解释为缩放），不再泄漏给浏览器产生横向滚动或历史导航手势。

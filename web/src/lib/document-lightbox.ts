@@ -219,6 +219,26 @@ function rewriteSVGIDReferences(
       .map((id) => ids.get(id) ?? id)
       .join(" ");
 
+  // CSS selectors scope styles to the renamed identifiers too: Mermaid emits
+  // `<style>` rules keyed on the root SVG id (`#m2h-mermaid-1 { … }`,
+  // `#m2h-mermaid-1 .node { … }`), which silently stop matching once the root
+  // is namespaced. Longest-first alternation plus a trailing boundary keeps a
+  // suffix id from matching inside a longer one.
+  const escapedIDs = [...ids.keys()]
+    .sort((a, b) => b.length - a.length)
+    .map((id) => id.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"));
+  const cssIDPattern =
+    escapedIDs.length > 0
+      ? new RegExp(`#(${escapedIDs.join("|")})(?![\\w-])`, "g")
+      : null;
+  const rewriteCSSIDSelectors = (value: string) =>
+    cssIDPattern === null
+      ? value
+      : value.replace(cssIDPattern, (match, id: string) => {
+          const replacement = ids.get(id);
+          return replacement === undefined ? match : `#${replacement}`;
+        });
+
   for (const element of elements) {
     if (element.id.length > 0) {
       element.id = ids.get(element.id) ?? element.id;
@@ -237,7 +257,9 @@ function rewriteSVGIDReferences(
     }
   }
   for (const style of snapshot.querySelectorAll("style")) {
-    const rewritten = rewriteURLReferences(style.textContent ?? "");
+    const rewritten = rewriteCSSIDSelectors(
+      rewriteURLReferences(style.textContent ?? ""),
+    );
     if (rewritten !== style.textContent) {
       style.textContent = rewritten;
     }
