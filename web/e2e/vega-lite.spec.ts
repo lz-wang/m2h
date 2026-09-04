@@ -514,22 +514,30 @@ test("browses charts, diagrams, and images in one lightbox sequence", async ({
   );
   await expect(counter).toHaveText("3 / 3");
 
-  // The chart lightbox shows the serialized SVG snapshot on the light
-  // theme's white diagram canvas, keyed by the stage's kind marker.
+  // The chart remains a native inline SVG on the light theme's diagram canvas.
   const stageState = await page.evaluate(() => {
     const stage = document.querySelector<HTMLElement>(".image-lightbox-stage");
-    const image = document.querySelector<HTMLImageElement>(
-      ".image-lightbox-image",
-    );
+    const svg = document.querySelector(".image-lightbox-vector > svg");
     return {
       kind: stage?.dataset.visualKind,
       background: stage === null ? "" : getComputedStyle(stage).backgroundColor,
-      src: image?.getAttribute("src") ?? "",
+      svgCount: svg === null ? 0 : 1,
     };
   });
   expect(stageState.kind).toBe("vega-lite");
   expect(stageState.background).toBe("rgb(255, 255, 255)");
-  expect(stageState.src.startsWith("data:image/svg+xml")).toBe(true);
+  expect(stageState.svgCount).toBe(1);
+  await expect(page.locator(".image-lightbox-image")).toHaveCount(0);
+
+  const vector = page.locator(".image-lightbox-vector");
+  const before = await vector.boundingBox();
+  await page.getByRole("button", { name: "放大图片" }).click();
+  const after = await vector.boundingBox();
+  expect(after?.width).toBeGreaterThan(before?.width ?? 0);
+  expect(after?.height).toBeGreaterThan(before?.height ?? 0);
+  await expect(
+    page.locator(".image-lightbox-vector-transform"),
+  ).not.toHaveAttribute("style", /scale\(/);
 
   await page.getByRole("button", { name: "上一项" }).click();
   await expect(counter).toHaveText("2 / 3");

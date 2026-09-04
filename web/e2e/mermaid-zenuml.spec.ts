@@ -133,10 +133,8 @@ test("opens the ZenUML diagram in the shared lightbox", async ({ page }) => {
 
   const popup = page.locator(".image-lightbox");
   await expect(popup).toBeVisible();
-  await expect(page.locator(".image-lightbox-image")).toHaveAttribute(
-    "src",
-    /^data:image\/svg\+xml/,
-  );
+  await expect(page.locator(".image-lightbox-vector > svg")).toHaveCount(1);
+  await expect(page.locator(".image-lightbox-image")).toHaveCount(0);
 
   await page.getByRole("button", { name: "关闭视觉内容预览" }).click();
   await expect(popup).toBeHidden();
@@ -211,19 +209,9 @@ test("repaints the ZenUML diagram when the theme switches", async ({
     .locator(".m2h-mermaid-frame .m2h-lightbox-trigger")
     .first()
     .click();
-  const snapshotSource = await page
-    .locator(".image-lightbox-image")
-    .getAttribute("src");
-  expect(snapshotSource).not.toBeNull();
-  // Decode the data URL with decodeURIComponent instead of fetching it: the
-  // page ships a strict connect-src 'self' CSP, and fetching data: URLs from
-  // the page context would be refused by design.
-  const snapshotSVG = await page.evaluate((source) => {
-    if (source === null) {
-      return "";
-    }
-    return decodeURIComponent(source.slice(source.indexOf(",") + 1));
-  }, snapshotSource);
+  const snapshotSVG = await page
+    .locator(".image-lightbox-vector > svg")
+    .evaluate((svg) => svg.outerHTML);
   expect(snapshotSVG).toContain('data-m2h-zenuml-theme="dark"');
   expect(snapshotSVG).toContain('data-m2h-zenuml-theme-style="dark"');
   expect(snapshotSVG).toContain("fill: #1f2020");

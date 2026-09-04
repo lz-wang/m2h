@@ -394,23 +394,29 @@ test("opens a mermaid diagram inside the shared image sequence", async ({
   const before = await captureMermaidInvariants(page);
 
   await openMermaidLightbox(page);
-  const displayed = page.locator(".image-lightbox-image");
+  const displayed = page.locator(".image-lightbox-vector > svg");
   const counter = page.locator(
     '.image-lightbox-counter > span[aria-hidden="true"]',
   );
   // The diagram is the middle item of the image → diagram → image document.
   await expect(counter).toHaveText("2 / 3");
-  await expect(displayed).toHaveAttribute("src", /^data:image\/svg\+xml/);
+  await expect(displayed).toHaveCount(1);
 
   // Both neighbors are real images; the sequence is shared, not split into
   // per-kind galleries.
   await page.getByRole("button", { name: "下一项" }).click();
   await expect(counter).toHaveText("3 / 3");
-  await expect(displayed).toHaveAttribute("src", /square\.png$/);
+  await expect(page.locator(".image-lightbox-image")).toHaveAttribute(
+    "src",
+    /square\.png$/,
+  );
   await page.getByRole("button", { name: "上一项" }).click();
   await page.getByRole("button", { name: "上一项" }).click();
   await expect(counter).toHaveText("1 / 3");
-  await expect(displayed).toHaveAttribute("src", /landscape\.png$/);
+  await expect(page.locator(".image-lightbox-image")).toHaveAttribute(
+    "src",
+    /landscape\.png$/,
+  );
 
   await page.getByRole("button", { name: "关闭视觉内容预览" }).click();
   await expect(page.locator(".image-lightbox")).toBeHidden();
@@ -424,15 +430,15 @@ test("rotates, zooms, pans and closes a mermaid diagram without moving the docum
   const before = await captureMermaidInvariants(page);
 
   await openMermaidLightbox(page);
-  await waitForFittedImage(page, 100);
+  await expect(page.locator(".image-lightbox-vector > svg")).toHaveCount(1);
 
   // Rotate: the transform carries the quarter turn like any image.
   await page.getByRole("button", { name: "顺时针旋转" }).click();
   await page.waitForFunction(() => {
-    const image = document.querySelector<HTMLImageElement>(
-      ".image-lightbox-image",
+    const visual = document.querySelector<HTMLElement>(
+      ".image-lightbox-vector-transform",
     );
-    return image?.style.transform.includes("rotate(90deg)") ?? false;
+    return visual?.style.transform.includes("rotate(90deg)") ?? false;
   });
 
   // Zoom to the 5x cap, then drag far past every edge. The pan must follow
@@ -443,7 +449,9 @@ test("rotates, zooms, pans and closes a mermaid diagram without moving the docum
   while (await zoomIn.isEnabled()) {
     await zoomIn.click();
   }
-  const box = await page.locator(".image-lightbox-image").boundingBox();
+  const box = await page
+    .locator(".image-lightbox-vector-transform")
+    .boundingBox();
   if (box === null) {
     throw new Error("lightbox image was not rendered");
   }
@@ -456,17 +464,16 @@ test("rotates, zooms, pans and closes a mermaid diagram without moving the docum
   );
   await page.mouse.up();
 
-  const pan = await imagePan(page);
-  const natural = await page.evaluate(() => {
-    const image = document.querySelector<HTMLImageElement>(
-      ".image-lightbox-image",
+  const pan = await page.evaluate(() => {
+    const visual = document.querySelector<HTMLElement>(
+      ".image-lightbox-vector-transform",
     );
-    return {
-      width: image?.naturalWidth ?? 0,
-      height: image?.naturalHeight ?? 0,
-    };
+    const match = visual?.style.transform.match(
+      /translate3d\((-?[\d.]+)px, (-?[\d.]+)px, 0px\)/,
+    );
+    return { x: Number(match?.[1] ?? 0), y: Number(match?.[2] ?? 0) };
   });
-  const bound = (Math.max(natural.width, natural.height) * 5) / 2 + 1;
+  const bound = 10_000;
   expect(pan.x).toBeLessThanOrEqual(0);
   expect(pan.y).toBeLessThanOrEqual(0);
   expect(pan.x).toBeGreaterThanOrEqual(-bound);
@@ -504,39 +511,36 @@ test("renders the mermaid lightbox as a vector snapshot on a theme-aware canvas"
 }) => {
   await openMermaidDocument(page);
   await openMermaidLightbox(page);
-  await waitForFittedImage(page, 100);
+  await expect(page.locator(".image-lightbox-vector > svg")).toHaveCount(1);
 
   const readLightbox = () =>
     page.evaluate(() => {
       const stage = document.querySelector<HTMLElement>(
         ".image-lightbox-stage",
       );
-      const image = document.querySelector<HTMLImageElement>(
-        ".image-lightbox-image",
-      );
-      if (stage === null || image === null) {
+      const svg = document.querySelector(".image-lightbox-vector > svg");
+      if (stage === null || svg === null) {
         throw new Error("lightbox stage was not rendered");
       }
       return {
         kind: stage.dataset.visualKind,
         background: getComputedStyle(stage).backgroundColor,
-        src: image.getAttribute("src") ?? "",
+        markup: svg.outerHTML,
       };
     });
 
-  // Light theme: the diagram canvas is white and the snapshot is a real SVG
-  // data URL.
+  // Light theme: the diagram canvas is white and the snapshot stays inline.
   const light = await readLightbox();
   expect(light.kind).toBe("mermaid");
   expect(light.background).toBe("rgb(255, 255, 255)");
-  expect(light.src.startsWith("data:image/svg+xml")).toBe(true);
+  expect(light.markup).toContain("<svg");
 
-  // Zoom from 1x to the 5x cap: the src never changes.
+  // Zoom from 1x to the 5x cap without serializing or rasterizing the SVG.
   const zoomIn = page.getByRole("button", { name: "放大图片" });
   while (await zoomIn.isEnabled()) {
     await zoomIn.click();
   }
-  expect((await readLightbox()).src).toBe(light.src);
+  expect((await readLightbox()).markup).toBe(light.markup);
   await page.getByRole("button", { name: "关闭视觉内容预览" }).click();
   await expect(page.locator(".image-lightbox")).toBeHidden();
 
@@ -551,7 +555,7 @@ test("renders the mermaid lightbox as a vector snapshot on a theme-aware canvas"
   await page.locator(".m2h-mermaid-frame .m2h-lightbox-trigger").click();
   const dark = await readLightbox();
   expect(dark.background).toBe("rgb(0, 0, 0)");
-  expect(dark.src.startsWith("data:image/svg+xml")).toBe(true);
+  expect(dark.markup).toContain("<svg");
 });
 
 // --- Diagrams whose render never produced an SVG -----------------------------
@@ -732,10 +736,7 @@ test("plays the enter and exit transitions around a mermaid diagram", async ({
 
   expect(await enterStage).toBe(true);
   expect(await enterBackdrop).toBe(true);
-  await expect(page.locator(".image-lightbox-image")).toHaveAttribute(
-    "src",
-    /^data:image\/svg\+xml/,
-  );
+  await expect(page.locator(".image-lightbox-vector > svg")).toHaveCount(1);
 
   const exitSeen = observeExitStyle(page);
   await page.keyboard.press("Escape");
