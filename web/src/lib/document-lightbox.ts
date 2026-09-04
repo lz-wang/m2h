@@ -245,6 +245,16 @@ function rewriteSVGIDReferences(
   return snapshot;
 }
 
+// Embedded links stay visually intact but inert: the snapshot is a visual,
+// and navigation belongs to the body document. tabindex keeps keyboard focus
+// out of the Lightbox's embedded links; the component blocks the actual
+// navigation on click while leaving the rest of the SVG hittable.
+function neutralizeEmbeddedLinks(svg: SVGSVGElement): void {
+  for (const anchor of svg.querySelectorAll("a")) {
+    anchor.setAttribute("tabindex", "-1");
+  }
+}
+
 // Snapshot only the rendered SVG element. Mermaid and Vega-Lite bake the
 // active palette into this markup, preserving it across a body replacement.
 // Rewriting local identifiers keeps the inline copy isolated from its source
@@ -262,6 +272,7 @@ function snapshotSVGVisual(
   const { width, height } = getSVGIntrinsicSize(svg);
   const snapshot = rewriteSVGIDReferences(svg, snapshotIndex);
   normalizeSVGSnapshotGeometry(snapshot, { width, height });
+  neutralizeEmbeddedLinks(snapshot);
   const markup = new XMLSerializer().serializeToString(snapshot);
   return {
     kind,

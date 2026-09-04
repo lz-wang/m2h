@@ -387,6 +387,67 @@ async function captureMermaidInvariants(page: Page) {
   };
 }
 
+// A screen point inside the diagram that hits no selectable text: by contract
+// a mouse press on diagram text is a selection, so pan gestures must
+// originate on shapes or the diagram background.
+async function findNonTextPoint(page: Page): Promise<{ x: number; y: number }> {
+  return page.evaluate(() => {
+    const svg = document.querySelector(".image-lightbox-vector > svg");
+    if (svg === null) {
+      throw new Error("lightbox svg was not rendered");
+    }
+    const rect = svg.getBoundingClientRect();
+    for (let step = 0; step < 400; step += 1) {
+      const x = rect.left + (rect.width * (step % 20)) / 19;
+      const y = rect.top + (rect.height * Math.floor(step / 20)) / 19;
+      // elementFromPoint respects the stage's clipping: a hit outside the
+      // diagram lands on the popup scrim, whose press closes the Lightbox —
+      // so the point must both hit-test into the svg and carry no text.
+      const hit = document.elementFromPoint(x, y);
+      if (
+        hit !== null &&
+        svg.contains(hit) &&
+        hit.closest("text, tspan, foreignObject") === null
+      ) {
+        return { x, y };
+      }
+    }
+    throw new Error("no non-text point found in the lightbox svg");
+  });
+}
+
+// A mouse drag across a diagram label. Mermaid emits labels either as SVG
+// `<text>` or as HTML inside a `<foreignObject>` (htmlLabels); both are
+// selectable and the locator accepts either shape. Edge labels carry empty
+// zero-size boxes, so only labels with real text qualify.
+async function dragAcrossDiagramLabel(page: Page): Promise<string> {
+  const label = page
+    .locator(".image-lightbox-vector text", { hasText: /\S/ })
+    .or(
+      page
+        .locator(".image-lightbox-vector foreignObject div", {
+          hasText: /\S/,
+        })
+        .first(),
+    )
+    .first();
+  await expect
+    .poll(async () => (await label.boundingBox())?.width ?? 0, {
+      timeout: 5_000,
+    })
+    .toBeGreaterThan(0);
+  const box = await label.boundingBox();
+  if (box === null) {
+    throw new Error("diagram label was not rendered");
+  }
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width * 0.15, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width * 0.9, y, { steps: 8 });
+  await page.mouse.up();
+  return page.evaluate(() => window.getSelection()?.toString() ?? "");
+}
+
 test("opens a mermaid diagram inside the shared image sequence", async ({
   page,
 }) => {
@@ -517,6 +578,33 @@ test("zooms a mermaid diagram with a real wheel gesture without scrolling", asyn
   expect(await page.evaluate(() => window.scrollY)).toBe(scrollBefore.y);
 });
 
+// Gesture arbitration on vector visuals: diagram text is real selectable
+// content (Mermaid labels are `<text>` or HTML in a `<foreignObject>`), so a
+// mouse drag across a label must produce a native selection — not a pan —
+// even when zoomed far enough that pan room exists.
+test("selects mermaid diagram text without panning", async ({ page }) => {
+  await openMermaidDocument(page);
+  await openMermaidLightbox(page);
+  await expect(page.locator(".image-lightbox-vector > svg")).toHaveCount(1);
+
+  // Zoom first: only then is there pan room, making the arbitration real.
+  const zoomIn = page.getByRole("button", { name: "放大图片" });
+  await zoomIn.click();
+  await zoomIn.click();
+
+  const selected = await dragAcrossDiagramLabel(page);
+  expect(selected.trim().length).toBeGreaterThan(0);
+
+  const pan = await page.evaluate(() => {
+    const visual = document.querySelector<HTMLElement>(
+      ".image-lightbox-vector-transform",
+    );
+    return visual?.style.transform ?? "";
+  });
+  // Chromium normalizes the unitless z to 0px; a pan would show non-zero x/y.
+  expect(pan).toContain("translate3d(0px, 0px, 0px)");
+});
+
 test("rotates, zooms, pans and closes a mermaid diagram without moving the document", async ({
   page,
 }) => {
@@ -535,26 +623,18 @@ test("rotates, zooms, pans and closes a mermaid diagram without moving the docum
     return visual?.style.transform.includes("rotate(90deg)") ?? false;
   });
 
-  // Zoom to the 5x cap, then drag far past every edge. The pan must stop at
-  // the exact rotated-stage boundary, calculated from the dimensions the
-  // Lightbox itself uses rather than an arbitrary safety bound.
+  // Zoom to the 5x cap, then drag far past every edge from a point that hits
+  // no selectable text — a press on diagram text is a selection by contract.
+  // The pan must stop at the exact rotated-stage boundary, calculated from
+  // the dimensions the Lightbox itself uses rather than an arbitrary bound.
   const zoomIn = page.getByRole("button", { name: "放大图片" });
   while (await zoomIn.isEnabled()) {
     await zoomIn.click();
   }
-  const box = await page
-    .locator(".image-lightbox-vector-transform")
-    .boundingBox();
-  if (box === null) {
-    throw new Error("lightbox image was not rendered");
-  }
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  const origin = await findNonTextPoint(page);
+  await page.mouse.move(origin.x, origin.y);
   await page.mouse.down();
-  await page.mouse.move(
-    box.x + box.width / 2 - 5000,
-    box.y + box.height / 2 - 5000,
-    { steps: 10 },
-  );
+  await page.mouse.move(origin.x - 5000, origin.y - 5000, { steps: 10 });
   await page.mouse.up();
 
   const { pan, geometry } = await page.evaluate(() => {

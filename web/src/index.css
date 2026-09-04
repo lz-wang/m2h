@@ -1157,11 +1157,15 @@ body,
 
 /* Rendered diagrams stay as inline SVG. Their inner box changes dimensions for
  * zoom so vector primitives repaint at the target size; the wrapper keeps pan
- * and rotation separate from that size change. */
+ * and rotation separate from that size change. The wrapper stays
+ * touch-action none (every touch drag pans) but user-select text: the pointer
+ * handlers arbitrate between the two mouse gestures — a press on selectable
+ * text (see the text rules below) belongs to native selection, any other
+ * press pans. */
 .image-lightbox-vector-transform {
   display: block;
   flex: none;
-  user-select: none;
+  user-select: text;
   touch-action: none;
   pointer-events: auto;
   cursor: grab;
@@ -1177,16 +1181,27 @@ body,
   flex: none;
 }
 
+/* The SVG keeps full hit-testing: diagram text is selectable, and embedded
+ * marks stay hittable. Only the *navigation* of embedded links is disabled —
+ * the wrapper captures link clicks — so an `<a>` can be a selection target
+ * without ever navigating. */
 .image-lightbox-vector > svg {
   display: block;
   width: 100%;
   height: 100%;
   max-width: none;
   max-height: none;
-  /* The body SVG may contain interactive marks (for example Vega href
-   * channels). In the Lightbox it is a visual snapshot: gestures belong to
-   * the pan wrapper and must never reactivate those embedded interactions. */
-  pointer-events: none;
+  pointer-events: auto;
+  user-select: text;
+}
+
+.image-lightbox-vector text,
+.image-lightbox-vector tspan,
+.image-lightbox-vector foreignObject,
+.image-lightbox-vector foreignObject * {
+  pointer-events: auto;
+  user-select: text;
+  cursor: text;
 }
 
 /* Bottom toolbar: one translucent, blurred pill with icon buttons and the

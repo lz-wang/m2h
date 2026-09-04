@@ -422,6 +422,120 @@ describe("DocumentLightbox", () => {
     expect(image.style.transform).toContain("translate3d(0px, 0px, 0)");
   });
 
+  // The vector arbitration contract: a mouse press on selectable diagram text
+  // (`<text>`, `<tspan>`, or a `<foreignObject>` label) belongs to native
+  // selection and must not start a pan; any other press pans. jsdom reports
+  // no geometry, so the pan range is unbounded here and every press "can pan".
+  const vectorItem: LightboxItem = {
+    kind: "mermaid",
+    markup:
+      '<svg viewBox="0 0 100 50"><rect width="100" height="50"></rect><text x="10" y="20">标签</text></svg>',
+    intrinsicWidth: 100,
+    intrinsicHeight: 50,
+    alt: "Mermaid 图表",
+    title: null,
+  };
+
+  function currentVectorWrapper(): HTMLElement {
+    const wrapper = screen
+      .getByRole("dialog")
+      .querySelector<HTMLElement>(".image-lightbox-vector-transform");
+    if (wrapper === null) {
+      throw new Error("lightbox vector wrapper was not rendered");
+    }
+    return wrapper;
+  }
+
+  it("leaves a mouse press on vector text to native selection instead of panning", () => {
+    renderLightbox([vectorItem], 0);
+
+    const text = screen.getByRole("dialog").querySelector("text");
+    if (text === null) {
+      throw new Error("vector text was not rendered");
+    }
+    // A fire that returns true means the handler did not preventDefault —
+    // the gesture was left to the browser's selection machinery.
+    expect(
+      fireEvent.pointerDown(text, {
+        pointerId: 1,
+        clientX: 10,
+        clientY: 10,
+        button: 0,
+        pointerType: "mouse",
+      }),
+    ).toBe(true);
+
+    const wrapper = currentVectorWrapper();
+    fireEvent.pointerMove(wrapper, {
+      pointerId: 1,
+      clientX: 60,
+      clientY: 40,
+      pointerType: "mouse",
+    });
+    expect(wrapper.style.transform).toContain("translate3d(0px, 0px, 0)");
+    expect(wrapper.dataset.panning).toBeUndefined();
+  });
+
+  it("pans a vector visual from a non-text press and claims the gesture", () => {
+    renderLightbox([vectorItem], 0);
+
+    // The wrapper press stands in for a press on a shape or the diagram
+    // background: jsdom's propagation of pointer events dispatched on SVG
+    // elements is unreliable, so the vector-specific target arbitration is
+    // covered by the text test above and the real-browser E2E, while this
+    // test pins the pan path itself (claim, preventDefault, drag, clamp).
+    const wrapper = currentVectorWrapper();
+    expect(
+      fireEvent.pointerDown(wrapper, {
+        pointerId: 1,
+        clientX: 0,
+        clientY: 0,
+        button: 0,
+        pointerType: "mouse",
+      }),
+    ).toBe(false);
+
+    fireEvent.pointerMove(wrapper, {
+      pointerId: 1,
+      clientX: 40,
+      clientY: 30,
+      pointerType: "mouse",
+    });
+    expect(wrapper.style.transform).toContain("translate3d(40px, 30px, 0)");
+    expect(wrapper.dataset.panning).toBe("true");
+
+    fireEvent.pointerUp(wrapper, { pointerId: 1, clientX: 40, clientY: 30 });
+    expect(wrapper.dataset.panning).toBeUndefined();
+  });
+
+  it("blocks navigation from embedded vector links without blocking other clicks", () => {
+    renderLightbox(
+      [
+        {
+          ...vectorItem,
+          markup:
+            '<svg viewBox="0 0 100 50"><a href="https://example.invalid/linked"><rect width="10" height="10"></rect></a><rect class="plain" width="5" height="5"></rect></svg>',
+        },
+      ],
+      0,
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const anchor = dialog.querySelector("a");
+    const plain = dialog.querySelector("rect.plain");
+    if (anchor === null || plain === null) {
+      throw new Error("vector link was not rendered");
+    }
+    // The anchor's click is swallowed in the capture phase — navigation can
+    // never commit — while a plain shape's click is left alone.
+    expect(fireEvent.click(anchor, { bubbles: true, cancelable: true })).toBe(
+      false,
+    );
+    expect(fireEvent.click(plain, { bubbles: true, cancelable: true })).toBe(
+      true,
+    );
+  });
+
   it("resets zoom, rotation, and pan when the item changes", async () => {
     const items = makeItems(2);
     const onIndexChange = vi.fn();

@@ -32,6 +32,7 @@ import {
 } from "lucide-react";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -90,6 +91,20 @@ function normalizedWheelDelta(event: WheelEvent): number {
     delta *= window.innerHeight;
   }
   return clamp(delta, -MAX_WHEEL_DELTA_PX, MAX_WHEEL_DELTA_PX);
+}
+
+// True when the pointer landed on selectable vector text — a `<text>`/`<tspan>`
+// or a `<foreignObject>` label (Mermaid renders many labels as HTML inside a
+// foreignObject). A mouse press there belongs to native text selection, never
+// to the pan.
+function isVectorTextTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) {
+    return false;
+  }
+  return (
+    target.closest("text, tspan") !== null ||
+    target.closest("foreignObject") !== null
+  );
 }
 
 export interface DocumentLightboxProps {
@@ -351,6 +366,25 @@ export function DocumentLightbox({
     if (event.pointerType === "mouse" && event.button !== 0) {
       return;
     }
+    // Gesture arbitration on vector visuals: a mouse press on selectable text
+    // belongs to the browser's native selection and must not start a pan.
+    // Touch has no selection affordance here, so it always pans.
+    if (
+      item?.kind !== "image" &&
+      event.pointerType === "mouse" &&
+      isVectorTextTarget(event.target)
+    ) {
+      return;
+    }
+    // Panning only makes sense when the visual actually overflows the stage;
+    // at the fitted baseline there is nothing to drag, and claiming the
+    // gesture would only suppress selection and focus for no gain.
+    const canPan = maxPanX > 0 || maxPanY > 0;
+    if (!canPan) {
+      return;
+    }
+    // This press is genuinely a pan: suppress the selection it would start.
+    event.preventDefault();
     // Pointer capture keeps the drag on the image even when the pointer leaves
     // it; where the API is unavailable (or rejects the id) the move/up pair
     // still works as long as the pointer stays over the image.
@@ -367,6 +401,18 @@ export function DocumentLightbox({
       originY: pan.y,
     };
     setPanning(true);
+  };
+
+  // The snapshot keeps embedded links visually intact and hittable (they may
+  // carry selectable text), but the Lightbox is a viewer: navigation never
+  // happens. Capturing the click at the wrapper blocks it before it reaches
+  // the anchor, whatever route the renderer used to synthesize it.
+  const handleVectorClickCapture = (event: ReactMouseEvent<HTMLElement>) => {
+    const target = event.target;
+    if (target instanceof Element && target.closest("a") !== null) {
+      event.preventDefault();
+      event.stopPropagation();
+    }
   };
 
   const handleVisualPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
@@ -498,6 +544,7 @@ export function DocumentLightbox({
                 onPointerMove={handleVisualPointerMove}
                 onPointerUp={handleVisualPointerEnd}
                 onPointerCancel={handleVisualPointerEnd}
+                onClickCapture={handleVectorClickCapture}
               >
                 <div
                   className="image-lightbox-vector"

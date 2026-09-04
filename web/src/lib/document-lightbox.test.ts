@@ -172,6 +172,37 @@ describe("collectLightboxState", () => {
     expect(item.intrinsicHeight).toBe(200);
   });
 
+  it("keeps embedded vector links in the markup but takes them out of tab order", () => {
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <div class="m2h-vega-lite" data-m2h-lightbox-item="true">
+        <svg viewBox="0 0 100 50">
+          <a href="https://example.invalid/linked">
+            <rect width="10" height="10"></rect>
+          </a>
+        </svg>
+      </div>
+    `;
+    const selected = root.querySelector<HTMLElement>(".m2h-vega-lite");
+    if (selected === null)
+      throw new Error("Vega-Lite container was not created");
+
+    const state = collectLightboxState(root, selected);
+    const item = state?.items[0];
+    if (item?.kind === "image" || item === undefined) {
+      throw new Error("expected an SVG Lightbox item");
+    }
+    const snapshot = new DOMParser().parseFromString(
+      item.markup,
+      "image/svg+xml",
+    );
+    const anchor = snapshot.querySelector("a");
+    // The link survives visually intact for hit-testing and text selection…
+    expect(anchor?.getAttribute("href")).toBe("https://example.invalid/linked");
+    // …but keyboard focus must never land inside the Lightbox snapshot.
+    expect(anchor?.getAttribute("tabindex")).toBe("-1");
+  });
+
   it("snapshots enhanced images in DOM order and indexes the selected one", () => {
     const root = enhancedRoot();
     const selected = root.querySelectorAll<HTMLImageElement>("img")[1];
