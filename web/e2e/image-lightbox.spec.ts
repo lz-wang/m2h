@@ -423,6 +423,24 @@ test("opens a mermaid diagram inside the shared image sequence", async ({
   await expectInvariantsUnchanged(page, before);
 });
 
+test("namespaces Mermaid SVG identifiers in its Lightbox snapshot", async ({
+  page,
+}) => {
+  await openMermaidDocument(page);
+  const sourceIDs = await page
+    .locator(".m2h-mermaid-frame svg [id]")
+    .evaluateAll((elements) => elements.map((element) => element.id));
+  expect(sourceIDs.length).toBeGreaterThan(0);
+
+  await openMermaidLightbox(page);
+  const lightboxIDs = await page
+    .locator(".image-lightbox-vector svg [id]")
+    .evaluateAll((elements) => elements.map((element) => element.id));
+  expect(lightboxIDs.length).toBeGreaterThan(0);
+  expect(lightboxIDs.every((id) => id.startsWith("m2h-lightbox-"))).toBe(true);
+  expect(lightboxIDs.some((id) => sourceIDs.includes(id))).toBe(false);
+});
+
 test("rotates, zooms, pans and closes a mermaid diagram without moving the document", async ({
   page,
 }) => {

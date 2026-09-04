@@ -79,7 +79,7 @@ export function collectLightboxState(
   const items: LightboxItem[] = [];
   let index = -1;
   for (const element of elements) {
-    const snapshot = snapshotLightboxItem(element);
+    const snapshot = snapshotLightboxItem(element, items.length);
     if (snapshot === null) {
       continue;
     }
@@ -91,7 +91,10 @@ export function collectLightboxState(
   return index === -1 ? null : { items, index };
 }
 
-function snapshotLightboxItem(element: HTMLElement): LightboxItem | null {
+function snapshotLightboxItem(
+  element: HTMLElement,
+  snapshotIndex: number,
+): LightboxItem | null {
   if (element instanceof HTMLImageElement) {
     return {
       kind: "image",
@@ -105,9 +108,14 @@ function snapshotLightboxItem(element: HTMLElement): LightboxItem | null {
   // Non-image items are the enhanced visual containers; their class names
   // the engine, which picks the snapshot's kind and alt text.
   if (element.classList.contains("m2h-vega-lite")) {
-    return snapshotSVGVisual(element, "vega-lite", "Vega-Lite 图表");
+    return snapshotSVGVisual(
+      element,
+      "vega-lite",
+      "Vega-Lite 图表",
+      snapshotIndex,
+    );
   }
-  return snapshotSVGVisual(element, "mermaid", "Mermaid 图表");
+  return snapshotSVGVisual(element, "mermaid", "Mermaid 图表", snapshotIndex);
 }
 
 interface Size {
@@ -135,19 +143,92 @@ function getSVGIntrinsicSize(svg: SVGSVGElement): Size {
   return { width: 1, height: 1 };
 }
 
+function rewriteSVGIDReferences(
+  svg: SVGSVGElement,
+  snapshotIndex: number,
+): SVGSVGElement {
+  const snapshot = svg.cloneNode(true) as SVGSVGElement;
+  const ids = new Map<string, string>();
+  const elements = [
+    snapshot,
+    ...Array.from(snapshot.querySelectorAll<SVGElement>("*")),
+  ];
+  for (const element of elements) {
+    const id = element.id;
+    if (id.length > 0) {
+      ids.set(id, `m2h-lightbox-${snapshotIndex}-${id}`);
+    }
+  }
+  if (ids.size === 0) {
+    return snapshot;
+  }
+
+  const rewriteURLReferences = (value: string) =>
+    value.replace(
+      /url\(\s*(['"]?)#([^\s)'"\]]+)\1\s*\)/g,
+      (match, quote, id) => {
+        const replacement = ids.get(id);
+        return replacement === undefined
+          ? match
+          : `url(${quote}#${replacement}${quote})`;
+      },
+    );
+  const rewriteFragmentReference = (value: string) => {
+    const replacement = ids.get(value.slice(1));
+    return value.startsWith("#") && replacement !== undefined
+      ? `#${replacement}`
+      : value;
+  };
+  const rewriteIDList = (value: string) =>
+    value
+      .split(/\s+/)
+      .map((id) => ids.get(id) ?? id)
+      .join(" ");
+
+  for (const element of elements) {
+    if (element.id.length > 0) {
+      element.id = ids.get(element.id) ?? element.id;
+    }
+    for (const attribute of Array.from(element.attributes)) {
+      const { name, value } = attribute;
+      let rewritten = rewriteURLReferences(value);
+      if (name === "href" || name === "xlink:href") {
+        rewritten = rewriteFragmentReference(rewritten);
+      } else if (name === "aria-labelledby" || name === "aria-describedby") {
+        rewritten = rewriteIDList(rewritten);
+      }
+      if (rewritten !== value) {
+        element.setAttribute(name, rewritten);
+      }
+    }
+  }
+  for (const style of snapshot.querySelectorAll("style")) {
+    const rewritten = rewriteURLReferences(style.textContent ?? "");
+    if (rewritten !== style.textContent) {
+      style.textContent = rewritten;
+    }
+  }
+  return snapshot;
+}
+
 // Snapshot only the rendered SVG element. Mermaid and Vega-Lite bake the
 // active palette into this markup, preserving it across a body replacement.
+// Rewriting local identifiers keeps the inline copy isolated from its source
+// SVG and every other snapshot in the document.
 function snapshotSVGVisual(
   container: HTMLElement,
   kind: Exclude<LightboxItemKind, "image">,
   alt: string,
+  snapshotIndex: number,
 ): LightboxItem | null {
   const svg = container.querySelector<SVGSVGElement>("svg");
   if (svg === null) {
     return null;
   }
   const { width, height } = getSVGIntrinsicSize(svg);
-  const markup = new XMLSerializer().serializeToString(svg);
+  const markup = new XMLSerializer().serializeToString(
+    rewriteSVGIDReferences(svg, snapshotIndex),
+  );
   return {
     kind,
     markup,

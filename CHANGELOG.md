@@ -17,6 +17,7 @@
 ### 修复
 
 - 修复 Lightbox 中 Mermaid 与 Vega-Lite 图表在 2–5 倍放大时可能因 `data:image/svg+xml` 的 `<img>` 合成层而变模糊的问题：图表现在保留为已渲染的内联 SVG，缩放直接改变实际渲染尺寸并使浏览器重绘矢量图元；平移和旋转仍由外层 transform 承担，普通位图图片继续使用原有的合成层缩放路径。
+- 修复 Lightbox 将 Mermaid、Vega-Lite 等 SVG 图表作为内联快照插回正文时可能与原图产生重复 DOM ID 的问题：快照会为本地 ID 及其 `url(#…)`、片段链接和辅助描述引用建立独立命名空间，避免 marker、clipPath、gradient 等定义错误地解析到正文图表。
 
 ## [0.17.0] - 2026-09-04
 

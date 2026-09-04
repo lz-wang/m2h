@@ -37,6 +37,70 @@ function itemPaths(items: LightboxItem[]): string[] {
 }
 
 describe("collectLightboxState", () => {
+  it("namespaces SVG identifiers and their local references in Lightbox snapshots", () => {
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <div class="mermaid" data-m2h-lightbox-item="true">
+        <svg viewBox="0 0 100 50">
+          <defs>
+            <linearGradient id="gradient"><stop offset="0"></stop></linearGradient>
+            <clipPath id="clip"><path id="shape" d="M0 0"></path></clipPath>
+          </defs>
+          <style>.mark { fill: url(#gradient); }</style>
+          <title id="title">图表</title>
+          <g aria-labelledby="title" clip-path="url(#clip)">
+            <use href="#shape" style="fill: url('#gradient')"></use>
+          </g>
+        </svg>
+      </div>
+    `;
+    const selected = root.querySelector<HTMLElement>(".mermaid");
+    if (selected === null) throw new Error("Mermaid container was not created");
+
+    const state = collectLightboxState(root, selected);
+    const item = state?.items[0];
+    if (item?.kind === "image" || item === undefined) {
+      throw new Error("expected an SVG Lightbox item");
+    }
+    const snapshot = new DOMParser().parseFromString(
+      item.markup,
+      "image/svg+xml",
+    );
+    const sourceIDs = new Set(
+      Array.from(
+        root.querySelectorAll<HTMLElement>("svg [id]"),
+        (element) => element.id,
+      ),
+    );
+    const snapshotIDs = Array.from(
+      snapshot.querySelectorAll<HTMLElement>("[id]"),
+      (element) => element.id,
+    );
+
+    expect(snapshotIDs).toEqual([
+      "m2h-lightbox-0-gradient",
+      "m2h-lightbox-0-clip",
+      "m2h-lightbox-0-shape",
+      "m2h-lightbox-0-title",
+    ]);
+    expect(snapshotIDs.some((id) => sourceIDs.has(id))).toBe(false);
+    expect(snapshot.querySelector("style")?.textContent).toContain(
+      "url(#m2h-lightbox-0-gradient)",
+    );
+    expect(snapshot.querySelector("g")?.getAttribute("aria-labelledby")).toBe(
+      "m2h-lightbox-0-title",
+    );
+    expect(snapshot.querySelector("g")?.getAttribute("clip-path")).toBe(
+      "url(#m2h-lightbox-0-clip)",
+    );
+    expect(snapshot.querySelector("use")?.getAttribute("href")).toBe(
+      "#m2h-lightbox-0-shape",
+    );
+    expect(snapshot.querySelector("use")?.getAttribute("style")).toContain(
+      "url('#m2h-lightbox-0-gradient')",
+    );
+  });
+
   it("snapshots enhanced images in DOM order and indexes the selected one", () => {
     const root = enhancedRoot();
     const selected = root.querySelectorAll<HTMLImageElement>("img")[1];
