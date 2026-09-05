@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import {
+  firstTouchSwipeFromRow,
   openColdMobileSidebar,
   readSidebarGeometry,
   waitForBody,
@@ -75,47 +76,9 @@ async function openRevealedNestedFile(page: import("@playwright/test").Page) {
   return targetScrollY;
 }
 
-// The cold-start mobile sheet opening lives in ./support
-// (openColdMobileSidebar) so the WebKit mobile scroll smoke locks the same
-// invariants.
-
-// One genuine touch gesture and nothing else: touchStart on the row's real
-// center, five upward touchMoves, touchEnd. Between opening the sheet and this
-// swipe there must be no tree click, no focus, no scrollTop write, no wheel,
-// no scrollIntoView, no expand/collapse — any of those would rebuild the
-// scrolling layer and turn the assertion into a preheated false negative.
-async function firstTouchSwipeFromRow(
-  page: import("@playwright/test").Page,
-  row: import("@playwright/test").Locator,
-) {
-  const box = await row.boundingBox();
-  if (box === null) {
-    throw new Error("swipe start row was not rendered");
-  }
-  const startX = box.x + box.width / 2;
-  const startY = box.y + box.height / 2;
-
-  const session = await page.context().newCDPSession(page);
-  await session.send("Input.dispatchTouchEvent", {
-    type: "touchStart",
-    touchPoints: [{ x: startX, y: startY }],
-  });
-  for (const offset of [40, 80, 120, 160, 200]) {
-    await session.send("Input.dispatchTouchEvent", {
-      type: "touchMove",
-      touchPoints: [{ x: startX, y: Math.max(startY - offset, 8) }],
-    });
-  }
-  await session.send("Input.dispatchTouchEvent", {
-    type: "touchEnd",
-    touchPoints: [],
-  });
-
-  await expect
-    .poll(async () => (await readSidebarGeometry(page)).scrollTop)
-    .toBeGreaterThan(0);
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
-}
+// The cold-start mobile sheet opening and the first-touch swipe gesture live
+// in ./support (openColdMobileSidebar, firstTouchSwipeFromRow) so the mobile
+// device-profile and WebKit suites lock the same invariants.
 
 test("centers the capped document inside a wide canvas", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });

@@ -18,6 +18,7 @@
 
 - 修复移动端侧边栏首次打开后文件树无法上下触摸滑动的问题：移动端 Sheet 内的 `SidebarContent` 不再套用桌面端的 `overflow-clip` 绘制边界（改为 `overflow-visible md:overflow-clip`），文件树滚动容器在移动端弃用 Base UI 自定义 ScrollArea，改为浏览器原生 `overflow-y: auto` 纵向滚动（`touch-action` 交还浏览器默认手势），Sheet 内层与滚动容器的高度链全部收敛为纯 flex 分配（`flex: 1` + `min-height: 0`），停用移动端目录行的粘性定位（消除 WebKit sticky 滚动层这一可疑合成变量，桌面端保持粘性目录），并将移动端文件行退化为纯按钮（不再包裹 Tooltip 与右键菜单触发器，触摸手势不再与长按/悬停包装层同处一行，桌面保持不变）；滚动容器保留原 viewport `data-slot` 契约，当前文件自动定位与折叠滚动钳制行为不变，桌面端维持 Base UI ScrollArea 与瞬态滚动条，并新增 WebKit 移动端滚动冒烟回归。
 - 升级 Base UI 至 1.8.0：上游将 floating 组件注册的 document 级 touch 监听改为 passive（弹层 outside-press 关闭等场景此前注册的非 passive 监听会被浏览器归为 scroll-blocking，干扰触屏滚动的起始判定），并包含 Dialog 忽略弹层打开前按压发起的外部点击等上游修复。
+- 修复移动端侧边栏 Sheet 打开后初始焦点错误落入“筛选文件”输入框的问题：侧边栏由工具栏按钮以受控状态打开，Base UI 无法识别打开来源，其针对触摸打开“聚焦弹层而非首个输入框”的保护未生效，默认初始焦点落到搜索框并牵动移动端输入法与可视视口路径；现在触摸与指针打开时 Sheet 初始聚焦弹层自身，键盘打开仍聚焦搜索框。新增基于移动设备 profile（Pixel 7 / iPhone 13 模拟）的初始焦点与首次触摸滑动回归测试。
 - 修复移动端文件树的“当前文件自动定位”在侧边栏处于收起状态时失效的问题：文件树可见性此前只跟随桌面端侧边栏开关，移动端 Sheet 实际打开与否使用的是另一份 `openMobile` 状态；现在统一为“移动端看 Sheet、桌面端看侧边栏”的单一有效可见状态，打开移动 Sheet 后当前文件会正确滚动到可视区域。
 - 修复移动端目录 Sheet 在长文档（目录远超一屏）下无法上下触摸滚动的问题：目录滚动区此前保留 flex 默认的 `min-height: auto`，长目录把滚动区撑高到超出 Sheet，内部 viewport 得不到受限高度、形不成有效滚动溢出，手指滑动页面完全不动；现在滚动区被限制在 Sheet 剩余高度内，首次打开即可触摸滚动。目录滚动区同时收敛为与侧边栏文件树一致的纵向单轴滚动契约（内容 `min-width: 0`、viewport `overflow-x: hidden`），目录链接补 `overflow-wrap: anywhere`，没有任何断行机会的超长标题在桌面与移动目录中折行完整显示，不再可能制造横向滚动。
 

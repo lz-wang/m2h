@@ -1,4 +1,4 @@
-import { expect, type Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 
 // Helpers shared by the real-browser suites (layout.spec.ts and the WebKit
 // mobile scroll smoke). Playwright registers tests only in *.spec.ts files,
@@ -61,7 +61,8 @@ export async function openColdMobileSidebar(page: Page) {
   await waitForBody(page, "/doc/tree/note-01.md");
 
   await page.getByRole("button", { name: "切换文件导航" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
 
   // The mobile scroller stays the tree's only scroll container — the native
   // overflow-y: auto box (.tree-native-scroll) — it really overflows, and the
@@ -88,10 +89,82 @@ export async function openColdMobileSidebar(page: Page) {
   expect(structure.viewportOverflowY).toBe("auto");
   expect(structure.overflowing).toBe(true);
 
+  // The sheet must not park focus in the filter input: a controlled open
+  // records no openMethod in Base UI, so its default initial focus falls to
+  // the first tabbable element — the filter input — whose keyboard path
+  // (virtual keyboard, visual viewport) was the standing suspect behind the
+  // dead first swipe on phones. Touch and pointer opens must focus the sheet
+  // popup itself; keyboard keeps the default first-field behavior.
+  const search = page.getByRole("searchbox", { name: "筛选文件" });
+  await expect(search).not.toBeFocused();
+  await expect
+    .poll(() =>
+      dialog.evaluate((element) => document.activeElement === element),
+    )
+    .toBe(true);
+
   // The cold-start invariant: no reveal, no normalization, no restore has
   // moved the tree viewport, and the reader window behind the modal sheet is
   // still at the top.
   const before = await readSidebarGeometry(page);
   expect(before.scrollTop).toBe(0);
   expect(before.windowScrollY).toBe(0);
+}
+
+// One geometry snapshot of the mobile TOC sheet's scroll container (the Base
+// UI ScrollArea viewport the outline keeps on every viewport).
+export async function readTocGeometry(page: Page) {
+  return page.evaluate(() => {
+    const viewport = document.querySelector<HTMLElement>(
+      '.reader-toc-sheet-scroll [data-slot="scroll-area-viewport"]',
+    );
+    if (!(viewport instanceof HTMLElement)) {
+      throw new Error("TOC viewport was not rendered");
+    }
+    return {
+      scrollTop: viewport.scrollTop,
+      scrollHeight: viewport.scrollHeight,
+      clientHeight: viewport.clientHeight,
+      windowScrollY: window.scrollY,
+    };
+  });
+}
+
+// One genuine touch gesture and nothing else: touchStart on the row's real
+// center, five upward touchMoves, touchEnd. Between opening the sheet and this
+// swipe there must be no tree click, no focus, no scrollTop write, no wheel,
+// no scrollIntoView, no expand/collapse — any of those would rebuild the
+// scrolling layer and turn the assertion into a preheated false negative.
+// CDP touch is Chromium-only, so callers outside Chromium must skip.
+export async function firstTouchSwipeFromRow(
+  page: Page,
+  row: Locator,
+  readScrollTop: () => Promise<number> = async () =>
+    (await readSidebarGeometry(page)).scrollTop,
+) {
+  const box = await row.boundingBox();
+  if (box === null) {
+    throw new Error("swipe start row was not rendered");
+  }
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+
+  const session = await page.context().newCDPSession(page);
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: startX, y: startY }],
+  });
+  for (const offset of [40, 80, 120, 160, 200]) {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: startX, y: Math.max(startY - offset, 8) }],
+    });
+  }
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+
+  await expect.poll(readScrollTop).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
 }

@@ -176,6 +176,11 @@ function Sidebar({
 }) {
   const { isMobile, state, openMobile, setOpenMobile } = useSidebar();
 
+  // The mobile Sheet popup element. Controlled opens (the toolbar toggle
+  // flips state without a Dialog.Trigger) leave Base UI without an
+  // openMethod, so the Sheet's initialFocus below aims here explicitly.
+  const mobilePopupRef = React.useRef<HTMLDivElement>(null);
+
   if (collapsible === "none") {
     return (
       <div
@@ -192,9 +197,20 @@ function Sidebar({
   }
 
   if (isMobile) {
+    // Controlled open: the toolbar toggle flips state without going through a
+    // Dialog.Trigger, so Base UI records no openMethod and its touch
+    // protection ("focus the popup, not the first field, on touch opens")
+    // never fires — the default then parks focus on the filter input, whose
+    // keyboard path (virtual keyboard, visual viewport) derails touch
+    // scrolling on phones. Focus the popup itself for any non-keyboard open;
+    // keyboard opens keep the default first-field behavior.
     return (
       <Sheet open={openMobile} onOpenChange={setOpenMobile} {...props}>
         <SheetContent
+          ref={mobilePopupRef}
+          initialFocus={(openType) =>
+            openType === "keyboard" ? true : mobilePopupRef.current
+          }
           dir={dir}
           data-sidebar="sidebar"
           data-slot="sidebar"

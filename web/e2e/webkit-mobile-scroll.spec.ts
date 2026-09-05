@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   openColdMobileSidebar,
   readSidebarGeometry,
+  readTocGeometry,
   waitForBody,
 } from "./support";
 
@@ -72,23 +73,9 @@ test("scrolls the mobile TOC sheet on WebKit from the cold open", async ({
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
 
-  const readTocGeometry = () =>
-    page.evaluate(() => {
-      const viewport = document.querySelector<HTMLElement>(
-        '.reader-toc-sheet-scroll [data-slot="scroll-area-viewport"]',
-      );
-      if (!(viewport instanceof HTMLElement)) {
-        throw new Error("TOC viewport was not rendered");
-      }
-      return {
-        scrollTop: viewport.scrollTop,
-        scrollHeight: viewport.scrollHeight,
-        clientHeight: viewport.clientHeight,
-        windowScrollY: window.scrollY,
-      };
-    });
+  const readToc = () => readTocGeometry(page);
 
-  const before = await readTocGeometry();
+  const before = await readToc();
   expect(before.scrollTop).toBe(0);
   expect(before.scrollHeight).toBeGreaterThan(before.clientHeight);
   expect(before.windowScrollY).toBe(0);
@@ -100,8 +87,6 @@ test("scrolls the mobile TOC sheet on WebKit from the cold open", async ({
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.wheel(0, 400);
 
-  await expect
-    .poll(async () => (await readTocGeometry()).scrollTop)
-    .toBeGreaterThan(0);
+  await expect.poll(async () => (await readToc()).scrollTop).toBeGreaterThan(0);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 });
