@@ -246,11 +246,9 @@ test("scrolls the mobile sidebar on the first untouched swipe from a directory r
 test("scrolls the mobile sidebar on the first untouched swipe from a file row", async ({
   page,
 }) => {
-  // The active file row starts the gesture: a button wrapped in a tooltip
-  // trigger and a context-menu trigger (whose touch affordance is the long
-  // press). If this fails while the directory swipe above passes, the file
-  // row's interactive wrappers are the culprit; if both fail, the scroll box
-  // layout is.
+  // The active file row starts the gesture: on mobile it is a plain button —
+  // the tooltip and context-menu wrappers are dropped there — so both swipe
+  // paths start on equivalent rows.
   await openColdMobileSidebar(page);
   await firstTouchSwipeFromRow(page, page.locator('[aria-current="page"]'));
 });

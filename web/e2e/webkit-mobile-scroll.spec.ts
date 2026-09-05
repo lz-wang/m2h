@@ -50,9 +50,9 @@ test("scrolls the mobile sidebar tree from the directory row on WebKit", async (
 test("scrolls the mobile sidebar tree from the file row on WebKit", async ({
   page,
 }) => {
-  // The active file row: a button wrapped in a tooltip trigger and a
-  // context-menu trigger, so the gesture passes through the interactive
-  // file-row machinery before reaching the scroll box.
+  // The active file row: a plain button on mobile (the tooltip and
+  // context-menu wrappers are dropped there), so the gesture runs the same
+  // unwrapped path as the directory row test, over real row content.
   await openColdMobileSidebar(page);
   await wheelDownFromRow(page, page.locator('[aria-current="page"]'));
 });

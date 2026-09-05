@@ -16,6 +16,7 @@ import {
   SidebarMenuItem,
   SidebarMenuSub,
 } from "@/components/ui/sidebar";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { copyText } from "@/lib/clipboard";
 import {
   absoluteURL,
@@ -66,6 +67,10 @@ export function DocumentTree({
 }: DocumentTreeProps) {
   const hasRootRow = rootLabel !== undefined;
   const tree = useMemo(() => buildTree(files), [files]);
+  // Mobile drops the file rows' interactive wrappers (see FileItem): the
+  // rows there must be plain buttons so the touch gesture never shares its
+  // start target with long-press/hover machinery.
+  const mobile = useIsMobile();
   // Translate the virtual selection key into this root's path space: only the
   // tree owning the selected root reports a selection, every other root's
   // tree sees null.
@@ -248,6 +253,7 @@ export function DocumentTree({
           onToggle={toggle}
           searching={searching}
           depth={hasRootRow ? 1 : 0}
+          mobile={mobile}
         />
       ))}
     </>
@@ -342,6 +348,9 @@ interface TreeItemProps {
   onToggle(path: string): void;
   searching: boolean;
   depth: number;
+  // Mobile viewport flag: mobile file rows drop the tooltip and context-menu
+  // wrappers (see FileItem); directory rows carry no wrappers to drop.
+  mobile: boolean;
 }
 
 // Dispatch-only: directory rows render through DirectoryItem, leaves through
@@ -364,6 +373,7 @@ function FileItem({
   onCopyStatus,
   selectedPath,
   onSelect,
+  mobile,
 }: TreeItemProps & { node: FileNode }) {
   const active = node.path === selectedPath;
   const identity = base === "" ? node.path : `${base}/${node.path}`;
@@ -373,24 +383,28 @@ function FileItem({
       aria-current={active ? "page" : undefined}
       aria-label={`${node.file.title}，${identity}`}
       className="document-tree-file h-8 text-sm"
-      tooltip={{
-        hidden: false,
-        side: "right",
-        align: "start",
-        className: "tree-tooltip",
-        children: (
-          <>
-            <span className="tree-tooltip-name">{node.name}</span>
-            <span className="tree-tooltip-title">{node.file.title}</span>
-            {node.file.description !== undefined &&
-            node.file.description !== "" ? (
-              <span className="tree-tooltip-description">
-                {node.file.description}
-              </span>
-            ) : null}
-          </>
-        ),
-      }}
+      tooltip={
+        mobile
+          ? undefined
+          : {
+              hidden: false,
+              side: "right",
+              align: "start",
+              className: "tree-tooltip",
+              children: (
+                <>
+                  <span className="tree-tooltip-name">{node.name}</span>
+                  <span className="tree-tooltip-title">{node.file.title}</span>
+                  {node.file.description !== undefined &&
+                  node.file.description !== "" ? (
+                    <span className="tree-tooltip-description">
+                      {node.file.description}
+                    </span>
+                  ) : null}
+                </>
+              ),
+            }
+      }
       onClick={() => onSelect(node.path)}
     >
       <FileText aria-hidden="true" />
@@ -399,10 +413,19 @@ function FileItem({
   );
   return (
     <SidebarMenuItem>
-      <ContextMenu.Root>
-        <ContextMenu.Trigger render={button} />
-        <FileContextMenu identity={identity} onCopyStatus={onCopyStatus} />
-      </ContextMenu.Root>
+      {mobile ? (
+        // Mobile renders the bare button: long-press (the context menu's
+        // touch affordance) and hover/tooltip wrappers are the remaining
+        // structural difference from the TOC sheet's rows, which scroll
+        // fine on the same phones, so the touch path there starts on
+        // gesture-wrapped targets while the TOC's never does.
+        button
+      ) : (
+        <ContextMenu.Root>
+          <ContextMenu.Trigger render={button} />
+          <FileContextMenu identity={identity} onCopyStatus={onCopyStatus} />
+        </ContextMenu.Root>
+      )}
     </SidebarMenuItem>
   );
 }
@@ -417,6 +440,7 @@ function DirectoryItem({
   onToggle,
   searching,
   depth,
+  mobile,
 }: TreeItemProps & { node: DirectoryNode }) {
   const open = searching || expanded.has(node.path);
   return (
@@ -458,6 +482,7 @@ function DirectoryItem({
               onToggle={onToggle}
               searching={searching}
               depth={depth + 1}
+              mobile={mobile}
             />
           ))}
         </SidebarMenuSub>
