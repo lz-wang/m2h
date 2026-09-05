@@ -1,9 +1,9 @@
 import { expect, type Page, test } from "@playwright/test";
 
 // Real-browser regressions for the workspace full-text search: the shortcut
-// entry, the deep-link into a matched section, the same-document navigation
-// that must not refetch the document, and the mobile toolbar trigger that
-// keeps the search reachable without a keyboard.
+// entry (the only one since the top-bar search button was removed), the
+// deep-link into a matched section, and the same-document navigation that
+// must not refetch the document.
 
 const DIALOG = '[data-slot="dialog-content"]';
 const SEARCH_INPUT = 'input[aria-label="全文搜索"]';
@@ -11,10 +11,10 @@ const DEMO_RESULT = "全文搜索演示，search-demo.md";
 
 async function openDialogWithShortcut(page: Page): Promise<void> {
   // The app is client-rendered: wait for the toolbar (and with it the
-  // window keydown listener) to exist before pressing the shortcut.
-  await expect(
-    page.getByRole("button", { name: "全文搜索", exact: true }),
-  ).toBeVisible();
+  // window keydown listener) to exist before pressing the shortcut. The
+  // shortcut is the search's only entry — the removed top-bar button must
+  // never come back as a ready signal here.
+  await expect(page.locator(".reader-toolbar")).toBeVisible();
   await page.keyboard.press("Control+k");
   await expect(page.locator(DIALOG)).toBeVisible();
 }
@@ -84,34 +84,4 @@ test("same-document hits navigate in place without refetching", async ({
   ).toBeVisible();
   // The document itself was never reloaded for the same-document jump.
   expect(documentRequests).toBe(1);
-});
-
-test("mobile readers open the search from the toolbar button", async ({
-  page,
-}) => {
-  // A phone-shaped viewport: no hardware keyboard, the toolbar entry is the
-  // only sensible trigger.
-  await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/doc/README.md");
-  await page.waitForLoadState("networkidle");
-
-  const trigger = page.getByRole("button", { name: "全文搜索", exact: true });
-  await expect(trigger).toBeVisible();
-  await trigger.click();
-
-  const dialog = page.locator(DIALOG);
-  await expect(dialog).toBeVisible();
-
-  await page.fill(SEARCH_INPUT, "unique-frontend-token");
-  await expect(page.getByRole("button", { name: DEMO_RESULT })).toBeVisible();
-
-  // Near-full-width on a phone, with the results scrolling internally
-  // instead of the page growing a horizontal scrollbar.
-  const geometry = await dialog.evaluate((node) => ({
-    width: node.getBoundingClientRect().width,
-    scrollWidth: document.documentElement.scrollWidth,
-    clientWidth: document.documentElement.clientWidth,
-  }));
-  expect(geometry.width).toBeGreaterThan(350);
-  expect(geometry.scrollWidth).toBeLessThanOrEqual(geometry.clientWidth);
 });

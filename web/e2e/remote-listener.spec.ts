@@ -112,15 +112,9 @@ test("keeps every server-local path affordance out of the UI", async ({
 }) => {
   await openDocument(page);
 
-  // The toolbar share menu keeps the shareable identities only.
-  await page.getByRole("button", { name: "分享文档" }).click();
-  await expect(
-    page.getByRole("menuitem", { name: "复制文档网页链接" }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("menuitem", { name: "复制文档本地路径" }),
-  ).toHaveCount(0);
-  await page.keyboard.press("Escape");
+  // The toolbar share menu is gone entirely (the copy actions survive in the
+  // file context menu below), so the remaining affordances to police are the
+  // context menu and the directory tooltip.
 
   // The file context menu keeps its open/copy actions only.
   await page

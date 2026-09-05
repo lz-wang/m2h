@@ -167,9 +167,12 @@
 
 第 41 节正文。
 
-## Section 42
+## This-is-an-intentionally-extremely-long-unbreakable-heading-used-to-detect-horizontal-overflow-in-the-mobile-table-of-contents-sheet
 
-第 42 节正文。
+本节标题是一个不可断行的长 token：普通长句可以自动换行，只有这种
+`min-content` 宽度超出行宽的连续 token 才能真正压迫目录的横向轴，
+用来验证目录 Sheet 的纵向单轴滚动契约（内容 `min-width: 0`、viewport
+`overflow-x: hidden`）确实生效。
 
 ## Section 43
 
