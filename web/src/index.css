@@ -1408,6 +1408,12 @@ body,
   font-size: 0.75rem;
   line-height: 1.25rem;
   text-decoration: none;
+  /* Headings are navigation content and must stay fully readable: a
+   * section title with no break opportunity (one long unbreakable token)
+   * has to wrap instead of widening the rail/sheet past its viewport.
+   * anywhere (not break-word) also lets the line shrink below its min
+   * content width, which is what keeps the flex contract above honest. */
+  overflow-wrap: anywhere;
 }
 
 .reader-toc-link:hover {

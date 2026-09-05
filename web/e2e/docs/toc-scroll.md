@@ -167,12 +167,13 @@
 
 第 41 节正文。
 
-## This-is-an-intentionally-extremely-long-unbreakable-heading-used-to-detect-horizontal-overflow-in-the-mobile-table-of-contents-sheet
+## ThisIsAnIntentionallyExtremelyLongUnbreakableHeadingUsedToDetectHorizontalOverflowInTheMobileTableOfContentsSheetWithoutAnyBreakOpportunity
 
-本节标题是一个不可断行的长 token：普通长句可以自动换行，只有这种
-`min-content` 宽度超出行宽的连续 token 才能真正压迫目录的横向轴，
-用来验证目录 Sheet 的纵向单轴滚动契约（内容 `min-width: 0`、viewport
-`overflow-x: hidden`）确实生效。
+本节标题是一个没有任何空格、连字符等断行机会的连续 token：普通长句
+甚至带连字符的长词都能被浏览器折行，只有这种 `min-content` 宽度超出
+行宽的连续 token 才能真正压迫目录的横向轴，用来验证目录 Sheet 的纵
+向单轴滚动契约（内容 `min-width: 0`、viewport `overflow-x: hidden`、
+链接 `overflow-wrap: anywhere`）确实生效。
 
 ## Section 43
 
