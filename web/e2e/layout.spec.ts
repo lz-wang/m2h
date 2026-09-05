@@ -221,6 +221,93 @@ test("collapses the width ladder on mobile viewports without touching the prefer
   await expect(page.locator(".document-width-control")).toBeVisible();
 });
 
+test("keeps the mobile sidebar tree scrollable on first open", async ({
+  page,
+}) => {
+  // The mobile Sheet reuses the desktop sidebar shell, whose SidebarContent
+  // carries an overflow-clip paint boundary for the desktop tree. Inside the
+  // fixed modal that clip around the ScrollArea viewport left first-open
+  // touch scrolling dead on mobile browsers until some interaction rebuilt
+  // the scrolling layer — so mobile must drop the clip while desktop keeps
+  // it, and the tree must overflow and scroll on the very first open.
+  await page.setViewportSize({ width: 375, height: 720 });
+  await waitForBody(page, "/doc/tree/note-24.md");
+
+  await page.getByRole("button", { name: "切换文件导航" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+
+  // The ScrollArea viewport stays the tree's only scroll container, it
+  // really overflows, and the mobile SidebarContent clips nothing.
+  const structure = await page.evaluate(() => {
+    const content = document.querySelector('[data-slot="sidebar-content"]');
+    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
+    const viewport = tree?.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (!(content instanceof HTMLElement)) {
+      throw new Error("sidebar content was not rendered");
+    }
+    if (!(viewport instanceof HTMLElement)) {
+      throw new Error("tree viewport was not rendered");
+    }
+    return {
+      contentOverflow: getComputedStyle(content).overflow,
+      viewportOverflowY: getComputedStyle(viewport).overflowY,
+      overflowing: viewport.scrollHeight > viewport.clientHeight,
+    };
+  });
+  expect(structure.contentOverflow).toBe("visible");
+  expect(structure.viewportOverflowY).toBe("scroll");
+  expect(structure.overflowing).toBe(true);
+
+  // Touch scrolling works on this very first open, with no tree interaction
+  // first: the active-file reveal has scrolled the viewport, so start it at
+  // the top, then swipe up over the tree — the viewport moves, the reader
+  // window behind the modal sheet does not.
+  await page.evaluate(() => {
+    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
+    const viewport = tree?.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (viewport instanceof HTMLElement) {
+      viewport.scrollTop = 0;
+    }
+  });
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  const session = await page.context().newCDPSession(page);
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: 100, y: 500 }],
+  });
+  for (const y of [460, 420, 380, 340, 300]) {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: 100, y }],
+    });
+  }
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const tree = document.querySelector('[aria-label="Markdown 文件树"]');
+        const viewport = tree?.closest<HTMLElement>(
+          '[data-slot="scroll-area-viewport"]',
+        );
+        return viewport === null || viewport === undefined
+          ? -1
+          : viewport.scrollTop;
+      }),
+    )
+    .toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
 test("opens the root README from the bare workspace address", async ({
   page,
 }) => {

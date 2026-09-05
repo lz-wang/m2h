@@ -171,7 +171,8 @@ body,
 /*
  * The sidebar scrolls exactly one container: the Base UI ScrollArea viewport.
  * .tree-scroll stretches the ScrollArea root to fill SidebarContent (itself
- * overflow-clip, see App.tsx — clip-only, no scroll semantics); the viewport
+ * clip-only on desktop, see App.tsx — no scroll semantics; mobile drops the
+ * clip inside the Sheet); the viewport
  * rules below are the tree's own scroll contract and deliberately NOT on the
  * shared ScrollArea component:
  * - overflow-x: a file tree never scrolls sideways; !important is required

@@ -506,13 +506,17 @@ export function App({ api }: AppProps) {
                 />
               </div>
             </SidebarHeader>
-            {/* overflow-clip keeps SidebarContent from becoming a second
-             * scroll owner: unlike overflow-hidden it hard-clips without
-             * establishing a scroll container at all, so the ScrollArea
-             * viewport below stays the sidebar's only scroll geometry —
-             * sticky rows, the active-file reveal and wheel input all act
-             * on it, and paint is cut at one deterministic boundary. */}
-            <SidebarContent className="min-w-0 overflow-clip">
+            {/* Desktop keeps overflow-clip so SidebarContent never becomes a
+             * second scroll owner: unlike overflow-hidden it hard-clips
+             * without establishing a scroll container at all, so the
+             * ScrollArea viewport below stays the sidebar's only scroll
+             * geometry — sticky rows, the active-file reveal and wheel input
+             * all act on it, and paint is cut at one deterministic boundary.
+             * Mobile drops the clip: inside the fixed Sheet, the clipped
+             * ancestor around the viewport left the first touch scroll dead
+             * until some interaction rebuilt the scrolling layer, while the
+             * viewport there is already the tree's only scroll container. */}
+            <SidebarContent className="min-w-0 overflow-visible md:overflow-clip">
               <ScrollArea
                 className="tree-scroll"
                 scrollbarVisibility="scrolling"

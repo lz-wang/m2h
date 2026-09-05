@@ -14,6 +14,10 @@
 
 ## [未发布]
 
+### 修复
+
+- 修复移动端侧边栏首次打开后文件树无法上下触摸滑动的问题：桌面端为滚动隔离与绘制边界引入的 `SidebarContent` `overflow-clip` 不再套在移动端 Sheet 上（改为 `overflow-visible md:overflow-clip`），移动端文件树仍由 Base UI ScrollArea viewport 作为唯一滚动容器，首次打开即可滑动，无需先点击任意文件或文件夹。
+
 ## [0.17.1] - 2026-09-04
 
 ### 移除
