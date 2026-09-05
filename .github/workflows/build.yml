@@ -236,9 +236,9 @@ jobs:
       - name: Install Web dependencies
         run: npm ci --prefix web
 
-      - name: Install Playwright Chromium
+      - name: Install Playwright Chromium and WebKit
         working-directory: web
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps chromium webkit
 
       - name: Run Playwright regression tests
         working-directory: web

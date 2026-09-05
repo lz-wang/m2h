@@ -16,7 +16,7 @@
 
 ### 修复
 
-- 修复移动端侧边栏首次打开后文件树无法上下触摸滑动的问题：移动端 Sheet 内的 `SidebarContent` 不再套用桌面端的 `overflow-clip` 绘制边界（改为 `overflow-visible md:overflow-clip`），文件树 ScrollArea 的滚动尺寸契约由嵌套在已定高 flex 容器内的 `height: 100%` 百分比链收敛为与移动端目录 Sheet 一致的 `flex: 1 1 0%` + `min-height: 0`，直接参与 SidebarContent 剩余空间分配，viewport 显式声明 `touch-action: pan-y` 纵向原生平移（文件行是按钮且包着 tooltip 与右键菜单触发器，长按手势不再与触摸滑动仲裁冲突）；移动端文件树仍由 Base UI ScrollArea viewport 作为唯一滚动容器，首次打开即可滑动，无需先点击任意文件或文件夹。
+- 修复移动端侧边栏首次打开后文件树无法上下触摸滑动的问题：移动端 Sheet 内的 `SidebarContent` 不再套用桌面端的 `overflow-clip` 绘制边界（改为 `overflow-visible md:overflow-clip`），文件树滚动容器在移动端弃用 Base UI 自定义 ScrollArea，改为浏览器原生 `overflow-y: auto` 纵向滚动（`touch-action` 交还浏览器默认手势），Sheet 内层与滚动容器的高度链全部收敛为纯 flex 分配（`flex: 1` + `min-height: 0`）；滚动容器保留原 viewport `data-slot` 契约，当前文件自动定位、折叠滚动钳制与粘性目录行为不变，桌面端维持 Base UI ScrollArea 与瞬态滚动条，并新增 WebKit 移动端滚动冒烟回归。
 - 修复移动端文件树的“当前文件自动定位”在侧边栏处于收起状态时失效的问题：文件树可见性此前只跟随桌面端侧边栏开关，移动端 Sheet 实际打开与否使用的是另一份 `openMobile` 状态；现在统一为“移动端看 Sheet、桌面端看侧边栏”的单一有效可见状态，打开移动 Sheet 后当前文件会正确滚动到可视区域。
 - 修复移动端目录 Sheet 在长文档（目录远超一屏）下无法上下触摸滚动的问题：目录滚动区此前保留 flex 默认的 `min-height: auto`，长目录把滚动区撑高到超出 Sheet，内部 viewport 得不到受限高度、形不成有效滚动溢出，手指滑动页面完全不动；现在滚动区被限制在 Sheet 剩余高度内，首次打开即可触摸滚动。目录滚动区同时收敛为与侧边栏文件树一致的纵向单轴滚动契约（内容 `min-width: 0`、viewport `overflow-x: hidden`），目录链接补 `overflow-wrap: anywhere`，没有任何断行机会的超长标题在桌面与移动目录中折行完整显示，不再可能制造横向滚动。
 

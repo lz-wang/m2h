@@ -494,6 +494,57 @@ export function App({ api }: AppProps) {
     }
   };
 
+  // The tree content is scroller-agnostic: mobile wraps it in the native
+  // .tree-native-scroll box, desktop in the Base UI ScrollArea (see the
+  // SidebarContent branch below and index.css for both contracts).
+  const treeGroup = (
+    <SidebarGroup>
+      <SidebarGroupLabel className="justify-between">
+        <span>Files</span>
+        <span className="text-xs tabular-nums text-sidebar-foreground/60">
+          <span aria-hidden="true">{filteredCount}</span>
+          <span className="sr-only">{filteredCount} 个 Markdown 文件</span>
+        </span>
+      </SidebarGroupLabel>
+      <SidebarGroupContent>
+        {filteredCount > 0 ? (
+          multiRoot ? (
+            filteredRoots.map((root) => (
+              <DocumentTree
+                key={root.id}
+                files={root.files}
+                rootBase={root.id}
+                rootLabel={root.name}
+                onCopyStatus={announceCopyStatus}
+                searching={fileFilterQuery.trim() !== ""}
+                selectedPath={preview.selectedPath}
+                visible={sidebarTreeVisible}
+                onSelect={(path) => void preview.select(path)}
+              />
+            ))
+          ) : (
+            <DocumentTree
+              files={filteredRoots[0]?.files ?? []}
+              onCopyStatus={announceCopyStatus}
+              searching={fileFilterQuery.trim() !== ""}
+              selectedPath={preview.selectedPath}
+              visible={sidebarTreeVisible}
+              onSelect={(path) => void preview.select(path)}
+            />
+          )
+        ) : (
+          <p className="tree-placeholder">
+            {loading
+              ? "正在加载文件…"
+              : fileFilterQuery.trim() !== ""
+                ? "没有匹配的文档"
+                : "目录中没有 Markdown 文件"}
+          </p>
+        )}
+      </SidebarGroupContent>
+    </SidebarGroup>
+  );
+
   return (
     <TooltipProvider delay={350}>
       <SidebarProvider
@@ -518,75 +569,44 @@ export function App({ api }: AppProps) {
                 />
               </div>
             </SidebarHeader>
-            {/* Desktop keeps overflow-clip so SidebarContent never becomes a
-             * second scroll owner: unlike overflow-hidden it hard-clips
-             * without establishing a scroll container at all, so the
-             * ScrollArea viewport below stays the sidebar's only scroll
-             * geometry — sticky rows, the active-file reveal and wheel input
-             * all act on it, and paint is cut at one deterministic boundary.
-             * Mobile drops the clip because the fixed Sheet already leaves
-             * the viewport as the tree's only scroll container; the scroll
-             * box sizing itself comes from .tree-scroll's flex: 1 contract
-             * (see index.css), the same model as the mobile TOC sheet. */}
+            {/* The two scrollers split by viewport, because the needs differ:
+             * desktop wants the custom transient scrollbar and wheel handling
+             * of the Base UI ScrollArea, while mobile only needs a stable,
+             * natively finger-scrolled box — so it uses a plain overflow-y
+             * auto div (.tree-native-scroll) and drops the clip, keeping the
+             * viewport as the tree's only scroll container. Both keep the
+             * data-slot="scroll-area-viewport" contract, which is how
+             * DocumentTree finds its scroll owner (active-file reveal,
+             * collapse clamp) without knowing the implementation. Desktop
+             * additionally keeps overflow-clip on SidebarContent so it never
+             * becomes a second scroll owner: unlike overflow-hidden it
+             * hard-clips without establishing a scroll container at all, so
+             * sticky rows, the active-file reveal and wheel input all act on
+             * the ScrollArea viewport, and paint is cut at one deterministic
+             * boundary. */}
             <SidebarContent className="min-w-0 overflow-visible md:overflow-clip">
-              <ScrollArea
-                className="tree-scroll"
-                scrollbarVisibility="scrolling"
-                contentProps={{
-                  // The tree is vertical-only: shrink Base UI Content's default
-                  // minWidth: fit-content back to the viewport width so a long
-                  // filename can never grow scrollWidth past clientWidth.
-                  style: { minWidth: 0, width: "100%" },
-                }}
-              >
-                <SidebarGroup>
-                  <SidebarGroupLabel className="justify-between">
-                    <span>Files</span>
-                    <span className="text-xs tabular-nums text-sidebar-foreground/60">
-                      <span aria-hidden="true">{filteredCount}</span>
-                      <span className="sr-only">
-                        {filteredCount} 个 Markdown 文件
-                      </span>
-                    </span>
-                  </SidebarGroupLabel>
-                  <SidebarGroupContent>
-                    {filteredCount > 0 ? (
-                      multiRoot ? (
-                        filteredRoots.map((root) => (
-                          <DocumentTree
-                            key={root.id}
-                            files={root.files}
-                            rootBase={root.id}
-                            rootLabel={root.name}
-                            onCopyStatus={announceCopyStatus}
-                            searching={fileFilterQuery.trim() !== ""}
-                            selectedPath={preview.selectedPath}
-                            visible={sidebarTreeVisible}
-                            onSelect={(path) => void preview.select(path)}
-                          />
-                        ))
-                      ) : (
-                        <DocumentTree
-                          files={filteredRoots[0]?.files ?? []}
-                          onCopyStatus={announceCopyStatus}
-                          searching={fileFilterQuery.trim() !== ""}
-                          selectedPath={preview.selectedPath}
-                          visible={sidebarTreeVisible}
-                          onSelect={(path) => void preview.select(path)}
-                        />
-                      )
-                    ) : (
-                      <p className="tree-placeholder">
-                        {loading
-                          ? "正在加载文件…"
-                          : fileFilterQuery.trim() !== ""
-                            ? "没有匹配的文档"
-                            : "目录中没有 Markdown 文件"}
-                      </p>
-                    )}
-                  </SidebarGroupContent>
-                </SidebarGroup>
-              </ScrollArea>
+              {isMobileViewport ? (
+                <div
+                  data-slot="scroll-area-viewport"
+                  className="tree-native-scroll"
+                >
+                  {treeGroup}
+                </div>
+              ) : (
+                <ScrollArea
+                  className="tree-scroll"
+                  scrollbarVisibility="scrolling"
+                  contentProps={{
+                    // The tree is vertical-only: shrink Base UI Content's
+                    // default minWidth: fit-content back to the viewport
+                    // width so a long filename can never grow scrollWidth
+                    // past clientWidth.
+                    style: { minWidth: 0, width: "100%" },
+                  }}
+                >
+                  {treeGroup}
+                </ScrollArea>
+              )}
             </SidebarContent>
             <ProjectFooter version={preview.version} />
             <SidebarResizeHandle

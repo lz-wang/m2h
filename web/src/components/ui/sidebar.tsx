@@ -211,7 +211,11 @@ function Sidebar({
             <SheetTitle>Sidebar</SheetTitle>
             <SheetDescription>Displays the mobile sidebar.</SheetDescription>
           </SheetHeader>
-          <div className="flex h-full w-full flex-col">{children}</div>
+          {/* flex:1 + min-height:0, not h-full: the Sheet Popup is a fixed
+           * flex column, so the shell joins the flex distribution instead of
+           * re-deriving its height from a percent chain (see .tree-scroll in
+           * index.css — same contract as the mobile TOC sheet). */}
+          <div className="flex min-h-0 w-full flex-1 flex-col">{children}</div>
         </SheetContent>
       </Sheet>
     );

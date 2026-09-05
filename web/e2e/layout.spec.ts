@@ -1,22 +1,14 @@
 import { expect, test } from "@playwright/test";
+import {
+  openColdMobileSidebar,
+  readSidebarGeometry,
+  waitForBody,
+} from "./support";
 
 // Real-browser layout regressions for the reader shell. jsdom computes no
 // geometry, so horizontal centering, the narrow-screen outline sheet, and the
 // sidebar reveal of the active file can only be locked down with a genuine
 // layout engine — the same reasoning as scroll-restoration.spec.ts.
-
-// Wait until the document body has painted, so geometry assertions never race
-// the client-rendered article.
-async function waitForBody(
-  page: import("@playwright/test").Page,
-  path: string,
-) {
-  await page.goto(path);
-  await page.waitForFunction(
-    () =>
-      document.querySelector(".markdown-body p, .markdown-body h2") !== null,
-  );
-}
 
 // Two animation frames: any scroll a wheel dispatch could have produced is
 // applied before the next frame paints, so positions read afterwards reflect
@@ -30,34 +22,9 @@ async function waitForScrollSettle(page: import("@playwright/test").Page) {
   );
 }
 
-// One geometry snapshot of the sidebar's single scroll container (the Base UI
-// ScrollArea viewport), so isolation and normalization assertions all read
-// the same source of truth.
-async function readSidebarGeometry(page: import("@playwright/test").Page) {
-  return page.evaluate(() => {
-    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
-    const viewport = tree?.closest<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
-    );
-    if (!(viewport instanceof HTMLElement)) {
-      throw new Error("tree viewport was not rendered");
-    }
-    const rect = viewport.getBoundingClientRect();
-    return {
-      scrollTop: viewport.scrollTop,
-      scrollLeft: viewport.scrollLeft,
-      scrollHeight: viewport.scrollHeight,
-      clientHeight: viewport.clientHeight,
-      scrollWidth: viewport.scrollWidth,
-      clientWidth: viewport.clientWidth,
-      windowScrollY: window.scrollY,
-      x: rect.x,
-      y: rect.y,
-      width: rect.width,
-      height: rect.height,
-    };
-  });
-}
+// One geometry snapshot of the sidebar's single scroll container lives in
+// ./support (readSidebarGeometry) so the WebKit mobile scroll smoke reads the
+// same source of truth.
 
 async function setSidebarScrollTop(
   page: import("@playwright/test").Page,
@@ -108,55 +75,9 @@ async function openRevealedNestedFile(page: import("@playwright/test").Page) {
   return targetScrollY;
 }
 
-// Cold-start opening of the mobile sidebar sheet, shared by the first-touch
-// regressions below. Real phones used to leave the very first swipe dead until
-// some tree interaction rebuilt the scrolling layer, and the earlier
-// regression could not see that because it preheated the viewport itself: a
-// bottom-of-tree document made the active-file reveal scroll, then the test
-// wrote scrollTop = 0 on top. Both are forbidden here — the document sits at
-// the top of the tree so the reveal has nothing to correct, and nothing may
-// touch the scroll position afterwards.
-async function openColdMobileSidebar(page: import("@playwright/test").Page) {
-  await page.setViewportSize({ width: 375, height: 720 });
-  // note-01 renders directly below its expanded `tree` directory row, so the
-  // active-file reveal keeps the viewport at scrollTop 0; a bottom-of-tree
-  // document (note-24) would scroll it before the first swipe.
-  await waitForBody(page, "/doc/tree/note-01.md");
-
-  await page.getByRole("button", { name: "切换文件导航" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-
-  // The ScrollArea viewport stays the tree's only scroll container, it really
-  // overflows, and the mobile SidebarContent clips nothing.
-  const structure = await page.evaluate(() => {
-    const content = document.querySelector('[data-slot="sidebar-content"]');
-    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
-    const viewport = tree?.closest<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
-    );
-    if (!(content instanceof HTMLElement)) {
-      throw new Error("sidebar content was not rendered");
-    }
-    if (!(viewport instanceof HTMLElement)) {
-      throw new Error("tree viewport was not rendered");
-    }
-    return {
-      contentOverflow: getComputedStyle(content).overflow,
-      viewportOverflowY: getComputedStyle(viewport).overflowY,
-      overflowing: viewport.scrollHeight > viewport.clientHeight,
-    };
-  });
-  expect(structure.contentOverflow).toBe("visible");
-  expect(structure.viewportOverflowY).toBe("scroll");
-  expect(structure.overflowing).toBe(true);
-
-  // The cold-start invariant: no reveal, no normalization, no restore has
-  // moved the tree viewport, and the reader window behind the modal sheet is
-  // still at the top.
-  const before = await readSidebarGeometry(page);
-  expect(before.scrollTop).toBe(0);
-  expect(before.windowScrollY).toBe(0);
-}
+// The cold-start mobile sheet opening lives in ./support
+// (openColdMobileSidebar) so the WebKit mobile scroll smoke locks the same
+// invariants.
 
 // One genuine touch gesture and nothing else: touchStart on the row's real
 // center, five upward touchMoves, touchEnd. Between opening the sheet and this
@@ -313,7 +234,7 @@ test("scrolls the mobile sidebar on the first untouched swipe from a directory r
   page,
 }) => {
   // A plain directory row starts the gesture: it carries no tooltip or
-  // context-menu wrapper, so a failure here indicts the sheet/ScrollArea
+  // context-menu wrapper, so a failure here indicts the sheet's native
   // scroll box itself rather than the interactive file-row machinery.
   await openColdMobileSidebar(page);
   await firstTouchSwipeFromRow(

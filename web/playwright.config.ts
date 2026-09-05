@@ -1,4 +1,4 @@
-import { defineConfig } from "@playwright/test";
+import { defineConfig, devices } from "@playwright/test";
 
 // Real-browser regression suite. Vitest/jsdom owns the logic tests; Playwright
 // owns the behaviors that need a genuine layout engine — scroll restoration
@@ -26,6 +26,22 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${port}`,
   },
+  // Two engines, two jobs: Chromium owns the full suite (the touch-drag
+  // regressions drive CDP, which exists only there), while WebKit runs the
+  // small mobile-scroll smoke in webkit-mobile-scroll.spec.ts — the dead
+  // first-swipe reports come from WebKit phones, so the mobile scroll
+  // contracts get engine-level coverage where the failures actually live.
+  projects: [
+    {
+      name: "chromium",
+      testIgnore: /webkit-mobile-scroll/,
+    },
+    {
+      name: "webkit",
+      testMatch: /webkit-mobile-scroll/,
+      use: { ...devices["Desktop WebKit"] },
+    },
+  ],
   webServer: {
     cwd: import.meta.dirname,
     command: [
