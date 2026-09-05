@@ -524,10 +524,10 @@ export function App({ api }: AppProps) {
              * ScrollArea viewport below stays the sidebar's only scroll
              * geometry — sticky rows, the active-file reveal and wheel input
              * all act on it, and paint is cut at one deterministic boundary.
-             * Mobile drops the clip: inside the fixed Sheet, the clipped
-             * ancestor around the viewport left the first touch scroll dead
-             * until some interaction rebuilt the scrolling layer, while the
-             * viewport there is already the tree's only scroll container. */}
+             * Mobile drops the clip because the fixed Sheet already leaves
+             * the viewport as the tree's only scroll container; the scroll
+             * box sizing itself comes from .tree-scroll's flex: 1 contract
+             * (see index.css), the same model as the mobile TOC sheet. */}
             <SidebarContent className="min-w-0 overflow-visible md:overflow-clip">
               <ScrollArea
                 className="tree-scroll"
