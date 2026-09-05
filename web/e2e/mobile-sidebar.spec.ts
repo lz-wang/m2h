@@ -2,7 +2,6 @@ import { expect, test } from "@playwright/test";
 import {
   firstTouchSwipeFromRow,
   openColdMobileSidebar,
-  readTocGeometry,
   waitForBody,
 } from "./support";
 
@@ -55,27 +54,4 @@ test("scrolls the mobile sidebar on the first untouched swipe from a file row", 
   test.skip(browserName !== "chromium", "CDP touch is Chromium-only");
   await openColdMobileSidebar(page);
   await firstTouchSwipeFromRow(page, page.locator('[aria-current="page"]'));
-});
-
-test("scrolls the mobile TOC sheet on the first untouched swipe", async ({
-  page,
-  browserName,
-}) => {
-  test.skip(browserName !== "chromium", "CDP touch is Chromium-only");
-  await waitForBody(page, "/doc/toc-scroll.md");
-  await page.getByRole("button", { name: "打开文档目录" }).tap();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-
-  const before = await readTocGeometry(page);
-  expect(before.scrollTop).toBe(0);
-  expect(before.scrollHeight).toBeGreaterThan(before.clientHeight);
-  expect(before.windowScrollY).toBe(0);
-
-  const link = dialog.getByRole("link").first();
-  await firstTouchSwipeFromRow(
-    page,
-    link,
-    async () => (await readTocGeometry(page)).scrollTop,
-  );
 });

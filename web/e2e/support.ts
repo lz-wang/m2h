@@ -45,22 +45,22 @@ export async function readSidebarGeometry(page: Page) {
 }
 
 // Cold-start opening of the mobile sidebar sheet, shared by the first-touch
-// regressions in layout.spec.ts and the WebKit scroll smoke. Real phones used
-// to leave the very first swipe dead until some tree interaction rebuilt the
-// scrolling layer, and the earlier regression could not see that because it
-// preheated the viewport itself: a bottom-of-tree document made the
-// active-file reveal scroll, then the test wrote scrollTop = 0 on top. Both
-// are forbidden here — the document sits at the top of the tree so the reveal
-// has nothing to correct, and nothing may touch the scroll position
-// afterwards.
+// regressions in mobile-sidebar.spec.ts under the mobile device profiles
+// (hasTouch + isMobile) — the open is a real touch tap, matching how phones
+// open the sheet. Real phones used to leave the very first swipe dead until
+// some tree interaction rebuilt the scrolling layer, and the earlier
+// regression could not see that because it preheated the viewport itself: a
+// bottom-of-tree document made the active-file reveal scroll, then the test
+// wrote scrollTop = 0 on top. Both are forbidden here — the document sits at
+// the top of the tree so the reveal has nothing to correct, and nothing may
+// touch the scroll position afterwards.
 export async function openColdMobileSidebar(page: Page) {
-  await page.setViewportSize({ width: 375, height: 720 });
   // note-01 renders directly below its expanded `tree` directory row, so the
   // active-file reveal keeps the viewport at scrollTop 0; a bottom-of-tree
   // document (note-24) would scroll it before the first swipe.
   await waitForBody(page, "/doc/tree/note-01.md");
 
-  await page.getByRole("button", { name: "切换文件导航" }).click();
+  await page.getByRole("button", { name: "切换文件导航" }).tap();
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
 
@@ -111,37 +111,13 @@ export async function openColdMobileSidebar(page: Page) {
   expect(before.windowScrollY).toBe(0);
 }
 
-// One geometry snapshot of the mobile TOC sheet's scroll container (the Base
-// UI ScrollArea viewport the outline keeps on every viewport).
-export async function readTocGeometry(page: Page) {
-  return page.evaluate(() => {
-    const viewport = document.querySelector<HTMLElement>(
-      '.reader-toc-sheet-scroll [data-slot="scroll-area-viewport"]',
-    );
-    if (!(viewport instanceof HTMLElement)) {
-      throw new Error("TOC viewport was not rendered");
-    }
-    return {
-      scrollTop: viewport.scrollTop,
-      scrollHeight: viewport.scrollHeight,
-      clientHeight: viewport.clientHeight,
-      windowScrollY: window.scrollY,
-    };
-  });
-}
-
 // One genuine touch gesture and nothing else: touchStart on the row's real
 // center, five upward touchMoves, touchEnd. Between opening the sheet and this
 // swipe there must be no tree click, no focus, no scrollTop write, no wheel,
 // no scrollIntoView, no expand/collapse — any of those would rebuild the
 // scrolling layer and turn the assertion into a preheated false negative.
 // CDP touch is Chromium-only, so callers outside Chromium must skip.
-export async function firstTouchSwipeFromRow(
-  page: Page,
-  row: Locator,
-  readScrollTop: () => Promise<number> = async () =>
-    (await readSidebarGeometry(page)).scrollTop,
-) {
+export async function firstTouchSwipeFromRow(page: Page, row: Locator) {
   const box = await row.boundingBox();
   if (box === null) {
     throw new Error("swipe start row was not rendered");
@@ -165,6 +141,8 @@ export async function firstTouchSwipeFromRow(
     touchPoints: [],
   });
 
-  await expect.poll(readScrollTop).toBeGreaterThan(0);
+  await expect
+    .poll(async () => (await readSidebarGeometry(page)).scrollTop)
+    .toBeGreaterThan(0);
   expect(await page.evaluate(() => window.scrollY)).toBe(0);
 }

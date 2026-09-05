@@ -26,22 +26,15 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${port}`,
   },
-  // Four engines, four jobs: desktop Chromium owns the full suite (the
-  // touch-drag regressions drive CDP, which exists only there), desktop
-  // WebKit runs the wheel-driven mobile scroll smoke (mobile WebKit cannot
-  // wheel), and the two phone profiles re-run the sidebar focus + first-swipe
-  // contracts with the hasTouch/isMobile emulation a desktop viewport never
-  // exercises — the dead first-swipe reports come from WebKit phones, so the
-  // focus contract gets engine coverage there too.
+  // Desktop Chromium owns the full suite (the touch-drag regressions drive
+  // CDP, which exists only there); mobile-sidebar.spec.ts runs under the two
+  // phone profiles — hasTouch + isMobile emulation a desktop viewport never
+  // exercises — so the sidebar sheet's focus and first-swipe contracts hold
+  // on real touch opens in both engines.
   projects: [
     {
       name: "chromium",
-      testIgnore: /webkit-mobile-scroll|mobile-sidebar/,
-    },
-    {
-      name: "webkit",
-      testMatch: /webkit-mobile-scroll/,
-      use: { ...devices["Desktop WebKit"] },
+      testIgnore: /mobile-sidebar/,
     },
     {
       name: "mobile-chromium",

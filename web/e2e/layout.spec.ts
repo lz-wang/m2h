@@ -1,10 +1,5 @@
 import { expect, test } from "@playwright/test";
-import {
-  firstTouchSwipeFromRow,
-  openColdMobileSidebar,
-  readSidebarGeometry,
-  waitForBody,
-} from "./support";
+import { readSidebarGeometry, waitForBody } from "./support";
 
 // Real-browser layout regressions for the reader shell. jsdom computes no
 // geometry, so horizontal centering, the narrow-screen outline sheet, and the
@@ -76,9 +71,8 @@ async function openRevealedNestedFile(page: import("@playwright/test").Page) {
   return targetScrollY;
 }
 
-// The cold-start mobile sheet opening and the first-touch swipe gesture live
-// in ./support (openColdMobileSidebar, firstTouchSwipeFromRow) so the mobile
-// device-profile and WebKit suites lock the same invariants.
+// The mobile sidebar sheet's focus and first-touch contracts live in
+// mobile-sidebar.spec.ts, under the mobile device profiles.
 
 test("centers the capped document inside a wide canvas", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
@@ -191,29 +185,6 @@ test("collapses the width ladder on mobile viewports without touching the prefer
     .toBeLessThanOrEqual(1280);
   expect(await page.evaluate(() => window.location.search)).toBe("?width=wide");
   await expect(page.locator(".document-width-control")).toBeVisible();
-});
-
-test("scrolls the mobile sidebar on the first untouched swipe from a directory row", async ({
-  page,
-}) => {
-  // A plain directory row starts the gesture: it carries no tooltip or
-  // context-menu wrapper, so a failure here indicts the sheet's native
-  // scroll box itself rather than the interactive file-row machinery.
-  await openColdMobileSidebar(page);
-  await firstTouchSwipeFromRow(
-    page,
-    page.locator('[data-tree-directory="true"][data-tree-path="a"]'),
-  );
-});
-
-test("scrolls the mobile sidebar on the first untouched swipe from a file row", async ({
-  page,
-}) => {
-  // The active file row starts the gesture: a button wrapped in a tooltip
-  // trigger and a context-menu trigger, the same interactive row content the
-  // directory-row test above bypasses.
-  await openColdMobileSidebar(page);
-  await firstTouchSwipeFromRow(page, page.locator('[aria-current="page"]'));
 });
 
 test("opens the root README from the bare workspace address", async ({
