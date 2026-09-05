@@ -582,6 +582,20 @@ test("keeps a long mobile TOC scrollable on first open", async ({ page }) => {
     )
     .toBe(true);
 
+  // …along one axis only: the outline never widens past its viewport.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const viewport = document.querySelector<HTMLElement>(
+          '.reader-toc-sheet-scroll [data-slot="scroll-area-viewport"]',
+        );
+        return viewport === null
+          ? Number.POSITIVE_INFINITY
+          : viewport.scrollWidth - viewport.clientWidth;
+      }),
+    )
+    .toBeLessThanOrEqual(0);
+
   // …and a first-open touch swipe — with no in-sheet interaction first —
   // scrolls the TOC viewport itself, never the reader window behind the
   // sheet.

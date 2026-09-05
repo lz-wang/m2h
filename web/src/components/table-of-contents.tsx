@@ -170,10 +170,16 @@ export function TableOfContentsSheet({
             <SheetTitle>本页目录</SheetTitle>
           </SheetHeader>
           {/* Same ScrollArea behavior as the desktop rail, so the narrow
-           * screen's outline scrolls exactly like the wide one. */}
+           * screen's outline scrolls exactly like the wide one. The content
+           * overrides mirror the sidebar's tree: vertical-only, so Base UI
+           * Content's default minWidth: fit-content can never let a long
+           * section title grow scrollWidth past the viewport. */}
           <ScrollArea
             className="reader-toc-sheet-scroll"
             scrollbarVisibility="scrolling"
+            contentProps={{
+              style: { minWidth: 0, width: "100%" },
+            }}
             role="navigation"
             aria-label="文档目录"
           >

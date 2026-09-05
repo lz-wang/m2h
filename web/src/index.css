@@ -1444,12 +1444,16 @@ body,
    * root grew past the sheet, the viewport never got a constrained box, and
    * touch gestures had no scrollable overflow at all. min-height: 0 clamps
    * the root to the sheet's remaining height, exactly like the sidebar's
-   * SidebarContent. */
+   * SidebarContent. min-width: 0 completes the same vertical-only contract:
+   * the outline never grows sideways. */
   min-height: 0;
+  min-width: 0;
   padding: 0 1rem 2rem;
 }
 
 .reader-toc-sheet-scroll [data-slot="scroll-area-viewport"] {
+  /* biome-ignore lint/complexity/noImportantStyles: Base UI sets `overflow: scroll` as an inline style on the viewport; only an important author declaration can forbid the x axis (same vertical-only contract as .tree-scroll). */
+  overflow-x: hidden !important;
   overscroll-behavior-y: contain;
 }
 
