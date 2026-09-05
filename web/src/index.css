@@ -1439,6 +1439,13 @@ body,
 
 .reader-toc-sheet-scroll {
   flex: 1;
+  /* The sheet is a column flex box, so the flex default min-height: auto
+   * would let a long outline hold its content-based minimum height — the
+   * root grew past the sheet, the viewport never got a constrained box, and
+   * touch gestures had no scrollable overflow at all. min-height: 0 clamps
+   * the root to the sheet's remaining height, exactly like the sidebar's
+   * SidebarContent. */
+  min-height: 0;
   padding: 0 1rem 2rem;
 }
 

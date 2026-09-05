@@ -554,6 +554,76 @@ test("offers the outline in a sheet on narrow viewports", async ({ page }) => {
     .toBeLessThanOrEqual(toolbarBottom + 200);
 });
 
+test("keeps a long mobile TOC scrollable on first open", async ({ page }) => {
+  // The narrow-screen sheet scrolls through the same ScrollArea as the
+  // sidebar, but its ScrollArea root kept the flex default min-height: auto:
+  // a long outline held its content-based minimum height, the viewport never
+  // received a constrained box, and a touch gesture had no scrollable
+  // overflow at all. The sidebar already went through this class of bug, so
+  // the TOC's first-open touch path gets locked down the same way.
+  await page.setViewportSize({ width: 375, height: 720 });
+  await waitForBody(page, "/doc/toc-scroll.md");
+
+  await page.getByRole("button", { name: "打开文档目录" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toBeVisible();
+
+  // The 50-section outline really overflows its viewport…
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const viewport = document.querySelector<HTMLElement>(
+          '.reader-toc-sheet-scroll [data-slot="scroll-area-viewport"]',
+        );
+        return viewport === null
+          ? null
+          : viewport.scrollHeight > viewport.clientHeight;
+      }),
+    )
+    .toBe(true);
+
+  // …and a first-open touch swipe — with no in-sheet interaction first —
+  // scrolls the TOC viewport itself, never the reader window behind the
+  // sheet.
+  await page.evaluate(() => {
+    const viewport = document.querySelector<HTMLElement>(
+      '.reader-toc-sheet-scroll [data-slot="scroll-area-viewport"]',
+    );
+    if (viewport instanceof HTMLElement) {
+      viewport.scrollTop = 0;
+    }
+  });
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+
+  const session = await page.context().newCDPSession(page);
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: 200, y: 500 }],
+  });
+  for (const y of [460, 420, 380, 340, 300]) {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: 200, y }],
+    });
+  }
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const viewport = document.querySelector<HTMLElement>(
+          '.reader-toc-sheet-scroll [data-slot="scroll-area-viewport"]',
+        );
+        return viewport === null ? -1 : viewport.scrollTop;
+      }),
+    )
+    .toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+});
+
 test("reveals the active file in the tree after a reload without moving the reader", async ({
   page,
 }) => {
