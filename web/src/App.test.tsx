@@ -1148,6 +1148,49 @@ describe("App directory preview", () => {
     expect(await screen.findByText("展开文件导航")).toBeTruthy();
   });
 
+  it("reveals the active file in the mobile sheet even with the sidebar collapsed", async () => {
+    // The mobile Sheet runs on its own openMobile state: a desktop session
+    // that collapsed and persisted the sidebar leaves sidebarOpen=false even
+    // while the mobile Sheet is open. The tree's visibility must follow the
+    // Sheet, or the active-file reveal silently never runs and the reader
+    // opens the tree with the current file hidden off-viewport.
+    window.localStorage.setItem(
+      "m2h.preview.layout",
+      JSON.stringify({ sidebarOpen: false, sidebarWidth: 256 }),
+    );
+    // useIsMobile reads window.innerWidth inside its effect; stubbing keeps
+    // this test on the mobile Sheet path and vi.unstubAllGlobals restores it
+    // for the tests that follow.
+    vi.stubGlobal("innerWidth", 375);
+    const user = userEvent.setup();
+    render(<App api={createAPI()} />);
+    await screen.findByText("Body for README.md");
+
+    // Mobile: the persistent sidebar is gone; the trigger owns the Sheet.
+    expect(
+      document.querySelector('[data-slot="sidebar-container"]'),
+    ).toBeNull();
+    await user.click(screen.getByRole("button", { name: "切换文件导航" }));
+    const dialog = await screen.findByRole("dialog");
+    expect(
+      within(dialog)
+        .getByRole("button", {
+          name: "Readme API Title，README.md",
+        })
+        .getAttribute("aria-current"),
+    ).toBe("page");
+
+    // jsdom computes no geometry, so the reveal's math reserves its 8px
+    // padding against a zero-height viewport and writes a deterministic
+    // negative scrollTop. The signal is that the reveal ran at all — under
+    // the stale desktop-only flag it never touches the viewport.
+    const viewport = document.querySelector<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    expect(viewport).toBeTruthy();
+    expect(viewport?.scrollTop).toBeLessThan(0);
+  });
+
   it("shows empty, API, deleted-document, and attachment errors", async () => {
     let view = render(
       <App

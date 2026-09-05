@@ -65,6 +65,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
+import { useIsMobile } from "./hooks/use-mobile";
 import {
   collectLightboxState,
   type LightboxState,
@@ -167,6 +168,15 @@ export function App({ api }: AppProps) {
   const [initialLayout] = useState(readStoredLayout);
   const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
   const [sidebarOpen, setSidebarOpen] = useState(initialLayout.sidebarOpen);
+  // The mobile Sheet owns its own open state (openMobile) that toggleSidebar
+  // flips below 768px; lifting it here lets the tree read one merged fact.
+  const [sidebarMobileOpen, setSidebarMobileOpen] = useState(false);
+  // The tree's visibility is whichever sidebar host is actually on screen:
+  // the mobile Sheet above 768px's persistent column. Deriving it from the
+  // desktop flag alone left the active-file reveal dead on mobile whenever
+  // the reader had collapsed and persisted the desktop sidebar.
+  const isMobileViewport = useIsMobile();
+  const sidebarTreeVisible = isMobileViewport ? sidebarMobileOpen : sidebarOpen;
   const [sidebarResizing, setSidebarResizing] = useState(false);
   // The sidebar input filters the file tree by name/title/path/description;
   // full-text search lives in the SearchDialog below. The two share nothing
@@ -491,6 +501,8 @@ export function App({ api }: AppProps) {
         style={{ "--sidebar-width": `${sidebarWidth}px` } as CSSProperties}
         open={sidebarOpen}
         onOpenChange={setSidebarOpen}
+        openMobile={sidebarMobileOpen}
+        onOpenMobileChange={setSidebarMobileOpen}
       >
         {navigationAvailable ? (
           <Sidebar collapsible="offcanvas" resizing={sidebarResizing}>
@@ -549,7 +561,7 @@ export function App({ api }: AppProps) {
                             onCopyStatus={announceCopyStatus}
                             searching={fileFilterQuery.trim() !== ""}
                             selectedPath={preview.selectedPath}
-                            visible={sidebarOpen}
+                            visible={sidebarTreeVisible}
                             onSelect={(path) => void preview.select(path)}
                           />
                         ))
@@ -559,7 +571,7 @@ export function App({ api }: AppProps) {
                           onCopyStatus={announceCopyStatus}
                           searching={fileFilterQuery.trim() !== ""}
                           selectedPath={preview.selectedPath}
-                          visible={sidebarOpen}
+                          visible={sidebarTreeVisible}
                           onSelect={(path) => void preview.select(path)}
                         />
                       )
