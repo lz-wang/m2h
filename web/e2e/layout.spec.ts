@@ -108,6 +108,94 @@ async function openRevealedNestedFile(page: import("@playwright/test").Page) {
   return targetScrollY;
 }
 
+// Cold-start opening of the mobile sidebar sheet, shared by the first-touch
+// regressions below. Real phones used to leave the very first swipe dead until
+// some tree interaction rebuilt the scrolling layer, and the earlier
+// regression could not see that because it preheated the viewport itself: a
+// bottom-of-tree document made the active-file reveal scroll, then the test
+// wrote scrollTop = 0 on top. Both are forbidden here — the document sits at
+// the top of the tree so the reveal has nothing to correct, and nothing may
+// touch the scroll position afterwards.
+async function openColdMobileSidebar(page: import("@playwright/test").Page) {
+  await page.setViewportSize({ width: 375, height: 720 });
+  // note-01 renders directly below its expanded `tree` directory row, so the
+  // active-file reveal keeps the viewport at scrollTop 0; a bottom-of-tree
+  // document (note-24) would scroll it before the first swipe.
+  await waitForBody(page, "/doc/tree/note-01.md");
+
+  await page.getByRole("button", { name: "切换文件导航" }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+
+  // The ScrollArea viewport stays the tree's only scroll container, it really
+  // overflows, and the mobile SidebarContent clips nothing.
+  const structure = await page.evaluate(() => {
+    const content = document.querySelector('[data-slot="sidebar-content"]');
+    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
+    const viewport = tree?.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (!(content instanceof HTMLElement)) {
+      throw new Error("sidebar content was not rendered");
+    }
+    if (!(viewport instanceof HTMLElement)) {
+      throw new Error("tree viewport was not rendered");
+    }
+    return {
+      contentOverflow: getComputedStyle(content).overflow,
+      viewportOverflowY: getComputedStyle(viewport).overflowY,
+      overflowing: viewport.scrollHeight > viewport.clientHeight,
+    };
+  });
+  expect(structure.contentOverflow).toBe("visible");
+  expect(structure.viewportOverflowY).toBe("scroll");
+  expect(structure.overflowing).toBe(true);
+
+  // The cold-start invariant: no reveal, no normalization, no restore has
+  // moved the tree viewport, and the reader window behind the modal sheet is
+  // still at the top.
+  const before = await readSidebarGeometry(page);
+  expect(before.scrollTop).toBe(0);
+  expect(before.windowScrollY).toBe(0);
+}
+
+// One genuine touch gesture and nothing else: touchStart on the row's real
+// center, five upward touchMoves, touchEnd. Between opening the sheet and this
+// swipe there must be no tree click, no focus, no scrollTop write, no wheel,
+// no scrollIntoView, no expand/collapse — any of those would rebuild the
+// scrolling layer and turn the assertion into a preheated false negative.
+async function firstTouchSwipeFromRow(
+  page: import("@playwright/test").Page,
+  row: import("@playwright/test").Locator,
+) {
+  const box = await row.boundingBox();
+  if (box === null) {
+    throw new Error("swipe start row was not rendered");
+  }
+  const startX = box.x + box.width / 2;
+  const startY = box.y + box.height / 2;
+
+  const session = await page.context().newCDPSession(page);
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x: startX, y: startY }],
+  });
+  for (const offset of [40, 80, 120, 160, 200]) {
+    await session.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: startX, y: Math.max(startY - offset, 8) }],
+    });
+  }
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+
+  await expect
+    .poll(async () => (await readSidebarGeometry(page)).scrollTop)
+    .toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+}
+
 test("centers the capped document inside a wide canvas", async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 900 });
   await waitForBody(page, "/doc/scroll.md");
@@ -221,91 +309,29 @@ test("collapses the width ladder on mobile viewports without touching the prefer
   await expect(page.locator(".document-width-control")).toBeVisible();
 });
 
-test("keeps the mobile sidebar tree scrollable on first open", async ({
+test("scrolls the mobile sidebar on the first untouched swipe from a directory row", async ({
   page,
 }) => {
-  // The mobile Sheet reuses the desktop sidebar shell, whose SidebarContent
-  // carries an overflow-clip paint boundary for the desktop tree. Inside the
-  // fixed modal that clip around the ScrollArea viewport left first-open
-  // touch scrolling dead on mobile browsers until some interaction rebuilt
-  // the scrolling layer — so mobile must drop the clip while desktop keeps
-  // it, and the tree must overflow and scroll on the very first open.
-  await page.setViewportSize({ width: 375, height: 720 });
-  await waitForBody(page, "/doc/tree/note-24.md");
+  // A plain directory row starts the gesture: it carries no tooltip or
+  // context-menu wrapper, so a failure here indicts the sheet/ScrollArea
+  // scroll box itself rather than the interactive file-row machinery.
+  await openColdMobileSidebar(page);
+  await firstTouchSwipeFromRow(
+    page,
+    page.locator('[data-tree-directory="true"][data-tree-path="a"]'),
+  );
+});
 
-  await page.getByRole("button", { name: "切换文件导航" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog).toBeVisible();
-
-  // The ScrollArea viewport stays the tree's only scroll container, it
-  // really overflows, and the mobile SidebarContent clips nothing.
-  const structure = await page.evaluate(() => {
-    const content = document.querySelector('[data-slot="sidebar-content"]');
-    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
-    const viewport = tree?.closest<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
-    );
-    if (!(content instanceof HTMLElement)) {
-      throw new Error("sidebar content was not rendered");
-    }
-    if (!(viewport instanceof HTMLElement)) {
-      throw new Error("tree viewport was not rendered");
-    }
-    return {
-      contentOverflow: getComputedStyle(content).overflow,
-      viewportOverflowY: getComputedStyle(viewport).overflowY,
-      overflowing: viewport.scrollHeight > viewport.clientHeight,
-    };
-  });
-  expect(structure.contentOverflow).toBe("visible");
-  expect(structure.viewportOverflowY).toBe("scroll");
-  expect(structure.overflowing).toBe(true);
-
-  // Touch scrolling works on this very first open, with no tree interaction
-  // first: the active-file reveal has scrolled the viewport, so start it at
-  // the top, then swipe up over the tree — the viewport moves, the reader
-  // window behind the modal sheet does not.
-  await page.evaluate(() => {
-    const tree = document.querySelector('[aria-label="Markdown 文件树"]');
-    const viewport = tree?.closest<HTMLElement>(
-      '[data-slot="scroll-area-viewport"]',
-    );
-    if (viewport instanceof HTMLElement) {
-      viewport.scrollTop = 0;
-    }
-  });
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
-
-  const session = await page.context().newCDPSession(page);
-  await session.send("Input.dispatchTouchEvent", {
-    type: "touchStart",
-    touchPoints: [{ x: 100, y: 500 }],
-  });
-  for (const y of [460, 420, 380, 340, 300]) {
-    await session.send("Input.dispatchTouchEvent", {
-      type: "touchMove",
-      touchPoints: [{ x: 100, y }],
-    });
-  }
-  await session.send("Input.dispatchTouchEvent", {
-    type: "touchEnd",
-    touchPoints: [],
-  });
-
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const tree = document.querySelector('[aria-label="Markdown 文件树"]');
-        const viewport = tree?.closest<HTMLElement>(
-          '[data-slot="scroll-area-viewport"]',
-        );
-        return viewport === null || viewport === undefined
-          ? -1
-          : viewport.scrollTop;
-      }),
-    )
-    .toBeGreaterThan(0);
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+test("scrolls the mobile sidebar on the first untouched swipe from a file row", async ({
+  page,
+}) => {
+  // The active file row starts the gesture: a button wrapped in a tooltip
+  // trigger and a context-menu trigger (whose touch affordance is the long
+  // press). If this fails while the directory swipe above passes, the file
+  // row's interactive wrappers are the culprit; if both fail, the scroll box
+  // layout is.
+  await openColdMobileSidebar(page);
+  await firstTouchSwipeFromRow(page, page.locator('[aria-current="page"]'));
 });
 
 test("opens the root README from the bare workspace address", async ({
