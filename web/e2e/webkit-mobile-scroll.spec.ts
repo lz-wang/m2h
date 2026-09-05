@@ -40,7 +40,7 @@ test("scrolls the mobile sidebar tree from the directory row on WebKit", async (
   page,
 }) => {
   // A plain directory row: no tooltip or context-menu wrapper around it, so
-  // the gesture targets the native scroll box itself.
+  // the gesture targets the ScrollArea scroll box itself.
   await openColdMobileSidebar(page);
   await wheelDownFromRow(
     page,

@@ -64,9 +64,9 @@ export async function openColdMobileSidebar(page: Page) {
   const dialog = page.getByRole("dialog");
   await expect(dialog).toBeVisible();
 
-  // The mobile scroller stays the tree's only scroll container — the native
-  // overflow-y: auto box (.tree-native-scroll) — it really overflows, and the
-  // mobile SidebarContent clips nothing.
+  // The ScrollArea viewport stays the tree's only scroll container (the Base
+  // UI ScrollArea, same as desktop), it really overflows, and the mobile
+  // SidebarContent clips nothing.
   const structure = await page.evaluate(() => {
     const content = document.querySelector('[data-slot="sidebar-content"]');
     const tree = document.querySelector('[aria-label="Markdown 文件树"]');
@@ -86,7 +86,7 @@ export async function openColdMobileSidebar(page: Page) {
     };
   });
   expect(structure.contentOverflow).toBe("visible");
-  expect(structure.viewportOverflowY).toBe("auto");
+  expect(structure.viewportOverflowY).toBe("scroll");
   expect(structure.overflowing).toBe(true);
 
   // The sheet must not park focus in the filter input: a controlled open

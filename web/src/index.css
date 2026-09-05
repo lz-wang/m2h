@@ -169,14 +169,12 @@ body,
 }
 
 /*
- * The sidebar scrolls exactly one container, but the scroller differs by
- * viewport (see the SidebarContent branch in App.tsx).
- *
- * Desktop: .tree-scroll stretches the Base UI ScrollArea root as a flex child
- * of SidebarContent — flex:1 + min-height:0, never a height:100% chain inside
- * an already flex-computed parent — keeping the custom transient scrollbar and
- * wheel handling. The viewport rules below are the tree's own scroll contract
- * and deliberately NOT on the shared ScrollArea component:
+ * The sidebar scrolls exactly one container: the Base UI ScrollArea viewport
+ * on every viewport width. .tree-scroll is a flex child of SidebarContent and
+ * grows into the space the sidebar leaves below header and footer — flex:1 +
+ * min-height:0, never a height:100% chain inside an already flex-computed
+ * parent; the viewport rules below are the tree's own scroll contract and
+ * deliberately NOT on the shared ScrollArea component:
  * - overflow-x: a file tree never scrolls sideways; !important is required
  *   because Base UI sets `overflow: scroll` as an inline style on the
  *   viewport, which out-ranks any plain selector.
@@ -187,7 +185,9 @@ body,
  *   a second scroll-position controller fighting it. The reader window keeps
  *   the browser default.
  * The width pair keeps the root pinned to the sidebar's box so the paint
- * boundary above stays deterministic while the tree content resizes.
+ * boundary above stays deterministic while the tree content resizes. The one
+ * mobile-specific behavior is the Sheet's initial focus, see the Sidebar
+ * mobile branch in ui/sidebar.tsx.
  */
 .tree-scroll {
   flex: 1 1 0%;
@@ -202,31 +202,6 @@ body,
   overflow-x: hidden !important;
   overscroll-behavior-y: contain;
   overflow-anchor: none;
-}
-
-/*
- * Mobile: the same single-container contract without the custom ScrollArea.
- * On phones the tree needs nothing but a stable, natively finger-scrolled
- * box — Base UI's viewport layering (ResizeObserver, scrollbar geometry,
- * scroll modality, WebKit touch special cases) is the variable the
- * first-touch dead-scroll reports kept circling, so the mobile Sheet swaps it
- * for the browser's own overflow-y: auto (App.tsx keeps the
- * data-slot="scroll-area-viewport" attribute so DocumentTree's reveal and
- * collapse logic are untouched). Same flex contract as .tree-scroll and the
- * mobile TOC sheet; touch-action stays the browser default so WebKit owns
- * its native pan gesture.
- */
-.tree-native-scroll {
-  flex: 1 1 0%;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior-y: contain;
-  overflow-anchor: none;
-  touch-action: auto;
 }
 
 /*
