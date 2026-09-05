@@ -434,6 +434,23 @@ body,
   background: var(--sidebar);
 }
 
+/*
+ * Mobile drops the stickiness: the sheet's native scroller is a plain
+ * overflow box, and sticky rows inside it are the last WebKit-risky
+ * compositing variable left in the tree — scroll container + sticky +
+ * z-index, the same stack family whose transform sibling above had to be
+ * removed for stale-raster artifacts. With the first-touch dead swipe still
+ * reproducing on phones after the native-scroller switch, this is a clean
+ * single-variable elimination; desktop keeps the VS Code-style sticky rows.
+ * The reveal reservation and the collapse clamp read the rows' live
+ * geometry, so both behave identically without sticking.
+ */
+@media (max-width: 767px) {
+  .document-tree-directory {
+    position: static;
+  }
+}
+
 .tree-tooltip {
   display: flex;
   max-width: 22rem;
