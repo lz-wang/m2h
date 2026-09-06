@@ -339,44 +339,37 @@ describe("App directory preview", () => {
     expect(window.location.pathname).toBe("/");
   });
 
-  it("opens the project and release links from the sidebar footer in new tabs", async () => {
+  it("shows project attribution below the rendered document", async () => {
     const view = render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
 
-    const repository = screen.getByRole("link", {
-      name: "在新页面打开 m2h GitHub 仓库",
+    const footer = screen.getByRole("contentinfo", {
+      name: "m2h 项目信息",
     });
+    expect(footer.textContent).toBe("Powered by m2h 0.9.1");
+    // The sidebar carries no footer chrome anymore: the attribution moved
+    // into the reader canvas, and the navigation shell ends at the file tree.
+    expect(document.querySelector('[data-slot="sidebar-footer"]')).toBeNull();
+
+    const repository = within(footer).getByRole("link", { name: "m2h" });
     expect(repository.getAttribute("href")).toBe(
       "https://github.com/lz-wang/m2h",
     );
     expect(repository.getAttribute("target")).toBe("_blank");
     expect(repository.getAttribute("rel")).toContain("noreferrer");
-    const icon = repository.querySelector("img");
-    expect(icon?.getAttribute("src")).toBe("/ui/github-invertocat.svg");
-    expect(icon?.getAttribute("alt")).toBe("");
-    expect(icon?.getAttribute("aria-hidden")).toBe("true");
 
-    const release = screen.getByRole("link", {
-      name: "在新页面打开 m2h v0.9.1 发布信息",
-    });
-    const footer = repository.closest('[data-slot="sidebar-footer"]');
-    expect(footer?.classList).toContain("justify-start");
-    expect(footer?.classList).toContain("gap-1");
-    expect(footer?.classList).not.toContain("justify-between");
-    expect(footer?.classList).toContain("flex-nowrap");
-    expect(repository.nextElementSibling).toBe(release);
-    expect(release.classList).toContain("project-footer-version");
-    expect(
-      footer?.contains(
-        screen.getByRole("button", { name: "显示主题：跟随系统" }),
-      ),
-    ).toBe(false);
+    // Release versions display bare (no "v") but link to the "v"-tagged
+    // release, the same semantics the sidebar footer used.
+    const release = within(footer).getByRole("link", { name: "0.9.1" });
     expect(release.getAttribute("href")).toBe(
       "https://github.com/lz-wang/m2h/releases/tag/v0.9.1",
     );
     expect(release.getAttribute("target")).toBe("_blank");
+    expect(release.getAttribute("rel")).toContain("noreferrer");
     view.unmount();
 
+    // Development builds display their full dev-<date>-<sha> version and
+    // link to the release list instead of any single tag.
     render(
       <App
         api={createAPI({
@@ -388,7 +381,7 @@ describe("App directory preview", () => {
       />,
     );
     const development = await screen.findByRole("link", {
-      name: "在新页面打开 m2h dev-20260812-abcdef0 发布信息",
+      name: "dev-20260812-abcdef0",
     });
     expect(development.getAttribute("href")).toBe(
       "https://github.com/lz-wang/m2h/releases",
@@ -432,6 +425,12 @@ describe("App directory preview", () => {
     expect(screen.getByRole("button", { name: "文档宽度：标准" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
+    ).toBeTruthy();
+    // The attribution belongs to the reader, not the navigation: a
+    // single-file preview renders no sidebar yet still closes the document
+    // with the project footer.
+    expect(
+      screen.getByRole("contentinfo", { name: "m2h 项目信息" }),
     ).toBeTruthy();
   });
 

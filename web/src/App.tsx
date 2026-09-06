@@ -36,6 +36,7 @@ import type { FrontMatter, PreviewAPI, SearchResult, TocItem } from "./api";
 import { DocumentLightbox } from "./components/document-lightbox";
 import { DocumentTree } from "./components/document-tree";
 import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
+import { ReaderFooter } from "./components/reader-footer";
 import { ReaderNavigation } from "./components/reader-navigation";
 import { SearchDialog } from "./components/search-dialog";
 import {
@@ -49,7 +50,6 @@ import { ScrollArea } from "./components/ui/scroll-area";
 import {
   Sidebar,
   SidebarContent,
-  SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
@@ -101,8 +101,6 @@ const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
 ];
 
 const layoutStorageKey = "m2h.preview.layout";
-const repositoryURL = "https://github.com/lz-wang/m2h";
-const releaseVersionPattern = /^\d+\.\d+\.\d+$/;
 
 // Browser-provided client hints identify the operating system without parsing
 // the user agent. navigator.platform is retained only as a fallback for older
@@ -588,7 +586,6 @@ export function App({ api }: AppProps) {
                 </SidebarGroup>
               </ScrollArea>
             </SidebarContent>
-            <ProjectFooter version={preview.version} />
             <SidebarResizeHandle
               width={sidebarWidth}
               onResize={setSidebarWidth}
@@ -667,6 +664,12 @@ export function App({ api }: AppProps) {
                 onErrorCapture={handleAssetError}
                 onVisualError={preview.reportVisualError}
               />
+              {/* The attribution belongs to a successfully opened document
+               * page, not the app shell: loading, unselected, not-found and
+               * error states stay footer-less. */}
+              {preview.phase === "ready" && preview.document !== null ? (
+                <ReaderFooter version={preview.version} />
+              ) : null}
             </div>
             {/* The desktop rail stays mounted whenever the document has a TOC
              * (only the sheet handles narrow screens); `visible` drives its
@@ -704,47 +707,6 @@ export function App({ api }: AppProps) {
         </SidebarInset>
       </SidebarProvider>
     </TooltipProvider>
-  );
-}
-
-function ProjectFooter({ version }: { version: string }) {
-  const releaseVersion = releaseVersionPattern.test(version);
-  const versionLabel = releaseVersion ? `v${version}` : version;
-  const versionURL = releaseVersion
-    ? `${repositoryURL}/releases/tag/${versionLabel}`
-    : `${repositoryURL}/releases`;
-
-  return (
-    <SidebarFooter className="project-footer flex-row shrink-0 flex-nowrap items-center justify-start gap-1 px-3 py-2">
-      <a
-        href={repositoryURL}
-        target="_blank"
-        rel="noreferrer"
-        aria-label="在新页面打开 m2h GitHub 仓库"
-        title="GitHub"
-        className="group flex size-8 items-center justify-center rounded-md text-sidebar-foreground/60 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-      >
-        <img
-          src="/ui/github-invertocat.svg"
-          alt=""
-          aria-hidden="true"
-          className="h-4 w-auto opacity-60 transition-opacity group-hover:opacity-100 dark:invert"
-        />
-        <span className="sr-only">在新页面打开 m2h GitHub 仓库</span>
-      </a>
-      {version !== "" ? (
-        <a
-          href={versionURL}
-          target="_blank"
-          rel="noreferrer"
-          aria-label={`在新页面打开 m2h ${versionLabel} 发布信息`}
-          title="查看发布信息"
-          className="project-footer-version shrink-0 rounded-md px-2 py-1 font-mono text-[11px] whitespace-nowrap tabular-nums text-sidebar-foreground/55 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring"
-        >
-          {versionLabel}
-        </a>
-      ) : null}
-    </SidebarFooter>
   );
 }
 

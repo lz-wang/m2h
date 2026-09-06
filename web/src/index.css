@@ -470,16 +470,6 @@ body,
   margin-left: auto;
 }
 
-.project-footer {
-  container-type: inline-size;
-}
-
-@container (max-width: 14rem) {
-  .project-footer-version {
-    display: none;
-  }
-}
-
 .theme-menu-positioner {
   z-index: 50;
   outline: none;
@@ -676,6 +666,36 @@ body,
   max-width: none;
   margin-right: 1rem;
   margin-left: 1rem;
+}
+
+/*
+ * The reader footer's project attribution. Deliberately faint: muted ink at
+ * 11px reads as chrome, not content, and the opacity stays on the element (a
+ * parent's opacity would dim the links with no way to recover it on
+ * hover/focus). text-align centers it against the canvas, which matches the
+ * document's center in every width mode — the standard/wide max-widths and
+ * margins already converge there, so the footer never duplicates them.
+ */
+.reader-footer {
+  margin-top: 2rem;
+  padding-inline: 1rem;
+
+  color: var(--muted-foreground);
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  text-align: center;
+}
+
+.reader-footer a {
+  color: inherit;
+  text-decoration: none;
+  text-underline-offset: 0.15em;
+}
+
+.reader-footer a:hover,
+.reader-footer a:focus-visible {
+  color: var(--foreground);
+  text-decoration: underline;
 }
 
 /*
