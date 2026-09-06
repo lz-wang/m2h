@@ -116,11 +116,42 @@ test("shows intrinsic size and format in the metadata row", async ({
 }) => {
   await openDocument(page);
 
-  // The metadata row reports the image's own pixels and its source format,
-  // independent of how small the page renders it.
+  // The metadata part reports the image's own pixels and its source format,
+  // independent of how small the page renders it. With an alt present it is
+  // wrapped in parentheses after the name.
   for (const tooltip of await page.locator(".m2h-image-name-tooltip").all()) {
     await expect(tooltip.locator(".m2h-image-tooltip-meta")).toHaveText(
-      "16 × 16 · PNG",
+      "(16 × 16, PNG)",
     );
   }
+});
+
+test("reads the tooltip as one line of name plus metadata", async ({
+  page,
+}) => {
+  await openDocument(page);
+
+  const tooltip = page.locator(".m2h-image-name-tooltip").first();
+
+  // The user-facing contract: the whole label reads "name (size, format)".
+  // The flex gap renders as visual space without a text node between the
+  // spans, so the reading-order match tolerates the missing literal space.
+  await expect(tooltip).toContainText(/短名称\s*\(16 × 16, PNG\)/);
+
+  // Text assertions cannot catch a flex-direction: column regression, so the
+  // two spans' real boxes are compared: one line means one top edge.
+  const layout = await tooltip.evaluate((element) => {
+    const alt = element.querySelector(".m2h-image-tooltip-alt");
+    const meta = element.querySelector(".m2h-image-tooltip-meta");
+
+    if (!(alt instanceof HTMLElement) || !(meta instanceof HTMLElement)) {
+      throw new Error("tooltip parts missing");
+    }
+
+    return {
+      altTop: alt.getBoundingClientRect().top,
+      metaTop: meta.getBoundingClientRect().top,
+    };
+  });
+  expect(Math.abs(layout.altTop - layout.metaTop)).toBeLessThanOrEqual(1);
 });
