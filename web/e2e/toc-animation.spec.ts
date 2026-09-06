@@ -208,3 +208,79 @@ test("snaps between states under prefers-reduced-motion", async ({ page }) => {
   await expect.poll(slotWidth).toBe(RAIL_WIDTH);
   await expectNoHorizontalOverflow(page);
 });
+
+test("keeps the desktop TOC pinned when the document reaches its bottom", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  // toc-scroll.md scrolls well past the fold, so the rail's viewport pinning
+  // is exercised across the full scroll range instead of only near the top.
+  await page.goto("/doc/toc-scroll.md");
+  await page.waitForFunction(
+    () =>
+      document.querySelector(".reader-toc-slot")?.getAttribute("data-state") ===
+      "expanded",
+  );
+
+  // The invariant under test: the rail hangs off the toolbar's bottom edge
+  // and reaches down to the viewport's bottom edge at every scroll offset.
+  // The larger of the two gaps must stay within a pixel — a sticky layout
+  // box violates this near the document's end, where its bottom constraint
+  // drags the rail upward.
+  const worstGap = () =>
+    page.evaluate(() => {
+      const toolbar = document.querySelector(".reader-toolbar");
+      const rail = document.querySelector(".reader-toc");
+      if (toolbar === null || rail === null) {
+        throw new Error("toolbar or TOC rail was not rendered");
+      }
+      const railRect = rail.getBoundingClientRect();
+      return Math.max(
+        Math.abs(railRect.top - toolbar.getBoundingClientRect().bottom),
+        Math.abs(document.documentElement.clientHeight - railRect.bottom),
+      );
+    });
+
+  await expect.poll(worstGap).toBeLessThanOrEqual(1);
+
+  // Mid-document: any scroll offset between the top and the end.
+  await page.evaluate(() => {
+    const max = document.documentElement.scrollHeight - window.innerHeight;
+    window.scrollTo(0, max / 2);
+  });
+  await expect.poll(worstGap).toBeLessThanOrEqual(1);
+
+  // The document's very end is where any slot-bound rail feels the pull, so
+  // scroll there and let two animation frames flush layout before checking.
+  await page.evaluate(() => {
+    window.scrollTo(0, Number.MAX_SAFE_INTEGER);
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await expect.poll(worstGap).toBeLessThanOrEqual(1);
+  await expectNoHorizontalOverflow(page);
+
+  // In-flow tail content after .reader-main (the copy status line renders
+  // exactly there) is the case a sticky slot cannot survive: its bottom
+  // constraint drags the rail up by the tail's full height, while a
+  // viewport-fixed rail must not move at all.
+  await page.evaluate(() => {
+    const spacer = document.createElement("div");
+    spacer.style.height = "200px";
+    document.querySelector(".reader-inset")?.append(spacer);
+  });
+  await page.evaluate(() => {
+    window.scrollTo(0, Number.MAX_SAFE_INTEGER);
+  });
+  await page.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+      }),
+  );
+  await expect.poll(worstGap).toBeLessThanOrEqual(1);
+});

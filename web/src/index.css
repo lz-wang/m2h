@@ -1362,22 +1362,19 @@ body,
 
 /*
  * The desktop TOC uses the same two-layer split as the sidebar's gap +
- * container pair. The slot is the sticky layout box the body text flows
- * around: it owns the rail's width, collapses that width to zero when hidden,
- * and clips the sliding rail so the collapse never spills a scrollbar. The
- * rail inside keeps its full width and only transforms, so its text never
+ * container pair, split by responsibility: the slot is the layout spacer the
+ * body text flows around — it only owns the rail's width and collapses that
+ * width to zero when hidden — while the rail is a viewport-fixed surface
+ * pinned under the toolbar. Keeping the rail out of the document flow means
+ * a sticky box's bottom constraint can never drag the outline upward when
+ * the document reaches its end. The rail only transforms, so its text never
  * reflows mid-animation. Durations and easing deliberately match the sidebar
  * (200ms linear): rail, body width, and the floating navigation all move as
  * one.
  */
 .reader-toc-slot {
-  position: sticky;
-  top: 3rem;
   width: var(--reader-toc-width);
   flex: 0 0 var(--reader-toc-width);
-  align-self: flex-start;
-  height: calc(100svh - 3rem);
-  overflow: clip;
 
   transition:
     width 200ms linear,
@@ -1389,13 +1386,20 @@ body,
   flex-basis: 0;
 }
 
-/* The rail stays pinned beside the document as the window scrolls (via the
- * sticky slot) and spans the remaining viewport height, with its own inner
- * scroll for long outlines. */
+/* The rail is fixed to the viewport — toolbar bottom to viewport bottom,
+ * flush with the right edge — so it stays put at every scroll position. The
+ * toolbar stacks above it (z-index 10 vs 9). Fixed elements outside the
+ * viewport don't extend the document's scrollable area, so the sliding rail
+ * never spills a scrollbar. */
 .reader-toc {
+  position: fixed;
+  top: 3rem;
+  right: 0;
+  z-index: 9;
+
   display: flex;
   width: var(--reader-toc-width);
-  height: 100%;
+  height: calc(100svh - 3rem);
   flex-direction: column;
   border-left: 1px solid var(--border);
   background: var(--background);
@@ -1656,8 +1660,8 @@ body,
  * (TableOfContentsSheet), which opens the outline on demand.
  */
 @media (max-width: 1199px) {
-  /* The whole two-layer rail goes: hiding the slot also drops its sticky
-   * layout box, so the canvas reclaims the full width. */
+  /* The whole two-layer rail goes: hiding the slot also drops its fixed
+   * descendant, so the canvas reclaims the full width. */
   .reader-toc-slot {
     display: none;
   }
