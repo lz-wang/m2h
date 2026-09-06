@@ -918,9 +918,11 @@ body,
   left: 50%;
   z-index: 2;
 
+  /* One line: the alt followed by the metadata on a shared baseline (the
+   * smaller metadata size hangs off that baseline). */
   display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
+  align-items: baseline;
+  gap: 0.25rem;
 
   width: max-content;
   max-width: min(20rem, calc(100vw - 2rem));
@@ -943,16 +945,19 @@ body,
   transition: opacity 120ms ease;
 }
 
-/* Each row shrinks inside the capped tooltip on its own: the alt row wraps at
- * the cap with an ellipsis, the metadata row (intrinsic size · format) never
- * wraps at all — it is short by construction and reads as one unit. */
+/* The two spans shrink inside the capped tooltip on their own: a long alt is
+ * what gets the ellipsis — the metadata (intrinsic size, format) never
+ * participates in the shrink, so the valuable numbers survive any truncation.
+ * min-width: 0 lets the alt shrink below its content width as a flex item. */
 .markdown-body .m2h-image-tooltip-alt {
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .markdown-body .m2h-image-tooltip-meta {
+  flex-shrink: 0;
   color: var(--muted-foreground);
   font-size: 0.6875rem;
   line-height: 0.875rem;

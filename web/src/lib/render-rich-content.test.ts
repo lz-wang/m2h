@@ -904,7 +904,9 @@ describe("image lightbox triggers", () => {
     Object.defineProperty(image, "naturalHeight", { value: 1080 });
     image?.dispatchEvent(new Event("load"));
 
-    expect(meta?.textContent).toBe("1920 × 1080 · PNG");
+    // The alt name is repeated on the shared line, with the metadata wrapped
+    // in parentheses after it.
+    expect(meta?.textContent).toBe("(1920 × 1080, PNG)");
   });
 
   it("reads the metadata line from the already-complete image", async () => {
@@ -921,7 +923,7 @@ describe("image lightbox triggers", () => {
 
     // A cached image is complete at enhancement time: no load event is coming.
     expect(root.querySelector(".m2h-image-tooltip-meta")?.textContent).toBe(
-      "16 × 16 · PNG",
+      "(16 × 16, PNG)",
     );
   });
 
@@ -931,14 +933,65 @@ describe("image lightbox triggers", () => {
     root.innerHTML =
       '<p><img src="/a.png" alt=""></p><p><img src="/b.png"></p>';
 
+    const images = root.querySelectorAll("img");
+    for (const image of images) {
+      Object.defineProperty(image, "complete", { value: true });
+      Object.defineProperty(image, "naturalWidth", { value: 16 });
+      Object.defineProperty(image, "naturalHeight", { value: 16 });
+    }
+
     await renderRichContent(root, { mode: "light" });
 
-    // Without alt text only the metadata row renders — the size/format line
-    // is still worth hovering for.
+    // Without alt text only the metadata row renders — the size/format part
+    // stands alone, with no parentheses — and is still worth hovering for.
     expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(2);
     expect(root.querySelectorAll(".m2h-image-name-tooltip")).toHaveLength(2);
     expect(root.querySelectorAll(".m2h-image-tooltip-alt")).toHaveLength(0);
     expect(root.querySelectorAll(".m2h-image-tooltip-meta")).toHaveLength(2);
+    for (const meta of root.querySelectorAll(".m2h-image-tooltip-meta")) {
+      expect(meta.textContent).toBe("16 × 16, PNG");
+    }
+  });
+
+  it("wraps the size alone in parentheses when the format is unknown", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><img src="/render" alt="render"></p>';
+
+    // An extension-less source derives no format; the size is still there.
+    const image = root.querySelector("img");
+    Object.defineProperty(image, "complete", { value: true });
+    Object.defineProperty(image, "naturalWidth", { value: 16 });
+    Object.defineProperty(image, "naturalHeight", { value: 16 });
+
+    await renderRichContent(root, { mode: "light" });
+
+    expect(root.querySelector(".m2h-image-tooltip-meta")?.textContent).toBe(
+      "(16 × 16)",
+    );
+  });
+
+  it("wraps the format alone in parentheses when the size is unknown", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><img src="/a.png" alt="architecture"></p>';
+
+    // A zero natural width stands in for an image whose intrinsic size the
+    // browser never reports even though the load succeeded (an SVG without
+    // intrinsic dimensions); the fill waits for the load event like any
+    // not-yet-fetched image. (A *complete* image with naturalWidth 0 is the
+    // cached-failure path and never gets a tooltip at all.)
+    const image = root.querySelector("img");
+    Object.defineProperty(image, "naturalWidth", { value: 0 });
+    Object.defineProperty(image, "naturalHeight", { value: 0 });
+
+    await renderRichContent(root, { mode: "light" });
+
+    const meta = root.querySelector(".m2h-image-tooltip-meta");
+    expect(meta?.textContent).toBe("");
+    image?.dispatchEvent(new Event("load"));
+
+    expect(meta?.textContent).toBe("(PNG)");
   });
 
   it("derives the display format from extension and data URL MIME", async () => {
@@ -975,17 +1028,17 @@ describe("image lightbox triggers", () => {
         ?.querySelector(".m2h-image-tooltip-meta")?.textContent;
     // JPEG normalizes to JPG regardless of source spelling; the query string
     // never leaks into the extension.
-    expect(meta("jpg")).toBe("10 × 10 · JPG");
-    expect(meta("jpg-upper")).toBe("10 × 10 · JPG");
-    expect(meta("svg")).toBe("10 × 10 · SVG");
-    expect(meta("webp")).toBe("10 × 10 · WEBP");
-    expect(meta("query")).toBe("10 × 10 · PNG");
+    expect(meta("jpg")).toBe("10 × 10, JPG");
+    expect(meta("jpg-upper")).toBe("10 × 10, JPG");
+    expect(meta("svg")).toBe("10 × 10, SVG");
+    expect(meta("webp")).toBe("10 × 10, WEBP");
+    expect(meta("query")).toBe("10 × 10, PNG");
     // Data URLs report their MIME, not a file name.
-    expect(meta("data")).toBe("10 × 10 · SVG");
-    expect(meta("data-jpeg")).toBe("10 × 10 · JPG");
+    expect(meta("data")).toBe("10 × 10, SVG");
+    expect(meta("data-jpeg")).toBe("10 × 10, JPG");
     // Unknown extensions pass through uppercased; extension-less sources
     // show the size alone.
-    expect(meta("unknown")).toBe("10 × 10 · XYZ");
+    expect(meta("unknown")).toBe("10 × 10, XYZ");
     expect(meta("no-extension")).toBe("10 × 10");
   });
 

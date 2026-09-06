@@ -678,11 +678,12 @@ function ensureImagePresentationFrame(image: HTMLImageElement): HTMLElement {
   return frame;
 }
 
-// The frame's hover tooltip: it repeats the alt text and adds the intrinsic
-// size and format for sighted readers. aria-hidden: the <img> alt already
-// provides the name to assistive technology, so a second accessible copy adds
-// nothing. Every image gets one — alt or not — because the size/format line
-// is useful on its own.
+// The frame's hover tooltip: one line repeating the alt text with the
+// intrinsic size and format in parentheses after it — "name (1920 × 1080,
+// PNG)". aria-hidden: the <img> alt already provides the name to assistive
+// technology, so a second accessible copy adds nothing. Every image gets one
+// — alt or not — because the size/format part is useful on its own; without
+// an alt it drops the parentheses and stands alone.
 function addImageMetadataTooltip(
   image: HTMLImageElement,
   frame: HTMLElement,
@@ -691,7 +692,8 @@ function addImageMetadataTooltip(
   tooltip.className = "m2h-image-name-tooltip";
   tooltip.setAttribute("aria-hidden", "true");
   const name = image.alt.trim();
-  if (name !== "") {
+  const hasAlt = name !== "";
+  if (hasAlt) {
     const alt = document.createElement("span");
     alt.className = "m2h-image-tooltip-alt";
     alt.textContent = name;
@@ -701,7 +703,7 @@ function addImageMetadataTooltip(
   meta.className = "m2h-image-tooltip-meta";
   tooltip.append(meta);
   frame.append(tooltip);
-  trackImageMetadata(image, meta);
+  trackImageMetadata(image, meta, hasAlt);
 }
 
 // Attach the Lightbox to one framed image: the item marker React's click-time
@@ -784,27 +786,41 @@ function syncImageLightboxAvailability(
   }
 }
 
-// Fill the tooltip's metadata line with the image's intrinsic size and format.
-// The enhancement pass usually runs before the browser finished fetching, so
-// the first fill happens on the load event; a cached image is already complete
-// and reads out immediately. A failed image simply never fills the line — the
-// alt row still says what the picture was meant to show.
+// The metadata text of one image: "size, format" when both are known, and
+// whichever one exists otherwise. A pure function so the presentation contract
+// ("(size, format)" after the alt, bare without one) lives apart from where
+// the size and format are read from the element.
+function imageMetadataText(size: string | null, format: string | null): string {
+  if (size !== null && format !== null) {
+    return `${size}, ${format}`;
+  }
+  return size ?? format ?? "";
+}
+
+// Fill the tooltip's metadata span with the image's intrinsic size and format,
+// wrapped in parentheses after the alt when the image has one (the alt row and
+// the metadata row render as one line; see the tooltip CSS). The enhancement
+// pass usually runs before the browser finished fetching, so the first fill
+// happens on the load event; a cached image is already complete and reads out
+// immediately. A failed image simply never fills the line — the tooltip is
+// removed with the placeholder swap.
 function trackImageMetadata(
   image: HTMLImageElement,
   meta: HTMLSpanElement,
+  hasAlt: boolean,
 ): void {
   const apply = () => {
     const format = imageFormat(image);
+
     const size =
       image.naturalWidth > 0
         ? `${image.naturalWidth} × ${image.naturalHeight}`
         : null;
+
+    const metadata = imageMetadataText(size, format);
+
     meta.textContent =
-      size === null
-        ? (format ?? "")
-        : format === null
-          ? size
-          : `${size} · ${format}`;
+      metadata === "" ? "" : hasAlt ? `(${metadata})` : metadata;
   };
   if (image.complete && image.naturalWidth > 0) {
     apply();
