@@ -836,3 +836,85 @@ test("jumps between document edges with the floating navigation", async ({
   });
   expect(geometry.bottom).toBeLessThanOrEqual(geometry.innerHeight);
 });
+
+test("lets the file tree fill the sidebar after removing the footer", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  // The 24-note tree overflows its column, so the scroll area is what has to
+  // reach all the way down.
+  await waitForBody(page, "/doc/tree/note-24.md");
+
+  const geometry = await page.evaluate(() => {
+    const inner = document.querySelector<HTMLElement>(
+      '[data-slot="sidebar-inner"]',
+    );
+    const scroll = document.querySelector<HTMLElement>(".tree-scroll");
+    return {
+      footerCount: document.querySelectorAll('[data-slot="sidebar-footer"]')
+        .length,
+      innerBottom: inner?.getBoundingClientRect().bottom ?? -1,
+      scrollBottom: scroll?.getBoundingClientRect().bottom ?? -1,
+    };
+  });
+
+  // The sidebar carries no footer chrome anymore…
+  expect(geometry.footerCount).toBe(0);
+  // … and the tree's scroll area ends exactly at the sidebar's bottom edge:
+  // removing the footer handed its height back to the tree, which is the
+  // user-visible point of the move.
+  expect(
+    Math.abs(geometry.scrollBottom - geometry.innerBottom),
+  ).toBeLessThanOrEqual(1);
+});
+
+test("centers the project attribution below the rendered document", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1600, height: 900 });
+  await waitForBody(page, "/doc/scroll.md");
+
+  // The attribution closes the document page: it renders after the article,
+  // shares the canvas's horizontal center in every width mode (standard and
+  // full are the two extremes — wide's centered cap converges to the same
+  // point), and never opens a page-level horizontal scrollbar.
+  const read = () =>
+    page.evaluate(() => {
+      const canvas = document.querySelector(".reader-canvas");
+      const article = document.querySelector(".reader-document");
+      const footer = document.querySelector(".reader-footer");
+      if (canvas === null || article === null || footer === null) {
+        throw new Error("reader canvas, document or footer was not rendered");
+      }
+      const canvasRect = canvas.getBoundingClientRect();
+      const articleRect = article.getBoundingClientRect();
+      const footerRect = footer.getBoundingClientRect();
+      return {
+        text: footer.textContent ?? "",
+        below: footerRect.top > articleRect.bottom,
+        centerDelta: Math.abs(
+          (footerRect.left + footerRect.right) / 2 -
+            (canvasRect.left + canvasRect.right) / 2,
+        ),
+        overflow:
+          document.documentElement.scrollWidth -
+          document.documentElement.clientWidth,
+      };
+    });
+
+  const standard = await read();
+  expect(standard.text).toMatch(/^Powered by m2h \S+$/);
+  expect(standard.below).toBe(true);
+  expect(standard.centerDelta).toBeLessThanOrEqual(1);
+  expect(standard.overflow).toBeLessThanOrEqual(0);
+
+  // Full width re-flows the canvas edge to edge; the attribution must stay
+  // centered under the document and inside the viewport.
+  await page.getByRole("button", { name: /文档宽度：/ }).click();
+  await page.getByRole("menuitemradio", { name: "全屏" }).click();
+  const full = await read();
+  expect(full.text).toMatch(/^Powered by m2h \S+$/);
+  expect(full.below).toBe(true);
+  expect(full.centerDelta).toBeLessThanOrEqual(1);
+  expect(full.overflow).toBeLessThanOrEqual(0);
+});
