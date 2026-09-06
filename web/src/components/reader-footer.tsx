@@ -18,15 +18,11 @@ function releaseURL(version: string): string {
 
 export function ReaderFooter({ version }: { version: string }) {
   return (
-    // role="contentinfo" is spelled out because a footer inside
-    // SidebarInset's <main> loses its implicit contentinfo role, and that
-    // landmark is what ties the attribution to the reader rather than the
-    // navigation shell.
-    <footer
-      className="reader-footer"
-      role="contentinfo"
-      aria-label="m2h 项目信息"
-    >
+    // No contentinfo role here, even though SidebarInset's <main> strips the
+    // footer's implicit one: this is a per-document attribution, not the
+    // application's global footer, so generic is exactly the right semantics
+    // — contentinfo is reserved for a top-level landmark.
+    <footer className="reader-footer">
       Powered by{" "}
       <a href={repositoryURL} target="_blank" rel="noreferrer">
         m2h

@@ -171,7 +171,7 @@ body,
 /*
  * The sidebar scrolls exactly one container: the Base UI ScrollArea viewport
  * on every viewport width. .tree-scroll is a flex child of SidebarContent and
- * grows into the space the sidebar leaves below header and footer — flex:1 +
+ * grows into the space below the sidebar header — flex:1 +
  * min-height:0, never a height:100% chain inside an already flex-computed
  * parent; the viewport rules below are the tree's own scroll contract and
  * deliberately NOT on the shared ScrollArea component:

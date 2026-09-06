@@ -343,9 +343,13 @@ describe("App directory preview", () => {
     const view = render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
 
-    const footer = screen.getByRole("contentinfo", {
-      name: "m2h 项目信息",
-    });
+    // The attribution is a document-level footer inside <main>, so it
+    // deliberately reads as generic — locate it by class, not by a landmark
+    // role.
+    const footer = document.querySelector(".reader-footer");
+    if (!(footer instanceof HTMLElement)) {
+      throw new Error("reader footer was not rendered");
+    }
     expect(footer.textContent).toBe("Powered by m2h 0.9.1");
     // The sidebar carries no footer chrome anymore: the attribution moved
     // into the reader canvas, and the navigation shell ends at the file tree.
@@ -429,9 +433,7 @@ describe("App directory preview", () => {
     // The attribution belongs to the reader, not the navigation: a
     // single-file preview renders no sidebar yet still closes the document
     // with the project footer.
-    expect(
-      screen.getByRole("contentinfo", { name: "m2h 项目信息" }),
-    ).toBeTruthy();
+    expect(document.querySelector(".reader-footer")).not.toBeNull();
   });
 
   it("groups a multi-root workspace into labeled root trees, expanding only the selected root", async () => {
