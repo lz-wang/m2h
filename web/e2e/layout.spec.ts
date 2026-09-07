@@ -435,56 +435,55 @@ test("fades the sidebar scrollbar in while scrolling and out after it stops", as
   expect((await readScrollbar()).scrolling).toBeNull();
 });
 
-test("keeps the sticky reader toolbar translucent", async ({ page }) => {
+test("keeps the sticky reader toolbar opaque", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 720 });
 
   const readToolbar = () =>
     page.evaluate(() => {
-      const toolbar = document.querySelector(".reader-toolbar");
+      const toolbar = document.querySelector<HTMLElement>(".reader-toolbar");
+
       if (toolbar === null) {
         throw new Error("reader toolbar was not rendered");
       }
-      const computed = getComputedStyle(toolbar);
-      // The alpha is the last number of the serialized color, whichever color
-      // space the browser resolves the mix into (rgba(), color(srgb …), …).
-      const alpha = Number.parseFloat(
-        computed.backgroundColor.match(/([\d.]+)\)$/)?.[1] ?? "1",
-      );
+
+      const toolbarStyle = getComputedStyle(toolbar);
+      const bodyStyle = getComputedStyle(document.body);
+
       return {
-        position: computed.position,
-        top: computed.top,
-        height: computed.height,
-        alpha,
-        backdropFilter: computed.backdropFilter,
+        position: toolbarStyle.position,
+        top: toolbarStyle.top,
+        height: toolbarStyle.height,
+        background: toolbarStyle.backgroundColor,
+        pageBackground: bodyStyle.backgroundColor,
+        backdropFilter: toolbarStyle.backdropFilter,
       };
     });
 
-  // Light theme: body content shows through the toolbar as it scrolls
-  // underneath, the blur keeps it from interfering with the controls, and —
-  // because the translucency is background-only — the geometry the heading
-  // spy and scroll restoration depend on is unchanged.
-  await waitForBody(page, "/doc/scroll.md");
+  // Light theme: the toolbar reads as part of the page — the same opaque
+  // surface as the body, no blur letting content bleed through — while the
+  // geometry the heading spy and scroll restoration depend on is unchanged.
+  await waitForBody(page, "/doc/scroll.md?mode=light");
+
   const light = await readToolbar();
+
   expect(light.position).toBe("sticky");
   expect(light.top).toBe("0px");
   expect(light.height).toBe("48px");
-  expect(light.alpha).toBeGreaterThan(0);
-  expect(light.alpha).toBeLessThan(1);
-  expect(light.backdropFilter).toContain("blur");
+  expect(light.background).toBe(light.pageBackground);
+  expect(light.backdropFilter).toBe("none");
 
-  // Dark theme: the translucent mix must not fall back to an opaque surface
-  // under the dark variable set.
   await page.goto("/doc/scroll.md?mode=dark");
   await page.waitForFunction(() =>
     document.documentElement.classList.contains("dark"),
   );
+
   const dark = await readToolbar();
+
   expect(dark.position).toBe("sticky");
   expect(dark.top).toBe("0px");
   expect(dark.height).toBe("48px");
-  expect(dark.alpha).toBeGreaterThan(0);
-  expect(dark.alpha).toBeLessThan(1);
-  expect(dark.backdropFilter).toContain("blur");
+  expect(dark.background).toBe(dark.pageBackground);
+  expect(dark.backdropFilter).toBe("none");
 });
 
 test("paints the sidebar and the TOC rail with the same surface", async ({

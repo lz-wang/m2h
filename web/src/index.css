@@ -271,13 +271,11 @@ body,
 }
 
 /*
- * The toolbar reads as part of the page while content scrolls beneath it: the
- * background is translucent (never element opacity, which would fade the
- * title, icons, and buttons too) and a backdrop blur keeps what slides under
- * it from interfering with the controls. The hairline border re-establishes
- * the toolbar/body boundary the translucency softens. Presentation only —
- * height, padding, and position stay untouched because the heading spy and
- * scroll restoration read this element's real geometry.
+ * The toolbar reads as part of the page: an opaque --background surface keeps
+ * the title, icons, and buttons fully legible with body text scrolling
+ * beneath it, and the hairline border holds the toolbar/body boundary.
+ * Presentation only — height, padding, and position stay untouched because
+ * the heading spy and scroll restoration read this element's real geometry.
  */
 .reader-toolbar {
   position: sticky;
@@ -289,20 +287,10 @@ body,
   align-items: center;
   gap: 0.25rem;
   padding: 0 0.75rem;
-  background: color-mix(in oklch, var(--background) 84%, transparent);
 
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
+  background: var(--background);
 
   border-bottom: 1px solid color-mix(in oklch, var(--border) 70%, transparent);
-}
-
-/* Fallback for browsers without color-mix support: an opaque toolbar beats a
- * fully transparent one over scrolling body text. */
-@supports not (background: color-mix(in oklch, red, blue)) {
-  .reader-toolbar {
-    background: var(--background);
-  }
 }
 
 .reader-toolbar [data-slot="button"],
