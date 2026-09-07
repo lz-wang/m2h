@@ -71,7 +71,7 @@ import {
   type LightboxState,
 } from "./lib/document-lightbox";
 import { enhanceDocumentLinks } from "./lib/document-links";
-import { prepareLazyImages, restoreLazyImages } from "./lib/lazy-images";
+import { observeLazyImages, prepareLazyImages } from "./lib/lazy-images";
 import {
   finalizeVegaLiteViews,
   renderRichContent,
@@ -1063,10 +1063,11 @@ function PreviewContent({
       isCurrent: () => bodyGenerationRef.current === generation,
       onVisualError,
     });
-    // Interim scheduler while the viewport observer is not in place yet:
-    // hand every parked image its sources back right away, which keeps the
-    // body's loading behavior identical to direct mounting.
-    restoreLazyImages(root);
+    // The images may load now: the observer hands each parked source back as
+    // its image approaches the viewport. Only the body's own lifetime owns
+    // the observation — the next body swap disconnects it with the rest of
+    // the cleanup.
+    const lazyImages = observeLazyImages(root);
     return () => {
       bodyGenerationRef.current++;
       initialRenderRef.current = null;
@@ -1074,6 +1075,7 @@ function PreviewContent({
       // finalize detaches; this cleanup runs while the old body DOM is still
       // in place, right before the next paint replaces it wholesale.
       finalizeVegaLiteViews(root);
+      lazyImages.disconnect();
     };
   }, [html, phase, onVisualError]);
 

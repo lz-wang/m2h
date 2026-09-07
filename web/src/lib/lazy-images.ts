@@ -9,7 +9,7 @@
 // is inert and invisible to the resource scanner, and replaces every image's
 // network sources with the shared placeholder. The real sources are parked in
 // data attributes — the same data-m2h-original-src the failure path already
-// reports — and handed back once the image may load.
+// reports — and handed back by the viewport observer once the image may load.
 
 // Served from the app's public assets under the /ui/ mount the document
 // server exposes them at, like the failure placeholder.
@@ -23,6 +23,23 @@ export const IMAGE_LOADING_SRC = "/ui/image-loading.svg";
 export type LazyImageState = "pending" | "loading" | "loaded" | "failed";
 
 const PENDING_SELECTOR = 'img[data-m2h-lazy-state="pending"]';
+
+// Load margin, not visibility: waiting for the viewport itself means a fast
+// scroll always shows the placeholder before the pixels. Images start loading
+// roughly half a screen to a screen before they can be seen, which is still
+// lazy loading for a reader — the document below the reading position never
+// loads at all.
+const VIEWPORT_MARGIN = "512px 0px";
+
+// Settle notifications, so the presentation layer (tooltip, Lightbox) can
+// follow the state machine without this module knowing about it.
+export interface LazyImageHooks {
+  onImageSettled?: (image: HTMLImageElement, loaded: boolean) => void;
+}
+
+export interface LazyImageController {
+  disconnect(): void;
+}
 
 // Parse server HTML into an inert fragment with every image rewritten to the
 // loading placeholder. Images that request nothing (no src, no srcset) stay
@@ -76,20 +93,112 @@ function prepareLazyImage(image: HTMLImageElement): void {
   image.src = IMAGE_LOADING_SRC;
 }
 
-// Give every pending image inside root its real sources back, marking it
-// loading. The restore order matters for <picture>: the <source> candidates
-// must be in place before the <img> src lands, because assigning src can
-// trigger resource selection immediately and would otherwise pick from a
-// candidate list that is still parked.
-export function restoreLazyImages(root: HTMLElement): void {
-  for (const image of root.querySelectorAll<HTMLImageElement>(
-    PENDING_SELECTOR,
-  )) {
-    restoreImageSources(image);
-    image.dataset.m2hLazyState = "loading";
+// Watch a mounted body's pending images and load each one as it approaches
+// the viewport. The returned controller ends the observation when the body it
+// belongs to is replaced. Without IntersectionObserver there is no scheduling
+// left to do — every pending image restores right away instead of sitting on
+// the placeholder forever.
+export function observeLazyImages(
+  root: HTMLElement,
+  hooks: LazyImageHooks = {},
+): LazyImageController {
+  const images = Array.from(
+    root.querySelectorAll<HTMLImageElement>(PENDING_SELECTOR),
+  );
+  if (!("IntersectionObserver" in window)) {
+    for (const image of images) {
+      startLazyLoad(image, null, hooks);
+    }
+    return { disconnect() {} };
+  }
+  const observer = new IntersectionObserver(
+    (entries) => {
+      for (const entry of entries) {
+        if (
+          !entry.isIntersecting ||
+          !(entry.target instanceof HTMLImageElement)
+        ) {
+          continue;
+        }
+        startLazyLoad(entry.target, observer, hooks);
+      }
+    },
+    { root: null, rootMargin: VIEWPORT_MARGIN, threshold: 0 },
+  );
+  for (const image of images) {
+    observer.observe(image);
+  }
+  return {
+    disconnect() {
+      observer.disconnect();
+    },
+  };
+}
+
+// Move one image from pending to loading and hand it its sources back. The
+// observer only unobserves on settle: a load already in flight keeps loading
+// when the reader scrolls past it, and a second intersection callback is
+// absorbed by the state guard.
+function startLazyLoad(
+  image: HTMLImageElement,
+  observer: { unobserve(image: HTMLImageElement): void } | null,
+  hooks: LazyImageHooks,
+): void {
+  if (image.dataset.m2hLazyState !== "pending") {
+    return;
+  }
+  // The failure pipeline may have collapsed this slot into its placeholder
+  // before the image ever approached the viewport; restoring would overwrite
+  // that placeholder with the source that already failed.
+  if (image.dataset.m2hFallback === "true") {
+    return;
+  }
+  image.dataset.m2hLazyState = "loading";
+  image.addEventListener(
+    "load",
+    () => {
+      settleLazyImage(image, true, observer, hooks);
+    },
+    { once: true },
+  );
+  image.addEventListener(
+    "error",
+    () => {
+      settleLazyImage(image, false, observer, hooks);
+    },
+    { once: true },
+  );
+  restoreImageSources(image);
+  // A cached image can finish synchronously with the restore; the load event
+  // still fires, but settling here keeps the state machine honest for
+  // engines that might not deliver one after a same-task src change.
+  if (image.complete && image.naturalWidth > 0) {
+    settleLazyImage(image, true, observer, hooks);
   }
 }
 
+function settleLazyImage(
+  image: HTMLImageElement,
+  loaded: boolean,
+  observer: { unobserve(image: HTMLImageElement): void } | null,
+  hooks: LazyImageHooks,
+): void {
+  // The placeholder's own load event (a pending delivery racing the restore)
+  // must not settle the image, and a settled image only leaves the machine
+  // once — both funnel into the same state guard.
+  if (image.dataset.m2hLazyState !== "loading") {
+    return;
+  }
+  image.dataset.m2hLazyState = loaded ? "loaded" : "failed";
+  image.removeAttribute("aria-busy");
+  observer?.unobserve(image);
+  hooks.onImageSettled?.(image, loaded);
+}
+
+// Give one image its real sources back. The restore order matters for
+// <picture>: the <source> candidates must be in place before the <img> src
+// lands, because assigning src can trigger resource selection immediately
+// and would otherwise pick from a candidate list that is still parked.
 function restoreImageSources(image: HTMLImageElement): void {
   image
     .closest("picture")
