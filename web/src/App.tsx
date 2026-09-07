@@ -71,6 +71,7 @@ import {
   type LightboxState,
 } from "./lib/document-lightbox";
 import { enhanceDocumentLinks } from "./lib/document-links";
+import { prepareLazyImages, restoreLazyImages } from "./lib/lazy-images";
 import {
   finalizeVegaLiteViews,
   renderRichContent,
@@ -1013,8 +1014,8 @@ function PreviewContent({
   resolvedModeRef.current = resolvedMode;
 
   // React owns the <article> container; the Markdown body DOM is owned by
-  // the rich-content renderer. Writing innerHTML in a layout effect runs
-  // before paint so there is no empty-body flash.
+  // the rich-content renderer. Mounting the parsed body in a layout effect
+  // runs before paint so there is no empty-body flash.
   //
   // The body effect keys on `phase` and `html` only. Only the "ready" phase
   // renders the <article>; re-entering "ready" (e.g. refreshing the current
@@ -1047,7 +1048,11 @@ function PreviewContent({
     setLightbox(null);
     const generation = ++bodyGenerationRef.current;
     const mode = resolvedModeRef.current;
-    root.innerHTML = html;
+    // The body is parsed inside a <template> and mounted as a fragment, so
+    // every image's real source is parked before the document can see it —
+    // mounting server HTML directly would start every image request before
+    // any lazy scheduling could run. See lib/lazy-images.ts.
+    root.replaceChildren(prepareLazyImages(html));
     // Link policy first, before the rich-content enhancements: external
     // links must open in a new tab even when a later renderer bails.
     enhanceDocumentLinks(root);
@@ -1058,6 +1063,10 @@ function PreviewContent({
       isCurrent: () => bodyGenerationRef.current === generation,
       onVisualError,
     });
+    // Interim scheduler while the viewport observer is not in place yet:
+    // hand every parked image its sources back right away, which keeps the
+    // body's loading behavior identical to direct mounting.
+    restoreLazyImages(root);
     return () => {
       bodyGenerationRef.current++;
       initialRenderRef.current = null;
