@@ -1416,6 +1416,17 @@ body,
   flex-basis: 0;
 }
 
+/*
+ * Desktop rail and narrow-screen Sheet are two presentations of the same
+ * document outline, so they share the reader's page surface instead of
+ * inheriting Sheet's generic popover surface.
+ */
+.reader-toc,
+.reader-toc-sheet {
+  background: var(--background);
+  color: var(--foreground);
+}
+
 /* The rail is fixed to the viewport — toolbar bottom to viewport bottom,
  * flush with the right edge — so it stays put at every scroll position. The
  * toolbar stacks above it (z-index 10 vs 9). Fixed elements outside the
@@ -1432,7 +1443,6 @@ body,
   height: calc(100svh - 3rem);
   flex-direction: column;
   border-left: 1px solid var(--border);
-  background: var(--background);
 
   transition: transform 200ms linear;
 }

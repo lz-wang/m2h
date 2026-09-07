@@ -529,6 +529,53 @@ test("paints the sidebar and the TOC rail with the same surface", async ({
   expect(backgrounds.sidebar).toBe(backgrounds.toc);
 });
 
+test("paints desktop and narrow-screen TOC with the same surface", async ({
+  page,
+}) => {
+  // The desktop rail and the narrow-screen Sheet are two presentations of the
+  // same document outline, so they must share one surface contract: the
+  // reader's page surface (--background), not Sheet's generic popover token.
+  // In dark mode --background and --popover differ, which is exactly where a
+  // drift would show; light mode alone cannot catch it (both resolve to
+  // white).
+  for (const mode of ["light", "dark"] as const) {
+    await page.setViewportSize({ width: 1440, height: 800 });
+    await waitForBody(page, `/doc/scroll.md?mode=${mode}`);
+
+    if (mode === "dark") {
+      await page.waitForFunction(() =>
+        document.documentElement.classList.contains("dark"),
+      );
+    }
+
+    const desktopBackground = await page
+      .locator(".reader-toc")
+      .evaluate((element) => getComputedStyle(element).backgroundColor);
+
+    const sidebarBackground = await page
+      .locator('[data-slot="sidebar-inner"]')
+      .evaluate((element) => getComputedStyle(element).backgroundColor);
+
+    expect(desktopBackground).toBe(sidebarBackground);
+
+    await page.setViewportSize({ width: 375, height: 720 });
+
+    await page.getByRole("button", { name: "打开文档目录" }).click();
+
+    const sheet = page.getByRole("dialog");
+    await expect(sheet).toBeVisible();
+
+    const sheetBackground = await sheet.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+
+    expect(sheetBackground).toBe(desktopBackground);
+
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+  }
+});
+
 test("offers the outline in a sheet on narrow viewports", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await waitForBody(page, "/doc/scroll.md");
