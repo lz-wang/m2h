@@ -106,8 +106,13 @@ export function observeLazyImages(
     root.querySelectorAll<HTMLImageElement>(PENDING_SELECTOR),
   );
   if (!("IntersectionObserver" in window)) {
+    // No scheduling is possible: restore everything right away and settle
+    // the machine, so every image reads exactly like a non-lazy one — the
+    // sources are back, the presentation is enabled, and a later real load
+    // event simply refreshes the metadata.
     for (const image of images) {
       startLazyLoad(image, null, hooks);
+      settleLazyImage(image, true, null, hooks);
     }
     return { disconnect() {} };
   }

@@ -76,6 +76,7 @@ import {
   finalizeVegaLiteViews,
   renderRichContent,
   rerenderThemeSensitiveContent,
+  revealLazyImage,
 } from "./lib/render-rich-content";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
 import {
@@ -1064,10 +1065,17 @@ function PreviewContent({
       onVisualError,
     });
     // The images may load now: the observer hands each parked source back as
-    // its image approaches the viewport. Only the body's own lifetime owns
-    // the observation — the next body swap disconnects it with the rest of
-    // the cleanup.
-    const lazyImages = observeLazyImages(root);
+    // its image approaches the viewport, and a loaded image's presentation
+    // (metadata tooltip, Lightbox) follows through the reveal hook. Only the
+    // body's own lifetime owns the observation — the next body swap
+    // disconnects it with the rest of the cleanup.
+    const lazyImages = observeLazyImages(root, {
+      onImageSettled: (image, loaded) => {
+        if (loaded) {
+          revealLazyImage(image);
+        }
+      },
+    });
     return () => {
       bodyGenerationRef.current++;
       initialRenderRef.current = null;

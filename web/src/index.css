@@ -1031,6 +1031,21 @@ body,
   display: none;
 }
 
+/* A lazy image still showing the shared loading placeholder. The frame's
+ * loading mark holds the presentation back until the real picture arrives:
+ * the magnifier is hidden through its [hidden] attribute (set by the same
+ * availability sync that withholds the Lightbox marker), and the metadata
+ * tooltip — which could only describe the placeholder's own 640×360/SVG —
+ * stays out of layout entirely. No spinner is layered on top: the
+ * placeholder SVG already carries the loading visual. */
+.markdown-body .m2h-image-loading {
+  cursor: default;
+}
+
+.markdown-body .m2h-image-loading .m2h-image-name-tooltip {
+  display: none;
+}
+
 /* A failed image collapses into the shared placeholder SVG. The frame keeps
  * its place in the text flow; the placeholder itself gets a fixed reading
  * size instead of inheriting the broken image's layout width (a 16px icon

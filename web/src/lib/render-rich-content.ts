@@ -660,6 +660,14 @@ function addImageEnhancements(root: HTMLElement): void {
       addImageLightbox(image, frame);
     }
     trackImageFailure(image);
+    // A lazy image still shows the shared loading placeholder: its frame is
+    // marked loading so the presentation holds back (the magnifier hides via
+    // the availability sync below, the tooltip via the stylesheet), and the
+    // Lightbox marker waits with it until revealLazyImage runs on load.
+    if (image.dataset.m2hLazyState === "pending") {
+      frame.classList.add("m2h-image-loading");
+      syncImageLightboxAvailability(image, false);
+    }
   }
 }
 
@@ -748,8 +756,11 @@ function replaceImageWithFallback(image: HTMLImageElement): void {
   }
   image.dataset.m2hFallback = "true";
   // Keep the failed source around for the top warning to report — after the
-  // swap, "src" no longer names what failed.
-  image.dataset.m2hOriginalSrc = image.getAttribute("src") ?? "";
+  // swap, "src" no longer names what failed. The lazy rewrite may already
+  // have parked the author's URL there; it stays the source of truth.
+  if (image.dataset.m2hOriginalSrc === undefined) {
+    image.dataset.m2hOriginalSrc = image.getAttribute("src") ?? "";
+  }
   // A <picture>'s <source> elements would keep feeding the original (missing)
   // candidates; without them the <img> src swap takes effect.
   image.parentElement?.querySelectorAll("source").forEach((source) => {
@@ -764,7 +775,15 @@ function replaceImageWithFallback(image: HTMLImageElement): void {
   // placeholder has neither a meaningful name nor size/format rows.
   const frame = image.closest(".m2h-image-frame");
   frame?.querySelector(":scope > .m2h-image-name-tooltip")?.remove();
+  frame?.classList.remove("m2h-image-loading");
   frame?.classList.add("m2h-image-failed");
+  // The slot has left the lazy machine: a pending/loading image settles as
+  // failed so no later viewport callback restores sources over the
+  // placeholder, and aria-busy goes with the placeholder.
+  if (image.dataset.m2hLazyState !== undefined) {
+    image.dataset.m2hLazyState = "failed";
+    image.removeAttribute("aria-busy");
+  }
 }
 
 // The image counterpart of syncRichVisualLightboxAvailability: whether an
@@ -804,30 +823,72 @@ function imageMetadataText(size: string | null, format: string | null): string {
 // pass usually runs before the browser finished fetching, so the first fill
 // happens on the load event; a cached image is already complete and reads out
 // immediately. A failed image simply never fills the line — the tooltip is
-// removed with the placeholder swap.
+// removed with the placeholder swap. The listener stays attached and refills
+// idempotently: a lazy image whose placeholder load races the real one gets
+// its line corrected when the real image's own load lands.
 function trackImageMetadata(
   image: HTMLImageElement,
   meta: HTMLSpanElement,
   hasAlt: boolean,
 ): void {
   const apply = () => {
-    const format = imageFormat(image);
-
-    const size =
-      image.naturalWidth > 0
-        ? `${image.naturalWidth} × ${image.naturalHeight}`
-        : null;
-
-    const metadata = imageMetadataText(size, format);
-
-    meta.textContent =
-      metadata === "" ? "" : hasAlt ? `(${metadata})` : metadata;
+    // A lazy image's placeholder reports its own intrinsic size and format
+    // here; the metadata line waits for the real image (see revealLazyImage).
+    if (
+      image.dataset.m2hLazyState !== undefined &&
+      image.dataset.m2hLazyState !== "loaded"
+    ) {
+      return;
+    }
+    fillImageMetadata(image, meta, hasAlt);
   };
   if (image.complete && image.naturalWidth > 0) {
     apply();
+  }
+  image.addEventListener("load", apply);
+}
+
+// One metadata fill, shared by the load listener and the lazy reveal.
+function fillImageMetadata(
+  image: HTMLImageElement,
+  meta: HTMLSpanElement,
+  hasAlt: boolean,
+): void {
+  const format = imageFormat(image);
+
+  const size =
+    image.naturalWidth > 0
+      ? `${image.naturalWidth} × ${image.naturalHeight}`
+      : null;
+
+  const metadata = imageMetadataText(size, format);
+
+  meta.textContent = metadata === "" ? "" : hasAlt ? `(${metadata})` : metadata;
+}
+
+// The load half of the lazy image contract: the observer settled this image
+// as loaded, so the presentation withheld at enhancement time follows. The
+// frame drops its loading mark, the metadata line reads the real picture
+// (never the placeholder it replaced), and the Lightbox — whose marker and
+// magnifier waited with the placeholder — becomes available.
+export function revealLazyImage(image: HTMLImageElement): void {
+  const state = image.dataset.m2hLazyState;
+  if (state !== "loaded") {
     return;
   }
-  image.addEventListener("load", apply, { once: true });
+  const frame = image.closest(".m2h-image-frame");
+  frame?.classList.remove("m2h-image-loading");
+  const tooltip = frame?.querySelector(":scope > .m2h-image-name-tooltip");
+  const meta = tooltip?.querySelector<HTMLElement>(
+    ":scope > .m2h-image-tooltip-meta",
+  );
+  const alt = tooltip?.querySelector(":scope > .m2h-image-tooltip-alt");
+  if (meta instanceof HTMLSpanElement) {
+    fillImageMetadata(image, meta, alt != null);
+  }
+  if (imageLightboxTarget(image) !== null) {
+    syncImageLightboxAvailability(image, true);
+  }
 }
 
 // The display format of an image, derived from its URL extension or data URL
