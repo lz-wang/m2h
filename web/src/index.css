@@ -1037,9 +1037,17 @@ body,
  * availability sync that withholds the Lightbox marker), and the metadata
  * tooltip — which could only describe the placeholder's own 640×360/SVG —
  * stays out of layout entirely. No spinner is layered on top: the
- * placeholder SVG already carries the loading visual. */
+ * placeholder SVG already carries the loading visual. The placeholder keeps
+ * the failed placeholder's capped reading size instead of its natural
+ * 640×360: a small image loading into a huge reserved slot would shrink the
+ * document by hundreds of pixels mid-read, and that shrink is exactly what
+ * scroll anchoring cannot hold steady. */
 .markdown-body .m2h-image-loading {
   cursor: default;
+}
+
+.markdown-body .m2h-image-loading img {
+  width: min(100%, 18rem);
 }
 
 .markdown-body .m2h-image-loading .m2h-image-name-tooltip {

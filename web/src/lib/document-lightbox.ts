@@ -98,8 +98,14 @@ function snapshotLightboxItem(
   if (element instanceof HTMLImageElement) {
     return {
       kind: "image",
-      src: element.currentSrc || element.src,
-      srcSet: element.getAttribute("srcset"),
+      // A lazy image still parked on the placeholder snapshots its real
+      // source instead: navigating to it is the reader explicitly asking for
+      // that picture, and the dialog's own <img> fetches it on demand — the
+      // body copy stays lazy and can never show the placeholder.
+      src:
+        element.dataset.m2hOriginalSrc ?? (element.currentSrc || element.src),
+      srcSet:
+        element.dataset.m2hOriginalSrcset ?? element.getAttribute("srcset"),
       sizes: element.getAttribute("sizes"),
       alt: element.alt,
       title: element.title || null,

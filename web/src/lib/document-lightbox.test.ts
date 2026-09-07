@@ -274,6 +274,36 @@ describe("collectLightboxState", () => {
     });
   });
 
+  it("snapshots a lazy pending image by its parked source, not the placeholder", () => {
+    // What the body looks like while a below-the-fold image waits: the
+    // element shows the placeholder, the real source is parked on it.
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <p><img src="/loaded.png" alt="Loaded" data-m2h-lightbox-item="true"></p>
+      <p><img src="/ui/image-loading.svg" alt="Parked"
+        data-m2h-lightbox-item="true"
+        data-m2h-original-src="/far-below.png"
+        data-m2h-original-srcset="far.png 1x, far@2x.png 2x"
+        data-m2h-lazy-state="pending"></p>
+    `;
+    const selected = root.querySelector<HTMLImageElement>("img");
+    if (selected === null) throw new Error("image missing");
+
+    const state = collectLightboxState(root, selected);
+
+    // The pending neighbor stays addressable from the loaded image's
+    // next/previous, and navigating to it would fetch the real picture —
+    // never the placeholder.
+    const items = state?.items ?? [];
+    expect(items).toHaveLength(2);
+    expect(items[1]).toMatchObject({
+      kind: "image",
+      src: "/far-below.png",
+      srcSet: "far.png 1x, far@2x.png 2x",
+      alt: "Parked",
+    });
+  });
+
   it("interleaves bitmap, Mermaid, and Vega-Lite snapshots in document order", () => {
     const root = mixedRoot();
     const selected = root.querySelector<HTMLElement>("div.mermaid");

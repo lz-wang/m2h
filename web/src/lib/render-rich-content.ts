@@ -661,12 +661,19 @@ function addImageEnhancements(root: HTMLElement): void {
     }
     trackImageFailure(image);
     // A lazy image still shows the shared loading placeholder: its frame is
-    // marked loading so the presentation holds back (the magnifier hides via
-    // the availability sync below, the tooltip via the stylesheet), and the
-    // Lightbox marker waits with it until revealLazyImage runs on load.
+    // marked loading so the presentation holds back (the magnifier hides,
+    // the tooltip via the stylesheet). The Lightbox marker stays — the item
+    // list may still address this image from a loaded neighbor's next /
+    // previous, and the snapshot carries its real source — but opening it
+    // waits for the real pixels until revealLazyImage runs on load.
     if (image.dataset.m2hLazyState === "pending") {
       frame.classList.add("m2h-image-loading");
-      syncImageLightboxAvailability(image, false);
+      const trigger = frame.querySelector<HTMLButtonElement>(
+        ":scope > .m2h-lightbox-trigger",
+      );
+      if (trigger) {
+        trigger.hidden = true;
+      }
     }
   }
 }
@@ -869,8 +876,8 @@ function fillImageMetadata(
 // The load half of the lazy image contract: the observer settled this image
 // as loaded, so the presentation withheld at enhancement time follows. The
 // frame drops its loading mark, the metadata line reads the real picture
-// (never the placeholder it replaced), and the Lightbox — whose marker and
-// magnifier waited with the placeholder — becomes available.
+// (never the placeholder it replaced), and the magnifier that waited with
+// the placeholder comes back.
 export function revealLazyImage(image: HTMLImageElement): void {
   const state = image.dataset.m2hLazyState;
   if (state !== "loaded") {
@@ -886,8 +893,11 @@ export function revealLazyImage(image: HTMLImageElement): void {
   if (meta instanceof HTMLSpanElement) {
     fillImageMetadata(image, meta, alt != null);
   }
-  if (imageLightboxTarget(image) !== null) {
-    syncImageLightboxAvailability(image, true);
+  const trigger = frame?.querySelector<HTMLButtonElement>(
+    ":scope > .m2h-lightbox-trigger",
+  );
+  if (trigger) {
+    trigger.hidden = false;
   }
 }
 
