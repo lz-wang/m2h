@@ -487,6 +487,48 @@ test("keeps the sticky reader toolbar translucent", async ({ page }) => {
   expect(dark.backdropFilter).toContain("blur");
 });
 
+test("paints the sidebar and the TOC rail with the same surface", async ({
+  page,
+}) => {
+  // --sidebar is an alias of --background (see web/src/index.css): the
+  // navigation column must read as the same surface as the reader and the
+  // TOC rail in both themes, not as a slightly lighter/darker plate beside
+  // them. Computed values are compared per theme so an alias that only
+  // holds in one palette cannot slip through.
+  await page.setViewportSize({ width: 1440, height: 800 });
+  await waitForBody(page, "/doc/scroll.md");
+  await expect(page.locator(".reader-toc")).toBeVisible();
+
+  const readNavigationBackgrounds = () =>
+    page.evaluate(() => {
+      const sidebar = document.querySelector<HTMLElement>(
+        '[data-slot="sidebar-inner"]',
+      );
+      const toc = document.querySelector<HTMLElement>(".reader-toc");
+
+      if (sidebar === null || toc === null) {
+        throw new Error("sidebar or TOC not rendered");
+      }
+
+      return {
+        sidebar: getComputedStyle(sidebar).backgroundColor,
+        toc: getComputedStyle(toc).backgroundColor,
+      };
+    });
+
+  let backgrounds = await readNavigationBackgrounds();
+  expect(backgrounds.sidebar).toBe(backgrounds.toc);
+
+  await page.getByRole("button", { name: /^显示主题：/ }).click();
+  await page.getByRole("menuitemradio", { name: "深色" }).click();
+  await page.waitForFunction(() =>
+    document.documentElement.classList.contains("m2h-mode-dark"),
+  );
+
+  backgrounds = await readNavigationBackgrounds();
+  expect(backgrounds.sidebar).toBe(backgrounds.toc);
+});
+
 test("offers the outline in a sheet on narrow viewports", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 768 });
   await waitForBody(page, "/doc/scroll.md");
