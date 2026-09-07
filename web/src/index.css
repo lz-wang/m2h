@@ -442,10 +442,19 @@ body,
   font-weight: 600;
 }
 
+/* Both tooltip text rows share the popup's own foreground at the same
+ * opacity: the tooltip is an inverted surface, and a muted token lifted from
+ * the page scheme would break that hierarchy. They differ only in layout —
+ * the title truncates on one line, the description wraps as prose. */
+.tree-tooltip-title,
+.tree-tooltip-description {
+  color: inherit;
+  opacity: 0.78;
+}
+
 .tree-tooltip-title {
   max-width: 100%;
   overflow: hidden;
-  opacity: 0.78;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
@@ -455,7 +464,6 @@ body,
  * single-line name/title rows above. */
 .tree-tooltip-description {
   max-width: 100%;
-  color: var(--muted-foreground);
   font-size: 0.75rem;
   line-height: 1rem;
   overflow-wrap: anywhere;

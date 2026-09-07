@@ -248,6 +248,32 @@ test("opens the root README from the bare workspace address", async ({
     Math.abs(alignment.rowCenter - alignment.tooltipCenter),
   ).toBeLessThanOrEqual(2);
 
+  // Title and description share the tooltip's inverted foreground at the same
+  // opacity. Computed opacity is checked alongside color because equal colors
+  // at different opacities would still render at different brightness.
+  const colors = await page.evaluate(() => {
+    const title = document.querySelector<HTMLElement>(".tree-tooltip-title");
+    const description = document.querySelector<HTMLElement>(
+      ".tree-tooltip-description",
+    );
+
+    if (title === null || description === null) {
+      throw new Error("tooltip text not rendered");
+    }
+
+    const titleStyle = getComputedStyle(title);
+    const descriptionStyle = getComputedStyle(description);
+
+    return {
+      titleColor: titleStyle.color,
+      descriptionColor: descriptionStyle.color,
+      titleOpacity: titleStyle.opacity,
+      descriptionOpacity: descriptionStyle.opacity,
+    };
+  });
+  expect(colors.descriptionColor).toBe(colors.titleColor);
+  expect(colors.descriptionOpacity).toBe(colors.titleOpacity);
+
   // Picking a document from the tree still opens it under /doc/ (expanding
   // the collapsed directories on the way).
   await page.locator('[data-tree-path="a"]').click();
