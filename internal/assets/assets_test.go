@@ -328,6 +328,26 @@ func TestStylesheetCodeCopyButtonIsThemeAware(t *testing.T) {
 	}
 }
 
+// TestStylesheetCodeFrameOwnsExternalSpacing guards the spacing split between
+// the shared frame and the WebUI's collapsible modifier: every fenced code
+// block — collapsible or not — takes its outer margin from .m2h-code-frame,
+// so export HTML and the WebUI never diverge and the modifier stays purely
+// about collapse, fade, and toggle.
+func TestStylesheetCodeFrameOwnsExternalSpacing(t *testing.T) {
+	t.Parallel()
+
+	want := ".markdown-body .m2h-code-frame {\n  position: relative;\n  margin: 1rem 0;\n}"
+	for _, mode := range []string{"light", "dark", "auto"} {
+		stylesheet, err := Stylesheet(mode)
+		if err != nil {
+			t.Fatalf("Stylesheet(%q) returned error: %v", mode, err)
+		}
+		if !strings.Contains(stylesheet, want) {
+			t.Errorf("Stylesheet(%q) does not give .m2h-code-frame the shared external margin %q", mode, want)
+		}
+	}
+}
+
 func TestVendoredMetadata(t *testing.T) {
 	t.Parallel()
 

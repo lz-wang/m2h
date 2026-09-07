@@ -145,13 +145,15 @@ html.m2h-mode-dark {
 
 /*
  * The frame is the block's positioning context and the single owner of its
- * external margin. The explicit margin: 0 matches the vendored theme's own
- * pre margin and keeps a future theme upgrade from introducing a double
- * spacing — the inner pre's margin is reset below for exactly that reason.
+ * external margin: every fenced code block gets the same 1rem breathing room,
+ * collapsible or not, so the spacing never depends on the WebUI's collapsible
+ * modifier. The explicit margin matches the vendored theme's own pre margin
+ * and keeps a future theme upgrade from introducing a double spacing — the
+ * inner pre's margin is reset below for exactly that reason.
  */
 .markdown-body .m2h-code-frame {
   position: relative;
-  margin: 0;
+  margin: 1rem 0;
 }
 
 /*

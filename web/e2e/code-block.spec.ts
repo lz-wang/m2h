@@ -300,6 +300,46 @@ test("pins the copy control to the frame while code scrolls sideways", async ({
   }
 });
 
+test("keeps consistent vertical spacing around every code frame", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await waitForBody(page, "/doc/long-code.md");
+
+  // External spacing is owned by the shared .m2h-code-frame (see
+  // internal/assets/layout.css), not by the WebUI's collapsible modifier —
+  // otherwise plain blocks would hug their neighbors while only the folded
+  // ones got breathing room. The only legal exception is the vendored theme's
+  // document-edge reset (first child loses its top, last child its bottom,
+  // both with !important), so the frame's first/last-child status must match
+  // exactly where a zero margin shows up.
+  const margins = await page.evaluate(() =>
+    Array.from(document.querySelectorAll<HTMLElement>(".m2h-code-frame")).map(
+      (frame) => {
+        const style = getComputedStyle(frame);
+        const body = frame.closest(".markdown-body");
+        return {
+          top: style.marginTop,
+          bottom: style.marginBottom,
+          collapsible: frame.classList.contains("m2h-code-block"),
+          firstChild: body !== null && body.firstElementChild === frame,
+          lastChild: body !== null && body.lastElementChild === frame,
+        };
+      },
+    ),
+  );
+
+  // The fixture pairs three bare frames (3-line, 25-line, 3-line-but-wide)
+  // with the two collapsible ones, so both spacing paths are really exercised.
+  expect(margins).toHaveLength(5);
+  expect(margins.filter((margin) => margin.collapsible)).toHaveLength(2);
+
+  for (const margin of margins) {
+    expect(margin.top).toBe(margin.firstChild ? "0px" : "16px");
+    expect(margin.bottom).toBe(margin.lastChild ? "0px" : "16px");
+  }
+});
+
 interface BlockGeometry {
   clientHeight: number;
   scrollHeight: number;
