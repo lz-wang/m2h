@@ -225,6 +225,29 @@ test("opens the root README from the bare workspace address", async ({
     "e2e 固定目录的入口文档",
   );
 
+  // The popup is a multi-line tooltip, so it must anchor by its vertical
+  // center on the hovered row — only then does the popup arrow keep pointing
+  // at this file instead of visually landing on the row below it.
+  const alignment = await page.evaluate(() => {
+    const row = document.querySelector<HTMLElement>('[aria-current="page"]');
+    const tooltip = document.querySelector<HTMLElement>(".tree-tooltip");
+
+    if (row === null || tooltip === null) {
+      throw new Error("file row or tooltip not rendered");
+    }
+
+    const rowRect = row.getBoundingClientRect();
+    const tooltipRect = tooltip.getBoundingClientRect();
+
+    return {
+      rowCenter: rowRect.top + rowRect.height / 2,
+      tooltipCenter: tooltipRect.top + tooltipRect.height / 2,
+    };
+  });
+  expect(
+    Math.abs(alignment.rowCenter - alignment.tooltipCenter),
+  ).toBeLessThanOrEqual(2);
+
   // Picking a document from the tree still opens it under /doc/ (expanding
   // the collapsed directories on the way).
   await page.locator('[data-tree-path="a"]').click();

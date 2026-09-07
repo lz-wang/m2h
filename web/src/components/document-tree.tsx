@@ -376,7 +376,10 @@ function FileItem({
       tooltip={{
         hidden: false,
         side: "right",
-        align: "start",
+        // A multi-line popup (name/title/description) anchors by its vertical
+        // center on the hovered row, so the popup arrow keeps pointing at THIS
+        // file instead of drifting toward the next one.
+        align: "center",
         className: "tree-tooltip",
         children: (
           <>
