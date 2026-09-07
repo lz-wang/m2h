@@ -1278,6 +1278,27 @@ describe("App directory preview", () => {
     );
   });
 
+  it("loads document images through the lazy pipeline transparently", async () => {
+    render(
+      <App
+        api={createAPI({
+          getDocument: vi.fn().mockResolvedValue({
+            path: "README.md",
+            title: "Readme API Title",
+            html: '<p><img src="/assets/banner.png" alt="Banner"></p>',
+          }),
+        })}
+      />,
+    );
+    const image = await screen.findByRole("img", { name: "Banner" });
+    // jsdom has no IntersectionObserver, so the eager fallback restored the
+    // parked source and settled the machine right after mount: the reader
+    // sees the original src, no busy marker, and a settled state.
+    expect(image.getAttribute("src")).toBe("/assets/banner.png");
+    expect(image.dataset.m2hLazyState).toBe("loaded");
+    expect(image.getAttribute("aria-busy")).toBeNull();
+  });
+
   it("shows the empty-document state for blank bodies while keeping frontmatter", async () => {
     // Case A: a zero-byte Markdown file renders an empty body.
     let view = render(

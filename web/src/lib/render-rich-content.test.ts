@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { runInThisContext } from "node:vm";
 import { waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
+import { prepareLazyImages } from "./lazy-images";
 import type {
   MathAutoRenderer,
   MathAutoRenderOptions,
@@ -1564,6 +1564,190 @@ describe("image lightbox triggers", () => {
         item.kind === "image" ? new URL(item.src).pathname : item.kind,
       ),
     ).toEqual(["/b.png", "/a.png"]);
+  });
+});
+
+describe("lazy image presentation", () => {
+  // These cases mount the body through prepareLazyImages so the images carry
+  // the same pending rewrite the App produces before enhancement runs.
+  function mountPrepared(html: string): HTMLElement {
+    const root = document.createElement("div");
+    root.append(prepareLazyImages(html));
+    return root;
+  }
+
+  function metaTextOf(frame: HTMLElement): string {
+    const meta = frame.querySelector<HTMLElement>(
+      ".m2h-image-name-tooltip .m2h-image-tooltip-meta",
+    );
+    return meta?.textContent ?? "";
+  }
+
+  it("withholds the tooltip and the magnifier while the placeholder shows", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = mountPrepared(
+      '<p><img src="/assets/big.png" alt="大图" width="1200" height="800"></p>',
+    );
+
+    await renderRichContent(root, { mode: "light" });
+
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    const image = root.querySelector("img");
+    // The loading mark is what the stylesheet keys the tooltip and cursor
+    // on; the author's width/height survive the rewrite for aspect-ratio.
+    expect(frame?.classList.contains("m2h-image-loading")).toBe(true);
+    expect(image?.getAttribute("width")).toBe("1200");
+    expect(image?.getAttribute("height")).toBe("800");
+    // A placeholder is nothing to magnify: the trigger hides until the real
+    // picture has loaded, so a pending image can never be opened. The item
+    // marker stays — a loaded neighbor's next/previous still addresses it.
+    expect(
+      frame?.querySelector<HTMLButtonElement>(".m2h-lightbox-trigger")?.hidden,
+    ).toBe(true);
+    expect(image?.dataset.m2hLightboxItem).toBe("true");
+  });
+
+  it("never reads the placeholder's own size into the metadata line", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = mountPrepared('<p><img src="/assets/big.png" alt="大图"></p>');
+    const image = root.querySelector("img");
+    if (!(image instanceof HTMLImageElement)) {
+      throw new Error("image missing");
+    }
+
+    await renderRichContent(root, { mode: "light" });
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    if (frame === null) {
+      throw new Error("frame missing");
+    }
+
+    // The placeholder is a real 640×360 SVG: its load event carries exactly
+    // the wrong metadata, so the fill waits for the real image.
+    Object.defineProperty(image, "complete", { value: true });
+    Object.defineProperty(image, "naturalWidth", { value: 640 });
+    Object.defineProperty(image, "naturalHeight", { value: 360 });
+    image.dispatchEvent(new Event("load"));
+    expect(metaTextOf(frame)).toBe("");
+  });
+
+  it("fills the metadata and re-enables the Lightbox on reveal", async () => {
+    const { renderRichContent, revealLazyImage } = await import(
+      "./render-rich-content"
+    );
+    const root = mountPrepared('<p><img src="/assets/big.png" alt="大图"></p>');
+    const image = root.querySelector("img");
+    if (!(image instanceof HTMLImageElement)) {
+      throw new Error("image missing");
+    }
+
+    await renderRichContent(root, { mode: "light" });
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    if (frame === null) {
+      throw new Error("frame missing");
+    }
+
+    // The observer's restore put the real source back and settled loaded.
+    image.dataset.m2hLazyState = "loaded";
+    image.src = "/assets/big.png";
+    Object.defineProperty(image, "naturalWidth", { value: 1920 });
+    Object.defineProperty(image, "naturalHeight", { value: 1080 });
+    revealLazyImage(image);
+
+    // The real picture's metadata, the loading mark gone, and the Lightbox
+    // exactly as a non-lazy image's: marker stamped, trigger shown.
+    expect(metaTextOf(frame)).toBe("(1920 × 1080, PNG)");
+    expect(frame.classList.contains("m2h-image-loading")).toBe(false);
+    expect(image.dataset.m2hLightboxItem).toBe("true");
+    expect(
+      frame.querySelector<HTMLButtonElement>(".m2h-lightbox-trigger")?.hidden,
+    ).toBe(false);
+  });
+
+  it("corrects the metadata when the real load lands after an early reveal", async () => {
+    const { renderRichContent, revealLazyImage } = await import(
+      "./render-rich-content"
+    );
+    const root = mountPrepared('<p><img src="/assets/big.png" alt="大图"></p>');
+    const image = root.querySelector("img");
+    if (!(image instanceof HTMLImageElement)) {
+      throw new Error("image missing");
+    }
+
+    await renderRichContent(root, { mode: "light" });
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    if (frame === null) {
+      throw new Error("frame missing");
+    }
+
+    // The rare race: the placeholder's late load settles the machine while
+    // its pixels are still the ones showing, so reveal reads the placeholder.
+    image.dataset.m2hLazyState = "loaded";
+    image.src = "/assets/big.png";
+    Object.defineProperty(image, "naturalWidth", {
+      value: 640,
+      configurable: true,
+    });
+    Object.defineProperty(image, "naturalHeight", {
+      value: 360,
+      configurable: true,
+    });
+    revealLazyImage(image);
+    expect(metaTextOf(frame)).toBe("(640 × 360, PNG)");
+
+    // The real image's own load event must overwrite it.
+    Object.defineProperty(image, "naturalWidth", { value: 1920 });
+    Object.defineProperty(image, "naturalHeight", { value: 1080 });
+    image.dispatchEvent(new Event("load"));
+    expect(metaTextOf(frame)).toBe("(1920 × 1080, PNG)");
+  });
+
+  it("keeps a multi-image link's Lightbox withheld after reveal", async () => {
+    const { renderRichContent, revealLazyImage } = await import(
+      "./render-rich-content"
+    );
+    const root = mountPrepared(
+      '<p><a href="/doc/other.md"><img src="/a.png" alt="A"><img src="/b.png" alt="B"></a></p>',
+    );
+
+    await renderRichContent(root, { mode: "light" });
+    for (const image of root.querySelectorAll<HTMLImageElement>("img")) {
+      image.dataset.m2hLazyState = "loaded";
+      revealLazyImage(image);
+    }
+
+    // Reveal only re-enables what enhancement granted: images inside a
+    // multi-image anchor never get a Lightbox, lazy or not.
+    expect(
+      root.querySelectorAll('img[data-m2h-lightbox-item="true"]'),
+    ).toHaveLength(0);
+    expect(root.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(0);
+  });
+
+  it("settles a failed lazy image into the shared failure pipeline", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = mountPrepared(
+      '<p><img src="/assets/broken.png" alt="架构图"></p>',
+    );
+    const image = root.querySelector("img");
+    if (!(image instanceof HTMLImageElement)) {
+      throw new Error("image missing");
+    }
+
+    await renderRichContent(root, { mode: "light" });
+    image.dispatchEvent(new Event("error"));
+
+    // The failure pipeline reports the parked original — not the loading
+    // placeholder that never failed — and the slot leaves the lazy machine
+    // as failed, so no viewport callback can restore sources over it.
+    expect(image.getAttribute("src")).toBe("/ui/image-load-failed.svg");
+    expect(image.dataset.m2hOriginalSrc).toBe("/assets/broken.png");
+    expect(image.dataset.m2hLazyState).toBe("failed");
+    expect(image.getAttribute("aria-busy")).toBeNull();
+    const frame = root.querySelector<HTMLElement>(".m2h-image-frame");
+    expect(frame?.classList.contains("m2h-image-failed")).toBe(true);
+    expect(frame?.classList.contains("m2h-image-loading")).toBe(false);
+    expect(frame?.querySelector(".m2h-image-name-tooltip")).toBeNull();
+    expect(image.dataset.m2hLightboxItem).toBeUndefined();
   });
 });
 

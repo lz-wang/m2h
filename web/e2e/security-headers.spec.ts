@@ -69,14 +69,33 @@ test("renders rich content under the strict CSP without refusals", async ({
   ).toBeVisible();
 
   // The local SVG image actually loads — an img-src that forgot 'self'
-  // would leave it broken.
-  const svgDisplayed = await page.evaluate(() => {
+  // would leave it broken. It sits far below the fold, so lazy loading has
+  // not even requested it yet: find it by its parked original source and
+  // bring it into the load margin first.
+  await page.evaluate(() => {
     const image = Array.from(
       document.querySelectorAll<HTMLImageElement>(".markdown-body img"),
-    ).find((element) => element.src.endsWith("architecture.svg"));
-    return image ? image.complete && image.naturalWidth > 0 : false;
+    ).find(
+      (element) =>
+        element.dataset.m2hOriginalSrc?.endsWith("architecture.svg") ??
+        element.src.endsWith("architecture.svg"),
+    );
+    image?.scrollIntoView({ block: "center" });
   });
-  expect(svgDisplayed).toBe(true);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const image = Array.from(
+          document.querySelectorAll<HTMLImageElement>(".markdown-body img"),
+        ).find(
+          (element) =>
+            element.dataset.m2hOriginalSrc?.endsWith("architecture.svg") ??
+            element.src.endsWith("architecture.svg"),
+        );
+        return image ? image.complete && image.naturalWidth > 0 : false;
+      }),
+    )
+    .toBe(true);
 
   // Tablesort enhanced the table (role=columnheader is its stamp) and
   // clicking the numeric header reorders the rows.

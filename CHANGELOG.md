@@ -14,6 +14,10 @@
 
 ## [未发布]
 
+### 新增
+
+- WebUI 文档图片支持延迟加载：正文挂载前图片的真实 `src`/`srcset`（含 `<picture>` 的 `<source>` 候选）先被暂存到元素上，占位显示内置的 `image-loading.svg`，只有接近视口（提前约半个屏幕的加载余量）的图片才恢复真实地址并发起请求，远离阅读位置的图片完全不产生网络流量；图片加载完成后恢复名称/尺寸提示与 Lightbox（放大按钮在占位阶段隐藏，Lightbox 中切换到未加载的图片按其真实地址按需加载，正文不因浏览 Lightbox 而全量加载），加载失败继续走统一的 `image-load-failed.svg` 占位与顶部原始路径告警；不支持 IntersectionObserver 的环境自动退化为立即加载。作者在 Markdown raw HTML 中写明的 `width`/`height` 属性保持原样，浏览器可据此预留宽高比。
+
 ### 修复
 
 - 修复 WebUI 中加载失败图片的占位图不显示的问题：失败占位此前引用 `/image-load-failed.svg` 根路径，而文档服务把应用自带资源挂在 `/ui/` 前缀下，该地址实际返回 404，图片失败后原位置只剩破图图标与 alt 文本；现在占位改用真实可达的 `/ui/image-load-failed.svg`，与顶部资源告警、Lightbox 禁用等既有失败处理行为保持不变。

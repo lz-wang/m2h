@@ -28,6 +28,7 @@ export default defineConfig({
       include: [
         "src/App.tsx",
         "src/api.ts",
+        "src/lib/lazy-images.ts",
         "src/lib/render-rich-content.ts",
         "src/lib/runtime-loader.ts",
         "src/model.ts",

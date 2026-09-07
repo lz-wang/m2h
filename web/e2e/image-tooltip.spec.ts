@@ -22,6 +22,16 @@ async function openDocument(page: Page, query = "") {
       document.querySelectorAll(".m2h-image-name-tooltip").length === count,
     frameCount,
   );
+  // The images load lazily, and a still-pending placeholder keeps its
+  // tooltip out of layout (display: none) — every geometry assertion below
+  // reads the loaded presentation, so wait for the lazy machines to settle.
+  await page.waitForFunction(
+    (count) =>
+      document.querySelectorAll<HTMLImageElement>(
+        '.markdown-body img[data-m2h-lazy-state="loaded"]',
+      ).length === count,
+    frameCount,
+  );
 }
 
 interface TooltipGeometry {
