@@ -715,9 +715,10 @@ function addImageLightbox(image: HTMLImageElement, frame: HTMLElement): void {
 }
 
 // The placeholder a failed image collapses into. Served from the app's own
-// public assets, so the fallback itself failing can only mean the app is
-// broken — the m2hFallback marker below makes sure that can never loop.
-const IMAGE_FALLBACK_SRC = "/image-load-failed.svg";
+// public assets under the /ui/ mount the document server exposes them at, so
+// the fallback itself failing can only mean the app is broken — the
+// m2hFallback marker below makes sure that can never loop.
+const IMAGE_FALLBACK_SRC = "/ui/image-load-failed.svg";
 
 // Watch a framed image for a load failure and collapse it into the shared
 // placeholder. The replacement lives here, not in React's error reporting:

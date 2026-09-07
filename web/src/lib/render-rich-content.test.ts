@@ -1064,7 +1064,7 @@ describe("image lightbox triggers", () => {
     const image = root.querySelector("img");
     // The placeholder replaces the broken image in place: same element, same
     // slot in the text flow, app-owned fallback asset.
-    expect(image?.getAttribute("src")).toBe("/image-load-failed.svg");
+    expect(image?.getAttribute("src")).toBe("/ui/image-load-failed.svg");
     expect(image?.alt).toBe("图片加载失败");
     expect(image?.dataset.m2hFallback).toBe("true");
     // The failed source survives on the element for the top warning to report.
@@ -1094,7 +1094,7 @@ describe("image lightbox triggers", () => {
     // The second error is the fallback failing: the marker short-circuits the
     // replacement, so the element keeps the fallback source and the recorded
     // original still names the real failure.
-    expect(image?.getAttribute("src")).toBe("/image-load-failed.svg");
+    expect(image?.getAttribute("src")).toBe("/ui/image-load-failed.svg");
     expect(image?.dataset.m2hOriginalSrc).toBe("/assets/broken.png");
   });
 
@@ -1111,7 +1111,7 @@ describe("image lightbox triggers", () => {
 
     await renderRichContent(root, { mode: "light" });
 
-    expect(image?.getAttribute("src")).toBe("/image-load-failed.svg");
+    expect(image?.getAttribute("src")).toBe("/ui/image-load-failed.svg");
     expect(
       root
         .querySelector(".m2h-image-frame")
@@ -1262,7 +1262,7 @@ describe("image lightbox triggers", () => {
     const failed = root.querySelectorAll("img")[0];
     // The failure fallback applies inside a link exactly as it does anywhere
     // else: the placeholder swap is presentation, not interaction.
-    expect(failed?.getAttribute("src")).toBe("/image-load-failed.svg");
+    expect(failed?.getAttribute("src")).toBe("/ui/image-load-failed.svg");
     expect(failed?.dataset.m2hFallback).toBe("true");
     expect(failed?.dataset.m2hOriginalSrc).toBe("/assets/broken.png");
     const frame = failed?.closest(".m2h-image-frame");
@@ -1402,7 +1402,7 @@ describe("image lightbox triggers", () => {
       ".m2h-rich-visual-error",
     );
     expect(failure?.querySelector("img")?.getAttribute("src")).toBe(
-      "/image-load-failed.svg",
+      "/ui/image-load-failed.svg",
     );
     expect(
       failure?.querySelector(".m2h-rich-visual-error-title")?.textContent,

@@ -1268,7 +1268,7 @@ describe("App directory preview", () => {
     // double the warning.
     expect(image.dataset.m2hFallback).toBe("true");
     expect(image.dataset.m2hOriginalSrc).toBe("/assets/missing.png");
-    expect(image.getAttribute("src")).toBe("/image-load-failed.svg");
+    expect(image.getAttribute("src")).toBe("/ui/image-load-failed.svg");
     fireEvent.error(image);
     await waitFor(() =>
       expect(document.querySelectorAll(".asset-warning")).toHaveLength(1),

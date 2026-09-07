@@ -21,7 +21,7 @@ test("collapses the broken image into the shared placeholder", async ({
   const frame = page.locator(".m2h-image-failed");
   await expect(frame.locator("img")).toHaveAttribute(
     "src",
-    "/image-load-failed.svg",
+    "/ui/image-load-failed.svg",
   );
   // The placeholder is what the accessibility tree reads: the original alt
   // described a picture that never showed up.
