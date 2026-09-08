@@ -861,9 +861,10 @@ test("rotates, zooms, pans and closes a mermaid diagram without moving the docum
 
 // The diagram lightbox is an inline vector snapshot on a theme-aware canvas:
 // its markup stays byte-identical across the whole zoom range — no
-// re-serialization or rasterization — while the stage behind it renders white
-// in the light theme and black in the dark one. Bitmap images keep the
-// transparent stage; the modal backdrop is unchanged.
+// re-serialization or rasterization — while the full-viewport backdrop behind
+// it renders white in the light theme and black in the dark one, covering the
+// whole page (stage, gutters, and the footer zone alike). Bitmap images keep
+// the near-black scrim backdrop.
 test("renders the mermaid lightbox as a vector snapshot on a theme-aware canvas", async ({
   page,
 }) => {
@@ -876,21 +877,42 @@ test("renders the mermaid lightbox as a vector snapshot on a theme-aware canvas"
       const stage = document.querySelector<HTMLElement>(
         ".image-lightbox-stage",
       );
+      const backdrop = document.querySelector<HTMLElement>(
+        ".image-lightbox-backdrop",
+      );
       const svg = document.querySelector(".image-lightbox-vector > svg");
-      if (stage === null || svg === null) {
-        throw new Error("lightbox stage was not rendered");
+      if (stage === null || backdrop === null || svg === null) {
+        throw new Error("lightbox layers were not rendered");
       }
+      const rect = backdrop.getBoundingClientRect();
       return {
         kind: stage.dataset.visualKind,
-        background: getComputedStyle(stage).backgroundColor,
+        backdropKind: backdrop.dataset.visualKind,
+        background: getComputedStyle(backdrop).backgroundColor,
+        geometry: {
+          left: rect.left,
+          top: rect.top,
+          width: rect.width,
+          height: rect.height,
+          viewportWidth: document.documentElement.clientWidth,
+          viewportHeight: document.documentElement.clientHeight,
+        },
         markup: svg.outerHTML,
       };
     });
 
-  // Light theme: the diagram canvas is white and the snapshot stays inline.
+  // Light theme: the whole modal page is white and the snapshot stays inline.
   const light = await readLightbox();
   expect(light.kind).toBe("mermaid");
+  expect(light.backdropKind).toBe("mermaid");
   expect(light.background).toBe("rgb(255, 255, 255)");
+  // "Covers the page" is a geometry contract, not only a color one.
+  expect(light.geometry.left).toBe(0);
+  expect(light.geometry.top).toBe(0);
+  expect(Math.abs(light.geometry.width - light.geometry.viewportWidth))
+    .toBeLessThanOrEqual(1);
+  expect(Math.abs(light.geometry.height - light.geometry.viewportHeight))
+    .toBeLessThanOrEqual(1);
   expect(light.markup).toContain("<svg");
 
   // Zoom from 1x to the 5x cap without serializing or rasterizing the SVG.
@@ -1061,7 +1083,8 @@ test("plays the enter and exit transitions around a plain image", async ({
   // Both presentation layers really entered through their starting states…
   expect(await enterStage).toBe(true);
   expect(await enterBackdrop).toBe(true);
-  // …and settle fully opaque while the popup stays up.
+  // …and settle fully opaque while the popup stays up. A plain image keeps
+  // the near-black scrim across the whole viewport.
   const popup = page.locator(".image-lightbox");
   await expect(popup).toBeVisible();
   await expect(popup.locator(".image-lightbox-stage")).toHaveCSS(
@@ -1071,6 +1094,10 @@ test("plays the enter and exit transitions around a plain image", async ({
   await expect(page.locator(".image-lightbox-backdrop")).toHaveCSS(
     "opacity",
     "1",
+  );
+  await expect(page.locator(".image-lightbox-backdrop")).toHaveCSS(
+    "background-color",
+    "rgba(0, 0, 0, 0.86)",
   );
 
   // Closing runs the exit transition before the popup leaves the DOM.

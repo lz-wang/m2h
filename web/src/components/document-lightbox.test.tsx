@@ -112,7 +112,7 @@ describe("DocumentLightbox", () => {
     expect(screen.getByText("第 2 项，共 3 项")).toBeTruthy();
   });
 
-  it("marks the stage with the item kind for the theme-aware diagram canvas", () => {
+  it("marks the stage and the backdrop with the item kind for the theme-aware diagram canvas", () => {
     const items: LightboxItem[] = [
       {
         kind: "image",
@@ -157,11 +157,14 @@ describe("DocumentLightbox", () => {
       screen
         .getByRole("dialog")
         .querySelector<HTMLElement>(".image-lightbox-stage");
-    // A bitmap image keeps the transparent stage…
+    const backdrop = () =>
+      document.body.querySelector<HTMLElement>(".image-lightbox-backdrop");
+    // A bitmap image keeps the transparent stage and the scrim backdrop…
     expect(stage()?.dataset.visualKind).toBe("image");
+    expect(backdrop()?.dataset.visualKind).toBe("image");
 
     // … while both SVG visual kinds are marked, which is what the stylesheet
-    // keys the white/black diagram canvas on.
+    // keys the full-viewport white/black diagram canvas on.
     view.rerender(
       <DocumentLightbox
         items={items}
@@ -173,6 +176,7 @@ describe("DocumentLightbox", () => {
       />,
     );
     expect(stage()?.dataset.visualKind).toBe("mermaid");
+    expect(backdrop()?.dataset.visualKind).toBe("mermaid");
     expect(
       stage()?.querySelectorAll(".image-lightbox-vector > svg"),
     ).toHaveLength(1);
@@ -188,6 +192,7 @@ describe("DocumentLightbox", () => {
       />,
     );
     expect(stage()?.dataset.visualKind).toBe("vega-lite");
+    expect(backdrop()?.dataset.visualKind).toBe("vega-lite");
     expect(
       stage()?.querySelectorAll(".image-lightbox-vector > svg"),
     ).toHaveLength(1);

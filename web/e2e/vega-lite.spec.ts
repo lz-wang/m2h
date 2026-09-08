@@ -552,18 +552,38 @@ test("browses charts, diagrams, and images in one lightbox sequence", async ({
   );
   await expect(counter).toHaveText("3 / 3");
 
-  // The chart remains a native inline SVG on the light theme's diagram canvas.
+  // The chart remains a native inline SVG, and the light theme's diagram
+  // canvas is the full-viewport backdrop, not just the stage.
   const stageState = await page.evaluate(() => {
     const stage = document.querySelector<HTMLElement>(".image-lightbox-stage");
+    const backdrop = document.querySelector<HTMLElement>(
+      ".image-lightbox-backdrop",
+    );
     const svg = document.querySelector(".image-lightbox-vector > svg");
+    const rect = backdrop?.getBoundingClientRect();
     return {
       kind: stage?.dataset.visualKind,
-      background: stage === null ? "" : getComputedStyle(stage).backgroundColor,
+      backdropKind: backdrop?.dataset.visualKind ?? null,
+      background:
+        backdrop === null || backdrop === undefined
+          ? ""
+          : getComputedStyle(backdrop).backgroundColor,
+      left: rect?.left ?? -1,
+      top: rect?.top ?? -1,
+      width: rect?.width ?? -1,
+      height: rect?.height ?? -1,
+      viewportWidth: document.documentElement.clientWidth,
+      viewportHeight: document.documentElement.clientHeight,
       svgCount: svg === null ? 0 : 1,
     };
   });
   expect(stageState.kind).toBe("vega-lite");
+  expect(stageState.backdropKind).toBe("vega-lite");
   expect(stageState.background).toBe("rgb(255, 255, 255)");
+  expect(stageState.left).toBe(0);
+  expect(stageState.top).toBe(0);
+  expect(stageState.width).toBe(stageState.viewportWidth);
+  expect(stageState.height).toBe(stageState.viewportHeight);
   expect(stageState.svgCount).toBe(1);
   await expect(page.locator(".image-lightbox-image")).toHaveCount(0);
 

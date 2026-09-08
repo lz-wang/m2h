@@ -1171,10 +1171,12 @@ body,
  */
 /* The diagram canvas inside the Lightbox: SVG visuals (Mermaid diagrams,
  * Vega-Lite charts) bake a white (light) / black (dark) page into their
- * palette, so their stage mirrors that canvas instead of showing the
- * semi-transparent backdrop through the diagram's transparent background.
- * Ordinary bitmap images keep the transparent stage. The backdrop itself is
- * unchanged — this colors the stage area only, not the whole modal. */
+ * palette. The full-viewport backdrop mirrors that canvas, so the whole
+ * modal reads as one seamless page behind the diagram instead of a diagram
+ * slab floating on the dark scrim. Ordinary bitmap images keep the
+ * near-black scrim. The background rides on the backdrop (not the stage or
+ * popup) so the white/black canvas follows the backdrop's own enter/exit
+ * fade — no flash of scrim, no instant white cut-in. */
 :root {
   --m2h-lightbox-diagram-bg: #fff;
 }
@@ -1183,8 +1185,8 @@ body,
   --m2h-lightbox-diagram-bg: #000;
 }
 
-.image-lightbox-stage[data-visual-kind="mermaid"],
-.image-lightbox-stage[data-visual-kind="vega-lite"] {
+.image-lightbox-backdrop[data-visual-kind="mermaid"],
+.image-lightbox-backdrop[data-visual-kind="vega-lite"] {
   background: var(--m2h-lightbox-diagram-bg);
 }
 
