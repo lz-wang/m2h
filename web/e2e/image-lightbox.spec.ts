@@ -388,9 +388,7 @@ async function expectCenteredInViewport(page: Page) {
     if (info === undefined) {
       throw new Error("lightbox info was not rendered");
     }
-    return Math.abs(
-      (info.left + info.right) / 2 - window.innerWidth / 2,
-    );
+    return Math.abs((info.left + info.right) / 2 - window.innerWidth / 2);
   });
   expect(centerDelta).toBeLessThanOrEqual(1);
 }
@@ -978,10 +976,12 @@ test("renders the mermaid lightbox as a vector snapshot on a theme-aware canvas"
   // "Covers the page" is a geometry contract, not only a color one.
   expect(light.geometry.left).toBe(0);
   expect(light.geometry.top).toBe(0);
-  expect(Math.abs(light.geometry.width - light.geometry.viewportWidth))
-    .toBeLessThanOrEqual(1);
-  expect(Math.abs(light.geometry.height - light.geometry.viewportHeight))
-    .toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(light.geometry.width - light.geometry.viewportWidth),
+  ).toBeLessThanOrEqual(1);
+  expect(
+    Math.abs(light.geometry.height - light.geometry.viewportHeight),
+  ).toBeLessThanOrEqual(1);
   expect(light.markup).toContain("<svg");
 
   // Zoom from 1x to the 5x cap without serializing or rasterizing the SVG.

@@ -682,9 +682,7 @@ describe("DocumentLightbox", () => {
     expect(infoOf().querySelector(".image-lightbox-alt")?.textContent).toBe(
       "Image 0",
     );
-    expect(
-      infoOf().querySelector(".image-lightbox-meta"),
-    ).toBeNull();
+    expect(infoOf().querySelector(".image-lightbox-meta")).toBeNull();
 
     const image = currentItem();
     Object.defineProperty(image, "naturalWidth", { value: 1024 });
@@ -769,9 +767,7 @@ describe("DocumentLightbox", () => {
       />,
     );
 
-    expect(
-      infoOf().querySelector(".image-lightbox-meta"),
-    ).toBeNull();
+    expect(infoOf().querySelector(".image-lightbox-meta")).toBeNull();
 
     // React reuses the <img> node across items, so this is the same element
     // with a fresh src — re-define its size stub for the second load.
