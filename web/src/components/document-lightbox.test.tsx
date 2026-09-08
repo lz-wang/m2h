@@ -19,7 +19,6 @@ function makeItems(count: number): LightboxItem[] {
     sizes: null,
     alt: `Image ${index}`,
     title: null,
-    format: "PNG",
   }));
 }
 
@@ -121,7 +120,6 @@ describe("DocumentLightbox", () => {
         sizes: null,
         alt: "A",
         title: null,
-        format: "PNG",
       },
       {
         kind: "mermaid",
@@ -315,7 +313,7 @@ describe("DocumentLightbox", () => {
         intrinsicHeight: 50,
         alt: "Mermaid 图表",
         title: null,
-        format: "SVG",
+        format: "SVG" as const,
       },
     ],
   ])("uses the mouse wheel to zoom the %s", (_label, item) => {
@@ -678,14 +676,15 @@ describe("DocumentLightbox", () => {
   it("shows the full alt text and the intrinsic metadata after the image loads", () => {
     renderLightbox(makeItems(1), 0);
 
-    // Before the dialog's own <img> has loaded, only the format is known —
-    // never a stale or placeholder size.
+    // Before the dialog's own <img> has loaded, nothing about the picture is
+    // known — no stale or placeholder size, and no format guessed from the
+    // snapshot's src while a srcset might still pick another candidate.
     expect(infoOf().querySelector(".image-lightbox-alt")?.textContent).toBe(
       "Image 0",
     );
-    expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
-      "PNG",
-    );
+    expect(
+      infoOf().querySelector(".image-lightbox-meta"),
+    ).toBeNull();
 
     const image = currentItem();
     Object.defineProperty(image, "naturalWidth", { value: 1024 });
@@ -694,6 +693,27 @@ describe("DocumentLightbox", () => {
 
     expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
       "1024 × 768 · PNG",
+    );
+  });
+
+  it("derives the image format from the resource the dialog actually loaded", () => {
+    renderLightbox(makeItems(1), 0);
+
+    // A srcset re-selects its candidate in the dialog: whatever the body
+    // loaded, the metadata must describe the resource on screen now — the
+    // element's currentSrc, not its src attribute.
+    const image = currentItem();
+    image.src = "/fallback.jpg";
+    Object.defineProperty(image, "currentSrc", {
+      configurable: true,
+      value: "/winner.webp",
+    });
+    Object.defineProperty(image, "naturalWidth", { value: 3840 });
+    Object.defineProperty(image, "naturalHeight", { value: 2160 });
+    fireEvent.load(image);
+
+    expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
+      "3840 × 2160 · WEBP",
     );
   });
 
@@ -708,7 +728,7 @@ describe("DocumentLightbox", () => {
     );
   });
 
-  it("drops the previous image's size when the item changes", () => {
+  it("drops the previous image's size and format when the item changes", () => {
     const items = makeItems(2);
     const view = render(
       <DocumentLightbox
@@ -736,8 +756,8 @@ describe("DocumentLightbox", () => {
     );
 
     // The parent feeds the switched index back as a rerender, exactly like
-    // App.tsx does: the old pixels' size must not survive into the next
-    // item's info area while its own picture loads.
+    // App.tsx does: none of the old picture's metadata may survive into the
+    // next item's info area while its own picture loads.
     view.rerender(
       <DocumentLightbox
         items={items}
@@ -749,9 +769,9 @@ describe("DocumentLightbox", () => {
       />,
     );
 
-    expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
-      "PNG",
-    );
+    expect(
+      infoOf().querySelector(".image-lightbox-meta"),
+    ).toBeNull();
 
     // React reuses the <img> node across items, so this is the same element
     // with a fresh src — re-define its size stub for the second load.
@@ -774,9 +794,21 @@ describe("DocumentLightbox", () => {
     const item = { ...makeItems(1)[0], alt: "" };
     renderLightbox([item], 0);
 
+    // Nothing is known yet on either line, so the whole info area waits.
+    expect(
+      document
+        .querySelector(".image-lightbox-footer")
+        ?.querySelector(".image-lightbox-info"),
+    ).toBeNull();
+
+    const image = currentItem();
+    Object.defineProperty(image, "naturalWidth", { value: 16 });
+    Object.defineProperty(image, "naturalHeight", { value: 16 });
+    fireEvent.load(image);
+
     expect(infoOf().querySelector(".image-lightbox-alt")).toBeNull();
     expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
-      "PNG",
+      "16 × 16 · PNG",
     );
   });
 });

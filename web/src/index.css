@@ -1385,19 +1385,24 @@ body,
 }
 
 /* The info plate mirrors the toolbar's translucent treatment: readable over
- * any visual, dimmed enough to read as chrome. The width is capped like the
- * body tooltip's — 80% of the visible page — so an enormous alt text wraps
- * across most of the viewport but never past it. */
+ * any visual, dimmed enough to read as chrome, and centered above it like
+ * the toolbar is. The cap is 80% of the *viewport* — deliberately a
+ * different contract from the body tooltip's 80% of the reading document:
+ * the Lightbox is a full-viewport modal with no reading column, so the
+ * page it lives on is the viewport itself. */
 .image-lightbox-info {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  align-items: center;
 
   width: fit-content;
   max-width: min(80vw, calc(100vw - 2rem));
+  margin-inline: auto;
   padding: 0.5rem 0.75rem;
 
   border-radius: 0.625rem;
+  text-align: center;
 
   background: rgb(20 20 20 / 55%);
   backdrop-filter: blur(8px);

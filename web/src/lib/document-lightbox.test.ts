@@ -271,7 +271,6 @@ describe("collectLightboxState", () => {
       sizes: null,
       alt: "Two",
       title: null,
-      format: "PNG",
     });
   });
 
@@ -302,9 +301,6 @@ describe("collectLightboxState", () => {
       src: "/far-below.png",
       srcSet: "far.png 1x, far@2x.png 2x",
       alt: "Parked",
-      // The format follows the parked real source: the element's live src
-      // is the placeholder, whose SVG must never leak into the item.
-      format: "PNG",
     });
   });
 
@@ -332,7 +328,6 @@ describe("collectLightboxState", () => {
       src: "/in-flight.png",
       srcSet: "in-flight.png 1x, in-flight@2x.png 2x",
       alt: "In flight",
-      format: "PNG",
     });
   });
 
@@ -389,7 +384,6 @@ describe("collectLightboxState", () => {
       kind: "image",
       srcSet: null,
       alt: "Settled picture",
-      format: "PNG",
     });
   });
 

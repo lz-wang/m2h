@@ -371,10 +371,29 @@ test("keeps the linked image's anchor while its trigger opens the lightbox", asy
 
 // --- Info area ----------------------------------------------------------------
 //
-// The footer reports the full alt text plus "intrinsic size · format". For a
-// bitmap the size comes from the dialog's own loaded <img> (never from the
-// body snapshot, which may have caught a lazy placeholder); for an SVG visual
-// it is the snapshot's intrinsic size with the SVG format.
+// The footer reports the full alt text plus "intrinsic size · format", all of
+// it centered above the toolbar. For a bitmap both facts come from the
+// dialog's own loaded <img> (never from the body snapshot, which may have
+// caught a lazy placeholder or a different srcset winner); for an SVG visual
+// it is the snapshot's intrinsic size with the SVG format. The plate caps at
+// 80% of the viewport — the Lightbox is a full-viewport modal, so its "page"
+// is the viewport, unlike the reading tooltip's document-width cap.
+
+// The viewport center is where both the info plate and the toolbar sit.
+async function expectCenteredInViewport(page: Page) {
+  const centerDelta = await page.evaluate(() => {
+    const info = document
+      .querySelector<HTMLElement>(".image-lightbox-info")
+      ?.getBoundingClientRect();
+    if (info === undefined) {
+      throw new Error("lightbox info was not rendered");
+    }
+    return Math.abs(
+      (info.left + info.right) / 2 - window.innerWidth / 2,
+    );
+  });
+  expect(centerDelta).toBeLessThanOrEqual(1);
+}
 
 test("shows the full alt text and intrinsic metadata in the footer", async ({
   page,
@@ -389,12 +408,50 @@ test("shows the full alt text and intrinsic metadata in the footer", async ({
   await expect(info.locator(".image-lightbox-meta")).toHaveText(
     "1200 × 600 · PNG",
   );
+  await expectCenteredInViewport(page);
 
   await page.getByRole("button", { name: "下一项" }).click();
   await expect(info.locator(".image-lightbox-alt")).toHaveText("链接图片");
   await expect(info.locator(".image-lightbox-meta")).toHaveText(
     "480 × 1200 · PNG",
   );
+  await expectCenteredInViewport(page);
+});
+
+test("reports the format of the resource the lightbox actually loaded", async ({
+  page,
+}) => {
+  await openDocument(page);
+
+  // Point the first image's srcset at two candidates of *different* formats,
+  // with a slot so large the widest candidate always wins — and make that
+  // winner a non-PNG resource (the app's own SVG). The snapshot's src
+  // attribute still says landscape.png, so a metadata line ending in SVG
+  // proves the format was derived from the resource the dialog's own <img>
+  // selected, not from the snapshot's fallback src.
+  await page.evaluate(() => {
+    const image = document.querySelector<HTMLImageElement>(
+      ".m2h-image-frame img",
+    );
+    if (image === null) {
+      throw new Error("image was not rendered");
+    }
+    image.sizes = "100000px";
+    image.srcset =
+      "/assets/images/landscape.png 640w, /ui/image-loading.svg 2400w";
+  });
+  // …and the body's own selection must have settled to the SVG too, so the
+  // snapshot cannot accidentally carry a stale different-format src.
+  await page.waitForFunction(() =>
+    document
+      .querySelector<HTMLImageElement>(".m2h-image-frame img")
+      ?.currentSrc.includes("image-loading.svg"),
+  );
+
+  await openLightbox(page, 0);
+  await expect(
+    page.locator(".image-lightbox-info .image-lightbox-meta"),
+  ).toHaveText(/ · SVG$/);
 });
 
 test("wraps a long alt text instead of truncating it", async ({ page }) => {
@@ -402,8 +459,10 @@ test("wraps a long alt text instead of truncating it", async ({ page }) => {
 
   // Author a long alt the way a document would: the snapshot reads the alt
   // from the body at open time, so the info area receives exactly this text.
+  // Four repetitions guarantee the text overflows the 80vw plate, so the
+  // cap — not the text — decides the plate's width below.
   const longAlt =
-    "这是一段非常长的图片说明，用于验证信息区完整换行展示，".repeat(3);
+    "这是一段非常长的图片说明，用于验证信息区完整换行展示，".repeat(4);
   await page.evaluate((text) => {
     const image = document.querySelector<HTMLImageElement>(
       ".m2h-image-frame img",
@@ -427,7 +486,8 @@ test("wraps a long alt text instead of truncating it", async ({ page }) => {
   );
   expect(lineCount).toBeGreaterThan(1.5);
 
-  // …with the text and its plate staying inside the viewport.
+  // …centered on the viewport, capped at 80% of it, and never spilling out
+  // of the page.
   const geometry = await page.evaluate(() => {
     const info = document.querySelector<HTMLElement>(".image-lightbox-info");
     const altLine = document.querySelector<HTMLElement>(
@@ -439,6 +499,11 @@ test("wraps a long alt text instead of truncating it", async ({ page }) => {
     const infoRect = info.getBoundingClientRect();
     const altRect = altLine.getBoundingClientRect();
     return {
+      centerDelta: Math.abs(
+        (infoRect.left + infoRect.right) / 2 - window.innerWidth / 2,
+      ),
+      width: infoRect.width,
+      viewportCap: window.innerWidth * 0.8,
       infoRight: infoRect.right,
       altRight: altRect.right,
       viewport: window.innerWidth,
@@ -447,6 +512,10 @@ test("wraps a long alt text instead of truncating it", async ({ page }) => {
         document.documentElement.clientWidth,
     };
   });
+  expect(geometry.centerDelta).toBeLessThanOrEqual(1);
+  expect(geometry.width).toBeLessThanOrEqual(geometry.viewportCap + 1);
+  // The text overflows the cap, so the plate width IS the cap.
+  expect(geometry.width).toBeCloseTo(geometry.viewportCap, 0);
   expect(geometry.altRight).toBeLessThanOrEqual(geometry.infoRight + 1);
   expect(geometry.infoRight).toBeLessThanOrEqual(geometry.viewport);
   expect(geometry.overflow).toBeLessThanOrEqual(0);

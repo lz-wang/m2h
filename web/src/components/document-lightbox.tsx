@@ -42,6 +42,7 @@ import {
 } from "react";
 
 import type { LightboxItem } from "../lib/document-lightbox";
+import { imageFormat } from "../lib/image-metadata";
 
 // zoom 1 is the fitted size; each step scales by 1.25 up to 5x. Dividing and
 // multiplying by the same factor makes the zoom-out path retrace the zoom-in
@@ -150,11 +151,15 @@ export function DocumentLightbox({
     width: 0,
     height: 0,
   });
-  // The bitmap's intrinsic pixels, read from the dialog's own <img> once it
-  // has really loaded. The snapshot deliberately carries no size: a lazy
-  // image's body element may still be the loading placeholder at snapshot
-  // time, so the only true size is the one the dialog's own load reports.
+  // The bitmap's intrinsic pixels and format, read from the dialog's own
+  // <img> once it has really loaded. The snapshot deliberately carries
+  // neither: a lazy image's body element may still be the loading placeholder
+  // at snapshot time, and a srcset's winning candidate is re-selected by this
+  // element — so size and format must both describe the resource that is
+  // actually on screen (naturalWidth/naturalHeight + currentSrc), not the one
+  // the body happened to load.
   const [naturalSize, setNaturalSize] = useState<Size | null>(null);
+  const [naturalFormat, setNaturalFormat] = useState<string | null>(null);
 
   // The dialog's portaled content mounts on a later commit than the component
   // itself, so the geometry observer must attach through callback refs: an
@@ -276,6 +281,7 @@ export function DocumentLightbox({
     setPan({ x: 0, y: 0 });
     setImageLayout({ width: 0, height: 0 });
     setNaturalSize(null);
+    setNaturalFormat(null);
   }, [index]);
 
   const rotated = rotation === 90 || rotation === 270;
@@ -472,10 +478,10 @@ export function DocumentLightbox({
 
   // The info area's two lines. The alt repeats the item's accessible name
   // verbatim (it must wrap, never truncate); the metadata reads
-  // "intrinsic size · format". For a bitmap the size comes from the dialog's
-  // own load (see naturalSize) and is unknown until then; for an SVG visual
-  // the snapshot's intrinsic size is the true original, and the underlying
-  // format is SVG by construction.
+  // "intrinsic size · format". For a bitmap both facts come from the dialog's
+  // own load (see naturalSize/naturalFormat) and are unknown until then; for
+  // an SVG visual the snapshot's intrinsic size is the true original and the
+  // underlying format is SVG by construction.
   const altText = item.alt.trim();
   const metadataSize =
     item.kind === "image"
@@ -483,12 +489,13 @@ export function DocumentLightbox({
         ? null
         : `${naturalSize.width} × ${naturalSize.height}`
       : `${item.intrinsicWidth} × ${item.intrinsicHeight}`;
+  const metadataFormat = item.kind === "image" ? naturalFormat : item.format;
   const metadataText =
-    item.format === null
+    metadataFormat === null
       ? metadataSize
       : metadataSize === null
-        ? item.format
-        : `${metadataSize} · ${item.format}`;
+        ? metadataFormat
+        : `${metadataSize} · ${metadataFormat}`;
 
   return (
     // Every closing entrance — Dialog.Close, Escape, a blank-area press —
@@ -554,13 +561,16 @@ export function DocumentLightbox({
                 title={item.title ?? undefined}
                 draggable={false}
                 onLoad={(event) => {
-                  // The info area reports the real picture's intrinsic
-                  // pixels; the placeholder never gets this far because the
-                  // dialog's own <img> only loads the snapshot's true source.
+                  // The info area reports the picture actually on screen:
+                  // intrinsic pixels plus the format of the resource this
+                  // <img> really loaded (currentSrc — a srcset's winner, and
+                  // never the lazy placeholder, which this element only ever
+                  // loads by its snapshot's parked true source).
                   setNaturalSize({
                     width: event.currentTarget.naturalWidth,
                     height: event.currentTarget.naturalHeight,
                   });
+                  setNaturalFormat(imageFormat(event.currentTarget));
                 }}
                 style={{
                   transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg) scale(${scale})`,
