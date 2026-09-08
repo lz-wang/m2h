@@ -974,7 +974,14 @@ body,
   gap: 0.25rem;
 
   width: max-content;
-  max-width: min(20rem, calc(100vw - 2rem));
+  /* 80% of the visible page, so long names get most of the viewport while
+   * short ones keep their natural width. This must stay a viewport unit and
+   * never become a plain percentage: the containing block is the image's own
+   * frame, so 80% of a 16px icon would cap the label at ~13px — exactly the
+   * squeeze max-content exists to prevent. The gutter clamp keeps an
+   * edge-adjacent label inside the page.
+   */
+  max-width: min(80vw, calc(100vw - 2rem));
   padding: 0.3rem 0.5rem;
 
   overflow: hidden;

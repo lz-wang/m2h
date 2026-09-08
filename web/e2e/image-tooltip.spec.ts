@@ -39,6 +39,16 @@ interface TooltipGeometry {
   tooltipWidth: number;
 }
 
+// The tooltip's width cap as the reader experiences it: 80% of the visible
+// page (never wider than it minus the side gutters). Read live, so the
+// assertions keep expressing the product contract if the viewport or the
+// formula changes.
+async function readTooltipCap(page: Page): Promise<number> {
+  return page.evaluate(
+    () => Math.min(window.innerWidth * 0.8, window.innerWidth - 32),
+  );
+}
+
 async function measureTooltip(
   page: Page,
   frameIndex: number,
@@ -80,34 +90,36 @@ for (const [label, query] of [
     page,
   }) => {
     await openDocument(page, query);
+    const cap = await readTooltipCap(page);
 
     for (let index = 0; index < frameCount; index += 1) {
       const geometry = await measureTooltip(page, index);
       // The label's width is decided by its text (up to the cap), never
       // squeezed to the icon-sized image it floats over.
       expect(geometry.tooltipWidth).toBeGreaterThan(geometry.imageWidth);
-      // 20rem cap; the long middle name reaches it, the short names stay
+      // Viewport cap; the long middle name reaches it, the short names stay
       // below, so this also pins the ellipsis ceiling.
-      expect(geometry.tooltipWidth).toBeLessThanOrEqual(320);
+      expect(geometry.tooltipWidth).toBeLessThanOrEqual(cap);
     }
 
     await expectNoHorizontalOverflow(page);
   });
 }
 
-test("caps the long name at 20rem while the short name stays under it", async ({
+test("caps the long name at 80% of the viewport while the short name stays under it", async ({
   page,
 }) => {
   await openDocument(page);
+  const cap = await readTooltipCap(page);
 
   const shortName = await measureTooltip(page, 0);
   const longName = await measureTooltip(page, 1);
 
   expect(shortName.tooltipWidth).toBeGreaterThan(16);
-  expect(shortName.tooltipWidth).toBeLessThan(320);
-  // The long fixture name far exceeds 20rem of text, so the cap — not the
-  // text — decides its width.
-  expect(longName.tooltipWidth).toBe(320);
+  expect(shortName.tooltipWidth).toBeLessThan(cap);
+  // The long fixture name far exceeds 80% of the viewport's worth of text,
+  // so the cap — not the text — decides its width.
+  expect(longName.tooltipWidth).toBeCloseTo(cap, 0);
 });
 
 test("reveals the tooltip on frame hover", async ({ page }) => {
