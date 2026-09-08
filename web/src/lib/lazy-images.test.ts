@@ -153,9 +153,13 @@ describe("observeLazyImages", () => {
     observer?.intersect([image]);
 
     expect(image.getAttribute("src")).toBe("/assets/foo.png");
-    expect(image.dataset.m2hOriginalSrc).toBeUndefined();
     expect(image.dataset.m2hLazyState).toBe("loading");
     expect(image.getAttribute("aria-busy")).toBe("true");
+    // The parked copies stay while the request is in flight: with the real
+    // src already on the element, a stale currentSrc can still point at the
+    // placeholder, so the parked attribute is the only stable source of
+    // truth for consumers snapshotting mid-flight (the Lightbox).
+    expect(image.dataset.m2hOriginalSrc).toBe("/assets/foo.png");
   });
 
   it("restores a picture's sources in candidate-then-img order", () => {
@@ -175,6 +179,9 @@ describe("observeLazyImages", () => {
     // Both candidates are back before the load event can pick between them.
     expect(source?.getAttribute("srcset")).toBe("dark.png");
     expect(image.getAttribute("src")).toBe("light.png");
+    // The parked copies stay until settle, like a plain image's.
+    expect(source?.dataset.m2hOriginalSrcset).toBe("dark.png");
+    expect(image.dataset.m2hOriginalSrc).toBe("light.png");
   });
 
   it("settles a load as loaded and stops observing the image", () => {
@@ -195,6 +202,10 @@ describe("observeLazyImages", () => {
     expect(image.getAttribute("aria-busy")).toBeNull();
     expect(observer?.observed).not.toContain(image);
     expect(settled).toEqual([[image, true]]);
+    // Settled as loaded: the live attributes carry the real sources, so the
+    // parked copies are cleaned up instead of shadowing them.
+    expect(image.dataset.m2hOriginalSrc).toBeUndefined();
+    expect(image.dataset.m2hOriginalSrcset).toBeUndefined();
   });
 
   it("settles an error as failed without touching the presentation", () => {
@@ -214,6 +225,9 @@ describe("observeLazyImages", () => {
     expect(image.dataset.m2hLazyState).toBe("failed");
     expect(image.getAttribute("aria-busy")).toBeNull();
     expect(settled).toEqual([[image, false]]);
+    // The failed machine keeps the parked source: the top warning reports
+    // the author's URL from it after the failure placeholder swapped in.
+    expect(image.dataset.m2hOriginalSrc).toBe("/assets/foo.png");
   });
 
   it("ignores a load delivered while the image is still pending", () => {

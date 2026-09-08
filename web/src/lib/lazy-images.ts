@@ -196,6 +196,20 @@ function settleLazyImage(
   }
   image.dataset.m2hLazyState = loaded ? "loaded" : "failed";
   image.removeAttribute("aria-busy");
+  if (loaded) {
+    // Settled as loaded: the live attributes carry the real sources again,
+    // so the parked copies have done their job and are cleaned up instead
+    // of shadowing them. A failed image keeps its parked source — the top
+    // warning reports the author's URL from it after the placeholder swap.
+    image
+      .closest("picture")
+      ?.querySelectorAll<HTMLSourceElement>("source")
+      .forEach((source) => {
+        delete source.dataset.m2hOriginalSrcset;
+      });
+    delete image.dataset.m2hOriginalSrcset;
+    delete image.dataset.m2hOriginalSrc;
+  }
   observer?.unobserve(image);
   hooks.onImageSettled?.(image, loaded);
 }
@@ -204,6 +218,12 @@ function settleLazyImage(
 // <picture>: the <source> candidates must be in place before the <img> src
 // lands, because assigning src can trigger resource selection immediately
 // and would otherwise pick from a candidate list that is still parked.
+//
+// The parked copies stay on the element until the machine settles: while
+// the request is in flight they are the only stable source of truth — a
+// half-updated currentSrc can still point at the placeholder — and the
+// failure path reports the author's URL from them. settleLazyImage cleans
+// them up when the image loads.
 function restoreImageSources(image: HTMLImageElement): void {
   image
     .closest("picture")
@@ -212,12 +232,10 @@ function restoreImageSources(image: HTMLImageElement): void {
   const srcset = image.dataset.m2hOriginalSrcset;
   if (srcset !== undefined) {
     image.setAttribute("srcset", srcset);
-    delete image.dataset.m2hOriginalSrcset;
   }
   const src = image.dataset.m2hOriginalSrc;
   if (src !== undefined) {
     image.src = src;
-    delete image.dataset.m2hOriginalSrc;
   }
 }
 
@@ -225,6 +243,5 @@ function restoreSource(source: HTMLSourceElement): void {
   const srcset = source.dataset.m2hOriginalSrcset;
   if (srcset !== undefined) {
     source.setAttribute("srcset", srcset);
-    delete source.dataset.m2hOriginalSrcset;
   }
 }

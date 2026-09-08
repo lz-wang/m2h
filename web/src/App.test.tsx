@@ -1292,10 +1292,13 @@ describe("App directory preview", () => {
     );
     const image = await screen.findByRole("img", { name: "Banner" });
     // jsdom has no IntersectionObserver, so the eager fallback restored the
-    // parked source and settled the machine right after mount: the reader
-    // sees the original src, no busy marker, and a settled state.
+    // parked source right after mount — eager loading, not eager settling:
+    // the machine follows the real load event before the busy marker drops.
     expect(image.getAttribute("src")).toBe("/assets/banner.png");
-    expect(image.dataset.m2hLazyState).toBe("loaded");
+    expect(image.dataset.m2hLazyState).toBe("loading");
+    expect(image.getAttribute("aria-busy")).toBe("true");
+    fireEvent.load(image);
+    await waitFor(() => expect(image.dataset.m2hLazyState).toBe("loaded"));
     expect(image.getAttribute("aria-busy")).toBeNull();
   });
 
@@ -2235,6 +2238,24 @@ describe("image lightbox integration", () => {
     });
   }
 
+  // jsdom never delivers image load events, and the eager fallback restores
+  // sources without settling the machine: while an image is loading its
+  // magnifier trigger stays hidden. Hand the document's loading images their
+  // load events, exactly as a browser finishing the fetch would, so the
+  // withheld presentation comes back.
+  async function deliverImageLoads(): Promise<void> {
+    await waitFor(() =>
+      expect(
+        document.querySelectorAll('img[data-m2h-lazy-state="loading"]').length,
+      ).toBeGreaterThan(0),
+    );
+    document
+      .querySelectorAll<HTMLImageElement>('img[data-m2h-lazy-state="loading"]')
+      .forEach((image) => {
+        image.dispatchEvent(new Event("load"));
+      });
+  }
+
   it("opens the lightbox from a dynamically injected trigger click", async () => {
     const user = userEvent.setup();
     render(
@@ -2245,6 +2266,7 @@ describe("image lightbox integration", () => {
         })}
       />,
     );
+    await deliverImageLoads();
     const triggers = await screen.findAllByRole("button", { name: "查看大图" });
     expect(triggers).toHaveLength(2);
 
@@ -2269,6 +2291,7 @@ describe("image lightbox integration", () => {
         })}
       />,
     );
+    await deliverImageLoads();
     await screen.findAllByRole("button", { name: "查看大图" });
 
     // The link interception path is untouched by the lightbox delegation.
@@ -2287,6 +2310,7 @@ describe("image lightbox integration", () => {
         })}
       />,
     );
+    await deliverImageLoads();
     await screen.findAllByRole("button", { name: "查看大图" });
 
     // Pressing the image itself keeps the link semantics: the document
@@ -2306,6 +2330,7 @@ describe("image lightbox integration", () => {
         })}
       />,
     );
+    await deliverImageLoads();
     await user.click(
       (
         await screen.findAllByRole("button", { name: "查看大图" })
@@ -2330,6 +2355,7 @@ describe("image lightbox integration", () => {
         })}
       />,
     );
+    await deliverImageLoads();
     await user.click(
       (
         await screen.findAllByRole("button", { name: "查看大图" })
@@ -2368,6 +2394,7 @@ describe("image lightbox integration", () => {
         })}
       />,
     );
+    await deliverImageLoads();
     const triggers = await screen.findAllByRole("button", { name: "查看大图" });
     expect(triggers).toHaveLength(2);
 

@@ -304,6 +304,33 @@ describe("collectLightboxState", () => {
     });
   });
 
+  it("snapshots a lazy loading image by its parked source, not the placeholder", () => {
+    // What the body looks like inside the restore window: the real src has
+    // landed on the element, but the request has not settled yet — in some
+    // engines currentSrc still points at the placeholder until the new
+    // request wins. The parked attribute remains the source of truth until
+    // the lazy machine settles (see lib/lazy-images.ts).
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <p><img src="/in-flight.png" alt="In flight"
+        data-m2h-lightbox-item="true"
+        data-m2h-original-src="/in-flight.png"
+        data-m2h-original-srcset="in-flight.png 1x, in-flight@2x.png 2x"
+        data-m2h-lazy-state="loading"></p>
+    `;
+    const selected = root.querySelector<HTMLImageElement>("img");
+    if (selected === null) throw new Error("image missing");
+
+    const state = collectLightboxState(root, selected);
+
+    expect(state?.items[0]).toMatchObject({
+      kind: "image",
+      src: "/in-flight.png",
+      srcSet: "in-flight.png 1x, in-flight@2x.png 2x",
+      alt: "In flight",
+    });
+  });
+
   it("interleaves bitmap, Mermaid, and Vega-Lite snapshots in document order", () => {
     const root = mixedRoot();
     const selected = root.querySelector<HTMLElement>("div.mermaid");
