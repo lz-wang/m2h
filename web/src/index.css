@@ -607,7 +607,10 @@ body,
   flex: 1;
   min-width: 0;
   min-height: calc(100svh - 3rem);
-  padding-bottom: 4rem;
+  /* Two footer line-heights of air below the attribution — the same
+   * rhythm .reader-footer keeps above it. This is the page's bottom
+   * breathing room, not a toolbar reserve. */
+  padding-bottom: 2rem;
 }
 
 .reader-document,

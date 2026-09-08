@@ -1026,6 +1026,7 @@ test("centers the project attribution below the rendered document", async ({
       const canvasRect = canvas.getBoundingClientRect();
       const articleRect = article.getBoundingClientRect();
       const footerRect = footer.getBoundingClientRect();
+      const footerStyle = getComputedStyle(footer);
       return {
         text: footer.textContent ?? "",
         below: footerRect.top > articleRect.bottom,
@@ -1033,25 +1034,40 @@ test("centers the project attribution below the rendered document", async ({
           (footerRect.left + footerRect.right) / 2 -
             (canvasRect.left + canvasRect.right) / 2,
         ),
+        // The air under the attribution is part of the reading contract: the
+        // canvas keeps exactly two of the footer's own line-heights (the same
+        // rhythm it keeps above the article's last block), so a future font
+        // or spacing change re-scales the assertion instead of breaking it.
+        footerLineHeight: Number.parseFloat(footerStyle.lineHeight),
+        bottomGap: canvasRect.bottom - footerRect.bottom,
         overflow:
           document.documentElement.scrollWidth -
           document.documentElement.clientWidth,
       };
     });
 
+  const expectContract = (geometry: {
+    text: string;
+    below: boolean;
+    centerDelta: number;
+    footerLineHeight: number;
+    bottomGap: number;
+    overflow: number;
+  }) => {
+    expect(geometry.text).toMatch(/^Powered by m2h \S+$/);
+    expect(geometry.below).toBe(true);
+    expect(geometry.centerDelta).toBeLessThanOrEqual(1);
+    expect(geometry.overflow).toBeLessThanOrEqual(0);
+    expect(Math.abs(geometry.bottomGap - 2 * geometry.footerLineHeight))
+      .toBeLessThanOrEqual(1);
+  };
+
   const standard = await read();
-  expect(standard.text).toMatch(/^Powered by m2h \S+$/);
-  expect(standard.below).toBe(true);
-  expect(standard.centerDelta).toBeLessThanOrEqual(1);
-  expect(standard.overflow).toBeLessThanOrEqual(0);
+  expectContract(standard);
 
   // Full width re-flows the canvas edge to edge; the attribution must stay
   // centered under the document and inside the viewport.
   await page.getByRole("button", { name: /文档宽度：/ }).click();
   await page.getByRole("menuitemradio", { name: "全屏" }).click();
-  const full = await read();
-  expect(full.text).toMatch(/^Powered by m2h \S+$/);
-  expect(full.below).toBe(true);
-  expect(full.centerDelta).toBeLessThanOrEqual(1);
-  expect(full.overflow).toBeLessThanOrEqual(0);
+  expectContract(await read());
 });
