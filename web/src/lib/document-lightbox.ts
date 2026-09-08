@@ -96,6 +96,22 @@ function snapshotLightboxItem(
   snapshotIndex: number,
 ): LightboxItem | null {
   if (element instanceof HTMLImageElement) {
+    // A source-only <picture>'s <img> parks no source of its own — its real
+    // candidate lives on the <source> element. While the lazy machine is
+    // unsettled there is nothing true to snapshot (the live src is still
+    // the loading placeholder), and reading the <source> candidate here
+    // would mean reimplementing the browser's media/type/srcset selection.
+    // The item simply stays out of the Lightbox until the machine settles
+    // and currentSrc names the resolved picture.
+    const lazyState = element.dataset.m2hLazyState;
+    if (
+      (lazyState === "pending" || lazyState === "loading") &&
+      element.dataset.m2hOriginalSrc === undefined &&
+      element.dataset.m2hOriginalSrcset === undefined &&
+      element.closest("picture") !== null
+    ) {
+      return null;
+    }
     return {
       kind: "image",
       // A lazy image still parked on the placeholder snapshots its real

@@ -200,8 +200,15 @@ function settleLazyImage(
 ): void {
   // The placeholder's own load event (a pending delivery racing the restore)
   // must not settle the image, and a settled image only leaves the machine
-  // once — both funnel into the same state guard.
+  // once — both funnel into the same state guard. The one re-entry that
+  // still has work to do: the failure pipeline may have collapsed the slot
+  // first (its error listener registered earlier), which settles the state
+  // without releasing the image from the observer. Let it go — the
+  // presentation is already handled, so no second settle notification.
   if (image.dataset.m2hLazyState !== "loading") {
+    if (image.dataset.m2hLazyState === "failed" && !loaded) {
+      observer?.unobserve(image);
+    }
     return;
   }
   image.dataset.m2hLazyState = loaded ? "loaded" : "failed";

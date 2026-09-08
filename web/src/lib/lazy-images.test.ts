@@ -269,6 +269,33 @@ describe("observeLazyImages", () => {
     expect(image.dataset.m2hOriginalSrc).toBe("/assets/foo.png");
   });
 
+  it("releases an image the failure pipeline already settled as failed", () => {
+    const settled: Array<[HTMLImageElement, boolean]> = [];
+    const root = mount('<p><img src="/assets/foo.png" alt="foo"></p>');
+    const image = imageIn(root);
+    observeLazyImages(root, {
+      onImageSettled: (settledImage, loaded) => {
+        settled.push([settledImage, loaded]);
+      },
+    });
+    const observer = FakeIntersectionObserver.instances.at(-1);
+
+    observer?.intersect([image]);
+    // What replaceImageWithFallback leaves behind when the enhancement
+    // layer's error listener runs first: the slot is already failed before
+    // this module's own listener sees the same event.
+    image.dataset.m2hLazyState = "failed";
+    image.dispatchEvent(new Event("error"));
+
+    // The state guard skips the double settle, but the image must still
+    // leave the observation set instead of riding along until the body is
+    // torn down. The failure pipeline owns the presentation, so no second
+    // settle notification fires.
+    expect(image.dataset.m2hLazyState).toBe("failed");
+    expect(observer?.observed).not.toContain(image);
+    expect(settled).toEqual([]);
+  });
+
   it("ignores a load delivered while the image is still pending", () => {
     const root = mount('<p><img src="/assets/foo.png" alt="foo"></p>');
     const image = imageIn(root);

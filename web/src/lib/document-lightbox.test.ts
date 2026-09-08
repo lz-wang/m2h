@@ -331,6 +331,62 @@ describe("collectLightboxState", () => {
     });
   });
 
+  it("skips an unsettled source-only picture instead of snapshotting the placeholder", () => {
+    // A <picture> whose <img> has no source of its own parks its candidate
+    // on the <source> element: while the lazy machine is unsettled there is
+    // no correct src to snapshot — the live src is still the loading
+    // placeholder — so the item stays out of the Lightbox entirely.
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <p><img src="/loaded.png" alt="Loaded" data-m2h-lightbox-item="true"></p>
+      <picture>
+        <source data-m2h-original-srcset="/candidate.png">
+        <img src="/ui/image-loading.svg" alt="Parked picture"
+          data-m2h-lightbox-item="true"
+          data-m2h-lazy-state="pending">
+      </picture>
+    `;
+    const selected = root.querySelector<HTMLImageElement>("img");
+    if (selected === null) throw new Error("image missing");
+
+    const state = collectLightboxState(root, selected);
+
+    // Navigating from the loaded image skips the parked picture; pressing
+    // it directly would not open at all (the snapshot index stays unset).
+    const items = state?.items ?? [];
+    expect(items).toHaveLength(1);
+    expect(itemPaths(items)).toEqual(["/loaded.png"]);
+  });
+
+  it("snapshots a settled source-only picture by its resolved source", () => {
+    // Once the lazy machine settled, the browser's resource selection has a
+    // winner on the <img>: currentSrc names the real picture, and the item
+    // belongs in the Lightbox again.
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <picture>
+        <source srcset="/candidate.png">
+        <img src="/resolved.png" alt="Settled picture"
+          data-m2h-lightbox-item="true"
+          data-m2h-lazy-state="loaded">
+      </picture>
+    `;
+    const selected = root.querySelector<HTMLImageElement>("img");
+    if (selected === null) throw new Error("image missing");
+
+    const state = collectLightboxState(root, selected);
+
+    // The src is the element's browser-resolved URL, not the raw attribute,
+    // and no srcSet: the resource selection already has a winner, so the
+    // Lightbox shows exactly the resource the body shows.
+    expect(itemPaths(state?.items ?? [])).toEqual(["/resolved.png"]);
+    expect(state?.items[0]).toMatchObject({
+      kind: "image",
+      srcSet: null,
+      alt: "Settled picture",
+    });
+  });
+
   it("interleaves bitmap, Mermaid, and Vega-Lite snapshots in document order", () => {
     const root = mixedRoot();
     const selected = root.querySelector<HTMLElement>("div.mermaid");
