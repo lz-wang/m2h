@@ -19,6 +19,7 @@ function makeItems(count: number): LightboxItem[] {
     sizes: null,
     alt: `Image ${index}`,
     title: null,
+    format: "PNG",
   }));
 }
 
@@ -120,6 +121,7 @@ describe("DocumentLightbox", () => {
         sizes: null,
         alt: "A",
         title: null,
+        format: "PNG",
       },
       {
         kind: "mermaid",
@@ -128,6 +130,7 @@ describe("DocumentLightbox", () => {
         intrinsicHeight: 50,
         alt: "Mermaid 图表",
         title: null,
+        format: "SVG",
       },
       {
         kind: "vega-lite",
@@ -136,6 +139,7 @@ describe("DocumentLightbox", () => {
         intrinsicHeight: 50,
         alt: "Vega-Lite 图表",
         title: null,
+        format: "SVG",
       },
     ];
 
@@ -208,6 +212,7 @@ describe("DocumentLightbox", () => {
       intrinsicHeight: 50,
       alt: "Mermaid 图表",
       title: null,
+      format: "SVG",
     };
 
     const view = renderLightbox([item], 0);
@@ -305,6 +310,7 @@ describe("DocumentLightbox", () => {
         intrinsicHeight: 50,
         alt: "Mermaid 图表",
         title: null,
+        format: "SVG",
       },
     ],
   ])("uses the mouse wheel to zoom the %s", (_label, item) => {
@@ -434,6 +440,7 @@ describe("DocumentLightbox", () => {
     intrinsicHeight: 50,
     alt: "Mermaid 图表",
     title: null,
+    format: "SVG",
   };
 
   function currentVectorWrapper(): HTMLElement {

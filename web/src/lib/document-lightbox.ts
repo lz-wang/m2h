@@ -13,11 +13,18 @@
 // them as inline SVG and change their rendered dimensions without routing a
 // diagram through an <img> compositor layer.
 
+import { imageFormatFromSource } from "./image-metadata";
+
 export type LightboxItemKind = "image" | "mermaid" | "vega-lite";
 
 interface LightboxItemBase {
   alt: string;
   title: string | null;
+  // The display format of the visual's underlying picture — "PNG", "JPG",
+  // "SVG", … — derived the same way the body's own presentation derives it
+  // (from the source URL / data URL, never a network probe). SVG visuals
+  // always report "SVG": their Lightbox markup is a serialized SVG.
+  format: string | null;
 }
 
 export interface ImageLightboxItem extends LightboxItemBase {
@@ -112,19 +119,27 @@ function snapshotLightboxItem(
     ) {
       return null;
     }
+    // A lazy image still parked on the placeholder snapshots its real
+    // source instead: navigating to it is the reader explicitly asking for
+    // that picture, and the dialog's own <img> fetches it on demand — the
+    // body copy stays lazy and can never show the placeholder.
+    const src =
+      element.dataset.m2hOriginalSrc ?? (element.currentSrc || element.src);
     return {
       kind: "image",
-      // A lazy image still parked on the placeholder snapshots its real
-      // source instead: navigating to it is the reader explicitly asking for
-      // that picture, and the dialog's own <img> fetches it on demand — the
-      // body copy stays lazy and can never show the placeholder.
-      src:
-        element.dataset.m2hOriginalSrc ?? (element.currentSrc || element.src),
+      src,
       srcSet:
         element.dataset.m2hOriginalSrcset ?? element.getAttribute("srcset"),
       sizes: element.getAttribute("sizes"),
       alt: element.alt,
       title: element.title || null,
+      // The format follows the snapshot's real source, never the element's
+      // live src: a lazy image's placeholder would otherwise report the
+      // placeholder's own SVG. The intrinsic size, unlike the format, is not
+      // snapshot here at all — the body <img> may still be the placeholder —
+      // the dialog reads naturalWidth/naturalHeight from its own <img> once
+      // the real pixels have loaded.
+      format: imageFormatFromSource(src),
     };
   }
   // Non-image items are the enhanced visual containers; their class names
@@ -325,5 +340,8 @@ function snapshotSVGVisual(
     intrinsicHeight: height,
     alt,
     title: null,
+    // The snapshot is the rendered SVG itself, so its underlying format is
+    // SVG regardless of the engine that produced it.
+    format: "SVG",
   };
 }

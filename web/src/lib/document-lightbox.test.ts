@@ -271,6 +271,7 @@ describe("collectLightboxState", () => {
       sizes: null,
       alt: "Two",
       title: null,
+      format: "PNG",
     });
   });
 
@@ -301,6 +302,9 @@ describe("collectLightboxState", () => {
       src: "/far-below.png",
       srcSet: "far.png 1x, far@2x.png 2x",
       alt: "Parked",
+      // The format follows the parked real source: the element's live src
+      // is the placeholder, whose SVG must never leak into the item.
+      format: "PNG",
     });
   });
 
@@ -328,6 +332,7 @@ describe("collectLightboxState", () => {
       src: "/in-flight.png",
       srcSet: "in-flight.png 1x, in-flight@2x.png 2x",
       alt: "In flight",
+      format: "PNG",
     });
   });
 
@@ -384,6 +389,7 @@ describe("collectLightboxState", () => {
       kind: "image",
       srcSet: null,
       alt: "Settled picture",
+      format: "PNG",
     });
   });
 
@@ -412,6 +418,9 @@ describe("collectLightboxState", () => {
       intrinsicHeight: 400,
       alt: "Mermaid 图表",
       title: null,
+      // Both engines present their visual as SVG; the Lightbox metadata
+      // reports that underlying format, not the engine name.
+      format: "SVG",
     });
     expect(vegaLite).toMatchObject({
       kind: "vega-lite",
@@ -419,6 +428,7 @@ describe("collectLightboxState", () => {
       intrinsicHeight: 300,
       alt: "Vega-Lite 图表",
       title: null,
+      format: "SVG",
     });
     expect(mermaid?.markup).toContain("<svg");
     expect(vegaLite?.markup).toContain("<svg");
