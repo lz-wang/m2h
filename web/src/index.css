@@ -1209,24 +1209,37 @@ body,
   inset: 0;
   z-index: 101;
 
+  /* One vertical flex column: the stage takes whatever the footer does not
+   * need, so a wrapping alt text grows the footer and shrinks the stage
+   * instead of sliding under fixed geometry. The padding is the popup's
+   * outer gutter on every side. */
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 1rem;
+
   outline: none;
 }
 
 /* The stage is the one coordinate system shared by the stylesheet, the
- * rotation fit, and the pan clamp: it insets the viewport to reserve the
- * bottom toolbar zone, so a rotated image re-fitting the stage can never
- * reach under the toolbar. It is pointer-transparent — blank-area presses
- * pass through to the popup's close-on-press handler — while a visual opts
- * back into pointer events for panning. Its z-index is the bottom of the
- * popup's explicit layering contract: a zoomed bitmap may paint far past its
- * layout box (and form its own stacking context), so the controls below carry
- * a higher z-index instead of relying on the close button's DOM position,
- * which precedes the stage. The enter/exit motion rides here (96% +
- * transparent → 100% + opaque), not on a visual. */
+ * rotation fit, and the pan clamp: it is the column's remaining space above
+ * the footer, so a rotated image re-fitting the stage can never reach under
+ * the toolbar. min-height: 0 releases the flex item's content-based minimum,
+ * which is what lets a huge visual shrink to the available box. It is
+ * pointer-transparent — blank-area presses pass through to the popup's
+ * close-on-press handler — while a visual opts back into pointer events for
+ * panning. Its z-index is the bottom of the popup's explicit layering
+ * contract: a zoomed bitmap may paint far past its layout box (and form its
+ * own stacking context), so the controls below carry a higher z-index instead
+ * of relying on the close button's DOM position, which precedes the stage.
+ * The enter/exit motion rides here (96% + transparent → 100% + opaque), not
+ * on a visual. */
 .image-lightbox-stage {
-  position: absolute;
-  inset: 1rem 1rem 6rem;
+  position: relative;
   z-index: 0;
+
+  flex: 1;
+  min-height: 0;
 
   display: flex;
   align-items: center;
@@ -1323,26 +1336,72 @@ body,
   cursor: text;
 }
 
-/* Bottom toolbar: one translucent, blurred pill with icon buttons and the
- * position counter. Control layer of the popup — always above the stage's
- * zoomed image (see the stage rule above). */
-.image-lightbox-toolbar {
-  position: absolute;
-  bottom: 1.25rem;
-  left: 50%;
+/* Bottom control layer: the footer owns everything that used to hang off
+ * fixed offsets — the info area (full alt text + "size · format") and the
+ * toolbar. A plain flex-none row of the column, it is as tall as the wrapped
+ * alt text needs, and its z-index keeps it above the stage's zoomed visual
+ * (see the stage rule above). */
+.image-lightbox-footer {
+  position: relative;
   z-index: 2;
 
+  flex: none;
+
   display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* The info plate mirrors the toolbar's translucent treatment: readable over
+ * any visual, dimmed enough to read as chrome. The width is capped like the
+ * body tooltip's — 80% of the visible page — so an enormous alt text wraps
+ * across most of the viewport but never past it. */
+.image-lightbox-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+
+  width: fit-content;
+  max-width: min(80vw, calc(100vw - 2rem));
+  padding: 0.5rem 0.75rem;
+
+  border-radius: 0.625rem;
+
+  background: rgb(20 20 20 / 55%);
+  backdrop-filter: blur(8px);
+}
+
+/* The full alt text: wrapping is the contract — no ellipsis, no clamping, no
+ * nowrap. overflow-wrap: anywhere gives even unbroken strings a break point,
+ * so no alt text can force the plate past its cap. */
+.image-lightbox-alt {
+  color: rgb(255 255 255 / 92%);
+  font-size: 0.8125rem;
+  line-height: 1.25rem;
+  overflow-wrap: anywhere;
+}
+
+.image-lightbox-meta {
+  color: rgb(255 255 255 / 60%);
+  font-size: 0.6875rem;
+  line-height: 0.75rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Toolbar: one translucent, blurred pill with icon buttons and the position
+ * counter, centered under the info plate. */
+.image-lightbox-toolbar {
+  display: flex;
+  width: fit-content;
   align-items: center;
   gap: 0.25rem;
 
+  margin-inline: auto;
   padding: 0.375rem;
   border-radius: 0.625rem;
 
   background: rgb(20 20 20 / 55%);
   backdrop-filter: blur(8px);
-
-  transform: translateX(-50%);
 }
 
 .image-lightbox-toolbar button {

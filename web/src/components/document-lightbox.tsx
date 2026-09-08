@@ -150,6 +150,11 @@ export function DocumentLightbox({
     width: 0,
     height: 0,
   });
+  // The bitmap's intrinsic pixels, read from the dialog's own <img> once it
+  // has really loaded. The snapshot deliberately carries no size: a lazy
+  // image's body element may still be the loading placeholder at snapshot
+  // time, so the only true size is the one the dialog's own load reports.
+  const [naturalSize, setNaturalSize] = useState<Size | null>(null);
 
   // The dialog's portaled content mounts on a later commit than the component
   // itself, so the geometry observer must attach through callback refs: an
@@ -270,6 +275,7 @@ export function DocumentLightbox({
     setRotation(0);
     setPan({ x: 0, y: 0 });
     setImageLayout({ width: 0, height: 0 });
+    setNaturalSize(null);
   }, [index]);
 
   const rotated = rotation === 90 || rotation === 270;
@@ -464,6 +470,26 @@ export function DocumentLightbox({
     return null;
   }
 
+  // The info area's two lines. The alt repeats the item's accessible name
+  // verbatim (it must wrap, never truncate); the metadata reads
+  // "intrinsic size · format". For a bitmap the size comes from the dialog's
+  // own load (see naturalSize) and is unknown until then; for an SVG visual
+  // the snapshot's intrinsic size is the true original, and the underlying
+  // format is SVG by construction.
+  const altText = item.alt.trim();
+  const metadataSize =
+    item.kind === "image"
+      ? naturalSize === null
+        ? null
+        : `${naturalSize.width} × ${naturalSize.height}`
+      : `${item.intrinsicWidth} × ${item.intrinsicHeight}`;
+  const metadataText =
+    item.format === null
+      ? metadataSize
+      : metadataSize === null
+        ? item.format
+        : `${metadataSize} · ${item.format}`;
+
   return (
     // Every closing entrance — Dialog.Close, Escape, a blank-area press —
     // funnels through onOpenChange(false); the popup then stays mounted for
@@ -497,8 +523,8 @@ export function DocumentLightbox({
             <X aria-hidden="true" />
           </Dialog.Close>
           {/* The stage is the one coordinate system for layout, rotation fit,
-           * and pan clamping: the stylesheet reserves the toolbar zone here,
-           * and the transform math measures this same box. It is
+           * and pan clamping: it is the flex column's remaining space above
+           * the footer, and the transform math measures this same box. It is
            * pointer-transparent so blank-area presses still reach the popup.
            * The enter/exit fade and scale ride on the stage (never on the
            * image below, whose transform carries live zoom/rotate/pan and
@@ -518,6 +544,15 @@ export function DocumentLightbox({
                 alt={item.alt}
                 title={item.title ?? undefined}
                 draggable={false}
+                onLoad={(event) => {
+                  // The info area reports the real picture's intrinsic
+                  // pixels; the placeholder never gets this far because the
+                  // dialog's own <img> only loads the snapshot's true source.
+                  setNaturalSize({
+                    width: event.currentTarget.naturalWidth,
+                    height: event.currentTarget.naturalHeight,
+                  });
+                }}
                 style={{
                   transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg) scale(${scale})`,
                   cursor: panning ? "grabbing" : undefined,
@@ -558,67 +593,85 @@ export function DocumentLightbox({
               </div>
             ) : null}
           </div>
-          <div className="image-lightbox-toolbar">
-            <button
-              type="button"
-              className="image-lightbox-control"
-              aria-label="上一项"
-              disabled={!hasPrevious}
-              onClick={goToPrevious}
-            >
-              <ChevronLeft aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="image-lightbox-control"
-              aria-label="缩小图片"
-              disabled={zoom <= MIN_ZOOM}
-              onClick={zoomOut}
-            >
-              <ZoomOut aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="image-lightbox-control"
-              aria-label="放大图片"
-              disabled={zoom >= MAX_ZOOM}
-              onClick={zoomIn}
-            >
-              <ZoomIn aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="image-lightbox-control"
-              aria-label="逆时针旋转"
-              onClick={rotateCounterClockwise}
-            >
-              <RotateCcw aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="image-lightbox-control"
-              aria-label="顺时针旋转"
-              onClick={rotateClockwise}
-            >
-              <RotateCw aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              className="image-lightbox-control"
-              aria-label="下一项"
-              disabled={!hasNext}
-              onClick={goToNext}
-            >
-              <ChevronRight aria-hidden="true" />
-            </button>
-            <span className="image-lightbox-counter">
-              <span aria-hidden="true">
-                {index + 1} / {items.length}
+          {/* Control layer of the popup: the info area (full alt text and
+           * intrinsic metadata, wrapping freely) above the toolbar. The
+           * footer is a normal flex row below the stage, so its height is
+           * whatever the wrapped alt text needs — no fixed toolbar reserve.
+           * aria-hidden: the alt and the visual's accessible name already
+           * carry the text for assistive technology. */}
+          <div className="image-lightbox-footer">
+            {altText !== "" || metadataText !== null ? (
+              <div className="image-lightbox-info" aria-hidden="true">
+                {altText !== "" ? (
+                  <div className="image-lightbox-alt">{altText}</div>
+                ) : null}
+                {metadataText !== null ? (
+                  <div className="image-lightbox-meta">{metadataText}</div>
+                ) : null}
+              </div>
+            ) : null}
+            <div className="image-lightbox-toolbar">
+              <button
+                type="button"
+                className="image-lightbox-control"
+                aria-label="上一项"
+                disabled={!hasPrevious}
+                onClick={goToPrevious}
+              >
+                <ChevronLeft aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="image-lightbox-control"
+                aria-label="缩小图片"
+                disabled={zoom <= MIN_ZOOM}
+                onClick={zoomOut}
+              >
+                <ZoomOut aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="image-lightbox-control"
+                aria-label="放大图片"
+                disabled={zoom >= MAX_ZOOM}
+                onClick={zoomIn}
+              >
+                <ZoomIn aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="image-lightbox-control"
+                aria-label="逆时针旋转"
+                onClick={rotateCounterClockwise}
+              >
+                <RotateCcw aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="image-lightbox-control"
+                aria-label="顺时针旋转"
+                onClick={rotateClockwise}
+              >
+                <RotateCw aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="image-lightbox-control"
+                aria-label="下一项"
+                disabled={!hasNext}
+                onClick={goToNext}
+              >
+                <ChevronRight aria-hidden="true" />
+              </button>
+              <span className="image-lightbox-counter">
+                <span aria-hidden="true">
+                  {index + 1} / {items.length}
+                </span>
+                <span className="sr-only">
+                  第 {index + 1} 项，共 {items.length} 项
+                </span>
               </span>
-              <span className="sr-only">
-                第 {index + 1} 项，共 {items.length} 项
-              </span>
-            </span>
+            </div>
           </div>
         </Dialog.Popup>
       </Dialog.Portal>

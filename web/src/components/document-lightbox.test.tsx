@@ -657,4 +657,121 @@ describe("DocumentLightbox", () => {
     renderLightbox(makeItems(1), 5);
     expect(screen.queryByRole("dialog")).toBeNull();
   });
+
+  // --- Info area ---------------------------------------------------------------
+
+  function infoOf(): HTMLElement {
+    const info = screen
+      .getByRole("dialog")
+      .querySelector<HTMLElement>(".image-lightbox-info");
+    if (info === null) {
+      throw new Error("lightbox info was not rendered");
+    }
+    return info;
+  }
+
+  it("shows the full alt text and the intrinsic metadata after the image loads", () => {
+    renderLightbox(makeItems(1), 0);
+
+    // Before the dialog's own <img> has loaded, only the format is known —
+    // never a stale or placeholder size.
+    expect(infoOf().querySelector(".image-lightbox-alt")?.textContent).toBe(
+      "Image 0",
+    );
+    expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
+      "PNG",
+    );
+
+    const image = currentItem();
+    Object.defineProperty(image, "naturalWidth", { value: 1024 });
+    Object.defineProperty(image, "naturalHeight", { value: 768 });
+    fireEvent.load(image);
+
+    expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
+      "1024 × 768 · PNG",
+    );
+  });
+
+  it("reports an SVG visual by its snapshot size and SVG format", () => {
+    renderLightbox([vectorItem], 0);
+
+    expect(infoOf().querySelector(".image-lightbox-alt")?.textContent).toBe(
+      "Mermaid 图表",
+    );
+    expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
+      "100 × 50 · SVG",
+    );
+  });
+
+  it("drops the previous image's size when the item changes", () => {
+    const items = makeItems(2);
+    const view = render(
+      <DocumentLightbox
+        items={items}
+        index={0}
+        open
+        onIndexChange={() => {}}
+        onClose={() => {}}
+        onClosed={vi.fn()}
+      />,
+    );
+
+    const first = currentItem();
+    Object.defineProperty(first, "naturalWidth", {
+      configurable: true,
+      value: 100,
+    });
+    Object.defineProperty(first, "naturalHeight", {
+      configurable: true,
+      value: 200,
+    });
+    fireEvent.load(first);
+    expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
+      "100 × 200 · PNG",
+    );
+
+    // The parent feeds the switched index back as a rerender, exactly like
+    // App.tsx does: the old pixels' size must not survive into the next
+    // item's info area while its own picture loads.
+    view.rerender(
+      <DocumentLightbox
+        items={items}
+        index={1}
+        open
+        onIndexChange={() => {}}
+        onClose={() => {}}
+        onClosed={vi.fn()}
+      />,
+    );
+
+    expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
+      "PNG",
+    );
+
+    // React reuses the <img> node across items, so this is the same element
+    // with a fresh src — re-define its size stub for the second load.
+    const second = currentItem();
+    Object.defineProperty(second, "naturalWidth", {
+      configurable: true,
+      value: 300,
+    });
+    Object.defineProperty(second, "naturalHeight", {
+      configurable: true,
+      value: 400,
+    });
+    fireEvent.load(second);
+    expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
+      "300 × 400 · PNG",
+    );
+  });
+
+  it("omits the alt line for an item without alt text", () => {
+    const item = { ...makeItems(1)[0], alt: "" };
+    renderLightbox([item], 0);
+
+    expect(infoOf().querySelector(".image-lightbox-alt")).toBeNull();
+    expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
+      "PNG",
+    );
+  });
 });

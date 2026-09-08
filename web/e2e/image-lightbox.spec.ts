@@ -290,14 +290,40 @@ test("clamps pointer pans to the fitted stage after zooming", async ({
   await openLightbox(page, 0);
   const start = await waitForFittedImage(page, 599);
 
-  // Zoom to the 5x cap: the 1200×600 landscape at 1280×900 sits at scale 5,
-  // so the drag bounds are maxPanX = (1200·5 − 1248)/2 = 2376 and maxPanY =
-  // (600·5 − 788)/2 = 1106.
+  // Zoom to the 5x cap, then derive the drag bounds from the geometry the
+  // component itself uses — the stage box and the image's untransformed
+  // layout — instead of hard-coded stage offsets (the footer below the stage
+  // is as tall as the wrapped info text needs, so the stage height is not a
+  // constant).
   const zoomIn = page.getByRole("button", { name: "放大图片" });
   for (let click = 0; click < 8; click += 1) {
     await zoomIn.click();
   }
   await expect(zoomIn).toBeDisabled();
+
+  const ZOOM_CAP = 5;
+  const bounds = await page.evaluate(() => {
+    const stage = document.querySelector<HTMLElement>(".image-lightbox-stage");
+    const image = document.querySelector<HTMLElement>(".image-lightbox-image");
+    if (stage === null || image === null) {
+      throw new Error("lightbox geometry was not rendered");
+    }
+    const stageRect = stage.getBoundingClientRect();
+    return {
+      stageWidth: stageRect.width,
+      stageHeight: stageRect.height,
+      layoutWidth: image.offsetWidth,
+      layoutHeight: image.offsetHeight,
+    };
+  });
+  const maxPanX = Math.max(
+    0,
+    (bounds.layoutWidth * ZOOM_CAP - bounds.stageWidth) / 2,
+  );
+  const maxPanY = Math.max(
+    0,
+    (bounds.layoutHeight * ZOOM_CAP - bounds.stageHeight) / 2,
+  );
 
   // Drag far past every edge; the pan must stop at the fitted bound instead
   // of following the pointer.
@@ -311,10 +337,8 @@ test("clamps pointer pans to the fitted stage after zooming", async ({
   await page.mouse.up();
 
   const pan = await imagePan(page);
-  expect(pan.x).toBeGreaterThanOrEqual(-2377);
-  expect(pan.x).toBeLessThanOrEqual(-2375);
-  expect(pan.y).toBeGreaterThanOrEqual(-1107);
-  expect(pan.y).toBeLessThanOrEqual(-1105);
+  expect(Math.abs(pan.x - -maxPanX)).toBeLessThanOrEqual(1);
+  expect(Math.abs(pan.y - -maxPanY)).toBeLessThanOrEqual(1);
 
   await expectInvariantsUnchanged(page, before);
 });
@@ -343,6 +367,89 @@ test("keeps the linked image's anchor while its trigger opens the lightbox", asy
   await expect(
     page.locator('.image-lightbox-counter > span[aria-hidden="true"]'),
   ).toHaveText("2 / 3");
+});
+
+// --- Info area ----------------------------------------------------------------
+//
+// The footer reports the full alt text plus "intrinsic size · format". For a
+// bitmap the size comes from the dialog's own loaded <img> (never from the
+// body snapshot, which may have caught a lazy placeholder); for an SVG visual
+// it is the snapshot's intrinsic size with the SVG format.
+
+test("shows the full alt text and intrinsic metadata in the footer", async ({
+  page,
+}) => {
+  await openDocument(page);
+
+  await openLightbox(page, 0);
+  const info = page.locator(".image-lightbox-info");
+  await expect(info.locator(".image-lightbox-alt")).toHaveText("第一张图片");
+  // The first fixture image is the 1200×600 landscape; the metadata follows
+  // the item on every next/previous switch.
+  await expect(info.locator(".image-lightbox-meta")).toHaveText(
+    "1200 × 600 · PNG",
+  );
+
+  await page.getByRole("button", { name: "下一项" }).click();
+  await expect(info.locator(".image-lightbox-alt")).toHaveText("链接图片");
+  await expect(info.locator(".image-lightbox-meta")).toHaveText(
+    "480 × 1200 · PNG",
+  );
+});
+
+test("wraps a long alt text instead of truncating it", async ({ page }) => {
+  await openDocument(page);
+
+  // Author a long alt the way a document would: the snapshot reads the alt
+  // from the body at open time, so the info area receives exactly this text.
+  const longAlt =
+    "这是一段非常长的图片说明，用于验证信息区完整换行展示，".repeat(3);
+  await page.evaluate((text) => {
+    const image = document.querySelector<HTMLImageElement>(
+      ".m2h-image-frame img",
+    );
+    if (image === null) {
+      throw new Error("image was not rendered");
+    }
+    image.alt = text;
+  }, longAlt);
+
+  await openLightbox(page, 0);
+  const alt = page.locator(".image-lightbox-info .image-lightbox-alt");
+  // The full text, verbatim — no ellipsis, no clamping.
+  await expect(alt).toHaveText(longAlt);
+
+  // …rendered as more than one line (the wrapping contract), …
+  const lineCount = await alt.evaluate(
+    (element) =>
+      element.getBoundingClientRect().height /
+      Number.parseFloat(getComputedStyle(element).lineHeight),
+  );
+  expect(lineCount).toBeGreaterThan(1.5);
+
+  // …with the text and its plate staying inside the viewport.
+  const geometry = await page.evaluate(() => {
+    const info = document.querySelector<HTMLElement>(".image-lightbox-info");
+    const altLine = document.querySelector<HTMLElement>(
+      ".image-lightbox-info .image-lightbox-alt",
+    );
+    if (info === null || altLine === null) {
+      throw new Error("lightbox info was not rendered");
+    }
+    const infoRect = info.getBoundingClientRect();
+    const altRect = altLine.getBoundingClientRect();
+    return {
+      infoRight: infoRect.right,
+      altRight: altRect.right,
+      viewport: window.innerWidth,
+      overflow:
+        document.documentElement.scrollWidth -
+        document.documentElement.clientWidth,
+    };
+  });
+  expect(geometry.altRight).toBeLessThanOrEqual(geometry.infoRight + 1);
+  expect(geometry.infoRight).toBeLessThanOrEqual(geometry.viewport);
+  expect(geometry.overflow).toBeLessThanOrEqual(0);
 });
 
 // --- Mermaid diagrams in the shared lightbox --------------------------------
@@ -482,6 +589,21 @@ test("opens a mermaid diagram inside the shared image sequence", async ({
   await page.getByRole("button", { name: "关闭视觉内容预览" }).click();
   await expect(page.locator(".image-lightbox")).toBeHidden();
   await expectInvariantsUnchanged(page, before);
+});
+
+test("reports a mermaid diagram by its snapshot size and SVG format", async ({
+  page,
+}) => {
+  await openMermaidDocument(page);
+  await openMermaidLightbox(page);
+
+  const info = page.locator(".image-lightbox-info");
+  await expect(info.locator(".image-lightbox-alt")).toHaveText("Mermaid 图表");
+  // The size is the snapshot's intrinsic geometry (the rendered SVG's own),
+  // and the underlying format is SVG whatever engine produced it.
+  await expect(info.locator(".image-lightbox-meta")).toHaveText(
+    /^\d+(?:\.\d+)? × \d+(?:\.\d+)? · SVG$/,
+  );
 });
 
 test("namespaces Mermaid SVG identifiers in its Lightbox snapshot", async ({
