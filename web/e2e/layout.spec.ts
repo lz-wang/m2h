@@ -1058,8 +1058,9 @@ test("centers the project attribution below the rendered document", async ({
     expect(geometry.below).toBe(true);
     expect(geometry.centerDelta).toBeLessThanOrEqual(1);
     expect(geometry.overflow).toBeLessThanOrEqual(0);
-    expect(Math.abs(geometry.bottomGap - 2 * geometry.footerLineHeight))
-      .toBeLessThanOrEqual(1);
+    expect(
+      Math.abs(geometry.bottomGap - 2 * geometry.footerLineHeight),
+    ).toBeLessThanOrEqual(1);
   };
 
   const standard = await read();

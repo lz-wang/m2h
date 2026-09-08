@@ -44,8 +44,8 @@ interface TooltipGeometry {
 // assertions keep expressing the product contract if the viewport or the
 // formula changes.
 async function readTooltipCap(page: Page): Promise<number> {
-  return page.evaluate(
-    () => Math.min(window.innerWidth * 0.8, window.innerWidth - 32),
+  return page.evaluate(() =>
+    Math.min(window.innerWidth * 0.8, window.innerWidth - 32),
   );
 }
 
