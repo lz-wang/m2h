@@ -39,14 +39,22 @@ interface TooltipGeometry {
   tooltipWidth: number;
 }
 
-// The tooltip's width cap as the reader experiences it: 80% of the visible
-// page (never wider than it minus the side gutters). Read live, so the
-// assertions keep expressing the product contract if the viewport or the
-// formula changes.
+// The tooltip's width cap as the reader experiences it: 80% of the reading
+// document's actual width (the .reader-document border box — standard/wide/
+// full caps, sidebar, and TOC all fold into it), never wider than the page
+// minus its gutters. Read live from the article, so the assertions keep
+// expressing the product contract if the viewport or the formula changes.
 async function readTooltipCap(page: Page): Promise<number> {
-  return page.evaluate(() =>
-    Math.min(window.innerWidth * 0.8, window.innerWidth - 32),
-  );
+  return page.evaluate(() => {
+    const article = document.querySelector(".reader-document");
+    if (article === null) {
+      throw new Error("reader document was not rendered");
+    }
+    return Math.min(
+      article.getBoundingClientRect().width * 0.8,
+      window.innerWidth - 32,
+    );
+  });
 }
 
 async function measureTooltip(
@@ -84,6 +92,7 @@ async function expectNoHorizontalOverflow(page: Page) {
 
 for (const [label, query] of [
   ["standard width", ""],
+  ["wide width", "?width=wide"],
   ["full width", "?width=full"],
 ] as const) {
   test(`sizes every tooltip to its label instead of the 16px image (${label})`, async ({
@@ -97,8 +106,8 @@ for (const [label, query] of [
       // The label's width is decided by its text (up to the cap), never
       // squeezed to the icon-sized image it floats over.
       expect(geometry.tooltipWidth).toBeGreaterThan(geometry.imageWidth);
-      // Viewport cap; the long middle name reaches it, the short names stay
-      // below, so this also pins the ellipsis ceiling.
+      // Document-width cap; the long middle name reaches it, the short names
+      // stay below, so this also pins the ellipsis ceiling.
       expect(geometry.tooltipWidth).toBeLessThanOrEqual(cap);
     }
 
@@ -106,7 +115,7 @@ for (const [label, query] of [
   });
 }
 
-test("caps the long name at 80% of the viewport while the short name stays under it", async ({
+test("caps the long name at 80% of the document width while the short name stays under it", async ({
   page,
 }) => {
   await openDocument(page);
@@ -117,8 +126,8 @@ test("caps the long name at 80% of the viewport while the short name stays under
 
   expect(shortName.tooltipWidth).toBeGreaterThan(16);
   expect(shortName.tooltipWidth).toBeLessThan(cap);
-  // The long fixture name far exceeds 80% of the viewport's worth of text,
-  // so the cap — not the text — decides its width.
+  // The long fixture name far exceeds 80% of the document's width worth of
+  // text, so the cap — not the text — decides its width.
   expect(longName.tooltipWidth).toBeCloseTo(cap, 0);
 });
 

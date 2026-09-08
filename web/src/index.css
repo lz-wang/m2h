@@ -620,6 +620,18 @@ body,
     margin 160ms ease;
 }
 
+/* The article is the inline-size container the body's floating layers measure
+ * against: 1cqw inside it is 1% of the document's actual width in the current
+ * reading mode, so "80% of the document" stays a pure-CSS fact through every
+ * width mode (standard/wide/full), sidebar and TOC toggles, and window
+ * resizes — no JS measurement anywhere. Declared before the width-mode
+ * variants, like the frontmatter rule above; the containment it implies is
+ * invisible to the article's children, which position their floats against
+ * their own frames. */
+.reader-document {
+  container: reader-document / inline-size;
+}
+
 /* The frontmatter panel above the article joins the reader's width ladder:
  * its base rule is a full-width bordered box centered by margin auto, and the
  * width modes below then cap it exactly like the document. Declared here —
@@ -952,14 +964,15 @@ body,
  * text. It floats at the image's bottom edge on frame hover — and on keyboard
  * focus inside the frame, so Tabbing to the magnifier reveals the name too —
  * using the popover tokens so it reads like the rest of the UI's floating
- * layers. The width is capped by the viewport, not the image: an icon-sized
- * image still gets a readable label, and the ellipsis handles long names. It
- * is aria-hidden in the DOM (the <img> alt already carries the accessible
- * name) and never takes pointer events, so it cannot block the image or its
- * links. width:max-content decouples the label's shrink-to-fit width from the
- * frame — the containing block of an absolutely-positioned element caps its
- * available width, so without it an icon-sized frame would squeeze the label
- * to the image's own width instead of the ellipsis handling the overflow.
+ * layers. The width is capped by the reading layout, not the image: an
+ * icon-sized image still gets a readable label, and the ellipsis handles long
+ * names. It is aria-hidden in the DOM (the <img> alt already carries the
+ * accessible name) and never takes pointer events, so it cannot block the
+ * image or its links. width:max-content decouples the label's shrink-to-fit
+ * width from the frame — the containing block of an absolutely-positioned
+ * element caps its available width, so without it an icon-sized frame would
+ * squeeze the label to the image's own width instead of the ellipsis handling
+ * the overflow.
  */
 .markdown-body .m2h-image-name-tooltip {
   position: absolute;
@@ -974,12 +987,14 @@ body,
   gap: 0.25rem;
 
   width: max-content;
-  /* 80% of the visible page, so long names get most of the viewport while
-   * short ones keep their natural width. This must stay a viewport unit and
-   * never become a plain percentage: the containing block is the image's own
-   * frame, so 80% of a 16px icon would cap the label at ~13px — exactly the
-   * squeeze max-content exists to prevent. The gutter clamp keeps an
-   * edge-adjacent label inside the page.
+  /* 80% of the document's actual width (see the container query below), so a
+   * long name fills most of the reading column in every width mode while
+   * short ones keep their natural width. This must never become a plain
+   * percentage: the containing block is the image's own frame, so 80% of a
+   * 16px icon would cap the label at ~13px — exactly the squeeze
+   * max-content exists to prevent. The viewport fallback covers container
+   * query-less engines; the gutter clamp keeps an edge-adjacent label inside
+   * the page in both cases.
    */
   max-width: min(80vw, calc(100vw - 2rem));
   padding: 0.3rem 0.5rem;
@@ -1018,6 +1033,21 @@ body,
   font-size: 0.6875rem;
   line-height: 0.875rem;
   white-space: nowrap;
+}
+
+/* The real cap: 80% of the reading document's border box, not of the
+ * viewport. The article is the reader-document container (see its own rule),
+ * so the cq length tracks the standard/wide/full caps, the sidebar, the TOC
+ * rail, and every resize with no script — but cq units resolve against the
+ * container's *content box*, while the "文档宽度" contract is the border
+ * box. The shared Markdown theme pads the article 45px per side, so +4.5rem
+ * (90px × 0.8) restores the border-box ratio; the tooltip e2e reads the
+ * border box as its source of truth and catches any theme padding drift.
+ * The plain 80vw rule above stays only as the container-query-less fallback. */
+@container reader-document (min-width: 0) {
+  .markdown-body .m2h-image-name-tooltip {
+    max-width: min(calc(80cqw + 4.5rem), calc(100vw - 2rem));
+  }
 }
 
 .markdown-body .m2h-image-frame:hover .m2h-image-name-tooltip,
