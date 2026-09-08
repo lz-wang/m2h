@@ -61,7 +61,17 @@ export function prepareLazyImages(html: string): DocumentFragment {
 function prepareLazyImage(image: HTMLImageElement): void {
   const src = image.getAttribute("src");
   const srcset = image.getAttribute("srcset");
-  if ((src === null || src === "") && srcset === null) {
+  // A <picture>'s <source> candidates issue their own requests, so an
+  // <img> with neither src nor srcset is not automatically a no-op — it
+  // may be the slot a candidate list loads through.
+  const pictureSources = image
+    .closest("picture")
+    ?.querySelectorAll<HTMLSourceElement>("source[srcset]");
+  if (
+    (src === null || src === "") &&
+    srcset === null &&
+    (pictureSources === undefined || pictureSources.length === 0)
+  ) {
     return;
   }
   // The parked sources double as the failure report's "original URL": both
@@ -236,6 +246,11 @@ function restoreImageSources(image: HTMLImageElement): void {
   const src = image.dataset.m2hOriginalSrc;
   if (src !== undefined) {
     image.src = src;
+  } else {
+    // A source-only <picture>'s <img> carried no src to park: the
+    // placeholder must go, or it would stay on the element as the fallback
+    // candidate behind the real ones just restored.
+    image.removeAttribute("src");
   }
 }
 

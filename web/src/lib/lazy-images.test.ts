@@ -119,6 +119,24 @@ describe("prepareLazyImages", () => {
     expect(image.dataset.m2hOriginalSrc).toBeUndefined();
     expect(image.getAttribute("aria-busy")).toBeNull();
   });
+
+  it("parks a picture whose img carries no src of its own", () => {
+    const root = mount(
+      `<picture>
+        <source srcset="large.webp">
+        <img alt="image">
+      </picture>`,
+    );
+    const source = root.querySelector("source");
+    const image = imageIn(root);
+
+    // The <source> candidate issues its own request, so this <img> is a
+    // live lazy slot, not a no-op: its candidate parks with the rest.
+    expect(source?.getAttribute("srcset")).toBeNull();
+    expect(source?.dataset.m2hOriginalSrcset).toBe("large.webp");
+    expect(image.dataset.m2hLazyState).toBe("pending");
+    expect(image.getAttribute("src")).toBe(IMAGE_LOADING_SRC);
+  });
 });
 
 describe("observeLazyImages", () => {
@@ -182,6 +200,27 @@ describe("observeLazyImages", () => {
     // The parked copies stay until settle, like a plain image's.
     expect(source?.dataset.m2hOriginalSrcset).toBe("dark.png");
     expect(image.dataset.m2hOriginalSrc).toBe("light.png");
+  });
+
+  it("drops the placeholder src when restoring a source-only picture", () => {
+    const root = mount(
+      `<picture>
+        <source srcset="large.webp">
+        <img alt="image">
+      </picture>`,
+    );
+    const source = root.querySelector("source");
+    const image = imageIn(root);
+    observeLazyImages(root);
+    const observer = FakeIntersectionObserver.instances.at(-1);
+
+    observer?.intersect([image]);
+
+    // The <img> had no src of its own: the placeholder must go, or it would
+    // stay on the element as the fallback candidate behind the real ones.
+    expect(source?.getAttribute("srcset")).toBe("large.webp");
+    expect(image.getAttribute("src")).toBeNull();
+    expect(image.dataset.m2hLazyState).toBe("loading");
   });
 
   it("settles a load as loaded and stops observing the image", () => {
