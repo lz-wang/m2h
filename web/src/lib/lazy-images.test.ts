@@ -297,11 +297,13 @@ describe("observeLazyImages", () => {
     expect(image.getAttribute("src")).toBe("/ui/image-load-failed.svg");
   });
 
-  it("eagerly restores and settles everything without IntersectionObserver", () => {
+  it("eagerly starts loading without IntersectionObserver", () => {
     vi.unstubAllGlobals();
     // jsdom has no IntersectionObserver: the environment check must take the
-    // fallback, restore every parked source right away, and settle the state
-    // so the images read exactly like non-lazy ones.
+    // fallback and restore every parked source right away — eager loading,
+    // not eager settling. The machine still follows the real load/error
+    // events, so the presentation withheld for a loading image (aria-busy,
+    // tooltip, Lightbox trigger) stays withheld until the picture is there.
     expect("IntersectionObserver" in window).toBe(false);
 
     const settled: Array<[HTMLImageElement, boolean]> = [];
@@ -316,6 +318,11 @@ describe("observeLazyImages", () => {
     });
 
     expect(image.getAttribute("src")).toBe("/assets/foo.png");
+    expect(image.dataset.m2hLazyState).toBe("loading");
+    expect(image.getAttribute("aria-busy")).toBe("true");
+    expect(settled).toEqual([]);
+
+    image.dispatchEvent(new Event("load"));
     expect(image.dataset.m2hLazyState).toBe("loaded");
     expect(image.getAttribute("aria-busy")).toBeNull();
     expect(settled).toEqual([[image, true]]);

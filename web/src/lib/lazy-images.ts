@@ -106,13 +106,13 @@ export function observeLazyImages(
     root.querySelectorAll<HTMLImageElement>(PENDING_SELECTOR),
   );
   if (!("IntersectionObserver" in window)) {
-    // No scheduling is possible: restore everything right away and settle
-    // the machine, so every image reads exactly like a non-lazy one — the
-    // sources are back, the presentation is enabled, and a later real load
-    // event simply refreshes the metadata.
+    // No scheduling is possible: every pending image restores right away
+    // instead of sitting on the placeholder forever. That is eager loading,
+    // not eager settling — the machines still follow the real load/error
+    // events, so a picture that is still downloading keeps announcing itself
+    // as busy instead of reading as done.
     for (const image of images) {
       startLazyLoad(image, null, hooks);
-      settleLazyImage(image, true, null, hooks);
     }
     return { disconnect() {} };
   }
