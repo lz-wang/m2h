@@ -1567,6 +1567,86 @@ describe("image lightbox triggers", () => {
   });
 });
 
+describe("standalone image blocks", () => {
+  // A paragraph whose content is framed images only joins the rich-visual
+  // frames' external spacing contract; prose paragraphs that merely contain
+  // an image inline keep their normal paragraph flow.
+  it("marks a paragraph holding only an image as a visual block", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p>前文</p><p><img src="/a.png" alt="A"></p><p>后文</p>';
+
+    await renderRichContent(root, { mode: "light" });
+
+    const paragraphs = root.querySelectorAll("p");
+    expect(paragraphs).toHaveLength(3);
+    expect(paragraphs[0]?.classList.contains("m2h-image-block")).toBe(false);
+    expect(paragraphs[1]?.classList.contains("m2h-image-block")).toBe(true);
+    expect(paragraphs[2]?.classList.contains("m2h-image-block")).toBe(false);
+  });
+
+  it("marks a paragraph holding a sole linked image", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><a href="/target"><img src="/a.png" alt="A"></a></p>';
+
+    await renderRichContent(root, { mode: "light" });
+
+    // The sole-image link is upgraded to the visual root, so the frame wraps
+    // the anchor and the paragraph still contains nothing but the frame.
+    const block = root.querySelector("p.m2h-image-block");
+    expect(block).not.toBeNull();
+    expect(block?.children).toHaveLength(1);
+    expect(
+      block?.firstElementChild?.classList.contains("m2h-image-frame"),
+    ).toBe(true);
+  });
+
+  it("marks a paragraph holding several plain images", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p><img src="/a.png" alt="A"><img src="/b.png" alt="B"></p>';
+
+    await renderRichContent(root, { mode: "light" });
+
+    const block = root.querySelector("p.m2h-image-block");
+    expect(block?.querySelectorAll(".m2h-image-frame")).toHaveLength(2);
+  });
+
+  it("leaves paragraphs that mix prose and images alone", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML =
+      '<p>文字 <img src="/a.png" alt="A"> 文字</p>' +
+      '<p><img src="/a.png" alt="A"><br></p>' +
+      "<p></p>";
+
+    await renderRichContent(root, { mode: "light" });
+
+    // Text around the image, a stray non-image element, and an empty
+    // paragraph are all ordinary flow: none of them becomes a visual block.
+    for (const paragraph of root.querySelectorAll("p")) {
+      expect(paragraph.classList.contains("m2h-image-block")).toBe(false);
+    }
+  });
+
+  it("stays idempotent across repeated enhancement passes", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = '<p><img src="/a.png" alt="A"></p>';
+
+    await renderRichContent(root, { mode: "light" });
+    await renderRichContent(root, { mode: "light" });
+
+    // The class is only ever added, never stacked, and the framed image
+    // never grows a second frame on the re-run.
+    const block = root.querySelector("p.m2h-image-block");
+    expect(block?.className).toBe("m2h-image-block");
+    expect(root.querySelectorAll(".m2h-image-frame")).toHaveLength(1);
+  });
+});
+
 describe("lazy image presentation", () => {
   // These cases mount the body through prepareLazyImages so the images carry
   // the same pending rewrite the App produces before enhancement runs.

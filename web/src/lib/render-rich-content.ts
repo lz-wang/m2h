@@ -157,6 +157,7 @@ export async function renderRichContent(
   addCodeLineNumbers(root);
   addCollapsibleCodeBlocks(root);
   addImageEnhancements(root);
+  markStandaloneImageBlocks(root);
   // Kick the Tablesort download off before awaiting Mermaid/KaTeX so all
   // needed runtimes load in parallel; the tables themselves are enhanced only
   // after those settle. The reserved indicator space is static CSS, so the
@@ -691,6 +692,44 @@ function ensureImagePresentationFrame(image: HTMLImageElement): HTMLElement {
   target.replaceWith(frame);
   frame.append(target);
   return frame;
+}
+
+// Mark every paragraph whose content is image frames only — a standalone
+// picture, a sole-image link, or several plain images in a row — with
+// m2h-image-block, the class that hands the paragraph's external spacing to
+// the same 1rem contract the rich-visual frames follow (see the stylesheet).
+// Prose paragraphs that merely contain an image inline keep their normal
+// flow: a frame only counts when it is the paragraph's entire content, so the
+// rules are "ignore whitespace text" and "everything else must be a frame".
+// Runs after addImageEnhancements, when the frames exist to be counted.
+// Idempotent, like every enhancement: the class is only added, never stacked.
+function markStandaloneImageBlocks(root: HTMLElement): void {
+  for (const paragraph of root.querySelectorAll<HTMLParagraphElement>("p")) {
+    if (isStandaloneImageParagraph(paragraph)) {
+      paragraph.classList.add("m2h-image-block");
+    }
+  }
+}
+
+function isStandaloneImageParagraph(paragraph: HTMLParagraphElement): boolean {
+  let sawFrame = false;
+  for (const node of paragraph.childNodes) {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if ((node.textContent ?? "").trim() !== "") {
+        return false;
+      }
+      continue;
+    }
+    if (
+      node instanceof HTMLElement &&
+      node.classList.contains("m2h-image-frame")
+    ) {
+      sawFrame = true;
+      continue;
+    }
+    return false;
+  }
+  return sawFrame;
 }
 
 // The frame's hover tooltip: one line repeating the alt text with the

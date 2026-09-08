@@ -705,21 +705,33 @@ body,
  * take effect after render-rich-content.ts enhances the rendered Markdown.
  */
 /*
+ * Visual blocks share one external spacing contract: a standalone image
+ * paragraph (m2h-image-block, stamped by render-rich-content.ts) and every
+ * rich-visual frame keep the same 1rem to the surrounding prose — the rhythm
+ * github-markdown-css gives paragraphs. The inner image, diagram, or chart
+ * container never decides the block's external distance itself; adjacent
+ * paragraph margins collapse into these, so the gap reads identically around
+ * every visual kind.
+ */
+.markdown-body .m2h-image-block,
+.markdown-body .m2h-rich-visual-frame {
+  margin: 1rem 0;
+}
+
+/*
  * Mermaid frame, injected by render-rich-content.ts around every rendered
  * diagram. The frame carries the shared m2h-rich-visual-frame class plus this
  * engine-specific one: shared presentation (the Lightbox trigger's hover
- * reveal) keys on the shared class so every rich-visual engine is covered at
- * once, while engine-specific geometry stays addressable here. The frame owns
- * the block's external geometry — the margin moves here from the .mermaid
- * container — and is the stable positioning context for the shared Lightbox
- * trigger: theme switches replace only the SVG inside the container, so the
- * frame, its trigger, and any focus on it survive every repaint. Block-level
- * like the code frame, so the trigger pins to the content column's top-right
- * regardless of the diagram's own width.
+ * reveal, the external margin above) keys on the shared class so every
+ * rich-visual engine is covered at once, while engine-specific geometry stays
+ * addressable here. The frame is the stable positioning context for the
+ * shared Lightbox trigger: theme switches replace only the SVG inside the
+ * container, so the frame, its trigger, and any focus on it survive every
+ * repaint. Block-level like the code frame, so the trigger pins to the
+ * content column's top-right regardless of the diagram's own width.
  */
 .markdown-body .m2h-mermaid-frame {
   position: relative;
-  margin: 1rem 0;
 }
 
 .markdown-body .mermaid {
@@ -747,7 +759,6 @@ body,
  */
 .markdown-body .m2h-vega-lite-frame {
   position: relative;
-  margin: 1rem 0;
 }
 
 .markdown-body .m2h-vega-lite {
@@ -757,6 +768,14 @@ body,
 }
 
 .markdown-body .m2h-vega-lite-frame > .m2h-vega-lite {
+  /* Vega-Embed stamps its own .vega-embed class (display: inline-block) on
+   * the container, which would sit the chart on the frame's text baseline
+   * and hang the line-box descent below it — 6px of phantom space the frame
+   * never asked for. Block flow keeps the frame's box exactly the chart's,
+   * so the shared external margin above stays the only spacing.
+   * (0,3,0) here outranks the injected .vega-embed (0,1,0) without
+   * !important; the export output, with no frame, keeps the embed default. */
+  display: block;
   margin: 0;
 }
 
@@ -914,6 +933,15 @@ body,
  * selection, so the frame wraps the picture instead). */
 .markdown-body .m2h-image-frame img {
   max-width: 100%;
+}
+
+/* A standalone image paragraph (see markStandaloneImageBlocks): the frames
+ * are inline-blocks, so the paragraph's own line-height would still hang a
+ * half-leading strut above and below them. Zeroing it here lets the image
+ * sit flush inside the block, whose 1rem margins (shared rule with the
+ * rich-visual frames) then decide the whole distance to the prose. */
+.markdown-body .m2h-image-block {
+  line-height: 0;
 }
 
 /*
