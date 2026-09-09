@@ -354,6 +354,28 @@ describe("renderRichContent", () => {
     expect(options?.ignoredClasses).toContain("m2h-literal-dollar");
   });
 
+  it("does not split escaped dollars inside parser-owned math nodes", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = String.raw`<p>Price $9 and $200 <span class="m2h-math">$x + \$ + y$</span></p><div class="m2h-math">$$x + \$ + y$$</div>`;
+    const formulas = Array.from(
+      root.querySelectorAll(".m2h-math"),
+      (node) => node.textContent,
+    );
+
+    await renderRichContent(root, { mode: "light" });
+
+    expect(
+      Array.from(
+        root.querySelectorAll(".m2h-math"),
+        (node) => node.textContent,
+      ),
+    ).toEqual(formulas);
+    expect(root.querySelector(".m2h-math .m2h-literal-dollar")).toBeNull();
+    expect(root.querySelectorAll(".m2h-literal-dollar")).toHaveLength(2);
+    expect(renderMathInElementMock).toHaveBeenCalledTimes(1);
+  });
+
   it("runs mermaid before KaTeX so math never scans diagram source", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const order: string[] = [];

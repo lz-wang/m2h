@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 演示索引
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-09
 ---
 
 # 检查规则演示索引
@@ -58,6 +58,7 @@ m2h check docs --enable all --disable image.alt-empty
   仍是协议相对网络 URL。WebUI 路由与检查器共享这套分类和越界边界；已经分类
   为本地但越出当前 root 的引用会在预览中改写到专用 404 地址，不会保留原始
   相对 URL 供浏览器再次解析。
+- [数学公式](../math.md)由共享解析器识别为原文节点，公式内的数组下标、等号、引用形状和 HTML 标签不参与 Markdown 结构与引用检查；公式外的真实错误仍正常报告。
 - 引用、脚注和反转链接扫描以真实 Goldmark AST 为边界：行内/块级代码、HTML
   block、HTML comment 与 inline raw HTML tag token 不参与；inline tag 之间的
   文本仍是普通 Markdown，会按渲染器相同语义检查。
@@ -65,7 +66,7 @@ m2h check docs --enable all --disable image.alt-empty
   其中看似 reference、脚注或反转链接的括号组合不会产生诊断。
 - `section.empty` 的“内容”指实际渲染节点；thematic break 会生成 `<hr>`，因此
   计为内容，reference definition、HTML comment 与空白不计。
-- `unicode.*` 检查源文件文本质量，仍扫描 raw HTML，仅代码区域豁免。
+- `unicode.*` 检查源文件文本质量，仍扫描 raw HTML，代码与数学区域豁免。
 
 ## error 规则（默认开启）
 

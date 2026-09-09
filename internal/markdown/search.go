@@ -100,6 +100,9 @@ func ProjectForSearch(source []byte, sourcePath string) (SearchProjection, error
 				title = headingText
 			}
 			return ast.WalkSkipChildren, nil
+		case *mathBlock:
+			projection.appendText(string(typed.Lines().Value(source)), section)
+			return ast.WalkSkipChildren, nil
 		case *ast.Paragraph, *ast.TextBlock:
 			// The two types are the leaf prose blocks: Paragraph for
 			// document body and loose list items, TextBlock for tight list
@@ -188,6 +191,8 @@ func inlineText(node ast.Node, source []byte) string {
 			return ast.WalkContinue, nil
 		}
 		switch typed := current.(type) {
+		case *mathInline:
+			builder.Write(typed.segment.Value(source))
 		case *ast.Text:
 			segment := typed.Segment
 			builder.Write(segment.Value(source))

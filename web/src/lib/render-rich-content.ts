@@ -65,7 +65,7 @@ const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
 // opener followed by non-space, closer preceded by non-space and not followed
 // by a digit.
 const LITERAL_DOLLAR_CLASS = "m2h-literal-dollar";
-const KATEX_IGNORED_CONTENT_SELECTOR = `script, noscript, style, textarea, pre, code, option, .katex, .${LITERAL_DOLLAR_CLASS}`;
+const KATEX_IGNORED_CONTENT_SELECTOR = `script, noscript, style, textarea, pre, code, option, .katex, .m2h-math, .${LITERAL_DOLLAR_CLASS}`;
 
 // Plain GFM tables Goldmark renders as bare <table>; a class attribute marks
 // user-authored HTML tables the client-side sorter must leave untouched, and

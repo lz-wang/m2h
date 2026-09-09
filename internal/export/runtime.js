@@ -20,7 +20,7 @@
   // as "$9 ... $200" stays literal while $x$ keeps rendering as inline math.
   var LITERAL_DOLLAR_CLASS = "m2h-literal-dollar";
   var KATEX_IGNORED_CONTENT_SELECTOR =
-    "script, noscript, style, textarea, pre, code, option, .katex, ." + LITERAL_DOLLAR_CLASS;
+    "script, noscript, style, textarea, pre, code, option, .katex, .m2h-math, ." + LITERAL_DOLLAR_CLASS;
   // Same leading-keyword rule as the official plugin's own detector: only a
   // diagram whose source starts with the zenuml keyword needs the plugin.
   var ZENUML_PREFIX = /^\s*zenuml/;

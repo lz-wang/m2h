@@ -17,21 +17,23 @@ type byteRange struct {
 	stop  int
 }
 
-// codeRanges collects the byte ranges Goldmark parsed as code: fenced and
-// indented code block contents plus inline code span contents. Everything
+// literalRanges collects math nodes, fenced and indented code block contents,
+// and inline code span contents. Everything
 // inside them is literal text the link and footnote parsers never saw, so
 // the source scan must never report syntax found there. Ranges come from the
 // AST rather than a hand-rolled block parser, which keeps the scan in lock
 // step with real parsing — including indented code inside list items and
 // code spans inside blockquotes.
-func codeRanges(document ast.Node) []byteRange {
+func literalRanges(document ast.Node) []byteRange {
 	ranges := make([]byteRange, 0)
 	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
 			return ast.WalkContinue, nil
 		}
 		switch typed := node.(type) {
-		case *ast.CodeBlock, *ast.FencedCodeBlock:
+		case *mathInline:
+			ranges = append(ranges, byteRange{start: typed.segment.Start, stop: typed.segment.Stop})
+		case *mathBlock, *ast.CodeBlock, *ast.FencedCodeBlock:
 			lines := typed.Lines()
 			if lines.Len() == 0 {
 				return ast.WalkContinue, nil
@@ -497,7 +499,7 @@ func newSourceScanner(source []byte, code []byteRange, rawHTML []byteRange, link
 	return scanner
 }
 
-// inCode reports whether offset sits inside a code range or a fence line,
+// inCode reports whether offset sits inside literal code/math or a fence line,
 // where nothing the scanner looks for can be real syntax.
 func (scanner *sourceScanner) inCode(offset int) bool {
 	index := sort.Search(len(scanner.code), func(index int) bool {
