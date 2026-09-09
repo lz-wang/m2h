@@ -34,3 +34,28 @@ func TestDiagnosticForRulePanicsOnUnknownInternalRule(t *testing.T) {
 	current := &indexedDocument{}
 	current.diagnosticForRule("typo.rule", "message", markdown.Position{Line: 1, Column: 1})
 }
+
+func TestDirectoryLinksShareDocumentSelection(t *testing.T) {
+	t.Parallel()
+	result, err := runCheck(t, map[string]string{
+		"index.md":        "# Index\n\n[Topic](topic/#intro) <a href=\"topic/\">Topic</a> [No slash](topic)\n",
+		"topic/README.md": "# Intro\n",
+		"topic/other.md":  "# Other\n",
+	}, Options{Depth: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Diagnostics) != 0 {
+		t.Fatalf("directory links rejected: %+v", result.Diagnostics)
+	}
+	result, err = runCheck(t, map[string]string{
+		"index.md":        "# Index\n\n[Topic](topic/#missing)\n",
+		"topic/README.md": "# Intro\n",
+	}, Options{Depth: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Diagnostics) != 1 || result.Diagnostics[0].Rule != RuleAnchorMissing {
+		t.Fatalf("anchor not checked: %+v", result.Diagnostics)
+	}
+}

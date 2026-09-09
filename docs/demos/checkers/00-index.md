@@ -53,6 +53,7 @@ m2h check docs --enable all --disable image.alt-empty
 
 ## 语义边界
 
+- 本地目录链接按当前 root 中可见的直属文档选择入口：README、index、00-index 优先，否则按路径字典序选择；支持 `.md` / `.markdown`。没有直属文档时按路径深度、字典序选择可见子目录文档，不跨 root，并遵循 depth/glob 与隐藏路径过滤。有效入口继续检查锚点；图片指向目录仍报告 `local-target.not-regular`。
 - 本地引用中，`images/logo.png` 相对当前文档，`/images/logo.png` 相对当前输入
   root（多 root 模式下为引用所在的 root），而 `//cdn.example.com/logo.png`
   仍是协议相对网络 URL。WebUI 路由与检查器共享这套分类和越界边界；已经分类

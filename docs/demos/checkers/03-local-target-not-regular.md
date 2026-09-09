@@ -13,14 +13,14 @@ checker: local-target.not-regular
 
 检查规则：`local-target.not-regular`
 
-下面这个链接指向 `assets/` 目录——路径存在，但它不是普通文件，浏览器无法
-把它当作一张图或一页文档打开：
+下面这张图片指向 `assets/` 目录——路径存在，但它不是图片文件。
+普通目录链接现在可以选择目录入口文档，图片仍必须指向普通文件：
 
-[资源目录不是普通文件](assets)
+![资源目录不是普通文件](assets)
 
 预期表现：
 
 - `m2h check docs/demos/checkers/03-local-target-not-regular.md` 报告
-  `19:2: error [local-target.not-regular]: target "assets" is not a regular file`
+  `19:3: error [local-target.not-regular]: target "assets" is not a regular file`
 
 [返回检查规则演示索引](00-index.md)

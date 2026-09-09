@@ -212,8 +212,9 @@ func (handler *documentHandler) serveDocument(response http.ResponseWriter, requ
 		return
 	}
 	rendered, err := markdown.Render(body, markdown.RenderOptions{
-		URLMode:  markdown.URLWeb,
-		RootPath: handler.workspace.publicRoot(root.id),
+		URLMode:           markdown.URLWeb,
+		DirectoryDocument: handler.directoryDocumentResolver(request.Context(), root),
+		RootPath:          handler.workspace.publicRoot(root.id),
 		// Rendering resolves relative Markdown links and attachments against
 		// the virtual (public) path. RootPath anchors both document-relative
 		// and workspace-root-relative destinations inside the current root,

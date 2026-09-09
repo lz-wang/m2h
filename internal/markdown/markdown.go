@@ -72,9 +72,14 @@ func (mode URLMode) String() string {
 
 // RenderOptions configures a single Markdown render.
 type RenderOptions struct {
-	SourcePath string
-	RootPath   string
-	URLMode    URLMode
+	// DirectoryDocument optionally maps a resolved local directory URL path to
+	// an encoded, visible document path within the same root. No callback is
+	// needed for standalone export, which preserves source links. A true boolean
+	// with an empty target denotes a directory without a visible entry.
+	DirectoryDocument func(string) (string, bool)
+	SourcePath        string
+	RootPath          string
+	URLMode           URLMode
 }
 
 // Heading is one entry of the document's table of contents, extracted from the
@@ -251,6 +256,14 @@ func rewriteDestination(destination []byte, options RenderOptions, image bool) [
 		return invalidLocalDestination(original)
 	}
 	_, suffix := splitDestination(original)
+	if !image && options.DirectoryDocument != nil {
+		if document, directory := options.DirectoryDocument(resolved); directory {
+			if document == "" {
+				return invalidLocalDestination(original)
+			}
+			return []byte("/doc/" + document + suffix)
+		}
+	}
 	if image || !RoutesToDocument(local.Path) {
 		return []byte("/assets/" + resolved + suffix)
 	}
@@ -264,7 +277,8 @@ func invalidLocalDestination(original string) []byte {
 // RoutesToDocument reports whether a local destination — identified by its
 // path part exactly as the Markdown source wrote it, before any percent
 // decoding — is a Markdown document the web renderer routes to /doc. Every
-// other local destination routes to /assets. The check command reuses this
+// other file destination routes to /assets; the scope-aware directory
+// callback can instead select a visible document entry. The checker reuses this
 // predicate so routing decisions can never disagree with the renderer: an
 // encoded extension (guide%2Emd) is not a Markdown destination here, and the
 // assets route that receives it never serves Markdown files.

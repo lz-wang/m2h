@@ -183,6 +183,11 @@ m2h check docs --enable all --disable image.alt-empty
 `m2h check --help`。末尾检查要求恰好一个结束换行（`正文\n`，兼容 CRLF），
 编辑器显示最后一行为空即可，无需再添加空白行。
 
+本地目录链接（如 `[算法](./algorithm/)`）会打开该目录内可见的入口文档：
+依次优先 README、index、00-index（`.md` / `.markdown`，名称不区分大小写），
+再按路径字典序选择直属 Markdown 文件；没有直属文档时按路径深度、字典序选择可见子目录文档，不跨 root 回退。
+空目录、没有可见文档的目录和目录符号链接不可作为文档入口。
+
 本地引用使用与 WebUI 相同的路径语义：`images/logo.png` 相对当前文档，
 `/images/logo.png` 相对当前输入 root（不是宿主机文件系统根目录）；多 root 模式
 始终锚定引用所在的 root。`//cdn.example.com/logo.png` 仍是协议相对网络 URL，

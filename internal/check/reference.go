@@ -177,6 +177,22 @@ func checkReference(
 	}
 
 	status := resolver.resolve(resolved)
+	directoryLink := false
+	if reference.Route == markdown.ReferenceRouteLink && !scope.single && (status.state == targetNotRegular || resolved == ".") {
+		visible := make([]string, 0, len(index))
+		for candidate := range index {
+			visible = append(visible, candidate)
+		}
+		directory := status.target
+		if resolved == "." {
+			directory = "."
+		}
+		if document := files.DirectoryDocument(scope.root, directory, visible); document != "" {
+			encoded := url.URL{Path: document}
+			status = resolver.resolve(encoded.EscapedPath())
+			directoryLink = true
+		}
+	}
 	switch status.state {
 	case targetMissing:
 		if local.Base == markdown.DestinationBaseRoot && errors.Is(status.err, files.ErrPathTraversal) && rules.Enabled(RuleLocalTargetOutsideRoot) {
@@ -209,12 +225,13 @@ func checkReference(
 	}
 
 	// Mirror the web renderer's routing, decided from the raw destination:
-	// a link whose path part carries a Markdown extension routes to /doc;
+	// directory links resolved above and paths with Markdown extensions route
+	// to /doc;
 	// everything else (images, raw HTML src/poster/data, and links to
 	// non-Markdown names — including encoded ones like guide%2Emd) routes to
 	// /assets, and the assets route never serves Markdown files. Such a
 	// target is unreachable in the browser even though it exists on disk.
-	if reference.Route != markdown.ReferenceRouteLink || !markdown.RoutesToDocument(local.Path) {
+	if reference.Route != markdown.ReferenceRouteLink || (!directoryLink && !markdown.RoutesToDocument(local.Path)) {
 		if files.IsMarkdown(status.target) && rules.Enabled(RuleLocalTargetMissing) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
 				fmt.Sprintf("target %q is not accessible: the assets route never serves Markdown files", status.target), reference))

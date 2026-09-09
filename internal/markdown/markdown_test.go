@@ -761,3 +761,31 @@ func TestRenderGitHubExtensionsFixture(t *testing.T) {
 		t.Errorf("fragment link missing or rewritten in export:\n%s", exported.Body)
 	}
 }
+
+func TestDirectoryDestinationCallbackPreservesScopeAndExport(t *testing.T) {
+	t.Parallel()
+	calls := 0
+	options := RenderOptions{URLMode: URLWeb, SourcePath: "r2/docs/index.md", RootPath: "r2", DirectoryDocument: func(path string) (string, bool) {
+		calls++
+		if path == "r2/docs/topic" {
+			return "r2/docs/topic/README.md", true
+		}
+		return "", false
+	}}
+	source := []byte("[Topic](topic/?mode=dark#hello) [Escape](../../r1/topic/) ![Image](topic/)\n")
+	rendered, err := Render(source, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rendered.Body, `href="/doc/r2/docs/topic/README.md?mode=dark#hello"`) || !strings.Contains(rendered.Body, InvalidLocalReferencePath) || calls != 1 {
+		t.Fatalf("unexpected rewrite %d: %s", calls, rendered.Body)
+	}
+	options.URLMode = URLPassthrough
+	rendered, err = Render(source, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rendered.Body, `href="topic/?mode=dark#hello"`) || calls != 1 {
+		t.Fatalf("export changed: %s", rendered.Body)
+	}
+}
