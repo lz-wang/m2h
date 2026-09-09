@@ -29,4 +29,3 @@ checker: unicode.mojibake
   （行内代码里的内容也永不参与判定）
 
 [返回检查规则演示索引](00-index.md)
-

@@ -30,4 +30,3 @@ checker: section.empty
   definition、HTML comment 与空白不计为渲染内容
 
 [返回检查规则演示索引](00-index.md)
-

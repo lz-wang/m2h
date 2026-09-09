@@ -16,7 +16,7 @@
 
 ### 新增
 
-- `m2h check` 新增三条默认开启的 warning：`frontmatter.title-mismatch` 在有效 title 与正文首个 H1 都存在时检查内容一致性；`frontmatter.tags-count` 在 tags 字段存在时要求规范化后有 1–5 个标签；`document.trailing-blank-lines` 要求文档最后恰好保留一整行空白行（`正文\n\n`，兼容 LF/CRLF）。三条规则均支持 `--disable`，并遵循 `--strict` 的 warning 失败行为。YAML 空标签（null、~）不再作为有效标签显示或计数。
+- `m2h check` 新增三条默认开启的 warning：`frontmatter.title-mismatch` 在有效 title 与正文首个 H1 都存在时检查内容一致性；`frontmatter.tags-count` 在 tags 字段存在时要求规范化后有 1–5 个标签；`document.trailing-blank-lines` 要求文档以恰好一个换行符结束（`正文\n`，兼容 LF/CRLF，编辑器显示末尾空行即可），不允许额外的空白行。三条规则均支持 `--disable`，并遵循 `--strict` 的 warning 失败行为。YAML 空标签（null、~）不再作为有效标签显示或计数。
 
 ### 修复
 
@@ -480,4 +480,3 @@
 ### 新增
 
 - 提供可构建的 m2h CLI 骨架、完整命令帮助以及一致的 `version`、`--version` 版本输出。
-

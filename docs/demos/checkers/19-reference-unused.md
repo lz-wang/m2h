@@ -27,4 +27,3 @@ checker: reference.unused
 - 标签按渲染器同一归一化比较：`[文字][SITE]` 同样算使用 `[site]`
 
 [返回检查规则演示索引](00-index.md)
-

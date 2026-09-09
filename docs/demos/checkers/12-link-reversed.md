@@ -27,4 +27,3 @@ checker: link.reversed
   之间仍是 Markdown 文本，已接受 inline link 的 destination/title 保持字面语法
 
 [返回检查规则演示索引](00-index.md)
-

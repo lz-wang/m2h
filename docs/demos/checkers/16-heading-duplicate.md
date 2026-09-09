@@ -28,4 +28,3 @@ checker: heading.duplicate
   重复 H1 只由 `document.multiple-h1` 报告，不重复计数
 
 [返回检查规则演示索引](00-index.md)
-

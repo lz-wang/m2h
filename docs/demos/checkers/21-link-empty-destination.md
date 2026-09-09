@@ -27,4 +27,3 @@ checker: link.empty-destination
   两个规则各自独立报告
 
 [返回检查规则演示索引](00-index.md)
-

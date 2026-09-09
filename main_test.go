@@ -58,15 +58,15 @@ func TestRunReturnsExitCodeAndRoutesOutput(t *testing.T) {
 func TestRunCheckExitCodes(t *testing.T) {
 	root := t.TempDir()
 	broken := filepath.Join(root, "broken.md")
-	if err := os.WriteFile(broken, []byte("# Broken\n\n![missing](nope.png)\n\n"), 0o644); err != nil {
+	if err := os.WriteFile(broken, []byte("# Broken\n\n![missing](nope.png)\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	clean := filepath.Join(root, "clean.md")
-	if err := os.WriteFile(clean, []byte("# Clean\n\n"), 0o644); err != nil {
+	if err := os.WriteFile(clean, []byte("# Clean\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	warning := filepath.Join(root, "warning.md")
-	if err := os.WriteFile(warning, []byte("# Warning\n\n![](logo.png)\n\n"), 0o644); err != nil {
+	if err := os.WriteFile(warning, []byte("# Warning\n\n![](logo.png)\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "logo.png"), []byte("png"), 0o644); err != nil {

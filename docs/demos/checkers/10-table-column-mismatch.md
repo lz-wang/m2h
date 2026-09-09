@@ -29,4 +29,3 @@ checker: table.column-mismatch
   同样报本规则
 
 [返回检查规则演示索引](00-index.md)
-

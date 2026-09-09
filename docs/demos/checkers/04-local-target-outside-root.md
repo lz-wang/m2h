@@ -24,4 +24,3 @@ checker: local-target.outside-root
   `19:2: error [local-target.outside-root]: target "../../../../etc/hosts" resolves outside the workspace root`
 
 [返回检查规则演示索引](00-index.md)
-

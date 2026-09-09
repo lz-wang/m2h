@@ -25,4 +25,3 @@ checker: document.multiple-h1
 - 诊断定位在**第二个** H1（第一个多余的）所在行
 
 [返回检查规则演示索引](00-index.md)
-

@@ -41,18 +41,21 @@ func TestTrailingBlankLinesRawSource(t *testing.T) {
 		name, source string
 		warn         bool
 	}{
-		{"one LF blank", "text\n\n", false},
-		{"one CRLF blank", "text\r\n\r\n", false},
+		{"extra LF blank", "text\n\n", true},
+		{"single CRLF", "text\r\n", false},
 		{"no newline", "text", true},
-		{"only line ending", "text\n", true},
+		{"single LF", "text\n", false},
+		{"DNS reference at EOF", "- [RFC 9460](https://www.rfc-editor.org/rfc/rfc9460)\n", false},
+		{"content trailing spaces", "text  \n", false},
+		{"extra CRLF blank", "text\r\n\r\n", true},
 		{"two blanks", "text\n\n\n", true},
 		{"CRLF extra", "text\r\n\r\n\r\n", true},
-		{"spaces in blank", "text\n \t\n", false},
+		{"spaces in blank", "text\n \t\n", true},
 		{"unterminated blank", "text\n \t", true},
 		{"whitespace extra", "text\n \n\t\n", true},
 		{"empty", "", true},
 		{"blank only", "\n", false},
-		{"frontmatter only", "---\ntags: [a]\n---\n\n", false},
+		{"frontmatter only", "---\ntags: [a]\n---\n", false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -79,7 +82,7 @@ func TestTrailingBlankLinesRawSource(t *testing.T) {
 func TestMetadataRulesSelectionAndInvalidYAML(t *testing.T) {
 	t.Parallel()
 	path := filepath.Join(t.TempDir(), "guide.md")
-	writeFile(t, path, "---\ntitle: Other\ntags: []\n---\n# Guide\n")
+	writeFile(t, path, "---\ntitle: Other\ntags: []\n---\n# Guide\n\n")
 	result, err := Run(context.Background(), Options{Input: path})
 	if err != nil {
 		t.Fatal(err)
@@ -97,7 +100,7 @@ func TestMetadataRulesSelectionAndInvalidYAML(t *testing.T) {
 			t.Fatalf("disabled rule: %+v", d)
 		}
 	}
-	writeFile(t, path, "---\ntitle: [\n---\n# Guide\n")
+	writeFile(t, path, "---\ntitle: [\n---\n# Guide\n\n")
 	result, err = Run(context.Background(), Options{Input: path})
 	if err != nil {
 		t.Fatal(err)

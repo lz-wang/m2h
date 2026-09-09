@@ -24,4 +24,3 @@ checker: local-target.not-regular
   `19:2: error [local-target.not-regular]: target "assets" is not a regular file`
 
 [返回检查规则演示索引](00-index.md)
-

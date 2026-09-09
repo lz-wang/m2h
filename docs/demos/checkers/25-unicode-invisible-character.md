@@ -28,4 +28,3 @@ checker: unicode.invisible-character
   emoji 依赖的 ZWJ（U+200D）与 variation selector（U+FE0F）永不报告
 
 [返回检查规则演示索引](00-index.md)
-

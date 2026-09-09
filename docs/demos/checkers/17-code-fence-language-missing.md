@@ -28,4 +28,3 @@ func main() { println("hello") }
   没有内容或 info string，诊断也定位到 opener 行
 
 [返回检查规则演示索引](00-index.md)
-

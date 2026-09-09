@@ -100,7 +100,7 @@ m2h check docs --enable all --disable image.alt-empty
 | [21-link-empty-destination](21-link-empty-destination.md) | `link.empty-destination` | 链接 destination 为空（顺带演示与 `image.alt-empty` 独立报告） |
 | [26-frontmatter-title-mismatch](26-frontmatter-title-mismatch.md) | `frontmatter.title-mismatch` | 有效 title 与首个 H1 的内容不一致 |
 | [27-frontmatter-tags-count](27-frontmatter-tags-count.md) | `frontmatter.tags-count` | 存在 tags 字段，但规范化后的标签数量不在 1–5 之间 |
-| [28-document-trailing-blank-lines](28-document-trailing-blank-lines.md) | `document.trailing-blank-lines` | 文件结尾不恰好保留一整行空白行 |
+| [28-document-trailing-blank-lines](28-document-trailing-blank-lines.md) | `document.trailing-blank-lines` | 缺少结束换行或结尾存在额外空白行 |
 
 ## warning 规则（默认关闭，`--enable` 开启）
 
@@ -119,4 +119,3 @@ m2h check docs --enable all --disable image.alt-empty
 warning）时退出码为 1。交互式终端只着色 severity 和总结结果：error 为红色、
 warning 为黄色、全部通过为绿色；重定向、管道、`NO_COLOR` 与 JSON 输出无颜色。
 文本诊断失败仍通过退出码表达，统计摘要是最后一行，不再追加重复的失败描述。
-

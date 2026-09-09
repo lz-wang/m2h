@@ -25,4 +25,3 @@ checker: frontmatter.date-invalid
   同样触发
 
 [返回检查规则演示索引](00-index.md)
-

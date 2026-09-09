@@ -9,4 +9,3 @@ title: 相邻目标文档
 在目录模式（`m2h check docs/demos/checkers`）下它是被服务的目标，引用它的
 `05-markdown-target-not-served.md` 不会产生诊断；在单文件模式下它不在服务
 范围内，因此触发 `markdown-target.not-served`。
-

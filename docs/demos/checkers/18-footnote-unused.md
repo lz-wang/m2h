@@ -25,4 +25,3 @@ checker: footnote.unused
 - 定义有内容，因此不触发 `footnote.empty`
 
 [返回检查规则演示索引](00-index.md)
-

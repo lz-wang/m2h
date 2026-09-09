@@ -26,4 +26,3 @@ checker: link.text-nondescriptive
   图片 alt 与 raw HTML 不在范围内
 
 [返回检查规则演示索引](00-index.md)
-

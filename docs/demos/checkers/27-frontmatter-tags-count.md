@@ -18,4 +18,3 @@ update_date: 2026-09-10
 `4:1: warning [frontmatter.tags-count]: frontmatter has 0 tags; expected 1 to 5`
 
 [返回检查规则演示索引](00-index.md)
-

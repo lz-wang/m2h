@@ -29,4 +29,3 @@ checker: reference.undefined
   其中的 `[示例][missing]` 不会占用真实 undefined reference 的诊断位置
 
 [返回检查规则演示索引](00-index.md)
-

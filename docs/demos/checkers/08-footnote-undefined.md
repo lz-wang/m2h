@@ -26,4 +26,3 @@ checker: footnote.undefined
   之间的文本仍按 Markdown 解析，inline link destination/title 则保持链接字面语法
 
 [返回检查规则演示索引](00-index.md)
-

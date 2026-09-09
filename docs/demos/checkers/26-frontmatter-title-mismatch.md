@@ -18,4 +18,3 @@ update_date: 2026-09-10
 `2:1: warning [frontmatter.title-mismatch]: frontmatter title "元数据标题" does not match first H1 "正文标题"`
 
 [返回检查规则演示索引](00-index.md)
-

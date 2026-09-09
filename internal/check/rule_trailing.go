@@ -2,14 +2,13 @@ package check
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/lz-wang/m2h/internal/markdown"
 )
 
-// checkTrailingBlankLines counts physical blank lines after the final content
-// line. The empty split field after a terminal newline is not itself a line.
-// LF and CRLF are equivalent; a whitespace-only line counts as a blank line.
+// checkTrailingBlankLines requires one terminal LF/CRLF, as displayed by an
+// editor with a final empty cursor line. Additional whitespace-only lines are
+// rejected; the empty split field after the terminal newline is not a line.
 func checkTrailingBlankLines(current *indexedDocument, source []byte, rules RuleSet) []Diagnostic {
 	if !rules.Enabled(RuleDocumentTrailingBlankLines) {
 		return nil
@@ -29,7 +28,7 @@ func checkTrailingBlankLines(current *indexedDocument, source []byte, rules Rule
 		}
 		blank++
 	}
-	if blank == 1 && terminated {
+	if terminated && (blank == 0 || bytes.Equal(source, []byte("\n")) || bytes.Equal(source, []byte("\r\n"))) {
 		return nil
 	}
 	position := markdown.Position{Line: len(lines), Column: 1}
@@ -40,5 +39,5 @@ func checkTrailingBlankLines(current *indexedDocument, source []byte, rules Rule
 		position.Column = len(bytes.TrimSuffix(lines[len(lines)-1], []byte{'\r'})) + 1
 	}
 	return []Diagnostic{current.diagnosticForRule(RuleDocumentTrailingBlankLines,
-		fmt.Sprintf("document must end with exactly one blank line (found %d; final newline: %t)", blank, terminated), position)}
+		"document must end with a single newline (LF or CRLF), without trailing blank lines", position)}
 }

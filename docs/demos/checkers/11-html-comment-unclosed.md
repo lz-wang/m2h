@@ -25,4 +25,3 @@ checker: html.comment-unclosed
 [返回检查规则演示索引](00-index.md)
 
 <!-- 遗忘的注释，后面的内容都被吞掉了
-

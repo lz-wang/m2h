@@ -24,4 +24,3 @@ checker: image.alt-empty
 - 装饰性图片使用空 alt 是合法做法，因此本规则是 warning 而不是 error
 
 [返回检查规则演示索引](00-index.md)
-

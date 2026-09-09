@@ -180,7 +180,8 @@ m2h check docs --enable all --disable image.alt-empty
 
 完整的 28 条规则、默认开关、触发样例、行为边界与逐字输出见
 [检查规则演示索引](docs/demos/checkers/00-index.md)；全部命令选项见
-`m2h check --help`。
+`m2h check --help`。末尾检查要求恰好一个结束换行（`正文\n`，兼容 CRLF），
+编辑器显示最后一行为空即可，无需再添加空白行。
 
 本地引用使用与 WebUI 相同的路径语义：`images/logo.png` 相对当前文档，
 `/images/logo.png` 相对当前输入 root（不是宿主机文件系统根目录）；多 root 模式
@@ -206,4 +207,3 @@ m2h 支持常用 GFM Markdown，并提供以下扩展：
 ## 许可证
 
 [MIT](LICENSE)
-

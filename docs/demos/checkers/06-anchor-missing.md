@@ -26,4 +26,3 @@ checker: anchor.missing
   （`target.md#anchor`）走同一规则
 
 [返回检查规则演示索引](00-index.md)
-

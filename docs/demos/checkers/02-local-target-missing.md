@@ -24,4 +24,3 @@ checker: local-target.missing
 - 图片写有 alt 文本，因此不会同时触发 `image.alt-empty`
 
 [返回检查规则演示索引](00-index.md)
-
