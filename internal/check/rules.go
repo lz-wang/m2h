@@ -10,6 +10,13 @@ import (
 // formats and are part of the stable contract CI and tooling consume, so
 // they must never be renamed.
 const (
+	// RuleFrontMatterTitleMismatch compares an available title with the first H1.
+	RuleFrontMatterTitleMismatch = "frontmatter.title-mismatch"
+	// RuleFrontMatterTagsCount requires 1-5 normalized tags when tags is present.
+	RuleFrontMatterTagsCount = "frontmatter.tags-count"
+	// RuleDocumentTrailingBlankLines checks the document's terminal line ending.
+	RuleDocumentTrailingBlankLines = "document.trailing-blank-lines"
+
 	// RuleFrontMatterInvalid: frontmatter YAML cannot be parsed or its root
 	// node is not a mapping. The document cannot be rendered at all.
 	RuleFrontMatterInvalid = "frontmatter.invalid"

@@ -5,11 +5,11 @@ tags:
   - 文档检查
   - 标题结构
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: document.multiple-h1
 ---
 
-# 第一个 H1 是文档标题
+# 一个文档多个 H1
 
 检查规则：`document.multiple-h1`
 
@@ -25,3 +25,4 @@ checker: document.multiple-h1
 - 诊断定位在**第二个** H1（第一个多余的）所在行
 
 [返回检查规则演示索引](00-index.md)
+

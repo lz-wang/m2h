@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 本地引用
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: local-target.missing
 ---
 
@@ -24,3 +24,4 @@ checker: local-target.missing
 - 图片写有 alt 文本，因此不会同时触发 `image.alt-empty`
 
 [返回检查规则演示索引](00-index.md)
+

@@ -1,20 +1,20 @@
 ---
 title: 检查规则演示索引
-description: m2h check 的 25 条检查规则、触发示例与预期诊断。
+description: m2h check 的 28 条检查规则、触发示例与预期诊断。
 tags:
   - 文档检查
   - 演示索引
 create_date: 2026-08-30
-update_date: 2026-09-09
+update_date: 2026-09-10
 ---
 
 # 检查规则演示索引
 
-本目录为 `m2h check` 的全部 25 条检查规则各提供一个最小触发示例。每个演示
+本目录为 `m2h check` 的全部 28 条检查规则各提供一个最小触发示例。每个演示
 文件只触发自己的规则（个别文件会顺带演示规则间的独立性），文件内的
 "预期表现"一节写明命令与逐字输出。
 
-一次性看全部默认开启的规则（12 error + 9 warning）：
+一次性看全部默认开启的规则（12 error + 12 warning）：
 
 ```bash
 m2h check docs/demos/checkers
@@ -98,6 +98,9 @@ m2h check docs --enable all --disable image.alt-empty
 | [19-reference-unused](19-reference-unused.md) | `reference.unused` | 定义了但从未使用的 reference |
 | [20-frontmatter-date-invalid](20-frontmatter-date-invalid.md) | `frontmatter.date-invalid` | Frontmatter 日期字段写了不存在的日期（2 月 30 日） |
 | [21-link-empty-destination](21-link-empty-destination.md) | `link.empty-destination` | 链接 destination 为空（顺带演示与 `image.alt-empty` 独立报告） |
+| [26-frontmatter-title-mismatch](26-frontmatter-title-mismatch.md) | `frontmatter.title-mismatch` | 有效 title 与首个 H1 的内容不一致 |
+| [27-frontmatter-tags-count](27-frontmatter-tags-count.md) | `frontmatter.tags-count` | 存在 tags 字段，但规范化后的标签数量不在 1–5 之间 |
+| [28-document-trailing-blank-lines](28-document-trailing-blank-lines.md) | `document.trailing-blank-lines` | 文件结尾不恰好保留一整行空白行 |
 
 ## warning 规则（默认关闭，`--enable` 开启）
 
@@ -116,3 +119,4 @@ m2h check docs --enable all --disable image.alt-empty
 warning）时退出码为 1。交互式终端只着色 severity 和总结结果：error 为红色、
 warning 为黄色、全部通过为绿色；重定向、管道、`NO_COLOR` 与 JSON 输出无颜色。
 文本诊断失败仍通过退出码表达，统计摘要是最后一行，不再追加重复的失败描述。
+

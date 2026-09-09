@@ -601,10 +601,10 @@ func TestCheckCommandReportsScope(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "index.md"), []byte("# Index"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "index.md"), []byte("# Index\n\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide\n\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "notes.txt"), []byte("plain"), 0o644); err != nil {
@@ -641,7 +641,7 @@ func TestCheckCommandWritesJSONReport(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "index.md"), []byte("# Index"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "index.md"), []byte("# Index\n\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -659,7 +659,7 @@ func TestCheckCommandValidatesArguments(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide\n\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -733,7 +733,7 @@ func TestCheckCommandEnableRunsOptInRules(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Title\n\n## Empty\n\n## Next\n\ncontent\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Title\n\n## Empty\n\n## Next\n\ncontent\n\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -762,7 +762,7 @@ func TestCheckCommandFailsOnDiagnostics(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide\n\n![missing](nope.png)\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide\n\n![missing](nope.png)\n\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -783,7 +783,7 @@ func TestCheckCommandStrictFailsOnWarnings(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide\n\n![](logo.png)\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "guide.md"), []byte("# Guide\n\n![](logo.png)\n\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "logo.png"), []byte("png"), 0o644); err != nil {
@@ -842,5 +842,29 @@ func TestBareSubcommandsShowOwnHelp(t *testing.T) {
 		if !strings.Contains(stdout, "USAGE:") || !strings.Contains(stdout, name) {
 			t.Fatalf("m2h %s help output does not document the command:\n%s", name, stdout)
 		}
+	}
+}
+
+func TestCheckNewQualityWarningsRespectStrictAndDisable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "guide.md")
+	if err := os.WriteFile(path, []byte("---\ntitle: Other\ntags: []\n---\n# Guide\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for _, strict := range []bool{false, true} {
+		args := []string{"check", path}
+		if strict {
+			args = append(args, "--strict")
+		}
+		stdout, _, err := runCommand(t, args...)
+		if IsCheckFailure(err) != strict {
+			t.Fatalf("strict=%t: %v", strict, err)
+		}
+		if !strings.Contains(stdout, "3 warnings") {
+			t.Fatalf("report: %s", stdout)
+		}
+	}
+	stdout, _, err := runCommand(t, "check", path, "--strict", "--disable", "frontmatter.title-mismatch,frontmatter.tags-count,document.trailing-blank-lines")
+	if err != nil || !strings.Contains(stdout, "no issues found") {
+		t.Fatalf("disabled: %v %s", err, stdout)
 	}
 }

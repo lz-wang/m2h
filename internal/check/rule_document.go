@@ -13,6 +13,7 @@ import (
 // so per-document rules stay cheap, pure and independently testable.
 func checkDocumentRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	diagnostics := make([]Diagnostic, 0)
+	diagnostics = append(diagnostics, checkMetadataRules(current, rules)...)
 	diagnostics = append(diagnostics, checkHeadingRules(current, rules)...)
 	diagnostics = append(diagnostics, checkDuplicateHeadings(current, rules)...)
 	diagnostics = append(diagnostics, checkSectionRules(current, rules)...)

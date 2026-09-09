@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 文本质量
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: unicode.invisible-character
 ---
 
@@ -28,3 +28,4 @@ checker: unicode.invisible-character
   emoji 依赖的 ZWJ（U+200D）与 variation selector（U+FE0F）永不报告
 
 [返回检查规则演示索引](00-index.md)
+

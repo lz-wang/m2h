@@ -14,6 +14,10 @@
 
 ## [未发布]
 
+### 新增
+
+- `m2h check` 新增三条默认开启的 warning：`frontmatter.title-mismatch` 在有效 title 与正文首个 H1 都存在时检查内容一致性；`frontmatter.tags-count` 在 tags 字段存在时要求规范化后有 1–5 个标签；`document.trailing-blank-lines` 要求文档最后恰好保留一整行空白行（`正文\n\n`，兼容 LF/CRLF）。三条规则均支持 `--disable`，并遵循 `--strict` 的 warning 失败行为。YAML 空标签（null、~）不再作为有效标签显示或计数。
+
 ### 修复
 
 - 共享 Markdown 解析器在解析阶段保护 `$...$` 与 `$$...$$` 数学公式，保留数组下标、独立等号、LaTeX 反斜杠和 HTML 特殊字符，修复公式被当作引用链接、Setext 一级标题或其他 Markdown 语法的问题；`m2h check` 不再对公式内容报告引用未定义、多 H1 与连带标题跳级，WebUI 与 HTML 导出使用同一数学节点，避免公式被拆散、目录被污染或公式内容丢失。金额仍保持普通文本，公式之外的真实引用、标题和表格错误继续检查。
@@ -476,3 +480,4 @@
 ### 新增
 
 - 提供可构建的 m2h CLI 骨架、完整命令帮助以及一致的 `version`、`--version` 版本输出。
+

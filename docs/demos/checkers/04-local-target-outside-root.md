@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 路径安全
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: local-target.outside-root
 ---
 
@@ -24,3 +24,4 @@ checker: local-target.outside-root
   `19:2: error [local-target.outside-root]: target "../../../../etc/hosts" resolves outside the workspace root`
 
 [返回检查规则演示索引](00-index.md)
+

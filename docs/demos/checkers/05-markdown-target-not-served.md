@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 文档范围
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: markdown-target.not-served
 ---
 
@@ -25,3 +25,4 @@ checker: markdown-target.not-served
 - 目录模式 `m2h check docs/demos/checkers` 下同一链接合法，不产生诊断
 
 [返回检查规则演示索引](00-index.md)
+

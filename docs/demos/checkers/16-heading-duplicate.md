@@ -5,11 +5,11 @@ tags:
   - 文档检查
   - 标题结构
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: heading.duplicate
 ---
 
-# 部署手册
+# 同一章节下重复标题
 
 检查规则：`heading.duplicate`
 
@@ -28,3 +28,4 @@ checker: heading.duplicate
   重复 H1 只由 `document.multiple-h1` 报告，不重复计数
 
 [返回检查规则演示索引](00-index.md)
+

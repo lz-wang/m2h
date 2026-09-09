@@ -145,6 +145,7 @@ func indexDocument(current document, rules RuleSet) (*indexedDocument, error) {
 	body, frontMatter, err := markdown.ParseFrontMatter(source)
 	if err != nil {
 		indexed := &indexedDocument{document: current, inspectable: false}
+		indexed.diagnostics = append(indexed.diagnostics, checkTrailingBlankLines(indexed, source, rules)...)
 		if rules.Enabled(RuleFrontMatterInvalid) {
 			indexed.diagnostics = append(indexed.diagnostics,
 				indexed.diagnosticForRule(RuleFrontMatterInvalid, err.Error(), markdown.Position{Line: 1, Column: 1}))
@@ -168,7 +169,7 @@ func indexDocument(current document, rules RuleSet) (*indexedDocument, error) {
 		inspection:  inspection,
 		anchors:     anchors,
 	}
-	diagnostics := make([]Diagnostic, 0)
+	diagnostics := checkTrailingBlankLines(indexed, source, rules)
 	diagnostics = append(diagnostics, checkDocumentRules(indexed, rules)...)
 	if rules.Enabled(RuleFrontMatterDateInvalid) {
 		for _, entry := range frontMatterDateEntries(frontMatter) {

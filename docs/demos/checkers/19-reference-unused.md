@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 引用链接
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: reference.unused
 ---
 
@@ -27,3 +27,4 @@ checker: reference.unused
 - 标签按渲染器同一归一化比较：`[文字][SITE]` 同样算使用 `[site]`
 
 [返回检查规则演示索引](00-index.md)
+

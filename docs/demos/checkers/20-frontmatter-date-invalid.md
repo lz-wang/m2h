@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - frontmatter
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 date: 2026-02-30
 checker: frontmatter.date-invalid
 ---
@@ -25,3 +25,4 @@ checker: frontmatter.date-invalid
   同样触发
 
 [返回检查规则演示索引](00-index.md)
+

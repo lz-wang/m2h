@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 可访问性
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: image.alt-empty
 ---
 
@@ -24,3 +24,4 @@ checker: image.alt-empty
 - 装饰性图片使用空 alt 是合法做法，因此本规则是 warning 而不是 error
 
 [返回检查规则演示索引](00-index.md)
+

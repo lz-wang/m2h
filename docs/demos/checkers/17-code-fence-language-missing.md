@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 代码块
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: code-fence.language-missing
 ---
 
@@ -28,3 +28,4 @@ func main() { println("hello") }
   没有内容或 info string，诊断也定位到 opener 行
 
 [返回检查规则演示索引](00-index.md)
+

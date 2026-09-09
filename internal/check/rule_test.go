@@ -502,7 +502,7 @@ func TestCheckHeadingDuplicate(t *testing.T) {
 		},
 		{
 			name:   "frontmatter shifts the duplicate",
-			source: "---\ntitle: Guide\n---\n\n# API\n\n## Install\n\n## Install\n",
+			source: "---\ntitle: API\n---\n\n# API\n\n## Install\n\n## Install\n",
 			want:   []string{fmt.Sprintf("guide.md:9:1 warning %s", RuleHeadingDuplicate)},
 		},
 	}

@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - HTML
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: html.comment-unclosed
 ---
 
@@ -25,3 +25,4 @@ checker: html.comment-unclosed
 [返回检查规则演示索引](00-index.md)
 
 <!-- 遗忘的注释，后面的内容都被吞掉了
+

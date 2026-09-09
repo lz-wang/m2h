@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 锚点
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: anchor.missing
 ---
 
@@ -26,3 +26,4 @@ checker: anchor.missing
   （`target.md#anchor`）走同一规则
 
 [返回检查规则演示索引](00-index.md)
+

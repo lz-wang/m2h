@@ -5,13 +5,13 @@ tags:
   - 文档检查
   - 标题结构
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: section.empty
 ---
 
 检查规则：`section.empty`
 
-# 标题
+# 没有正文的章节
 
 ## 空章节
 
@@ -30,3 +30,4 @@ checker: section.empty
   definition、HTML comment 与空白不计为渲染内容
 
 [返回检查规则演示索引](00-index.md)
+

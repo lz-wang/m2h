@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 链接
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: link.reversed
 ---
 
@@ -27,3 +27,4 @@ checker: link.reversed
   之间仍是 Markdown 文本，已接受 inline link 的 destination/title 保持字面语法
 
 [返回检查规则演示索引](00-index.md)
+

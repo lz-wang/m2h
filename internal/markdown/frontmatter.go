@@ -302,6 +302,9 @@ func IsISODate(value string) bool {
 func normalizeFrontMatterTags(node *yaml.Node) []string {
 	switch node.Kind {
 	case yaml.ScalarNode:
+		if node.Tag == "!!null" {
+			return nil
+		}
 		value := strings.TrimSpace(node.Value)
 		if value == "" {
 			return nil
@@ -311,7 +314,7 @@ func normalizeFrontMatterTags(node *yaml.Node) []string {
 		result := make([]string, 0, len(node.Content))
 		seen := make(map[string]struct{}, len(node.Content))
 		for _, child := range node.Content {
-			if child.Kind != yaml.ScalarNode {
+			if child.Kind != yaml.ScalarNode || child.Tag == "!!null" {
 				continue
 			}
 			value := strings.TrimSpace(child.Value)

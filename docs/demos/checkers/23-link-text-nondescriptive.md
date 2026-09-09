@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 可访问性
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: link.text-nondescriptive
 ---
 
@@ -26,3 +26,4 @@ checker: link.text-nondescriptive
   图片 alt 与 raw HTML 不在范围内
 
 [返回检查规则演示索引](00-index.md)
+

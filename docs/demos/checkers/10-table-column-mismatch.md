@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 表格
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: table.column-mismatch
 ---
 
@@ -29,3 +29,4 @@ checker: table.column-mismatch
   同样报本规则
 
 [返回检查规则演示索引](00-index.md)
+

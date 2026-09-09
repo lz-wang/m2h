@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 脚注
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: footnote.empty
 ---
 
@@ -26,3 +26,4 @@ checker: footnote.empty
 - 冒号后换行、以缩进续行书写多行内容是合法的，不触发本规则
 
 [返回检查规则演示索引](00-index.md)
+

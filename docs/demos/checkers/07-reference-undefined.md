@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 引用链接
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: reference.undefined
 ---
 
@@ -29,3 +29,4 @@ checker: reference.undefined
   其中的 `[示例][missing]` 不会占用真实 undefined reference 的诊断位置
 
 [返回检查规则演示索引](00-index.md)
+

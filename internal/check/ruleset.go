@@ -40,6 +40,10 @@ var ruleDefinitions = []RuleDefinition{
 	{ID: RuleReferenceUnused, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleFootnoteUnused, Severity: SeverityWarning, DefaultEnabled: true},
 
+	{ID: RuleFrontMatterTitleMismatch, Severity: SeverityWarning, DefaultEnabled: true},
+	{ID: RuleFrontMatterTagsCount, Severity: SeverityWarning, DefaultEnabled: true},
+	{ID: RuleDocumentTrailingBlankLines, Severity: SeverityWarning, DefaultEnabled: true},
+
 	// Opt-in quality rules: false-positive-prone by nature, so they run only
 	// when named by --enable.
 	{ID: RuleSectionEmpty, Severity: SeverityWarning, DefaultEnabled: false},

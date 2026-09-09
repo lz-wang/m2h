@@ -5,11 +5,11 @@ tags:
   - 文档检查
   - 标题结构
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 checker: heading.level-skip
 ---
 
-# API 参考
+# 标题层级向下跳跃
 
 检查规则：`heading.level-skip`
 
@@ -24,3 +24,4 @@ checker: heading.level-skip
 - 向上跳任意级是合法的章节收尾；文档第一条标题即使是 H3 也不报
 
 [返回检查规则演示索引](00-index.md)
+

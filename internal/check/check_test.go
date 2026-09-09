@@ -96,10 +96,10 @@ func TestRunCountsDirectoryMarkdownFiles(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "index.md"), "# Index")
-	writeFile(t, filepath.Join(root, "guide.md"), "# Guide")
+	writeFile(t, filepath.Join(root, "index.md"), "# Index\n\n")
+	writeFile(t, filepath.Join(root, "guide.md"), "# Guide\n\n")
 	writeFile(t, filepath.Join(root, "notes.txt"), "plain")
-	writeFile(t, filepath.Join(root, "sub", "deep.md"), "# Deep")
+	writeFile(t, filepath.Join(root, "sub", "deep.md"), "# Deep\n\n")
 
 	result, err := Run(context.Background(), Options{Input: root, Depth: 4})
 	if err != nil {
@@ -135,8 +135,8 @@ func TestRunCountsSingleFileScope(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "README.md"), "# Readme")
-	writeFile(t, filepath.Join(root, "guide.md"), "# Guide")
+	writeFile(t, filepath.Join(root, "README.md"), "# Readme\n\n")
+	writeFile(t, filepath.Join(root, "guide.md"), "# Guide\n\n")
 
 	result, err := Run(context.Background(), Options{Input: filepath.Join(root, "README.md")})
 	if err != nil {
@@ -154,7 +154,7 @@ func TestRunRejectsDirectoryInputForFileOptions(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "guide.md"), "# Guide")
+	writeFile(t, filepath.Join(root, "guide.md"), "# Guide\n\n")
 
 	// A directory passed where a single-file scope would be built must not
 	// be mistaken for one: files.Resolve reports the kind and Run routes it
@@ -169,11 +169,15 @@ func TestRunRejectsDirectoryInputForFileOptions(t *testing.T) {
 }
 
 // setupCheckRoot writes the given files (relative slash paths) under a fresh
-// temporary root and returns the root path.
+// temporary root and returns the root path. Markdown fixtures get the canonical
+// trailing blank line; tests of raw EOF bytes must use writeFile directly.
 func setupCheckRoot(t *testing.T, sources map[string]string) string {
 	t.Helper()
 	root := t.TempDir()
 	for relative, contents := range sources {
+		if strings.HasSuffix(strings.ToLower(relative), ".md") {
+			contents = strings.TrimRight(contents, "\r\n") + "\n\n"
+		}
 		writeFile(t, filepath.Join(root, filepath.FromSlash(relative)), contents)
 	}
 	return root
@@ -724,7 +728,7 @@ func TestCheckSymlinkTargets(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "docs", "guide.md"), "# Guide\n\n[Inside](/inside.png), [Outside](/outside.png), [Broken](/broken.png), [Through dir](/linked/file.png)\n")
+	writeFile(t, filepath.Join(root, "docs", "guide.md"), "# Guide\n\n[Inside](/inside.png), [Outside](/outside.png), [Broken](/broken.png), [Through dir](/linked/file.png)\n\n")
 	writeFile(t, filepath.Join(root, "real.png"), "png")
 	writeFile(t, filepath.Join(root, "realdir", "file.png"), "png")
 
@@ -776,7 +780,7 @@ func TestCheckSingleFileSymlinkDiagnosticsUseInputPath(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
-	writeFile(t, filepath.Join(root, "docs", "real-name.md"), "# Guide\n\n![missing](nope.png)\n")
+	writeFile(t, filepath.Join(root, "docs", "real-name.md"), "# Guide\n\n![missing](nope.png)\n\n")
 	alias := filepath.Join(root, "alias.md")
 	if err := os.Symlink(filepath.Join(root, "docs", "real-name.md"), alias); err != nil {
 		t.Fatal(err)
@@ -998,7 +1002,7 @@ func TestCheckMultipleH1Warning(t *testing.T) {
 		t.Parallel()
 
 		result, err := runCheck(t, map[string]string{
-			"guide.md": "---\ntitle: x\n---\n# First\n\n# Second\n",
+			"guide.md": "---\ntitle: First\n---\n# First\n\n# Second\n",
 		}, Options{})
 		summary := summarize(t, result, err)
 		want := []string{fmt.Sprintf("guide.md:6:1 warning %s", RuleDocumentMultipleH1)}
@@ -1018,7 +1022,7 @@ func TestCheckFrontMatterDateInvalidWarning(t *testing.T) {
 	}{
 		{
 			name:   "valid dates stay silent",
-			source: "---\ndate: 2026-08-30\ncreate_date: 2026-08-30T10:00\ntitle: x\n---\n# Guide\n",
+			source: "---\ndate: 2026-08-30\ncreate_date: 2026-08-30T10:00\ntitle: Guide\n---\n# Guide\n",
 			want:   []string{},
 		},
 		{
