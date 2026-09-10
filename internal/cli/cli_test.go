@@ -85,7 +85,7 @@ func TestHelpDocumentsContract(t *testing.T) {
 			want: []string{
 				"--host", "(default: \"127.0.0.1\")", "--port", "-p", "(default: 8793)",
 				"--[no-]open", "(default: true)", "--mode", "(default: \"auto\")",
-				"--width", "(default: \"standard\")", "--toc", "(default: true)",
+				"--width", "(default: \"standard\")", "--[no-]toc", "(default: true)",
 				"--glob", "--depth", "-d", "(default: 4)",
 				"--[no-]cdn", "(default: false)",
 				"--version", "-v",
@@ -160,6 +160,7 @@ func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
 		{"export", "README.md", "--host", "0.0.0.0"},
 		{"export", "README.md", "--toc"},
 		{"export", "README.md", "--open"},
+		{"export", "README.md", "--no-toc"},
 		{"export", "README.md", "--cdn"},
 		{"export", "README.md", "--no-cdn"},
 		{"export", "README.md", "--glob", "*.md"},
@@ -174,6 +175,7 @@ func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
 		{"check", "README.md", "--width", "wide"},
 		{"check", "README.md", "--toc"},
 		{"check", "README.md", "--open"},
+		{"check", "README.md", "--no-toc"},
 		{"check", "README.md", "--cdn"},
 		{"check", "README.md", "--no-cdn"},
 		{"check", "README.md", "--output", "out.html"},
@@ -367,20 +369,82 @@ func TestServeForwardsTOCFlag(t *testing.T) {
 		captured = options
 		return nil
 	}
-	_, _, err := runCommand(t, "guide.md", "--toc=false")
-	if err != nil {
-		t.Fatalf("serve --toc=false returned error: %v", err)
+	for _, test := range []struct {
+		name string
+		args []string
+		want bool
+		set  bool
+	}{
+		{name: "default", args: []string{"guide.md"}, want: true},
+		{name: "enabled", args: []string{"guide.md", "--toc"}, want: true, set: true},
+		{name: "disabled", args: []string{"guide.md", "--no-toc"}, set: true},
+		{name: "disabled before input", args: []string{"--no-toc", "guide.md"}, set: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, _, err := runCommand(t, test.args...); err != nil {
+				t.Fatalf("serve %v: %v", test.args, err)
+			}
+			if captured.TOC != test.want || captured.TOCSet != test.set {
+				t.Fatalf("TOC=%v TOCSet=%v, want TOC=%v TOCSet=%v", captured.TOC, captured.TOCSet, test.want, test.set)
+			}
+		})
 	}
-	if captured.TOC || !captured.TOCSet {
-		t.Fatalf("serve toc = %+v, want TOC=false TOCSet=true", captured)
-	}
+}
 
-	_, _, err = runCommand(t, "guide.md", "--toc=true")
-	if err != nil {
-		t.Fatalf("serve --toc=true returned error: %v", err)
+func TestTOCRejectsValuesBeforeServerOperations(t *testing.T) {
+	previous := runServer
+	t.Cleanup(func() { runServer = previous })
+	runServer = func(_ context.Context, _ server.Options) error {
+		t.Fatal("server must not run for a TOC option with a value")
+		return nil
 	}
-	if !captured.TOC || !captured.TOCSet {
-		t.Fatalf("serve toc = %+v, want TOC=true TOCSet=true", captured)
+	for _, name := range []string{"toc", "no-toc"} {
+		for _, value := range []string{"true", "false", "", "1", "invalid"} {
+			option := "--" + name + "=" + value
+			for _, args := range [][]string{
+				{option, "missing.md"}, {"missing.md", option}, {option},
+				{"missing.md", " " + option + " "},
+				{strings.TrimPrefix(option, "-"), "missing.md"},
+				{"--help", option}, {"--version", option},
+			} {
+				_, _, err := runCommand(t, args...)
+				want := "Error: --" + name + " does not accept a value; use --toc or --no-toc"
+				if err == nil || err.Error() != want {
+					t.Errorf("m2h %v error = %v, want %q", args, err, want)
+				}
+			}
+		}
+	}
+}
+
+func TestTOCSyntaxValidationPreservesArgumentBoundaries(t *testing.T) {
+	previous := runServer
+	t.Cleanup(func() { runServer = previous })
+	var captured server.Options
+	runServer = func(_ context.Context, options server.Options) error {
+		captured = options
+		return nil
+	}
+	for _, test := range []struct {
+		name    string
+		args    []string
+		input   string
+		pattern string
+	}{
+		{name: "end of options", args: []string{"--", "--toc=true"}, input: "--toc=true"},
+		{name: "inverse filename", args: []string{"--", "--no-toc=false"}, input: "--no-toc=false"},
+		{name: "option value", args: []string{"--glob", "--toc=true", "docs"}, input: "docs", pattern: "--toc=true"},
+		{name: "attached option value", args: []string{"--glob=--toc=false", "docs"}, input: "docs", pattern: "--toc=false"},
+		{name: "explicit relative path", args: []string{"./--toc=false"}, input: "./--toc=false"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, _, err := runCommand(t, test.args...); err != nil {
+				t.Fatalf("m2h %v: %v", test.args, err)
+			}
+			if len(captured.Inputs) != 1 || captured.Inputs[0] != test.input || captured.Pattern != test.pattern || !captured.TOC {
+				t.Fatalf("options = %+v", captured)
+			}
+		})
 	}
 }
 

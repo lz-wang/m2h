@@ -27,7 +27,7 @@ const (
 )
 
 // New constructs the root command after validating the injected build version.
-func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Command, error) {
+func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*Command, error) {
 	info, err := version.Parse(buildVersion)
 	if err != nil {
 		return nil, fmt.Errorf("configure CLI: %w", err)
@@ -62,7 +62,7 @@ func New(buildVersion string, ui fs.FS, stdout, stderr io.Writer) (*urfavecli.Co
 		return serveAction(ctx, current, ui, info.String())
 	}
 
-	return command, nil
+	return &Command{root: command}, nil
 }
 
 // serverFlags returns the document-server options for the root command.
@@ -86,13 +86,7 @@ func serverFlags() []urfavecli.Flag {
 		&urfavecli.BoolWithInverseFlag{Name: "cdn", Value: false, Usage: "load WebUI rich-content dependencies from jsDelivr CDN", Local: true},
 		modeFlag(),
 		widthFlag(),
-		&urfavecli.BoolFlag{
-			Name:        "toc",
-			Value:       defaultTOC,
-			DefaultText: "true",
-			Usage:       "show the document table of contents",
-			Local:       true,
-		},
+		&urfavecli.BoolWithInverseFlag{Name: "toc", Value: defaultTOC, Usage: "show the document table of contents", Local: true},
 		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
 		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
 	}
