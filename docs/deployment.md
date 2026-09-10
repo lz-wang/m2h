@@ -5,7 +5,7 @@ tags:
   - 部署
   - 安全
 create_date: 2026-08-30
-update_date: 2026-08-30
+update_date: 2026-09-10
 ---
 
 # VPS 部署指南
@@ -71,6 +71,25 @@ m2h /srv/m2h/docs \
 ```
 
 默认监听 `127.0.0.1:8793`。通过 Nginx/Caddy/Traefik 反向代理部署时保持 loopback 监听，仅由反向代理暴露公网入口；需要直接向局域网提供服务时才使用 `--host 0.0.0.0`。
+
+### 可选 CDN 加载
+
+当 VPS 出口带宽或延迟影响图表加载时，在启动参数中加入 `--cdn`：
+
+```console
+m2h /srv/m2h/docs --host 127.0.0.1 --port 8793 --no-open --cdn
+```
+
+浏览器会按需直接从 `https://cdn.jsdelivr.net` 加载固定版本的 Mermaid/ZenUML、
+KaTeX（含样式与字体）、Vega-Lite 和表格排序依赖；主程序、文档、API 与附件仍由
+m2h 服务。下面的 systemd unit 若需启用，只需在 `ExecStart` 中追加 `--cdn`，
+执行 `systemctl daemon-reload` 并重启服务，刷新页面即可生效，文档深链接也使用同一配置。
+
+默认关闭，`--no-cdn` 显式使用内嵌资源。CDN 模式依赖访问者的网络，实际速度应以
+部署后的访问体验为准；CDN 无法访问时可移除 `--cdn` 或使用 `--no-cdn` 后重启服务。
+m2h 会在 CSP 的脚本、样式与字体来源中加入 `https://cdn.jsdelivr.net`，仍禁止
+内联脚本与 `eval`；若反向代理额外设置了 CSP，也需允许这些来源，避免浏览器拦截。
+附件的独立 sandbox 策略继续生效。此选项只控制 Web 文档服务。
 
 ## 专用用户与文件权限
 

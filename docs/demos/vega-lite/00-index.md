@@ -10,7 +10,7 @@ update_date: 2026-09-10
 
 # Vega-Lite 统计图表演示索引
 
-m2h 支持在 Markdown 中嵌入 [Vega-Lite](https://vega.github.io/vega-lite/) 统计图表：把 JSON spec 写进 ` ```vega-lite ` 围栏代码块（别名 ` ```vegalite `），浏览器按需加载渲染运行时并输出 SVG 图表。Web 文档服务从内嵌运行时渲染，导出 HTML 从固定版本的 CDN 加载同一组运行时，两端行为一致。
+m2h 支持在 Markdown 中嵌入 [Vega-Lite](https://vega.github.io/vega-lite/) 统计图表：把 JSON spec 写进 ` ```vega-lite ` 围栏代码块（别名 ` ```vegalite `），浏览器按需加载渲染运行时并输出 SVG 图表。Web 文档服务默认使用内嵌运行时，启动时加 `--cdn` 可切换到固定版本的 jsDelivr CDN；导出 HTML 从 CDN 加载同一组运行时，两端行为一致。
 
 ```bash
 m2h docs/demos/vega-lite

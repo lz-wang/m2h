@@ -3,7 +3,8 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- No inline scripts: the page ships a strict script-src 'self' CSP, so
+    <!-- No inline scripts: the default CSP uses script-src 'self' (with an
+         explicit jsDelivr allowance when the server enables --cdn), so
          every script — including the scroll-restoration preference set at the
          top of src/main.tsx — loads as an external module. -->
     <link rel="icon" type="image/svg+xml" href="/ui/favicon.svg" />

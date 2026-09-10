@@ -87,6 +87,7 @@ func TestHelpDocumentsContract(t *testing.T) {
 				"--[no-]open", "(default: true)", "--mode", "(default: \"auto\")",
 				"--width", "(default: \"standard\")", "--toc", "(default: true)",
 				"--glob", "--depth", "-d", "(default: 4)",
+				"--[no-]cdn", "(default: false)",
 				"--version", "-v",
 			},
 		},
@@ -159,6 +160,8 @@ func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
 		{"export", "README.md", "--host", "0.0.0.0"},
 		{"export", "README.md", "--toc"},
 		{"export", "README.md", "--open"},
+		{"export", "README.md", "--cdn"},
+		{"export", "README.md", "--no-cdn"},
 		{"export", "README.md", "--glob", "*.md"},
 		{"export", "README.md", "--depth", "2"},
 		{"export", "README.md", "--no-local-paths"},
@@ -171,6 +174,8 @@ func TestFlagsAreIsolatedBetweenCommands(t *testing.T) {
 		{"check", "README.md", "--width", "wide"},
 		{"check", "README.md", "--toc"},
 		{"check", "README.md", "--open"},
+		{"check", "README.md", "--cdn"},
+		{"check", "README.md", "--no-cdn"},
 		{"check", "README.md", "--output", "out.html"},
 		{"check", "README.md", "--force"},
 		{"README.md", "--strict"},
@@ -319,6 +324,37 @@ func TestServeNoOpen(t *testing.T) {
 	}
 	if captured.Browser {
 		t.Fatalf("serve Browser = true, want false with --no-open")
+	}
+}
+
+func TestServeCDNFlag(t *testing.T) {
+	previous := runServer
+	t.Cleanup(func() { runServer = previous })
+	var captured server.Options
+	runServer = func(_ context.Context, options server.Options) error {
+		captured = options
+		return nil
+	}
+	for _, test := range []struct {
+		name string
+		args []string
+		want bool
+	}{
+		{name: "default", args: []string{"guide.md"}},
+		{name: "enabled before input", args: []string{"--cdn", "guide.md"}, want: true},
+		{name: "enabled after input", args: []string{"guide.md", "--cdn"}, want: true},
+		{name: "disabled", args: []string{"guide.md", "--no-cdn"}},
+		{name: "explicit false", args: []string{"guide.md", "--cdn=false"}},
+		{name: "multiple roots", args: []string{"docs", "wiki", "--cdn"}, want: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, _, err := runCommand(t, test.args...); err != nil {
+				t.Fatalf("serve %v: %v", test.args, err)
+			}
+			if captured.CDN != test.want {
+				t.Fatalf("CDN = %v, want %v", captured.CDN, test.want)
+			}
+		})
 	}
 }
 

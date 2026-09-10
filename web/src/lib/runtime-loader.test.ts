@@ -78,6 +78,7 @@ describe("runtime loader", () => {
     // Each test re-imports the module so loader singletons reset.
     vi.resetModules();
     document.head.innerHTML = "";
+    document.body.innerHTML = "";
     delete window.mermaid;
     delete window.renderMathInElement;
     delete window.Tablesort;
@@ -98,6 +99,120 @@ describe("runtime loader", () => {
     fire(script, "load");
 
     await expect(pending).resolves.toBe(mermaidRuntime);
+  });
+
+  describe("CDN mode", () => {
+    const base = "https://cdn.jsdelivr.net/npm/";
+    beforeEach(() => {
+      document.head.innerHTML = '<meta name="m2h-cdn" content="true">';
+    });
+
+    it("loads pinned Mermaid on demand, deduplicates, and selects the ZenUML ESM tree", async () => {
+      const loader = await import("./runtime-loader");
+      expect(document.head.querySelector("script")).toBeNull();
+      expect(loader.ZENUML_MODULE_URL).toBe(
+        `${base}@mermaid-js/mermaid-zenuml@0.2.3/dist/mermaid-zenuml.esm.min.mjs`,
+      );
+      const first = loader.loadMermaid();
+      const second = loader.loadMermaid();
+      expect(document.head.querySelectorAll("script")).toHaveLength(1);
+      const script = headElement<HTMLScriptElement>("script");
+      expect(script.src).toBe(`${base}mermaid@11.16.1/dist/mermaid.min.js`);
+      window.mermaid = mermaidRuntime;
+      fire(script, "load");
+      await expect(first).resolves.toBe(mermaidRuntime);
+      await expect(second).resolves.toBe(mermaidRuntime);
+      expect(document.head.querySelector('[src*="/runtime/"]')).toBeNull();
+    });
+
+    it("keeps failed CDN scripts retryable", async () => {
+      const loader = await import("./runtime-loader");
+      const first = loader.loadMermaid();
+      fire(headElement("script"), "error");
+      await expect(first).rejects.toThrow(
+        `load runtime script ${base}mermaid@11.16.1/dist/mermaid.min.js`,
+      );
+      const retry = loader.loadMermaid();
+      const script = headElement<HTMLScriptElement>("script");
+      expect(script.src).toBe(`${base}mermaid@11.16.1/dist/mermaid.min.js`);
+      window.mermaid = mermaidRuntime;
+      fire(script, "load");
+      await expect(retry).resolves.toBe(mermaidRuntime);
+    });
+
+    it("loads KaTeX CSS and core before auto-render from the same pinned dist", async () => {
+      const loader = await import("./runtime-loader");
+      const pending = loader.loadKatex();
+      const stylesheet = headElement<HTMLLinkElement>('link[rel="stylesheet"]');
+      const core = headElement<HTMLScriptElement>("script");
+      expect(stylesheet.href).toBe(`${base}katex@0.18.4/dist/katex.min.css`);
+      expect(core.src).toBe(`${base}katex@0.18.4/dist/katex.min.js`);
+      expect(document.head.querySelectorAll("script")).toHaveLength(1);
+      fire(stylesheet, "load");
+      fire(core, "load");
+      const autoRender = await waitForHeadElement<HTMLScriptElement>(
+        `script[src="${base}katex@0.18.4/dist/contrib/auto-render.min.js"]`,
+      );
+      window.renderMathInElement = renderMathInElement;
+      fire(autoRender, "load");
+      await expect(pending).resolves.toBe(renderMathInElement);
+    });
+
+    it("loads all five Tablesort comparators only after the CDN core", async () => {
+      const loader = await import("./runtime-loader");
+      const pending = loader.loadTablesort();
+      const core = headElement<HTMLScriptElement>("script");
+      expect(core.src).toBe(`${base}tablesort@5.3.0/dist/tablesort.min.js`);
+      expect(document.head.querySelectorAll("script")).toHaveLength(1);
+      fire(core, "load");
+      window.Tablesort = tablesortCtor;
+      for (const comparator of [
+        "date",
+        "dotsep",
+        "filesize",
+        "monthname",
+        "number",
+      ]) {
+        const script = await waitForHeadElement<HTMLScriptElement>(
+          `script[src="${base}tablesort@5.3.0/dist/sorts/tablesort.${comparator}.min.js"]`,
+        );
+        fire(script, "load");
+      }
+      await expect(pending).resolves.toBe(tablesortCtor);
+      expect(document.head.querySelectorAll("script")).toHaveLength(6);
+    });
+
+    it("loads the pinned Vega trio in dependency order", async () => {
+      const loader = await import("./runtime-loader");
+      const pending = loader.loadVegaLite();
+      let count = 0;
+      for (const path of [
+        "vega@6.4.0/build/vega.min.js",
+        "vega-lite@6.4.3/build/vega-lite.min.js",
+        "vega-embed@7.1.0/build/vega-embed.min.js",
+      ]) {
+        const script = await waitForHeadElement<HTMLScriptElement>(
+          `script[src="${base}${path}"]`,
+        );
+        expect(document.head.querySelectorAll("script")).toHaveLength(++count);
+        window.vegaEmbed = vegaEmbedRuntime;
+        fire(script, "load");
+      }
+      await expect(pending).resolves.toBe(vegaEmbedRuntime);
+    });
+  });
+
+  it("ignores document content and later changes to the server CDN choice", async () => {
+    document.body.innerHTML = '<meta name="m2h-cdn" content="true">';
+    const loader = await import("./runtime-loader");
+    document.head.innerHTML = '<meta name="m2h-cdn" content="true">';
+    const pending = loader.loadMermaid();
+    const script = headElement<HTMLScriptElement>("script");
+    expect(script.getAttribute("src")).toBe("/runtime/mermaid.min.js");
+    window.mermaid = mermaidRuntime;
+    fire(script, "load");
+    await expect(pending).resolves.toBe(mermaidRuntime);
+    document.body.innerHTML = "";
   });
 
   it("attaches the mermaid runtime without configuring its theme", async () => {

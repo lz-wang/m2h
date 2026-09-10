@@ -5,13 +5,16 @@ tags:
   - markdown
   - math
 create_date: 2026-09-09
-update_date: 2026-09-09
+update_date: 2026-09-10
 ---
 
 # 数学公式
 
 m2h 在共享 Markdown 解析阶段识别数学公式，保留公式原文，再由 KaTeX
 完成排版。WebUI、HTML 导出和 `m2h check` 使用相同的数学区域边界。
+
+WebUI 默认按需加载内嵌 KaTeX；启动时加 `--cdn` 可让脚本、样式与字体从固定版本的
+jsDelivr CDN 加载。HTML 导出按需使用同版本 CDN，公式语法与排版规则保持一致。
 
 ## 行内公式
 

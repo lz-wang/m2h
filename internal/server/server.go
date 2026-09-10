@@ -43,6 +43,7 @@ type Options struct {
 	Mode       markdown.Mode
 	Width      markdown.Width
 	Browser    bool
+	CDN        bool
 	TOC        bool
 	Pattern    string
 	Depth      int
@@ -126,7 +127,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	handler := newDocumentHandlerWithVersion(workspace, logger, options.UI, normalized.Version)
+	handler := newDocumentHandlerWithConfig(workspace, logger, options.UI, normalized.Version, normalized.CDN)
 	httpServer := newHTTPServer(handler, runContext, logger)
 	requestedAddress := net.JoinHostPort(normalized.Host, strconv.Itoa(normalized.Port))
 	listener, err := deps.listen("tcp", requestedAddress)

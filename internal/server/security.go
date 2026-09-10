@@ -1,6 +1,9 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
+	"strings"
+)
 
 // defaultContentSecurityPolicy is the browser policy for m2h's own pages.
 //
@@ -39,10 +42,20 @@ const defaultContentSecurityPolicy = "default-src 'self'; " +
 // attachments, runtime scripts, 404s — carries the same browser hardening
 // baseline. A handler may still override an individual header afterwards
 // (the assets route replaces the CSP with its stricter sandbox policy).
-func securityHeaders(next http.Handler) http.Handler {
+// The pinned runtime provider is permitted only when the administrator enables
+// CDN loading. Inline scripts and eval stay blocked.
+func securityHeaders(next http.Handler, cdn bool) http.Handler {
+	policy := defaultContentSecurityPolicy
+	if cdn {
+		policy = strings.NewReplacer(
+			"script-src 'self'", "script-src 'self' https://cdn.jsdelivr.net",
+			"style-src 'self'", "style-src 'self' https://cdn.jsdelivr.net",
+			"font-src 'self'", "font-src 'self' https://cdn.jsdelivr.net",
+		).Replace(policy)
+	}
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		headers := response.Header()
-		headers.Set("Content-Security-Policy", defaultContentSecurityPolicy)
+		headers.Set("Content-Security-Policy", policy)
 		headers.Set("X-Content-Type-Options", "nosniff")
 		// Private-document service: never leak the document URL to another
 		// origin through the Referer header.

@@ -102,6 +102,7 @@ m2h /srv/docs --host 127.0.0.1 --port 8793 --no-open
 | `--host` | 监听地址 |
 | `--port`, `-p` | 监听端口，默认 `8793` |
 | `--open` / `--no-open` | 是否自动打开浏览器 |
+| `--cdn` / `--no-cdn` | 是否从 jsDelivr CDN 按需加载 WebUI 富内容依赖，默认关闭 |
 | `--mode` | `light`、`dark` 或 `auto` |
 | `--width` | `standard`、`wide` 或 `full` |
 | `--toc` | 是否显示文档目录 |
@@ -113,6 +114,17 @@ m2h /srv/docs --host 127.0.0.1 --port 8793 --no-open
 ```console
 m2h --help
 ```
+
+VPS 带宽受限时，可启用 CDN，让访问者的浏览器直接下载固定版本的 Mermaid/ZenUML、
+KaTeX（含样式与字体）、Vega-Lite 和表格排序运行时：
+
+```console
+m2h /srv/docs --no-open --cdn
+```
+
+默认或显式 `--no-cdn` 时使用二进制内嵌资源，可离线渲染上述内容。启用后需要访问者
+能连接 `cdn.jsdelivr.net`，实际速度取决于其网络；WebUI 主程序与文档仍由 m2h 提供。
+CDN 选项适用于整个服务，直接打开文档链接同样生效；不适用于 `export` 和 `check`。
 
 ### 导出 HTML
 
@@ -199,6 +211,9 @@ m2h check docs --enable all --disable image.alt-empty
 ## Markdown 支持
 
 m2h 支持常用 GFM Markdown，并提供以下扩展：
+
+WebUI 富内容运行时默认从本地加载，也可通过 `--cdn` 切换到固定版本的 CDN，
+渲染语法保持一致；HTML 导出继续按需使用 CDN。
 
 | 类别 | 支持内容与演示 |
 | --- | --- |

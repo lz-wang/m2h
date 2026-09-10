@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 
 	"github.com/lz-wang/m2h/internal/markdown"
@@ -37,8 +38,9 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 		done <- run(ctx, Options{
 			Inputs:  []string{source},
 			Mode:    markdown.ModeAuto,
+			CDN:     true,
 			Log:     &logOutput,
-			UI:      directoryTestUI(),
+			UI:      fstest.MapFS{"index.html": {Data: []byte(`<html><head></head><body><div id="root"></div></body></html>`)}},
 			Version: "1.2.3",
 			OnListening: func(address string) {
 				listening <- address
@@ -64,6 +66,10 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 	}
 	if shell.StatusCode != http.StatusOK || !bytes.Contains(shellBody, []byte(`id="root"`)) {
 		t.Fatalf("document shell = %d %q", shell.StatusCode, shellBody)
+	}
+	if !bytes.Contains(shellBody, []byte(`<meta name="m2h-cdn" content="true">`)) ||
+		!strings.Contains(shell.Header.Get("Content-Security-Policy"), "script-src 'self' https://cdn.jsdelivr.net;") {
+		t.Fatalf("CDN option did not reach the served shell and CSP: %s", shellBody)
 	}
 
 	listResponse, err := http.Get(address + "api/files")

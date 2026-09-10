@@ -83,6 +83,7 @@ func serverFlags() []urfavecli.Flag {
 			},
 		},
 		&urfavecli.BoolWithInverseFlag{Name: "open", Value: true, Usage: "open the default browser after listening", Local: true},
+		&urfavecli.BoolWithInverseFlag{Name: "cdn", Value: false, Usage: "load WebUI rich-content dependencies from jsDelivr CDN", Local: true},
 		modeFlag(),
 		widthFlag(),
 		&urfavecli.BoolFlag{
@@ -139,6 +140,7 @@ func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buil
 		Mode:       markdown.Mode(command.String("mode")),
 		Width:      markdown.Width(command.String("width")),
 		Browser:    command.Bool("open"),
+		CDN:        command.Bool("cdn"),
 		TOC:        command.Bool("toc"),
 		Pattern:    command.String("glob"),
 		Depth:      command.Int("depth"),

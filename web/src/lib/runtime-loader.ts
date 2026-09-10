@@ -1,7 +1,7 @@
 // Loader for the rich-content runtime the Go binary embeds and the document
 // server exposes under /runtime/*. The WebUI loads them on demand instead of
-// bundling a second copy through Vite; export output loads the same pinned
-// releases from the CDN.
+// bundling a second copy through Vite. With --cdn the server's shell opts into
+// the same pinned CDN releases used by export output.
 
 export interface MermaidInitializeOptions {
   startOnLoad?: boolean;
@@ -170,6 +170,36 @@ declare global {
 
 const RUNTIME_BASE = "/runtime/";
 
+// Keep versions in sync with internal/assets/rich/NOTICE.md and export/page.go.
+// Capture only the server-owned head metadata, before document HTML is mounted.
+const useCDN =
+  document.head.querySelector<HTMLMetaElement>('meta[name="m2h-cdn"]')
+    ?.content === "true";
+const CDN_BASE = "https://cdn.jsdelivr.net/npm/";
+const CDN_PATHS = {
+  "mermaid.min.js": "mermaid@11.16.1/dist/mermaid.min.js",
+  "mermaid-zenuml/mermaid-zenuml.esm.min.mjs":
+    "@mermaid-js/mermaid-zenuml@0.2.3/dist/mermaid-zenuml.esm.min.mjs",
+  "katex.min.css": "katex@0.18.4/dist/katex.min.css",
+  "katex.min.js": "katex@0.18.4/dist/katex.min.js",
+  "auto-render.min.js": "katex@0.18.4/dist/contrib/auto-render.min.js",
+  "tablesort.min.js": "tablesort@5.3.0/dist/tablesort.min.js",
+  "tablesort.date.js": "tablesort@5.3.0/dist/sorts/tablesort.date.min.js",
+  "tablesort.dotsep.js": "tablesort@5.3.0/dist/sorts/tablesort.dotsep.min.js",
+  "tablesort.filesize.js":
+    "tablesort@5.3.0/dist/sorts/tablesort.filesize.min.js",
+  "tablesort.monthname.js":
+    "tablesort@5.3.0/dist/sorts/tablesort.monthname.min.js",
+  "tablesort.number.js": "tablesort@5.3.0/dist/sorts/tablesort.number.min.js",
+  "vega.min.js": "vega@6.4.0/build/vega.min.js",
+  "vega-lite.min.js": "vega-lite@6.4.3/build/vega-lite.min.js",
+  "vega-embed.min.js": "vega-embed@7.1.0/build/vega-embed.min.js",
+} as const;
+
+function runtimeURL(asset: keyof typeof CDN_PATHS): string {
+  return useCDN ? `${CDN_BASE}${CDN_PATHS[asset]}` : `${RUNTIME_BASE}${asset}`;
+}
+
 const scriptLoads = new Map<string, Promise<void>>();
 const styleLoads = new Map<string, Promise<void>>();
 
@@ -227,7 +257,7 @@ function injectStyle(href: string): Promise<void> {
  * cannot be fetched or does not attach `window.mermaid`.
  */
 export async function loadMermaid(): Promise<MermaidRuntime> {
-  await injectScript(`${RUNTIME_BASE}mermaid.min.js`);
+  await injectScript(runtimeURL("mermaid.min.js"));
   const runtime = window.mermaid;
   if (runtime === undefined) {
     throw new Error("mermaid runtime did not attach window.mermaid");
@@ -239,15 +269,16 @@ export async function loadMermaid(): Promise<MermaidRuntime> {
 // internal/assets/rich/NOTICE.md): the entry module lazy-imports its diagram
 // chunk through a relative URL, so the chunks directory must stay reachable
 // next to this file under /runtime/.
-export const ZENUML_MODULE_URL =
-  "/runtime/mermaid-zenuml/mermaid-zenuml.esm.min.mjs";
+export const ZENUML_MODULE_URL = runtimeURL(
+  "mermaid-zenuml/mermaid-zenuml.esm.min.mjs",
+);
 
 type ZenUMLModuleImporter = () => Promise<{
   default: MermaidExternalDiagramDefinition;
 }>;
 
 function importZenUMLModule(): ReturnType<ZenUMLModuleImporter> {
-  // The specifier is a runtime URL served by the document server, never a
+  // The specifier is a runtime URL served locally or by the CDN, never a
   // module in Vite's graph; the ignore comment keeps Vite from trying to
   // resolve and bundle it at build time.
   return import(/* @vite-ignore */ ZENUML_MODULE_URL);
@@ -335,10 +366,10 @@ export async function ensureZenUMLRegistered(
  */
 export async function loadKatex(): Promise<MathAutoRenderer> {
   await Promise.all([
-    injectStyle(`${RUNTIME_BASE}katex.min.css`),
-    injectScript(`${RUNTIME_BASE}katex.min.js`),
+    injectStyle(runtimeURL("katex.min.css")),
+    injectScript(runtimeURL("katex.min.js")),
   ]);
-  await injectScript(`${RUNTIME_BASE}auto-render.min.js`);
+  await injectScript(runtimeURL("auto-render.min.js"));
   const renderMath = window.renderMathInElement;
   if (renderMath === undefined) {
     throw new Error("KaTeX runtime did not attach renderMathInElement");
@@ -354,14 +385,14 @@ export async function loadKatex(): Promise<MathAutoRenderer> {
  * cannot be fetched or the core does not attach `window.Tablesort`.
  */
 export async function loadTablesort(): Promise<TablesortConstructor> {
-  await injectScript(`${RUNTIME_BASE}tablesort.min.js`);
+  await injectScript(runtimeURL("tablesort.min.js"));
 
   await Promise.all([
-    injectScript(`${RUNTIME_BASE}tablesort.date.js`),
-    injectScript(`${RUNTIME_BASE}tablesort.dotsep.js`),
-    injectScript(`${RUNTIME_BASE}tablesort.filesize.js`),
-    injectScript(`${RUNTIME_BASE}tablesort.monthname.js`),
-    injectScript(`${RUNTIME_BASE}tablesort.number.js`),
+    injectScript(runtimeURL("tablesort.date.js")),
+    injectScript(runtimeURL("tablesort.dotsep.js")),
+    injectScript(runtimeURL("tablesort.filesize.js")),
+    injectScript(runtimeURL("tablesort.monthname.js")),
+    injectScript(runtimeURL("tablesort.number.js")),
   ]);
 
   const runtime = window.Tablesort;
@@ -384,9 +415,9 @@ export async function loadTablesort(): Promise<TablesortConstructor> {
  * `window.vegaEmbed`.
  */
 export async function loadVegaLite(): Promise<VegaEmbedRuntime> {
-  await injectScript(`${RUNTIME_BASE}vega.min.js`);
-  await injectScript(`${RUNTIME_BASE}vega-lite.min.js`);
-  await injectScript(`${RUNTIME_BASE}vega-embed.min.js`);
+  await injectScript(runtimeURL("vega.min.js"));
+  await injectScript(runtimeURL("vega-lite.min.js"));
+  await injectScript(runtimeURL("vega-embed.min.js"));
 
   const runtime = window.vegaEmbed;
   if (runtime === undefined) {
