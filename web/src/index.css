@@ -789,7 +789,7 @@ body,
    * never asked for. Block flow keeps the frame's box exactly the chart's,
    * so the shared external margin above stays the only spacing.
    * (0,3,0) here outranks the injected .vega-embed (0,1,0) without
-   * !important; the export output, with no frame, keeps the embed default. */
+   * !important; the export output uses the shared block container rule. */
   display: block;
   margin: 0;
 }
@@ -931,16 +931,17 @@ body,
 /*
  * Image lightbox trigger, injected by render-rich-content.ts. The frame owns
  * the image's external geometry so the absolutely-positioned magnifier stays
- * pinned to the image's top-right corner; line-height 0 keeps a wrapped inline
- * frame from growing a stray text baseline. WebUI-only, like the gutter: the
+ * pinned to the image's top-right corner. Each image gets a centered block
+ * that fits its width, including linked images and pictures. WebUI-only: the
  * export output keeps its bare images.
  */
 .markdown-body .m2h-image-frame {
   position: relative;
-  display: inline-block;
+  display: block;
+  width: fit-content;
   max-width: 100%;
+  margin-inline: auto;
   line-height: 0;
-  vertical-align: middle;
 }
 
 /* The frame caps every image it wraps: a direct <img>, or the <img> of a
@@ -950,11 +951,8 @@ body,
   max-width: 100%;
 }
 
-/* A standalone image paragraph (see markStandaloneImageBlocks): the frames
- * are inline-blocks, so the paragraph's own line-height would still hang a
- * half-leading strut above and below them. Zeroing it here lets the image
- * sit flush inside the block, whose 1rem margins (shared rule with the
- * rich-visual frames) then decide the whole distance to the prose. */
+/* Standalone image paragraphs keep whitespace between image frames from
+ * adding line boxes; their shared 1rem margins set the distance to prose. */
 .markdown-body .m2h-image-block {
   line-height: 0;
 }

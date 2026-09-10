@@ -116,13 +116,13 @@ test("gives every visual kind the same gap to the surrounding prose", async ({
   }
 });
 
-test("marks standalone image paragraphs without touching inline ones", async ({
+test("marks standalone image paragraphs while retaining prose line height", async ({
   page,
 }) => {
   await openDocument(page);
 
   // Only the standalone image paragraph joins the visual block contract; a
-  // prose paragraph is never re-flowed around its inline images.
+  // prose paragraph retains its own text line-height.
   const counts = await page.evaluate(() => ({
     blocks: document.querySelectorAll(".markdown-body .m2h-image-block").length,
     frames: document.querySelectorAll(".markdown-body .m2h-image-frame").length,

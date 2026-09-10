@@ -32,6 +32,22 @@ body.m2h-page {
   padding: 45px;
 }
 
+/* Center document images in both WebUI and HTML export. Limit SVG layout to
+ * document/diagram roots: nested diagram SVGs, math glyphs and button icons
+ * keep their own geometry. WebUI centers its image presentation frames too. */
+.markdown-body img,
+.markdown-body > svg,
+.markdown-body :is(p, figure, div) > svg:not(svg svg) {
+  display: block;
+  margin-inline: auto;
+}
+
+.markdown-body > svg,
+.markdown-body :is(p, figure, div) > svg:not(svg svg) {
+  max-width: 100%;
+  height: auto;
+}
+
 html[data-width="wide"] .markdown-body {
   max-width: 1280px;
 }
@@ -80,6 +96,7 @@ html[data-width="full"] .markdown-body {
  * frame and Lightbox trigger on top in its own stylesheet.
  */
 .markdown-body .m2h-vega-lite {
+  display: block;
   margin: 1rem 0;
   overflow-x: auto;
   text-align: center;

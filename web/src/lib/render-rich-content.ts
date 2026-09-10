@@ -699,9 +699,10 @@ function ensureImagePresentationFrame(image: HTMLImageElement): HTMLElement {
 // picture, a sole-image link, or several plain images in a row — with
 // m2h-image-block, the class that hands the paragraph's external spacing to
 // the same 1rem contract the rich-visual frames follow (see the stylesheet).
-// Prose paragraphs that merely contain an image inline keep their normal
-// flow: a frame only counts when it is the paragraph's entire content, so the
-// rules are "ignore whitespace text" and "everything else must be a frame".
+// Prose paragraphs retain their text line-height even though their images
+// also center as blocks: a frame only counts as standalone when it is the
+// paragraph's entire content. Ignore whitespace text; everything else must
+// be a frame.
 // Runs after addImageEnhancements, when the frames exist to be counted.
 // Idempotent, like every enhancement: the class is only added, never stacked.
 function markStandaloneImageBlocks(root: HTMLElement): void {

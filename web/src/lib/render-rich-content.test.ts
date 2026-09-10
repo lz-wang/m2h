@@ -1592,7 +1592,7 @@ describe("image lightbox triggers", () => {
 describe("standalone image blocks", () => {
   // A paragraph whose content is framed images only joins the rich-visual
   // frames' external spacing contract; prose paragraphs that merely contain
-  // an image inline keep their normal paragraph flow.
+  // an image retain their normal text line-height.
   it("marks a paragraph holding only an image as a visual block", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
