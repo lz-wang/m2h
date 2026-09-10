@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 
-import type { LightboxItem } from "../lib/document-lightbox";
+import type { ImageLightboxItem, LightboxItem } from "../lib/document-lightbox";
 import { DocumentLightbox } from "./document-lightbox";
 
 // jsdom runs no layout: the ResizeObserver stub never reports sizes, so the
@@ -11,7 +11,7 @@ import { DocumentLightbox } from "./document-lightbox";
 // neutral baseline (fitScale 1, free pan). The zoom sequence below is exact in
 // binary floating point (powers of 5/4), so the transform-string assertions
 // are stable.
-function makeItems(count: number): LightboxItem[] {
+function makeItems(count: number): ImageLightboxItem[] {
   return Array.from({ length: count }, (_, index) => ({
     kind: "image" as const,
     src: `/img-${index}.png`,
@@ -715,15 +715,41 @@ describe("DocumentLightbox", () => {
     );
   });
 
-  it("reports an SVG visual by its snapshot size and SVG format", () => {
-    renderLightbox([vectorItem], 0);
+  it.each(["mermaid", "vega-lite"] as const)(
+    "hides information for %s while keeping its accessible name",
+    (kind) => {
+      renderLightbox([{ ...vectorItem, kind }], 0);
+      expect(document.querySelector(".image-lightbox-info")).toBeNull();
+      expect(screen.getByRole("img", { name: vectorItem.alt })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "放大图片" })).toBeTruthy();
+    },
+  );
 
-    expect(infoOf().querySelector(".image-lightbox-alt")?.textContent).toBe(
-      "Mermaid 图表",
-    );
-    expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
-      "100 × 50 · SVG",
-    );
+  it.each(["/diagram.SVG?version=1", "data:image/svg+xml,%3Csvg%3E%3C/svg%3E"])(
+    "hides SVG image information before and after loading %s",
+    (src) => {
+      renderLightbox([{ ...makeItems(1)[0], src }], 0);
+      expect(document.querySelector(".image-lightbox-info")).toBeNull();
+      fireEvent.load(currentItem());
+      expect(document.querySelector(".image-lightbox-info")).toBeNull();
+    },
+  );
+
+  it("follows the loaded srcset format when deciding whether to show information", () => {
+    renderLightbox(makeItems(1), 0);
+    const image = currentItem();
+    Object.defineProperty(image, "currentSrc", {
+      configurable: true,
+      value: "/diagram.svg",
+    });
+    fireEvent.load(image);
+    expect(document.querySelector(".image-lightbox-info")).toBeNull();
+
+    Object.defineProperty(image, "currentSrc", { value: "/picture.webp" });
+    fireEvent.load(image);
+    expect(
+      infoOf().querySelector(".image-lightbox-meta")?.textContent,
+    ).toContain("WEBP");
   });
 
   it("drops the previous image's size and format when the item changes", () => {

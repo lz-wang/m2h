@@ -587,13 +587,7 @@ test("browses charts, diagrams, and images in one lightbox sequence", async ({
   expect(stageState.svgCount).toBe(1);
   await expect(page.locator(".image-lightbox-image")).toHaveCount(0);
 
-  // The info area reports the chart's stable title and its SVG metadata.
-  await expect(
-    page.locator(".image-lightbox-info .image-lightbox-alt"),
-  ).toHaveText("Vega-Lite 图表");
-  await expect(
-    page.locator(".image-lightbox-info .image-lightbox-meta"),
-  ).toHaveText(/^\d+(?:\.\d+)? × \d+(?:\.\d+)? · SVG$/);
+  await expect(page.locator(".image-lightbox-info")).toHaveCount(0);
 
   const lightboxChartLink = page.locator(
     ".image-lightbox-vector a[href='#vega-lite-chart-link']",

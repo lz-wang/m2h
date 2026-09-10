@@ -5,7 +5,7 @@ tags:
   - vega-lite
   - 图表
 create_date: 2026-09-02
-update_date: 2026-09-03
+update_date: 2026-09-10
 ---
 
 # Vega-Lite 统计图表演示索引
@@ -55,7 +55,7 @@ m2h docs/demos/vega-lite
 
 ## 主题与 Lightbox
 
-图表外观 chrome（背景、坐标轴、图例与标题的文字和网格颜色）跟随阅读器主题，取值来自页面主题的 CSS 变量；作者在 spec 中定义的数据颜色（mark color、scale.range）不会被宿主覆盖，切换主题不会改变图表的数据语义。Web 文档服务中图表支持 Lightbox 放大查看，与图片、Mermaid 图表按文档顺序共用同一查看器。
+图表外观 chrome（背景、坐标轴、图例与标题的文字和网格颜色）跟随阅读器主题，取值来自页面主题的 CSS 变量；作者在 spec 中定义的数据颜色（mark color、scale.range）不会被宿主覆盖，切换主题不会改变图表的数据语义。Web 文档服务中图表支持 Lightbox 放大查看，与图片、Mermaid 图表按文档顺序共用同一查看器。SVG 不显示底部名称、尺寸与格式信息，保留可访问名称与查看工具栏。
 
 ## 失败隔离
 

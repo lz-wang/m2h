@@ -374,8 +374,8 @@ test("keeps the linked image's anchor while its trigger opens the lightbox", asy
 // The footer reports the full alt text plus "intrinsic size · format", all of
 // it centered above the toolbar. For a bitmap both facts come from the
 // dialog's own loaded <img> (never from the body snapshot, which may have
-// caught a lazy placeholder or a different srcset winner); for an SVG visual
-// it is the snapshot's intrinsic size with the SVG format. The plate caps at
+// caught a lazy placeholder or a different srcset winner). SVGs omit the info
+// plate altogether. The bitmap info plate caps at
 // 80% of the viewport — the Lightbox is a full-viewport modal, so its "page"
 // is the viewport, unlike the reading tooltip's document-width cap.
 
@@ -416,7 +416,7 @@ test("shows the full alt text and intrinsic metadata in the footer", async ({
   await expectCenteredInViewport(page);
 });
 
-test("reports the format of the resource the lightbox actually loaded", async ({
+test("hides information when srcset selects an SVG resource", async ({
   page,
 }) => {
   await openDocument(page);
@@ -424,9 +424,8 @@ test("reports the format of the resource the lightbox actually loaded", async ({
   // Point the first image's srcset at two candidates of *different* formats,
   // with a slot so large the widest candidate always wins — and make that
   // winner a non-PNG resource (the app's own SVG). The snapshot's src
-  // attribute still says landscape.png, so a metadata line ending in SVG
-  // proves the format was derived from the resource the dialog's own <img>
-  // selected, not from the snapshot's fallback src.
+  // attribute still says landscape.png; hiding the info plate must follow
+  // the selected SVG, not that fallback source.
   await page.evaluate(() => {
     const image = document.querySelector<HTMLImageElement>(
       ".m2h-image-frame img",
@@ -447,9 +446,7 @@ test("reports the format of the resource the lightbox actually loaded", async ({
   );
 
   await openLightbox(page, 0);
-  await expect(
-    page.locator(".image-lightbox-info .image-lightbox-meta"),
-  ).toHaveText(/ · SVG$/);
+  await expect(page.locator(".image-lightbox-info")).toHaveCount(0);
 });
 
 test("wraps a long alt text instead of truncating it", async ({ page }) => {
@@ -658,19 +655,11 @@ test("opens a mermaid diagram inside the shared image sequence", async ({
   await expectInvariantsUnchanged(page, before);
 });
 
-test("reports a mermaid diagram by its snapshot size and SVG format", async ({
-  page,
-}) => {
+test("hides information for a Mermaid diagram", async ({ page }) => {
   await openMermaidDocument(page);
   await openMermaidLightbox(page);
-
-  const info = page.locator(".image-lightbox-info");
-  await expect(info.locator(".image-lightbox-alt")).toHaveText("Mermaid 图表");
-  // The size is the snapshot's intrinsic geometry (the rendered SVG's own),
-  // and the underlying format is SVG whatever engine produced it.
-  await expect(info.locator(".image-lightbox-meta")).toHaveText(
-    /^\d+(?:\.\d+)? × \d+(?:\.\d+)? · SVG$/,
-  );
+  await expect(page.locator(".image-lightbox-info")).toHaveCount(0);
+  await expect(page.getByRole("img", { name: "Mermaid 图表" })).toBeVisible();
 });
 
 test("namespaces Mermaid SVG identifiers in its Lightbox snapshot", async ({

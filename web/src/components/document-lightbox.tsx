@@ -42,7 +42,7 @@ import {
 } from "react";
 
 import type { LightboxItem } from "../lib/document-lightbox";
-import { imageFormat } from "../lib/image-metadata";
+import { imageFormat, imageFormatFromSource } from "../lib/image-metadata";
 
 // zoom 1 is the fitted size; each step scales by 1.25 up to 5x. Dividing and
 // multiplying by the same factor makes the zoom-out path retrace the zoom-in
@@ -476,20 +476,19 @@ export function DocumentLightbox({
     return null;
   }
 
-  // The info area's two lines. The alt repeats the item's accessible name
-  // verbatim (it must wrap, never truncate); the metadata reads
-  // "intrinsic size · format". For a bitmap both facts come from the dialog's
-  // own load (see naturalSize/naturalFormat) and are unknown until then; for
-  // an SVG visual the snapshot's intrinsic size is the true original and the
-  // underlying format is SVG by construction.
+  // SVGs keep their accessible name but have no visible info plate. For an
+  // <img>, the loaded resource wins over the fallback URL (srcset can choose
+  // a different format). Before loading, suppress known SVGs immediately.
+  const showInfo =
+    item.kind === "image" &&
+    (naturalSize === null ? imageFormatFromSource(item.src) : naturalFormat) !==
+      "SVG";
   const altText = item.alt.trim();
   const metadataSize =
-    item.kind === "image"
-      ? naturalSize === null
-        ? null
-        : `${naturalSize.width} × ${naturalSize.height}`
-      : `${item.intrinsicWidth} × ${item.intrinsicHeight}`;
-  const metadataFormat = item.kind === "image" ? naturalFormat : item.format;
+    naturalSize === null
+      ? null
+      : `${naturalSize.width} × ${naturalSize.height}`;
+  const metadataFormat = naturalFormat;
   const metadataText =
     metadataFormat === null
       ? metadataSize
@@ -619,7 +618,7 @@ export function DocumentLightbox({
            * aria-hidden: the alt and the visual's accessible name already
            * carry the text for assistive technology. */}
           <div className="image-lightbox-footer">
-            {altText !== "" || metadataText !== null ? (
+            {showInfo && (altText !== "" || metadataText !== null) ? (
               <div className="image-lightbox-info" aria-hidden="true">
                 {altText !== "" ? (
                   <div className="image-lightbox-alt">{altText}</div>
