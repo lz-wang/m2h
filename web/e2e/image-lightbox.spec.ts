@@ -209,31 +209,18 @@ test("disables previous on the first image and next on the last", async ({
   await expect(previous).toBeEnabled();
 });
 
-test("keeps a rotated landscape image clear of the bottom toolbar", async ({
+test("fits a rotated landscape image to the full viewport", async ({
   page,
 }) => {
   await openDocument(page);
   const before = await captureInvariants(page);
-
-  // The first image is the 1200×600 landscape fixture: tall enough that a
-  // quarter turn produces a portrait taller than the toolbar-free area, so a
-  // fit computed against the whole viewport would slide under the toolbar.
   await openLightbox(page, 0);
-  const toolbar = page.locator(".image-lightbox-toolbar");
+  await waitForFittedImage(page, 599);
 
-  // Unrotated fit: the image already sits inside the stage.
-  let imageBox = await waitForFittedImage(page, 599);
-  let toolbarBox = await toolbar.boundingBox();
-  expect(toolbarBox).not.toBeNull();
-  expect(imageBox.y + imageBox.height).toBeLessThanOrEqual(toolbarBox.y);
-
-  // A quarter turn swaps the visual axes; the re-fit must land inside the
-  // stage (the popup minus the toolbar reserve), never under the toolbar.
   await page.getByRole("button", { name: "顺时针旋转" }).click();
-  imageBox = await waitForFittedImage(page, 700);
-  toolbarBox = await toolbar.boundingBox();
-  expect(imageBox.y + imageBox.height).toBeLessThanOrEqual(toolbarBox.y + 1);
-
+  const imageBox = await waitForFittedImage(page, 899);
+  expect(imageBox.y).toBeCloseTo(0, 0);
+  expect(imageBox.height).toBeCloseTo(900, 0);
   await expectInvariantsUnchanged(page, before);
 });
 
@@ -292,9 +279,7 @@ test("clamps pointer pans to the fitted stage after zooming", async ({
 
   // Zoom to the 5x cap, then derive the drag bounds from the geometry the
   // component itself uses — the stage box and the image's untransformed
-  // layout — instead of hard-coded stage offsets (the footer below the stage
-  // is as tall as the wrapped info text needs, so the stage height is not a
-  // constant).
+  // layout — the stage spans the full viewport regardless of footer height.
   const zoomIn = page.getByRole("button", { name: "放大图片" });
   for (let click = 0; click < 8; click += 1) {
     await zoomIn.click();

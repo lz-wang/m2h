@@ -14,7 +14,7 @@
 - 文件树与文件筛选、全文搜索（Ctrl/Cmd+K，支持从结果直接跳转到匹配章节）、文档目录、主题和正文宽度切换
 - 支持 GFM、语法高亮、数学公式、Mermaid、Vega-Lite 统计图表、脚注、Emoji 和 GitHub Alerts
 - 支持 [Frontmatter 标题与日期元数据](docs/demos/frontmatter/00-index.md)、可排序表格、代码行号与长代码块折叠
-- 图片、Mermaid 图表与 Vega-Lite 图表支持 Lightbox 查看，可切换、通过工具栏或鼠标滚轮平滑缩放、拖动和旋转；图表以原生 SVG 渲染，放大时保持清晰；SVG 不显示底部图片信息
+- 图片、Mermaid 图表与 Vega-Lite 图表支持全屏 Lightbox 查看，可切换、通过工具栏或鼠标滚轮平滑缩放、拖动和旋转；图表以原生 SVG 渲染，放大时保持清晰；SVG 不显示底部图片信息
 - 正文图片延迟加载：接近视口时才请求实际资源，加载中显示内置占位图，失败折叠为统一占位并提示原始路径
 - 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
 - 输入 root 即发布边界：目录服务隐藏点开头路径，附件路由拒绝 HTML/JS/CSS 等主动 Web 内容，响应携带统一浏览器安全头
@@ -207,7 +207,7 @@ m2h 支持常用 GFM Markdown，并提供以下扩展：
 | 本地引用 | 当前文档相对路径与 `/` 开头的当前 root 相对路径；检查行为见 [本地目标演示](docs/demos/checkers/02-local-target-missing.md) |
 | 行内扩展 | `==高亮==`、`^^插入^^` 与 [`++ctrl+alt+del++` 键盘按键](docs/demos/pymarkdown/keyboards.md) |
 | 协作标记 | [Critic Markup 行内与块级语法](docs/demos/pymarkdown/critic.md) |
-| WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开、正文图片临近视口延迟加载，以及图片、Mermaid 与 Vega-Lite 图表 Lightbox（支持滚轮平滑缩放；图表以原生 SVG 放大，SVG 不显示图片信息） |
+| WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开、正文图片临近视口延迟加载，以及图片、Mermaid 与 Vega-Lite 图表 Lightbox（使用整个视口缩放与拖动，工具栏浮于图像上方，支持滚轮平滑缩放；图表以原生 SVG 放大，SVG 不显示图片信息） |
 
 ## 许可证
 

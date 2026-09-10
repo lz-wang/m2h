@@ -537,9 +537,9 @@ export function DocumentLightbox({
           >
             <X aria-hidden="true" />
           </Dialog.Close>
-          {/* The stage is the one coordinate system for layout, rotation fit,
-           * and pan clamping: it is the flex column's remaining space above
-           * the footer, and the transform math measures this same box. It is
+          {/* The stage is the full viewport and the one coordinate system for
+           * layout, rotation fit, and pan clamping. Floating controls never
+           * change this box, and the transform math measures it directly. It is
            * pointer-transparent so blank-area presses still reach the popup.
            * The enter/exit fade and scale ride on the stage (never on the
            * image below, whose transform carries live zoom/rotate/pan and
@@ -611,10 +611,8 @@ export function DocumentLightbox({
               </div>
             ) : null}
           </div>
-          {/* Control layer of the popup: the info area (full alt text and
-           * intrinsic metadata, wrapping freely) above the toolbar. The
-           * footer is a normal flex row below the stage, so its height is
-           * whatever the wrapped alt text needs — no fixed toolbar reserve.
+          {/* Floating control layer: bitmap info wraps above the toolbar
+           * without shrinking the viewport available for zooming/panning.
            * aria-hidden: the alt and the visual's accessible name already
            * carry the text for assistive technology. */}
           <div className="image-lightbox-footer">

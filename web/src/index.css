@@ -1241,37 +1241,20 @@ body,
   inset: 0;
   z-index: 101;
 
-  /* One vertical flex column: the stage takes whatever the footer does not
-   * need, so a wrapping alt text grows the footer and shrinks the stage
-   * instead of sliding under fixed geometry. The padding is the popup's
-   * outer gutter on every side. */
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  padding: 1rem;
-
+  overflow: hidden;
   outline: none;
 }
 
 /* The stage is the one coordinate system shared by the stylesheet, the
- * rotation fit, and the pan clamp: it is the column's remaining space above
- * the footer, so a rotated image re-fitting the stage can never reach under
- * the toolbar. min-height: 0 releases the flex item's content-based minimum,
- * which is what lets a huge visual shrink to the available box. It is
- * pointer-transparent — blank-area presses pass through to the popup's
- * close-on-press handler — while a visual opts back into pointer events for
- * panning. Its z-index is the bottom of the popup's explicit layering
- * contract: a zoomed bitmap may paint far past its layout box (and form its
- * own stacking context), so the controls below carry a higher z-index instead
- * of relying on the close button's DOM position, which precedes the stage.
- * The enter/exit motion rides here (96% + transparent → 100% + opaque), not
- * on a visual. */
+ * rotation fit, and the pan clamp: every visual gets the entire viewport.
+ * Controls float above it without reducing its size, even when image info
+ * wraps. Empty space passes presses through to the popup's close handler;
+ * visuals opt back into pointer events for panning. Enter/exit motion rides
+ * here, independently of the visual's live zoom/rotation/pan. */
 .image-lightbox-stage {
-  position: relative;
+  position: absolute;
+  inset: 0;
   z-index: 0;
-
-  flex: 1;
-  min-height: 0;
 
   display: flex;
   align-items: center;
@@ -1298,8 +1281,8 @@ body,
   transform: scale(0.96);
 }
 
-/* The fitted baseline the zoom transform scales from: a bitmap image contains
- * into the stage (the viewport minus the toolbar reserve).
+/* The fitted baseline the zoom transform scales from: an image contains
+ * into the full-viewport stage.
  * touch-action none hands all touch drags to the pointer-pan handlers, and the
  * transform (never width/height) carries zoom/rotate/pan so dragging stays
  * compositor-only. */
@@ -1368,16 +1351,15 @@ body,
   cursor: text;
 }
 
-/* Bottom control layer: the footer owns everything that used to hang off
- * fixed offsets — the info area (full alt text + "size · format") and the
- * toolbar. A plain flex-none row of the column, it is as tall as the wrapped
- * alt text needs, and its z-index keeps it above the stage's zoomed visual
- * (see the stage rule above). */
+/* Controls overlay the full-viewport stage. The gaps around the info plate
+ * and toolbar pass pointer gestures through to the visual underneath. */
 .image-lightbox-footer {
-  position: relative;
+  position: absolute;
+  inset-inline: 1rem;
+  bottom: 1rem;
+  max-height: calc(100% - 2rem);
   z-index: 2;
-
-  flex: none;
+  pointer-events: none;
 
   display: flex;
   flex-direction: column;
@@ -1395,6 +1377,9 @@ body,
   flex-direction: column;
   gap: 0.25rem;
   align-items: center;
+  min-height: 0;
+  overflow: auto;
+  pointer-events: auto;
 
   width: fit-content;
   max-width: min(80vw, calc(100vw - 2rem));
@@ -1429,6 +1414,8 @@ body,
  * counter, centered under the info plate. */
 .image-lightbox-toolbar {
   display: flex;
+  flex: none;
+  pointer-events: auto;
   width: fit-content;
   align-items: center;
   gap: 0.25rem;
