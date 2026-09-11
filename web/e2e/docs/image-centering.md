@@ -1,11 +1,11 @@
 ---
 title: 正文图片居中回归文档
-description: 验证普通图片、链接、picture、SVG 和图表在正文中的居中布局。
+description: 验证普通图片、链接、picture、SVG 和图表在正文中的居中布局，以及 GFM Alert 与居中规则共存。
 tags:
   - 测试
   - 图片
 create_date: 2026-09-10
-update_date: 2026-09-10
+update_date: 2026-09-11
 ---
 
 # 正文图片居中回归文档
@@ -43,3 +43,6 @@ flowchart LR
   }
 }
 ```
+
+> [!NOTE]
+> Alert layout regression.

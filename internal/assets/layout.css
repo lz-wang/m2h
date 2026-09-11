@@ -34,16 +34,24 @@ body.m2h-page {
 
 /* Center document images in both WebUI and HTML export. Limit SVG layout to
  * document/diagram roots: nested diagram SVGs, math glyphs and button icons
- * keep their own geometry. WebUI centers its image presentation frames too. */
+ * keep their own geometry. WebUI centers its image presentation frames too.
+ * A bare <svg> block qualifies too: CommonMark wraps it in a <p>, so the p
+ * clause is what centers it. The one paragraph context that stays out is the
+ * GFM alert title — its flex layout must keep the octicon at the leading
+ * edge, which margin-inline: auto would break. */
 .markdown-body img,
 .markdown-body > svg,
-.markdown-body :is(p, figure, div) > svg:not(svg svg) {
+.markdown-body
+  :is(p, figure, div)
+  > svg:not(svg svg):not(.markdown-alert-title > *) {
   display: block;
   margin-inline: auto;
 }
 
 .markdown-body > svg,
-.markdown-body :is(p, figure, div) > svg:not(svg svg) {
+.markdown-body
+  :is(p, figure, div)
+  > svg:not(svg svg):not(.markdown-alert-title > *) {
   max-width: 100%;
   height: auto;
 }

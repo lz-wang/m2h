@@ -49,14 +49,51 @@ async function expectCenteredImages(page: Page) {
   }
 }
 
+// Block-visual centering must not leak into the alert title: its flex layout
+// has to keep the octicon at the leading edge with the variant name following
+// across the fixed title gap. Assert the geometry contract, not the CSS
+// declarations, so the rules can be reworked without touching this test.
+async function expectAlertTitlePinnedLeft(page: Page) {
+  await expect(page.locator(".markdown-alert-title")).toHaveCount(1);
+  const geometry = await page
+    .locator(".markdown-alert-title")
+    .evaluate((title) => {
+      const icon = title.querySelector(".octicon");
+      if (!(icon instanceof SVGElement)) {
+        throw new Error("missing alert icon");
+      }
+      const textNode = Array.from(title.childNodes).find(
+        (node) =>
+          node.nodeType === Node.TEXT_NODE && node.textContent?.trim() !== "",
+      );
+      if (!(textNode instanceof Text)) {
+        throw new Error("missing alert text");
+      }
+      const titleRect = title.getBoundingClientRect();
+      const iconRect = icon.getBoundingClientRect();
+      const textRange = document.createRange();
+      textRange.selectNodeContents(textNode);
+      const textRect = textRange.getBoundingClientRect();
+      return {
+        leftGap: iconRect.left - titleRect.left,
+        textGap: textRect.left - iconRect.right,
+      };
+    });
+  expect(geometry.leftGap).toBeLessThanOrEqual(1);
+  expect(geometry.textGap).toBeGreaterThan(0);
+  expect(geometry.textGap).toBeLessThanOrEqual(12);
+}
+
 test("centers every document image and chart at desktop and narrow widths", async ({
   page,
 }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/doc/image-centering.md");
   await expectCenteredImages(page);
+  await expectAlertTitlePinnedLeft(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await expectCenteredImages(page);
+  await expectAlertTitlePinnedLeft(page);
 });
 
 test("centers the same images and charts in exported HTML", async ({
@@ -84,8 +121,10 @@ test("centers the same images and charts in exported HTML", async ({
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/assets/image-centering-export.html");
     await expectCenteredImages(page);
+    await expectAlertTitlePinnedLeft(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await expectCenteredImages(page);
+    await expectAlertTitlePinnedLeft(page);
   } finally {
     rmSync(outputDir, { recursive: true, force: true });
   }
