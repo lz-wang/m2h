@@ -451,3 +451,50 @@ describe("tree model", () => {
     expect(initialExpandedPaths(tree, null, true, "r0")).toEqual(new Set());
   });
 });
+
+describe("workspace-scale model", () => {
+  // 10K synthetic documents across two roots, mirroring the shape the
+  // /api/files listing serves at scale. Like the buildTree smoke test these
+  // assertions pin correctness, not speed — benchmarks own the numbers.
+  function listing(prefix: string, count: number): FileSummary[] {
+    const files: FileSummary[] = [];
+    for (let index = 0; index < count; index += 1) {
+      const name = `doc-${String(index).padStart(5, "0")}.md`;
+      files.push({
+        path: `${prefix}/group-${index % 40}/${name}`,
+        name,
+      });
+    }
+    return files;
+  }
+
+  const workspace: RootSummary[] = [
+    { id: "r0", name: "alpha", files: listing("group", 5_000) },
+    { id: "r1", name: "beta", files: listing("notes", 5_000) },
+  ];
+
+  it("flattens and prefixes a 10000-file multi-root workspace", () => {
+    const files = rootFiles(workspace);
+    expect(files).toHaveLength(10_000);
+    // Every virtual key is unique and keeps the "<rootId>/<path>" shape the
+    // document API, scroll storage and sidebar selection all share.
+    const keys = new Set(files.map((file) => file.path));
+    expect(keys.size).toBe(10_000);
+    expect(keys.has("r0/group/group-7/doc-00007.md")).toBe(true);
+    expect(keys.has("r1/notes/group-7/doc-00007.md")).toBe(true);
+  });
+
+  it("auto-open stays correct across a 10000-file workspace", () => {
+    // The first root carries no root-level README: with 5K nested documents
+    // the pick still resolves without scanning into the second root.
+    expect(autoOpenDocument(workspace, "workspace")).toBeNull();
+    const readme = [...workspace[0].files];
+    readme[0] = { path: "README.md", name: "README.md" };
+    expect(
+      autoOpenDocument(
+        [{ id: "r0", name: "alpha", files: readme }, workspace[1]],
+        "workspace",
+      ),
+    ).toBe("r0/README.md");
+  });
+});
