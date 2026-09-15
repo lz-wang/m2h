@@ -13,10 +13,10 @@ import (
 // directoryDocumentResolver resolves directory links for one rendered
 // response. The entry document of a directory is found by walking only that
 // directory's own subtree (files.FindDirectoryDocument) with the root's
-// discovery rules — never by discovering the whole workspace — so opening a
-// document stays independent of the workspace's total size. Decisions are
-// cached per response: the same Markdown may reference one directory
-// repeatedly. It never broadens serving scope.
+// discovery rules — it no longer unconditionally discovers the whole
+// workspace, though a link into a very large directory can still scan a
+// large subtree. Decisions are cached per response: the same Markdown may
+// reference one directory repeatedly. It never broadens serving scope.
 func (handler *documentHandler) directoryDocumentResolver(ctx context.Context, root workspaceRoot) func(string) (string, bool) {
 	type decision struct {
 		document  string
