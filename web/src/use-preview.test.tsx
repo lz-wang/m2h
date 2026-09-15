@@ -1,7 +1,13 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { APIError, type PreviewAPI, type RootSummary } from "./api";
+import {
+  APIError,
+  type FileMetadata,
+  type FileSummary,
+  type PreviewAPI,
+  type RootSummary,
+} from "./api";
 import { usePreview } from "./use-preview";
 
 // A caller-controlled promise: tests decide exactly when (and whether) a
@@ -17,16 +23,8 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
-function rootWith(
-  files: Array<{ path: string; name: string; title?: string }>,
-): RootSummary[] {
-  return [
-    {
-      id: "r0",
-      name: "docs",
-      files: files.map((file) => ({ title: "", ...file })),
-    },
-  ];
+function rootWith(files: FileSummary[]): RootSummary[] {
+  return [{ id: "r0", name: "docs", files }];
 }
 
 function createAPI() {
@@ -162,5 +160,64 @@ describe("usePreview decoupled loading", () => {
     await waitFor(() => expect(result.current.phase).toBe("not-found"));
     expect(result.current.files).toHaveLength(1);
     expect(result.current.filesError).toBeNull();
+  });
+
+  it("dedupes concurrent metadata requests for one path", async () => {
+    window.history.replaceState(null, "", "/doc/README.md");
+    const api = createAPI();
+    api.listFiles.mockResolvedValue({
+      kind: "directory",
+      version: "test",
+      roots: rootWith([{ path: "README.md", name: "README.md" }]),
+    });
+    api.getDocument.mockResolvedValue(documentResponse("README.md"));
+    const pending = deferred<FileMetadata>();
+    api.getFileMetadata.mockReturnValue(pending.promise);
+    const { result } = renderHook(() => usePreview(api));
+    await waitFor(() => expect(result.current.phase).toBe("ready"));
+    expect(api.getFileMetadata).not.toHaveBeenCalled();
+
+    await act(async () => {
+      const first = result.current.loadFileMetadata("README.md");
+      const second = result.current.loadFileMetadata("README.md");
+      expect(api.getFileMetadata).toHaveBeenCalledTimes(1);
+      pending.resolve({ title: "Meta" });
+      await Promise.all([first, second]);
+    });
+    expect(result.current.metadata.get("README.md")).toEqual({ title: "Meta" });
+
+    // A settled entry answers from the cache without a new request.
+    await result.current.loadFileMetadata("README.md");
+    expect(api.getFileMetadata).toHaveBeenCalledTimes(1);
+  });
+
+  it("drops the metadata cache whenever the file list reloads", async () => {
+    window.history.replaceState(null, "", "/doc/README.md");
+    const api = createAPI();
+    api.listFiles.mockResolvedValue({
+      kind: "directory",
+      version: "test",
+      roots: rootWith([{ path: "README.md", name: "README.md" }]),
+    });
+    api.getDocument.mockResolvedValue(documentResponse("README.md"));
+    api.getFileMetadata.mockResolvedValue({ title: "Meta" });
+    const { result } = renderHook(() => usePreview(api));
+    await waitFor(() => expect(result.current.phase).toBe("ready"));
+
+    await act(async () => {
+      await result.current.loadFileMetadata("README.md");
+    });
+    expect(result.current.metadata.get("README.md")).toEqual({ title: "Meta" });
+
+    await act(async () => {
+      await result.current.refresh();
+    });
+    expect(result.current.metadata.size).toBe(0);
+
+    // The cleared cache refetches: stale metadata never survives a reload.
+    await act(async () => {
+      await result.current.loadFileMetadata("README.md");
+    });
+    expect(api.getFileMetadata).toHaveBeenCalledTimes(2);
   });
 });

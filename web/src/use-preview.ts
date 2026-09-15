@@ -11,6 +11,7 @@ import {
   browserAPI,
   type DocumentResponse,
   type FileListResponse,
+  type FileMetadata,
   type FileSummary,
   type PreviewAPI,
   type PreviewKind,
@@ -61,6 +62,12 @@ export interface PreviewState {
   // what the reader shows.
   filesLoading: boolean;
   filesError: string | null;
+  // Display metadata cache keyed by the virtual document path. Entries land
+  // as the reader points at sidebar files (deduplicated, one request per
+  // path) and are dropped whenever the file list reloads, so a refresh never
+  // serves stale metadata.
+  metadata: ReadonlyMap<string, FileMetadata>;
+  loadFileMetadata(path: string): Promise<void>;
   error: string | null;
   visualError: string | null;
   refresh(): Promise<void>;
@@ -109,6 +116,9 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   );
   const [filesLoading, setFilesLoading] = useState(true);
   const [filesError, setFilesError] = useState<string | null>(null);
+  const [metadata, setMetadata] = useState<ReadonlyMap<string, FileMetadata>>(
+    () => new Map(),
+  );
   const [error, setError] = useState<string | null>(null);
   const [visualError, setVisualError] = useState<string | null>(null);
   const filesRef = useRef<FileSummary[]>([]);
@@ -121,6 +131,11 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   const listController = useRef<AbortController | null>(null);
   const documentController = useRef<AbortController | null>(null);
   const documentRequest = useRef(0);
+  const metadataRef = useRef<Map<string, FileMetadata>>(new Map());
+  const metadataRequestsRef = useRef<Map<string, Promise<void>>>(new Map());
+  // Bumped whenever the cache is dropped (a file-list reload): an in-flight
+  // metadata response from before the reload must not repopulate it.
+  const metadataGeneration = useRef(0);
 
   const writeRoute = useCallback(
     (path: string | null, action: HistoryAction, hash = "") => {
@@ -207,6 +222,14 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
       listController.current = controller;
       setFilesLoading(true);
       setFilesError(null);
+      // A fresh listing invalidates every cached metadata entry: files may
+      // have changed on disk, and the "refresh reads the latest state" rule
+      // leaves no room for stale titles. No watcher, no mtime bookkeeping —
+      // a reload is the invalidation.
+      metadataGeneration.current += 1;
+      metadataRef.current.clear();
+      metadataRequestsRef.current.clear();
+      setMetadata(new Map());
       try {
         const loaded = await api.listFiles(controller.signal);
         if (controller.signal.aborted) {
@@ -234,6 +257,43 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         return null;
       }
     }, [api]);
+
+  // On-demand display metadata for one sidebar file. pointerenter and focus
+  // can fire almost simultaneously for the same row, so in-flight requests
+  // are shared and settled entries are served from the cache — one request
+  // per path, ever, until the next file-list reload drops it.
+  const loadFileMetadata = useCallback(
+    (path: string): Promise<void> => {
+      const pending = metadataRequestsRef.current.get(path);
+      if (pending !== undefined) {
+        return pending;
+      }
+      if (metadataRef.current.has(path)) {
+        return Promise.resolve();
+      }
+      const generation = metadataGeneration.current;
+      const request = api
+        .getFileMetadata(path)
+        .then((loaded) => {
+          if (generation !== metadataGeneration.current) {
+            return;
+          }
+          metadataRef.current.set(path, loaded);
+          setMetadata(new Map(metadataRef.current));
+        })
+        .catch(() => {
+          // A failed lookup degrades to the filename-only tooltip and
+          // accessible name; the reader is unaffected. Dropping the
+          // in-flight entry lets a later hover retry.
+        })
+        .finally(() => {
+          metadataRequestsRef.current.delete(path);
+        });
+      metadataRequestsRef.current.set(path, request);
+      return request;
+    },
+    [api],
+  );
 
   // The "/" starting point has no document in the URL: the workspace's own
   // default (single file, or the first root's README/index/first root-level
@@ -451,6 +511,8 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     phase,
     filesLoading,
     filesError,
+    metadata,
+    loadFileMetadata,
     error,
     visualError,
     refresh,

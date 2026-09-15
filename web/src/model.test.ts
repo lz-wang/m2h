@@ -18,15 +18,15 @@ import {
 } from "./model";
 
 const files: FileSummary[] = [
-  { path: "z.md", name: "z.md", title: "Z" },
-  { path: "guide/part10.md", name: "part10.md", title: "Part 10" },
-  { path: "guide/part2.md", name: "part2.md", title: "Part 2" },
+  { path: "z.md", name: "z.md" },
+  { path: "guide/part10.md", name: "part10.md" },
+  { path: "guide/part2.md", name: "part2.md" },
 ];
 
 // autoOpenDocument fixtures: a one-line file summary and a one-root workspace.
 function file(path: string): FileSummary {
   const name = path.split("/").pop() ?? path;
-  return { path, name, title: name };
+  return { path, name };
 }
 
 function directoryRoot(rootFiles: FileSummary[]): RootSummary {
@@ -144,13 +144,12 @@ describe("route model", () => {
         "directory",
       ),
     ).toBe("INDEX.md");
-    // … but a same-stem title never promotes a non-README name.
-    expect(
-      autoOpenDocument(
-        [directoryRoot([{ ...file("a.md"), title: "README" }])],
-        "directory",
-      ),
-    ).toBe("a.md");
+    // Titles never participate: the file NAME is the convention, so a
+    // README-named title cannot promote a differently named file. (The
+    // summary carries no title anymore — the name alone decides.)
+    expect(autoOpenDocument([directoryRoot([file("a.md")])], "directory")).toBe(
+      "a.md",
+    );
   });
 
   it("falls back to the first root-level file in natural name order", () => {
@@ -243,7 +242,6 @@ describe("workspace model", () => {
   const readme: FileSummary = {
     path: "README.md",
     name: "README.md",
-    title: "Readme",
   };
 
   it("keeps single-root file paths unprefixed", () => {
@@ -269,19 +267,18 @@ describe("workspace model", () => {
         id: "r1",
         name: "beta",
         files: [
-          { path: "README.md", name: "README.md", title: "Beta Readme" },
+          { path: "README.md", name: "README.md" },
           {
             path: "guide/part.md",
             name: "part.md",
-            title: "Part",
           },
         ],
       },
     ];
     expect(rootFiles(roots)).toEqual([
       { ...readme, path: "r0/README.md" },
-      { path: "r1/README.md", name: "README.md", title: "Beta Readme" },
-      { path: "r1/guide/part.md", name: "part.md", title: "Part" },
+      { path: "r1/README.md", name: "README.md" },
+      { path: "r1/guide/part.md", name: "part.md" },
     ]);
   });
 });
@@ -338,9 +335,9 @@ describe("tree model", () => {
 
   it("expands first-level directories of an unselected single-root tree", () => {
     const tree = buildTree([
-      { path: "docs/a/b.md", name: "b.md", title: "B" },
-      { path: "docs/deep/c/d.md", name: "d.md", title: "D" },
-      { path: "guide.md", name: "guide.md", title: "Guide" },
+      { path: "docs/a/b.md", name: "b.md" },
+      { path: "docs/deep/c/d.md", name: "d.md" },
+      { path: "guide.md", name: "guide.md" },
     ]);
     // Top-level directories open, the deeper "docs/deep" level stays closed.
     expect(initialExpandedPaths(tree, null, false, "")).toEqual(
@@ -350,8 +347,8 @@ describe("tree model", () => {
 
   it("expands only the selection's own chain, root row included", () => {
     const tree = buildTree([
-      { path: "a/b/c.md", name: "c.md", title: "C" },
-      { path: "x/y.md", name: "y.md", title: "Y" },
+      { path: "a/b/c.md", name: "c.md" },
+      { path: "x/y.md", name: "y.md" },
     ]);
     // Single root: just the ancestors, no synthetic root row.
     expect(initialExpandedPaths(tree, "a/b/c.md", false, "")).toEqual(
@@ -364,9 +361,7 @@ describe("tree model", () => {
   });
 
   it("expands nothing in an unselected multi-root tree", () => {
-    const tree = buildTree([
-      { path: "README.md", name: "README.md", title: "Readme" },
-    ]);
+    const tree = buildTree([{ path: "README.md", name: "README.md" }]);
     expect(initialExpandedPaths(tree, null, true, "r0")).toEqual(new Set());
   });
 });

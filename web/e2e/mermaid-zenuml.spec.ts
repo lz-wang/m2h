@@ -247,9 +247,7 @@ test("does not retain ZenUML host styles after in-app navigation", async ({
   await page.waitForFunction(
     () => document.querySelector(".m2h-mermaid-frame .mermaid > svg") !== null,
   );
-  await page
-    .getByRole("button", { name: "滚动恢复回归文档，scroll.md" })
-    .click();
+  await page.getByRole("button", { name: "scroll.md，scroll.md" }).click();
   await expect(page).toHaveURL(/\/doc\/scroll\.md\?mode=light$/);
   await page.waitForFunction(() =>
     document

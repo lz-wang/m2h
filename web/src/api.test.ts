@@ -66,7 +66,7 @@ describe("browser API", () => {
         {
           id: "r0",
           name: "docs",
-          files: [{ path: "README.md", name: "README.md", title: "Readme" }],
+          files: [{ path: "README.md", name: "README.md" }],
         },
       ],
     });
@@ -240,8 +240,9 @@ describe("browser API", () => {
       "文档响应格式无效",
     );
 
-    // The description rides along when present, but must be a string — a
-    // non-string value is a contract breach, not something to coerce.
+    // The listing is topology-only: a summary missing its name is still a
+    // contract breach, but anything beyond path/name is ignored — the server
+    // can no longer carry title/description here at all.
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -264,12 +265,20 @@ describe("browser API", () => {
         { status: 200 },
       ),
     );
-    await expect(browserAPI.listFiles()).rejects.toThrow(
-      "文件条目响应格式无效",
-    );
+    await expect(browserAPI.listFiles()).resolves.toEqual({
+      kind: "directory",
+      version: "1",
+      roots: [
+        {
+          id: "r0",
+          name: "docs",
+          files: [{ path: "README.md", name: "README.md" }],
+        },
+      ],
+    });
   });
 
-  it("carries the optional description on file summaries", async () => {
+  it("keeps file summaries metadata-free", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -279,15 +288,7 @@ describe("browser API", () => {
             {
               id: "r0",
               name: "docs",
-              files: [
-                {
-                  path: "README.md",
-                  name: "README.md",
-                  title: "Readme",
-                  description: "m2h documentation",
-                },
-                { path: "bare.md", name: "bare.md", title: "Bare" },
-              ],
+              files: [{ path: "README.md", name: "README.md" }],
             },
           ],
         }),
@@ -295,7 +296,7 @@ describe("browser API", () => {
       ),
     );
 
-    // Present on the first file, absent (not empty) on the second.
+    // The summary carries exactly path and name: no title, no description.
     await expect(browserAPI.listFiles()).resolves.toEqual({
       kind: "directory",
       version: "1",
@@ -303,15 +304,7 @@ describe("browser API", () => {
         {
           id: "r0",
           name: "docs",
-          files: [
-            {
-              path: "README.md",
-              name: "README.md",
-              title: "Readme",
-              description: "m2h documentation",
-            },
-            { path: "bare.md", name: "bare.md", title: "Bare" },
-          ],
+          files: [{ path: "README.md", name: "README.md" }],
         },
       ],
     });

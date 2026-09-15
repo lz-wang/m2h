@@ -24,7 +24,7 @@ import (
 	appversion "github.com/lz-wang/m2h/internal/version"
 )
 
-func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
+func TestDirectoryFilesAPIUsesSharedDiscoveryAndTopology(t *testing.T) {
 	root := directoryFixture(t)
 	canonical := canonicalDirectory(t, root)
 	options := files.DiscoverOptions{Depth: 2, Pattern: "**/*.md"}
@@ -66,25 +66,25 @@ func TestDirectoryFilesAPIUsesSharedDiscoveryAndTitles(t *testing.T) {
 	if !reflect.DeepEqual(gotPaths, wantPaths) {
 		t.Fatalf("API paths = %v, shared discovery paths = %v", gotPaths, wantPaths)
 	}
-	if titleFor(files, "design/architecture.md") != "Architecture" {
-		t.Fatalf("architecture title = %q", titleFor(files, "design/architecture.md"))
-	}
-	if titleFor(files, "notes.md") != "notes.md" {
-		t.Fatalf("fallback title = %q", titleFor(files, "notes.md"))
+	// The listing is topology-only: no display metadata may ride along, so
+	// its cost can never scale with the Markdown content it does not read.
+	for _, key := range []string{`"title"`, `"description"`} {
+		if strings.Contains(response.Body.String(), key) {
+			t.Fatalf("listing response carries %s: %s", key, response.Body.String())
+		}
 	}
 	if !regexp.MustCompile(`^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \| 192\.0\.2\.1 \[GET\] /api/files \[200\] \d+\.\dms\n$`).MatchString(logOutput.String()) {
 		t.Fatalf("request log = %q", logOutput.String())
 	}
 }
 
-func TestDirectoryFilesAPICarriesDescription(t *testing.T) {
+func TestDirectoryFilesAPIStaysMetadataFreeForBrokenFrontmatter(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	canonical := canonicalDirectory(t, root)
-	writeTestFile(t, filepath.Join(root, "with.md"),
+	writeTestFile(t, filepath.Join(root, "valid.md"),
 		"---\ntitle: With\ndescription: 一句话介绍\n---\n# With\n")
-	writeTestFile(t, filepath.Join(root, "without.md"), "# Without\n")
 	writeTestFile(t, filepath.Join(root, "invalid.md"),
 		"---\ntitle: [unclosed\n---\n# Invalid\n")
 	options := files.DiscoverOptions{Depth: 2, Pattern: "**/*.md"}
@@ -95,42 +95,22 @@ func TestDirectoryFilesAPICarriesDescription(t *testing.T) {
 		t.Fatalf("GET /api/files status = %d, body = %s", response.Code, response.Body.String())
 	}
 
-	// description is omitempty: the raw JSON for a document without one must
-	// not carry the key at all.
-	body := response.Body.String()
-	if !strings.Contains(body, `"description":"一句话介绍"`) {
-		t.Fatalf("declared description missing from response: %s", body)
-	}
-	if strings.Count(body, `"description"`) != 1 {
-		t.Fatalf("description key present more than once (omit empty broken): %s", body)
-	}
-
+	// An invalid frontmatter block must not fail the listing: every document
+	// stays navigable, and the raw response still carries no metadata keys —
+	// opening the document is where the 422 surfaces.
 	var payload fileListResponse
 	decodeJSON(t, response, &payload)
-	files := payload.Roots[0].Files
-	if got := descriptionFor(files, "with.md"); got != "一句话介绍" {
-		t.Errorf("with.md description = %q, want %q", got, "一句话介绍")
+	if !containsSummary(payload.Roots[0].Files, "invalid.md") {
+		t.Fatalf("invalid.md missing from listing: %s", response.Body.String())
 	}
-	if got := descriptionFor(files, "without.md"); got != "" {
-		t.Errorf("without.md description = %q, want empty", got)
+	if !containsSummary(payload.Roots[0].Files, "valid.md") {
+		t.Fatalf("valid.md missing from listing: %s", response.Body.String())
 	}
-	// The invalid frontmatter block must not fail the listing; the entry
-	// keeps its title fallback and carries no description.
-	if got := descriptionFor(files, "invalid.md"); got != "" {
-		t.Errorf("invalid.md description = %q, want empty", got)
-	}
-	if titleFor(files, "invalid.md") == "" {
-		t.Errorf("invalid.md lost its fallback title")
-	}
-}
-
-func descriptionFor(summaries []fileSummary, relative string) string {
-	for _, summary := range summaries {
-		if summary.Path == relative {
-			return summary.Description
+	for _, key := range []string{`"title"`, `"description"`} {
+		if strings.Contains(response.Body.String(), key) {
+			t.Fatalf("listing response carries %s: %s", key, response.Body.String())
 		}
 	}
-	return ""
 }
 
 func TestDirectoryFilesAPIDepthGlobRefresh(t *testing.T) {
@@ -315,8 +295,14 @@ func TestDirectoryFilesAPIEmptyAndFailures(t *testing.T) {
 	handlerState.discover = func(context.Context, rootScope) (files.Discovery, error) {
 		return files.Discovery{Markdown: []files.Entry{{AbsolutePath: valid, RelativePath: "../invalid.md"}}}, nil
 	}
+	// The listing is a pure mapper over discovery output: it reads no Markdown
+	// content, so the old per-file title extraction (whose fallback rejected
+	// such a path with a 500) is gone. Path validity is discovery's contract —
+	// the walk is root-bounded and can never emit one like this.
 	response = performRequest(handler, http.MethodGet, "/api/files")
-	assertJSONError(t, response, http.StatusInternalServerError)
+	if response.Code != http.StatusOK {
+		t.Fatalf("topology mapping status = %d, want 200", response.Code)
+	}
 }
 
 func TestDirectoryDocumentAPIReadsLatestContent(t *testing.T) {
@@ -522,15 +508,9 @@ func TestDocumentAPITitlePrefersFrontMatter(t *testing.T) {
 		directoryTestUI(),
 	)
 
-	// /api/files keeps its tolerance: every document is listed, the invalid
-	// frontmatter one included, with the shared title priority applied.
-	response := performRequest(handler, http.MethodGet, "/api/files")
-	if response.Code != http.StatusOK {
-		t.Fatalf("GET /api/files status = %d, body = %s", response.Code, response.Body.String())
-	}
-	var payload fileListResponse
-	decodeJSON(t, response, &payload)
-	summaries := payload.Roots[0].Files
+	// The listing keeps its tolerance — every document is listed, the invalid
+	// frontmatter one included — while the shared title priority now lives in
+	// the on-demand metadata endpoint.
 	wantTitles := map[string]string{
 		"both.md":           "使用指南",
 		"no-h1.md":          "无标题正文",
@@ -540,9 +520,26 @@ func TestDocumentAPITitlePrefersFrontMatter(t *testing.T) {
 		"sequence-title.md": "Sequence",
 		"broken.md":         "Broken",
 	}
+	response := performRequest(handler, http.MethodGet, "/api/files")
+	if response.Code != http.StatusOK {
+		t.Fatalf("GET /api/files status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload fileListResponse
+	decodeJSON(t, response, &payload)
+	for path := range wantTitles {
+		if !containsSummary(payload.Roots[0].Files, path) {
+			t.Errorf("files listing missing %q", path)
+		}
+	}
 	for path, want := range wantTitles {
-		if got := titleFor(summaries, path); got != want {
-			t.Errorf("files title for %q = %q, want %q", path, got, want)
+		metadata := performRequest(handler, http.MethodGet, "/api/file-metadata?path="+path)
+		if metadata.Code != http.StatusOK {
+			t.Fatalf("metadata %q status = %d, body = %s", path, metadata.Code, metadata.Body.String())
+		}
+		var got fileMetadataResponse
+		decodeJSON(t, metadata, &got)
+		if got.Title != want {
+			t.Errorf("metadata title for %q = %q, want %q", path, got.Title, want)
 		}
 	}
 
@@ -1536,17 +1533,14 @@ func assertJSONError(t *testing.T, response *httptest.ResponseRecorder, status i
 	}
 }
 
+// containsSummary reports whether the listing carries one root-relative path.
 func containsSummary(summaries []fileSummary, relative string) bool {
-	return titleFor(summaries, relative) != ""
-}
-
-func titleFor(summaries []fileSummary, relative string) string {
 	for _, summary := range summaries {
 		if summary.Path == relative {
-			return summary.Title
+			return true
 		}
 	}
-	return ""
+	return false
 }
 
 // directoryTestUI is the embedded WebUI filesystem used by directory handler tests.

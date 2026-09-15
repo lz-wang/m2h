@@ -90,7 +90,7 @@ test("lists both roots side by side and opens each same-named README", async ({
   // The file row visibly renders its icon and name: the context-menu refactor
   // once emptied the button while aria-label-based queries kept passing.
   const file = page.getByRole("button", {
-    name: "Root A Readme，r0/README.md",
+    name: "README.md，r0/README.md",
   });
   await expect(file).toContainText("README.md");
   await expect(file.locator("span.truncate")).toHaveText("README.md");
@@ -98,18 +98,14 @@ test("lists both roots side by side and opens each same-named README", async ({
 
   // The second root's same-named README opens under its own virtual path.
   await page.getByRole("button", { name: "root-b" }).click();
-  await page
-    .getByRole("button", { name: "Root B Readme，r1/README.md" })
-    .click();
+  await page.getByRole("button", { name: "README.md，r1/README.md" }).click();
   await expect(page.locator(".markdown-body h1")).toHaveText("Root B Readme");
   expect(await page.evaluate(() => window.location.pathname)).toBe(
     "/doc/r1/README.md",
   );
 
   // And back to the first root's copy.
-  await page
-    .getByRole("button", { name: "Root A Readme，r0/README.md" })
-    .click();
+  await page.getByRole("button", { name: "README.md，r0/README.md" }).click();
   await expect(page.locator(".markdown-body h1")).toHaveText("Root A Readme");
   expect(await page.evaluate(() => window.location.pathname)).toBe(
     "/doc/r0/README.md",
@@ -224,16 +220,18 @@ test("filter matches a root's name and keeps the tree grouped by root", async ({
 
   // Matching the second root's name surfaces every document under it and
   // nothing from the first root.
-  const search = page.getByRole("searchbox", { name: "筛选文件" });
+  const search = page.getByRole("searchbox", {
+    name: "按文件名或路径筛选文件",
+  });
   await search.fill("root-b");
   await expect(
-    page.getByRole("button", { name: "Root B Readme，r1/README.md" }),
+    page.getByRole("button", { name: "README.md，r1/README.md" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "B Guide，r1/guide.md" }),
+    page.getByRole("button", { name: "guide.md，r1/guide.md" }),
   ).toBeVisible();
   await expect(
-    page.getByRole("button", { name: "Root A Readme，r0/README.md" }),
+    page.getByRole("button", { name: "README.md，r0/README.md" }),
   ).toBeHidden();
   await expect(page.getByText("2 个 Markdown 文件")).toBeVisible();
 });
@@ -269,7 +267,7 @@ test("right-clicking same-named files copies each root's own addresses", async (
   // The first root's same-named README copies r0 addresses. Right-clicking
   // must not select it: the open document stays r0's README.
   await page
-    .getByRole("button", { name: "Root A Readme，r0/README.md" })
+    .getByRole("button", { name: "README.md，r0/README.md" })
     .click({ button: "right" });
   await page.getByRole("menuitem", { name: "复制文档网页链接" }).click();
   await expect(page.getByRole("status")).toHaveText("已复制文档链接");
@@ -282,7 +280,7 @@ test("right-clicking same-named files copies each root's own addresses", async (
   // starts collapsed (the open document lives in r0), so it opens first.
   await page.getByRole("button", { name: "root-b" }).click();
   await page
-    .getByRole("button", { name: "Root B Readme，r1/README.md" })
+    .getByRole("button", { name: "README.md，r1/README.md" })
     .click({ button: "right" });
   await page.getByRole("menuitem", { name: "复制 Markdown 链接" }).click();
   await expect(page.getByRole("status")).toHaveText("已复制 Markdown 链接");
@@ -302,7 +300,7 @@ test("context-menu open-in-new-tab really opens a popup with the document", asyn
   await openWorkspace(page, "/doc/r1/README.md");
 
   await page
-    .getByRole("button", { name: "Root B Readme，r1/README.md" })
+    .getByRole("button", { name: "README.md，r1/README.md" })
     .click({ button: "right" });
   const [popup] = await Promise.all([
     context.waitForEvent("page"),

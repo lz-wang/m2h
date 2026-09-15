@@ -11,7 +11,7 @@
 ## 特性
 
 - 直接浏览 Markdown 文件、目录或多个文档目录（打开目录时自动进入 README/index 或第一个根级文档）
-- 文件树与文件筛选、全文搜索（Ctrl/Cmd+K，支持从结果直接跳转到匹配章节）、文档目录、主题和正文宽度切换
+- 文件树与文件名/路径筛选、全文搜索（Ctrl/Cmd+K，支持从结果直接跳转到匹配章节）、文档目录、主题和正文宽度切换
 - 支持 GFM、语法高亮、数学公式、Mermaid、Vega-Lite 统计图表、脚注、Emoji 和 GitHub Alerts
 - 支持 [Frontmatter 标题与日期元数据](docs/demos/frontmatter/00-index.md)、可排序表格、代码行号与长代码块折叠
 - 图片、Mermaid 图表与 Vega-Lite 图表支持全屏 Lightbox 查看，可切换、通过工具栏或鼠标滚轮平滑缩放、拖动和旋转；图表以原生 SVG 渲染，放大时保持清晰；SVG 不显示底部图片信息

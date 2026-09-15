@@ -20,8 +20,8 @@ const initialFiles: FileListResponse = {
       id: "r0",
       name: "docs",
       files: [
-        { path: "README.md", name: "README.md", title: "Readme API Title" },
-        { path: "guides/setup.md", name: "setup.md", title: "Setup API Title" },
+        { path: "README.md", name: "README.md" },
+        { path: "guides/setup.md", name: "setup.md" },
       ],
     },
   ],
@@ -98,7 +98,7 @@ describe("App directory preview", () => {
     );
     expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Readme API Title，README.md" }),
+      screen.getByRole("button", { name: "README.md，README.md" }),
     ).toBeTruthy();
   });
 
@@ -113,8 +113,8 @@ describe("App directory preview", () => {
             id: "r0",
             name: "docs",
             files: [
-              { path: "b.md", name: "b.md", title: "B" },
-              { path: "a.md", name: "a.md", title: "A" },
+              { path: "b.md", name: "b.md" },
+              { path: "a.md", name: "a.md" },
             ],
           },
         ],
@@ -168,14 +168,14 @@ describe("App directory preview", () => {
     expect(window.location.pathname + window.location.search).toBe(
       "/doc/README.md",
     );
-    expect(document.title).toBe("Readme API Title");
+    expect(document.title).toBe("README");
     expect(document.documentElement.dataset.mode).toBe("auto");
     expect(
       document.getElementById("m2h-markdown-styles")?.getAttribute("href"),
     ).toBe("/ui/markdown.css");
     expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
     const title = screen.getByRole("region", { name: "当前文档标题" });
-    expect(title.textContent).toBe("Readme API Title");
+    expect(title.textContent).toBe("README");
     expect(
       screen.getByRole("button", { name: "显示主题：跟随系统" }),
     ).toBeTruthy();
@@ -259,16 +259,12 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
-            files: [
-              { path: "README.md", name: "README.md", title: "Alpha Readme" },
-            ],
+            files: [{ path: "README.md", name: "README.md" }],
           },
           {
             id: "r1",
             name: "beta",
-            files: [
-              { path: "README.md", name: "README.md", title: "Beta Readme" },
-            ],
+            files: [{ path: "README.md", name: "README.md" }],
           },
         ],
       }),
@@ -309,16 +305,12 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
-            files: [
-              { path: "nested/guide.md", name: "guide.md", title: "Guide" },
-            ],
+            files: [{ path: "nested/guide.md", name: "guide.md" }],
           },
           {
             id: "r1",
             name: "beta",
-            files: [
-              { path: "README.md", name: "README.md", title: "Beta Readme" },
-            ],
+            files: [{ path: "README.md", name: "README.md" }],
           },
         ],
       }),
@@ -424,7 +416,9 @@ describe("App directory preview", () => {
       expect.any(AbortSignal),
     );
     expect(screen.queryByRole("button", { name: "切换文件导航" })).toBeNull();
-    expect(screen.queryByRole("searchbox", { name: "筛选文件" })).toBeNull();
+    expect(
+      screen.queryByRole("searchbox", { name: "按文件名或路径筛选文件" }),
+    ).toBeNull();
     // Shared toolbar controls remain available in single-file mode.
     expect(screen.getByRole("button", { name: "文档宽度：标准" })).toBeTruthy();
     expect(
@@ -453,15 +447,13 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
-            files: [
-              { path: "README.md", name: "README.md", title: "Alpha Readme" },
-            ],
+            files: [{ path: "README.md", name: "README.md" }],
           },
           {
             id: "r1",
             name: "beta",
             files: [
-              { path: "README.md", name: "README.md", title: "Beta Readme" },
+              { path: "README.md", name: "README.md" },
               {
                 path: "guide/intro.md",
                 name: "intro.md",
@@ -504,7 +496,7 @@ describe("App directory preview", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "beta" }));
     await user.click(
-      screen.getByRole("button", { name: "Beta Readme，r1/README.md" }),
+      screen.getByRole("button", { name: "README.md，r1/README.md" }),
     );
     await screen.findByRole("heading", { level: 1, name: "Beta" });
     expect(getDocument).toHaveBeenLastCalledWith(
@@ -515,17 +507,19 @@ describe("App directory preview", () => {
 
     // Search stays global across roots but keeps the root grouping: matching
     // a root's name surfaces every document under it.
-    const search = screen.getByRole("searchbox", { name: "筛选文件" });
+    const search = screen.getByRole("searchbox", {
+      name: "按文件名或路径筛选文件",
+    });
     await user.clear(search);
     await user.type(search, "beta");
     expect(
-      screen.getByRole("button", { name: "Beta Readme，r1/README.md" }),
+      screen.getByRole("button", { name: "README.md，r1/README.md" }),
     ).toBeTruthy();
     expect(
-      screen.getByRole("button", { name: "Intro，r1/guide/intro.md" }),
+      screen.getByRole("button", { name: "intro.md，r1/guide/intro.md" }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "Alpha Readme，r0/README.md" }),
+      screen.queryByRole("button", { name: "README.md，r0/README.md" }),
     ).toBeNull();
     expect(screen.getByText("2 个 Markdown 文件")).toBeTruthy();
 
@@ -535,7 +529,7 @@ describe("App directory preview", () => {
     expect(screen.getByText("没有匹配的文档")).toBeTruthy();
   });
 
-  it("matches the sidebar search against the document description", async () => {
+  it("matches the sidebar search against file names and paths", async () => {
     const user = userEvent.setup();
     window.history.replaceState(null, "", "/doc/README.md");
     const api = createAPI({
@@ -547,13 +541,8 @@ describe("App directory preview", () => {
             id: "r0",
             name: "docs",
             files: [
-              {
-                path: "a.md",
-                name: "a.md",
-                title: "A",
-                description: "vps deployment guide",
-              },
-              { path: "b.md", name: "b.md", title: "B" },
+              { path: "notes/plan.md", name: "plan.md" },
+              { path: "b.md", name: "b.md" },
             ],
           },
         ],
@@ -569,12 +558,24 @@ describe("App directory preview", () => {
     render(<App api={api} />);
     await screen.findByText("Body for README.md");
 
-    // The description is searchable metadata: a query that matches only
-    // a.md's description surfaces it and drops b.md.
-    const search = screen.getByRole("searchbox", { name: "筛选文件" });
-    await user.type(search, "deployment");
-    expect(screen.getByRole("button", { name: "A，a.md" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "B，b.md" })).toBeNull();
+    // The filter is file location only: a query matching a path segment
+    // surfaces the file even though its name alone would not, and the file
+    // name still matches on its own.
+    const search = screen.getByRole("searchbox", {
+      name: "按文件名或路径筛选文件",
+    });
+    await user.type(search, "notes");
+    expect(
+      screen.getByRole("button", { name: "plan.md，notes/plan.md" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "b.md，b.md" })).toBeNull();
+
+    await user.clear(search);
+    await user.type(search, "plan.md");
+    expect(
+      screen.getByRole("button", { name: "plan.md，notes/plan.md" }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "b.md，b.md" })).toBeNull();
   });
 
   it("restores a dark deep link and expands the selected directory", async () => {
@@ -604,7 +605,7 @@ describe("App directory preview", () => {
     ).toBe("true");
     expect(
       screen
-        .getByRole("button", { name: "Setup API Title，guides/setup.md" })
+        .getByRole("button", { name: "setup.md，guides/setup.md" })
         .getAttribute("aria-current"),
     ).toBe("page");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
@@ -621,8 +622,8 @@ describe("App directory preview", () => {
 
   it("keeps deeply nested tree items aligned to the root trailing edge", async () => {
     const path = "internal/markdown/testdata/gfm.md";
-    const title = "GFM Fixture";
-    const file = { path, name: "gfm.md", title };
+    const name = "gfm.md";
+    const file = { path, name };
     window.history.replaceState(null, "", `/doc/${path}`);
     const api = createAPI({
       listFiles: vi.fn().mockResolvedValue({
@@ -638,14 +639,14 @@ describe("App directory preview", () => {
       }),
       getDocument: vi.fn().mockResolvedValue({
         path,
-        title,
+        title: "GFM Fixture",
         html: "<p>Nested fixture</p>",
       }),
     });
     render(<App api={api} />);
 
     const fileButton = await screen.findByRole("button", {
-      name: `${title}，${path}`,
+      name: `${name}，${path}`,
     });
     const submenus: HTMLElement[] = [];
     for (
@@ -717,7 +718,7 @@ describe("App directory preview", () => {
 
     await user.click(screen.getByRole("button", { name: "guides" }));
     await user.click(
-      screen.getByRole("button", { name: "Setup API Title，guides/setup.md" }),
+      screen.getByRole("button", { name: "setup.md，guides/setup.md" }),
     );
     await screen.findByText("Body for guides/setup.md");
     expect(window.location.pathname + window.location.search).toBe(
@@ -839,25 +840,38 @@ describe("App directory preview", () => {
     ).toBe(Node.DOCUMENT_POSITION_PRECEDING);
   });
 
-  it("filters documents locally by title and file name", async () => {
+  it("filters documents locally by file name and path", async () => {
     const user = userEvent.setup();
     const api = createAPI();
     render(<App api={api} />);
     await screen.findByText("Body for README.md");
 
-    const search = screen.getByRole("searchbox", { name: "筛选文件" });
+    const search = screen.getByRole("searchbox", {
+      name: "按文件名或路径筛选文件",
+    });
     expect(search.getAttribute("placeholder")).toBe(
-      "筛选文件（Ctrl+K全文搜索）",
+      "筛选文件名或路径（Ctrl+K全文搜索）",
     );
-    await user.type(search, "setup api");
+    // The name matches even when the query is not a full path...
+    await user.type(search, "setup");
     expect(
       screen.getByRole("button", {
-        name: "Setup API Title，guides/setup.md",
+        name: "setup.md，guides/setup.md",
       }),
     ).toBeTruthy();
     expect(
-      screen.queryByRole("button", { name: "Readme API Title，README.md" }),
+      screen.queryByRole("button", { name: "README.md，README.md" }),
     ).toBeNull();
+    expect(screen.getByText("1 个 Markdown 文件")).toBeTruthy();
+
+    // ...and so does the path segment the name alone would not cover.
+    await user.clear(search);
+    await user.type(search, "guides");
+    expect(
+      screen.getByRole("button", {
+        name: "setup.md，guides/setup.md",
+      }),
+    ).toBeTruthy();
     expect(screen.getByText("1 个 Markdown 文件")).toBeTruthy();
 
     await user.clear(search);
@@ -867,21 +881,74 @@ describe("App directory preview", () => {
     expect(api.getDocument).toHaveBeenCalledTimes(1);
   });
 
+  it("loads sidebar file metadata lazily and caches it per row", async () => {
+    const user = userEvent.setup();
+    window.history.replaceState(null, "", "/doc/README.md");
+    const getFileMetadata = vi
+      .fn<PreviewAPI["getFileMetadata"]>()
+      .mockImplementation(async (path: string) => {
+        if (path === "guides/setup.md") {
+          return { title: "Setup Guide", description: "安装与配置" };
+        }
+        throw new APIError(500, "metadata failed");
+      });
+    const api = createAPI({ getFileMetadata });
+    render(<App api={api} />);
+    await screen.findByText("Body for README.md");
+
+    // The initial render fetches nothing: metadata is pulled by pointing at
+    // a row, never eagerly.
+    expect(getFileMetadata).not.toHaveBeenCalled();
+
+    // Hovering pulls the row's metadata and upgrades its accessible name.
+    await user.click(screen.getByRole("button", { name: "guides" }));
+    const row = screen.getByRole("button", {
+      name: "setup.md，guides/setup.md",
+    });
+    await user.hover(row);
+    await waitFor(() =>
+      expect(row.getAttribute("aria-label")).toBe(
+        "Setup Guide，guides/setup.md",
+      ),
+    );
+    expect(getFileMetadata).toHaveBeenCalledTimes(1);
+    expect(getFileMetadata).toHaveBeenCalledWith("guides/setup.md");
+
+    // Repeated hover and keyboard focus on the same row are cache hits.
+    fireEvent.pointerEnter(row);
+    fireEvent.focus(row);
+    expect(getFileMetadata).toHaveBeenCalledTimes(1);
+
+    // A failing lookup keeps the filename fallback and never reaches the
+    // reader's error state.
+    const readmeRow = screen.getByRole("button", {
+      name: "README.md，README.md",
+    });
+    fireEvent.pointerEnter(readmeRow);
+    await waitFor(() => expect(getFileMetadata).toHaveBeenCalledTimes(2));
+    expect(readmeRow.getAttribute("aria-label")).toBe("README.md，README.md");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("Body for README.md")).toBeTruthy();
+  });
+
   it("exposes full file names and resizes the desktop sidebar without drag transitions", async () => {
     const user = userEvent.setup();
     render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
 
     const file = screen.getByRole("button", {
-      name: "Readme API Title，README.md",
+      name: "README.md，README.md",
     });
     await user.hover(file);
     const tooltipName = await screen.findByText("README.md", {
       selector: ".tree-tooltip-name",
     });
+    // Hovering pulls the file's display metadata; the tooltip then gains the
+    // title line (the mocked metadata title is the name without extension).
+    await screen.findByText("README", { selector: ".tree-tooltip-title" });
     expect(
       tooltipName.closest('[data-slot="tooltip-content"]')?.textContent,
-    ).toContain("Readme API Title");
+    ).toContain("README");
     const resize = screen.getByRole("button", { name: "调整侧边栏宽度" });
     const sidebar = document.querySelector<HTMLElement>(
       '[data-slot="sidebar"]',
@@ -938,7 +1005,7 @@ describe("App directory preview", () => {
     // stayed green while nothing was visibly rendered. Assert the rendered
     // content itself, not the accessible name.
     const fileButton = screen.getByRole("button", {
-      name: "Readme API Title，README.md",
+      name: "README.md，README.md",
     });
     expect(fileButton.textContent).toContain("README.md");
 
@@ -969,7 +1036,7 @@ describe("App directory preview", () => {
       // Right-click a file row that is not the open document.
       fireEvent.contextMenu(
         screen.getByRole("button", {
-          name: "Setup API Title，guides/setup.md",
+          name: "setup.md，guides/setup.md",
         }),
       );
 
@@ -1048,16 +1115,12 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
-            files: [
-              { path: "README.md", name: "README.md", title: "Alpha Readme" },
-            ],
+            files: [{ path: "README.md", name: "README.md" }],
           },
           {
             id: "r1",
             name: "beta",
-            files: [
-              { path: "README.md", name: "README.md", title: "Beta Readme" },
-            ],
+            files: [{ path: "README.md", name: "README.md" }],
           },
         ],
       }),
@@ -1080,7 +1143,7 @@ describe("App directory preview", () => {
       // Same-named files carry their own root's addresses, never the other
       // root's.
       fireEvent.contextMenu(
-        screen.getByRole("button", { name: "Alpha Readme，r0/README.md" }),
+        screen.getByRole("button", { name: "README.md，r0/README.md" }),
       );
       expect(
         (
@@ -1098,7 +1161,7 @@ describe("App directory preview", () => {
       // expand it to reach its file row.
       await user.click(screen.getByRole("button", { name: "beta" }));
       fireEvent.contextMenu(
-        screen.getByRole("button", { name: "Beta Readme，r1/README.md" }),
+        screen.getByRole("button", { name: "README.md，r1/README.md" }),
       );
       expect(
         (
@@ -1176,7 +1239,7 @@ describe("App directory preview", () => {
     expect(
       within(dialog)
         .getByRole("button", {
-          name: "Readme API Title，README.md",
+          name: "README.md，README.md",
         })
         .getAttribute("aria-current"),
     ).toBe("page");
@@ -2111,16 +2174,12 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
-            files: [
-              { path: "README.md", name: "README.md", title: "Alpha Readme" },
-            ],
+            files: [{ path: "README.md", name: "README.md" }],
           },
           {
             id: "r1",
             name: "beta",
-            files: [
-              { path: "README.md", name: "README.md", title: "Beta Readme" },
-            ],
+            files: [{ path: "README.md", name: "README.md" }],
           },
         ],
       }),
@@ -2150,7 +2209,7 @@ describe("App directory preview", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "alpha" }));
     await user.click(
-      screen.getByRole("button", { name: "Alpha Readme，r0/README.md" }),
+      screen.getByRole("button", { name: "README.md，r0/README.md" }),
     );
     await screen.findByText("Alpha body");
     expect(window.location.pathname).toBe("/doc/r0/README.md");
@@ -2180,16 +2239,12 @@ describe("App directory preview", () => {
           {
             id: "r0",
             name: "alpha",
-            files: [
-              { path: "README.md", name: "README.md", title: "Alpha Readme" },
-            ],
+            files: [{ path: "README.md", name: "README.md" }],
           },
           {
             id: "r1",
             name: "beta",
-            files: [
-              { path: "README.md", name: "README.md", title: "Beta Readme" },
-            ],
+            files: [{ path: "README.md", name: "README.md" }],
           },
         ],
       }),
@@ -2212,7 +2267,7 @@ describe("App directory preview", () => {
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "alpha" }));
     await user.click(
-      screen.getByRole("button", { name: "Alpha Readme，r0/README.md" }),
+      screen.getByRole("button", { name: "README.md，r0/README.md" }),
     );
     await screen.findByText("Body for r0/README.md");
     expect(scrollTo).toHaveBeenCalledWith(0, 111);
@@ -2558,7 +2613,7 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
       }
       return {
         path,
-        title: file.title,
+        title: file.name.replace(/\.md$/, ""),
         html: `<p>Body for ${path}</p>`,
         frontmatter: null,
         toc: [],
@@ -2580,7 +2635,7 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
       if (file === undefined) {
         throw new APIError(404, "not found");
       }
-      return { title: file.title, description: undefined };
+      return { title: file.name.replace(/\.md$/, "") };
     }),
     search: vi.fn().mockResolvedValue({ query: "", results: [] }),
     ...overrides,

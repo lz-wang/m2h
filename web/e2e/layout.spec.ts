@@ -278,7 +278,7 @@ test("opens the root README from the bare workspace address", async ({
   // the collapsed directories on the way).
   await page.locator('[data-tree-path="a"]').click();
   await page.locator('[data-tree-path="a/b"]').click();
-  await page.getByRole("button", { name: "笔记 A-01，a/b/a-01.md" }).click();
+  await page.getByRole("button", { name: "a-01.md，a/b/a-01.md" }).click();
   await expect(page.locator(".markdown-body")).toBeVisible();
   expect(await page.evaluate(() => window.location.pathname)).toBe(
     "/doc/a/b/a-01.md",

@@ -3,14 +3,12 @@
 // encoder shared with the sidebar and toolbar links.
 import { markdownURL } from "./model";
 
+// FileSummary is the listing's topology-only entry: an addressable path and
+// its display name. The listing never reads Markdown content, so title and
+// description arrive separately — see FileMetadata and getFileMetadata.
 export interface FileSummary {
   path: string;
   name: string;
-  title: string;
-  // The frontmatter description, when the document declares one. Absent —
-  // not empty — is the "no description" state, so the sidebar tooltip and
-  // the search filter can treat it uniformly.
-  description?: string;
 }
 
 // FileMetadata is the on-demand display metadata of one document, fetched
@@ -18,7 +16,9 @@ export interface FileSummary {
 // the (topology-only) file listing.
 export interface FileMetadata {
   title: string;
-  // Same "absent means none" contract as the file summary above.
+  // The frontmatter description, when the document declares one. Absent —
+  // not empty — is the "no description" state, so the tooltip can treat it
+  // uniformly.
   description?: string;
 }
 
@@ -195,23 +195,13 @@ function parseFileSummary(value: unknown): FileSummary {
   if (
     !isRecord(value) ||
     typeof value.path !== "string" ||
-    typeof value.name !== "string" ||
-    typeof value.title !== "string"
+    typeof value.name !== "string"
   ) {
     throw new Error("文件条目响应格式无效");
   }
-  const summary: FileSummary = {
-    path: value.path,
-    name: value.name,
-    title: value.title,
-  };
-  if (value.description !== undefined) {
-    if (typeof value.description !== "string") {
-      throw new Error("文件条目响应格式无效");
-    }
-    summary.description = value.description;
-  }
-  return summary;
+  // Topology only: anything else the payload carries is ignored, matching
+  // the listing's metadata-free contract.
+  return { path: value.path, name: value.name };
 }
 
 // A missing or unrecognized kind falls back to directory so the WebUI keeps

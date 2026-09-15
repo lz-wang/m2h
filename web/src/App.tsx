@@ -178,9 +178,11 @@ export function App({ api }: AppProps) {
   const isMobileViewport = useIsMobile();
   const sidebarTreeVisible = isMobileViewport ? sidebarMobileOpen : sidebarOpen;
   const [sidebarResizing, setSidebarResizing] = useState(false);
-  // The sidebar input filters the file tree by name/title/path/description;
-  // full-text search lives in the SearchDialog below. The two share nothing
-  // but the magnifier icon — different capabilities, different entries.
+  // The sidebar input filters the file tree by file name and path only — it
+  // is file location, served from the listing's topology data alone.
+  // Title/description/body search lives in the SearchDialog (Ctrl/Cmd+K)
+  // below. The two share nothing but the magnifier icon — different
+  // capabilities, different entries.
   const [fileFilterQuery, setFileFilterQuery] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
   const search = useSearch(api);
@@ -202,9 +204,7 @@ export function App({ api }: AppProps) {
           files: root.files.filter(
             (file) =>
               file.name.toLocaleLowerCase().includes(query) ||
-              file.title.toLocaleLowerCase().includes(query) ||
-              file.path.toLocaleLowerCase().includes(query) ||
-              (file.description?.toLocaleLowerCase().includes(query) ?? false),
+              file.path.toLocaleLowerCase().includes(query),
           ),
         };
       })
@@ -520,8 +520,8 @@ export function App({ api }: AppProps) {
                 <Input
                   type="search"
                   value={fileFilterQuery}
-                  aria-label="筛选文件"
-                  placeholder={`筛选文件（${searchShortcutHint}全文搜索）`}
+                  aria-label="按文件名或路径筛选文件"
+                  placeholder={`筛选文件名或路径（${searchShortcutHint}全文搜索）`}
                   onChange={(event) => setFileFilterQuery(event.target.value)}
                 />
               </div>
@@ -564,6 +564,10 @@ export function App({ api }: AppProps) {
                           <DocumentTree
                             key={root.id}
                             files={root.files}
+                            metadata={preview.metadata}
+                            onRequestMetadata={(path) =>
+                              void preview.loadFileMetadata(path)
+                            }
                             rootBase={root.id}
                             rootLabel={root.name}
                             onCopyStatus={announceCopyStatus}
@@ -576,6 +580,10 @@ export function App({ api }: AppProps) {
                       ) : (
                         <DocumentTree
                           files={filteredRoots[0]?.files ?? []}
+                          metadata={preview.metadata}
+                          onRequestMetadata={(path) =>
+                            void preview.loadFileMetadata(path)
+                          }
                           onCopyStatus={announceCopyStatus}
                           searching={fileFilterQuery.trim() !== ""}
                           selectedPath={preview.selectedPath}

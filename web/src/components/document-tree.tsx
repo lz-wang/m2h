@@ -9,7 +9,7 @@ import {
 } from "lucide-react";
 import type { CSSProperties, ReactNode } from "react";
 import { useLayoutEffect, useMemo, useRef, useState } from "react";
-import type { FileSummary } from "@/api";
+import type { FileMetadata, FileSummary } from "@/api";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -33,6 +33,13 @@ interface DocumentTreeProps {
   // Files of ONE root, root-relative: a multi-root workspace renders one tree
   // per root and keeps display paths free of the root-id prefix.
   files: FileSummary[];
+  // Display metadata cache keyed by the virtual document key. Entries land
+  // lazily via onRequestMetadata (hover/focus); until then rows fall back to
+  // the plain file name.
+  metadata: ReadonlyMap<string, FileMetadata>;
+  // Requests the display metadata of one file. Deduplication and caching
+  // live upstream (use-preview); this only forwards the virtual key.
+  onRequestMetadata(path: string): void;
   // The virtual document key of the selection (root-prefixed in a multi-root
   // workspace); it is translated to this tree's root-relative space below.
   selectedPath: string | null;
@@ -56,6 +63,8 @@ interface DocumentTreeProps {
 
 export function DocumentTree({
   files,
+  metadata,
+  onRequestMetadata,
   selectedPath,
   rootBase = "",
   rootLabel,
@@ -241,6 +250,8 @@ export function DocumentTree({
           key={`${node.type}:${node.path}`}
           node={node}
           base={rootBase}
+          metadata={metadata}
+          onRequestMetadata={onRequestMetadata}
           onCopyStatus={onCopyStatus}
           expanded={expanded}
           selectedPath={selectedRelative}
@@ -335,6 +346,8 @@ interface TreeItemProps {
   // stay distinguishable to assistive technology while the visible label
   // keeps the plain root-relative name.
   base: string;
+  metadata: ReadonlyMap<string, FileMetadata>;
+  onRequestMetadata(path: string): void;
   onCopyStatus?: (message: string) => void;
   expanded: Set<string>;
   selectedPath: string | null;
@@ -355,24 +368,37 @@ function TreeItem({ node, ...rest }: TreeItemProps) {
 }
 
 // The tree's leaves: one Markdown file. The visible label keeps the plain
-// root-relative file name; the accessible name additionally announces the
-// document title and the virtual key, and the context menu carries the same
-// document's addresses (see TreeItemProps for the identity rules).
+// root-relative file name; the accessible name and the tooltip show the
+// document's title/description once their metadata has loaded (lazy, on
+// hover/focus), falling back to the file name before that — the metadata
+// request itself is issued by the pointer/focus events below, never render.
 function FileItem({
   node,
   base,
+  metadata,
+  onRequestMetadata,
   onCopyStatus,
   selectedPath,
   onSelect,
 }: TreeItemProps & { node: FileNode }) {
   const active = node.path === selectedPath;
   const identity = base === "" ? node.path : `${base}/${node.path}`;
+  const fileMetadata = metadata.get(identity);
+  const requestMetadata = () => {
+    onRequestMetadata(identity);
+  };
   const button = (
     <SidebarMenuButton
       isActive={active}
       aria-current={active ? "page" : undefined}
-      aria-label={`${node.file.title}，${identity}`}
+      aria-label={
+        fileMetadata !== undefined
+          ? `${fileMetadata.title}，${identity}`
+          : `${node.name}，${identity}`
+      }
       className="document-tree-file h-8 text-sm"
+      onPointerEnter={requestMetadata}
+      onFocus={requestMetadata}
       tooltip={{
         hidden: false,
         side: "right",
@@ -384,11 +410,14 @@ function FileItem({
         children: (
           <>
             <span className="tree-tooltip-name">{node.name}</span>
-            <span className="tree-tooltip-title">{node.file.title}</span>
-            {node.file.description !== undefined &&
-            node.file.description !== "" ? (
+            {fileMetadata !== undefined ? (
+              <span className="tree-tooltip-title">{fileMetadata.title}</span>
+            ) : null}
+            {fileMetadata !== undefined &&
+            fileMetadata.description !== undefined &&
+            fileMetadata.description !== "" ? (
               <span className="tree-tooltip-description">
-                {node.file.description}
+                {fileMetadata.description}
               </span>
             ) : null}
           </>
@@ -413,6 +442,8 @@ function FileItem({
 function DirectoryItem({
   node,
   base,
+  metadata,
+  onRequestMetadata,
   onCopyStatus,
   expanded,
   selectedPath,
@@ -454,6 +485,8 @@ function DirectoryItem({
               key={`${child.type}:${child.path}`}
               node={child}
               base={base}
+              metadata={metadata}
+              onRequestMetadata={onRequestMetadata}
               onCopyStatus={onCopyStatus}
               expanded={expanded}
               selectedPath={selectedPath}

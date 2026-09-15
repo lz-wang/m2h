@@ -26,7 +26,7 @@ test("opens the mobile sidebar focused on the sheet, not the filter input", asyn
   await expect(dialog).toBeVisible();
 
   await expect(
-    page.getByRole("searchbox", { name: "筛选文件" }),
+    page.getByRole("searchbox", { name: "按文件名或路径筛选文件" }),
   ).not.toBeFocused();
   await expect
     .poll(() =>

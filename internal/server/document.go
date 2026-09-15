@@ -22,11 +22,14 @@ import (
 	appversion "github.com/lz-wang/m2h/internal/version"
 )
 
+// fileSummary is one navigable document in the listing: topology only. The
+// listing must never read Markdown content — its cost stays proportional to
+// the number of entries, never to the documents' total size — so display
+// metadata (title, description) is fetched per file through
+// /api/file-metadata instead.
 type fileSummary struct {
-	Path        string `json:"path"`
-	Name        string `json:"name"`
-	Title       string `json:"title"`
-	Description string `json:"description,omitempty"`
+	Path string `json:"path"`
+	Name string `json:"name"`
 }
 
 // fileMetadataResponse is the on-demand display metadata of one document:
@@ -160,24 +163,9 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 
 		summaries := make([]fileSummary, 0, len(discovered.Markdown))
 		for _, entry := range discovered.Markdown {
-			contents, err := os.ReadFile(entry.AbsolutePath)
-			if err != nil {
-				if errors.Is(err, fs.ErrNotExist) {
-					continue
-				}
-				writeJSONError(response, http.StatusInternalServerError, "read Markdown file")
-				return
-			}
-			metadata, err := fileDisplayMetadata(contents, entry.RelativePath)
-			if err != nil {
-				writeJSONError(response, http.StatusInternalServerError, "extract Markdown title")
-				return
-			}
 			summaries = append(summaries, fileSummary{
-				Path:        entry.RelativePath,
-				Name:        path.Base(entry.RelativePath),
-				Title:       metadata.Title,
-				Description: metadata.Description,
+				Path: entry.RelativePath,
+				Name: path.Base(entry.RelativePath),
 			})
 		}
 		roots = append(roots, rootSummary{

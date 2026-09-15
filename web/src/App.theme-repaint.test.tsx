@@ -34,8 +34,8 @@ const initialFiles: FileListResponse = {
       id: "r0",
       name: "docs",
       files: [
-        { path: "README.md", name: "README.md", title: "Readme API Title" },
-        { path: "guides/setup.md", name: "setup.md", title: "Setup API Title" },
+        { path: "README.md", name: "README.md" },
+        { path: "guides/setup.md", name: "setup.md" },
       ],
     },
   ],
@@ -78,7 +78,7 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
       }
       return {
         path,
-        title: file.title,
+        title: file.name.replace(/\.md$/, ""),
         html: `<p>Body for ${path}</p>`,
         frontmatter: null,
         toc: [],
@@ -233,7 +233,7 @@ describe("theme repaint scheduling", () => {
     // The dark repaint is parked on the first body's initial gate.
     await user.click(screen.getByRole("button", { name: "guides" }));
     await user.click(
-      screen.getByRole("button", { name: "Setup API Title，guides/setup.md" }),
+      screen.getByRole("button", { name: "setup.md，guides/setup.md" }),
     );
     await screen.findByText("Body for guides/setup.md");
     expect(renderRichContentMock).toHaveBeenCalledTimes(2);

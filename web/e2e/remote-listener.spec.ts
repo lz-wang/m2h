@@ -86,7 +86,7 @@ test("serves documents and the file tree with a path-free API", async ({
     "延迟图片回归文档",
   );
   await expect(
-    page.getByRole("button", { name: "延迟图片回归文档，images.md" }),
+    page.getByRole("button", { name: "images.md，images.md" }),
   ).toBeVisible();
 });
 
@@ -118,7 +118,7 @@ test("keeps every server-local path affordance out of the UI", async ({
 
   // The file context menu keeps its open/copy actions only.
   await page
-    .getByRole("button", { name: "延迟图片回归文档，images.md" })
+    .getByRole("button", { name: "images.md，images.md" })
     .click({ button: "right" });
   await expect(
     page.getByRole("menuitem", { name: "新页面打开" }),
