@@ -10,11 +10,14 @@ import (
 	"github.com/lz-wang/m2h/internal/files"
 )
 
-// directoryDocumentResolver lazily discovers only the referencing root and
-// caches directory decisions for one response. It never broadens serving scope.
+// directoryDocumentResolver resolves directory links for one rendered
+// response. The entry document of a directory is found by walking only that
+// directory's own subtree (files.FindDirectoryDocument) with the root's
+// discovery rules — never by discovering the whole workspace — so opening a
+// document stays independent of the workspace's total size. Decisions are
+// cached per response: the same Markdown may reference one directory
+// repeatedly. It never broadens serving scope.
 func (handler *documentHandler) directoryDocumentResolver(ctx context.Context, root workspaceRoot) func(string) (string, bool) {
-	var visible []string
-	loaded := false
 	type decision struct {
 		document  string
 		directory bool
@@ -59,17 +62,7 @@ func (handler *documentHandler) directoryDocumentResolver(ctx context.Context, r
 			return "", false
 		}
 		cache[encoded] = decision{directory: true}
-		if !loaded {
-			loaded = true
-			found, err := root.scope.discover(ctx)
-			if err != nil {
-				return "", true
-			}
-			for _, entry := range found.Markdown {
-				visible = append(visible, entry.RelativePath)
-			}
-		}
-		document := files.DirectoryDocument(root.scope.root, directory, visible)
+		document := files.FindDirectoryDocument(ctx, root.scope.root, directory, root.scope.discovery)
 		if document == "" {
 			return "", true
 		}
