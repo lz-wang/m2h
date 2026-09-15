@@ -287,7 +287,14 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
           // in-flight entry lets a later hover retry.
         })
         .finally(() => {
-          metadataRequestsRef.current.delete(path);
+          // Only retire the entry while it is still ours: a refresh may
+          // have cleared the map and already hold a newer in-flight
+          // request for the same path, and this older generation's
+          // settlement must not evict it — that would let the next hover
+          // issue a duplicate request.
+          if (metadataRequestsRef.current.get(path) === request) {
+            metadataRequestsRef.current.delete(path);
+          }
         });
       metadataRequestsRef.current.set(path, request);
       return request;

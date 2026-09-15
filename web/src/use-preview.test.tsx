@@ -220,4 +220,59 @@ describe("usePreview decoupled loading", () => {
     });
     expect(api.getFileMetadata).toHaveBeenCalledTimes(2);
   });
+
+  it("keeps the in-flight dedupe entry when a stale request settles after a refresh", async () => {
+    window.history.replaceState(null, "", "/doc/README.md");
+    const api = createAPI();
+    api.listFiles.mockResolvedValue({
+      kind: "directory",
+      version: "test",
+      roots: rootWith([{ path: "README.md", name: "README.md" }]),
+    });
+    api.getDocument.mockResolvedValue(documentResponse("README.md"));
+    // Base fallback: any unexpected third request resolves visibly.
+    api.getFileMetadata.mockImplementation(async () => ({ title: "P3" }));
+    const { result } = renderHook(() => usePreview(api));
+    await waitFor(() => expect(result.current.phase).toBe("ready"));
+
+    // P1 goes in flight, then a refresh drops the cache while it is pending.
+    const stale = deferred<FileMetadata>();
+    api.getFileMetadata.mockReturnValueOnce(stale.promise);
+    await act(async () => {
+      void result.current.loadFileMetadata("README.md");
+    });
+    await act(async () => {
+      await result.current.refresh();
+    });
+
+    // P2 is the fresh in-flight request after the reload.
+    const fresh = deferred<FileMetadata>();
+    api.getFileMetadata.mockReturnValueOnce(fresh.promise);
+    await act(async () => {
+      void result.current.loadFileMetadata("README.md");
+    });
+    expect(api.getFileMetadata).toHaveBeenCalledTimes(2);
+
+    // P1 settles late. Its generation guard must keep it from writing stale
+    // metadata — and it must not evict P2's dedupe entry on its way out.
+    await act(async () => {
+      stale.resolve({ title: "Stale" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(result.current.metadata.has("README.md")).toBe(false);
+
+    // The next hover must reuse the still-in-flight P2, not issue a P3.
+    await act(async () => {
+      void result.current.loadFileMetadata("README.md");
+    });
+    expect(api.getFileMetadata).toHaveBeenCalledTimes(2);
+
+    await act(async () => {
+      fresh.resolve({ title: "Fresh" });
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(result.current.metadata.get("README.md")).toEqual({
+      title: "Fresh",
+    });
+  });
 });
