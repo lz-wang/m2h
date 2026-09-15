@@ -209,6 +209,12 @@ export function buildTree(files: FileSummary[]): TreeNode[] {
     path: "",
     children: [],
   };
+  // Directories are indexed by path: descending into "docs/backend/go" is a
+  // Map.get per level instead of a linear children.find per sibling, so the
+  // construction stays linear in entries even when one directory holds very
+  // many sibling directories. The index and the parent walk always agree —
+  // a directory enters both exactly when it is first created.
+  const directories = new Map<string, DirectoryNode>([["", root]]);
   for (const file of files) {
     const segments = file.path.split("/");
     let parent = root;
@@ -217,11 +223,9 @@ export function buildTree(files: FileSummary[]): TreeNode[] {
       if (name === undefined) {
         continue;
       }
-      const directoryPath = segments.slice(0, index + 1).join("/");
-      const existing = parent.children.find(
-        (node): node is DirectoryNode =>
-          node.type === "directory" && node.name === name,
-      );
+      const directoryPath =
+        parent.path === "" ? name : `${parent.path}/${name}`;
+      const existing = directories.get(directoryPath);
       if (existing !== undefined) {
         parent = existing;
         continue;
@@ -232,6 +236,7 @@ export function buildTree(files: FileSummary[]): TreeNode[] {
         path: directoryPath,
         children: [],
       };
+      directories.set(directoryPath, directory);
       parent.children.push(directory);
       parent = directory;
     }

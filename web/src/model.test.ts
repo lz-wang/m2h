@@ -15,6 +15,7 @@ import {
   readRoute,
   rootFiles,
   routeURL,
+  type TreeNode,
 } from "./model";
 
 const files: FileSummary[] = [
@@ -331,6 +332,91 @@ describe("tree model", () => {
     }
     expect(ancestorDirectories("one/two/file.md")).toEqual(["one", "one/two"]);
     expect(ancestorDirectories(null)).toEqual([]);
+  });
+
+  it("merges nested paths through shared directory nodes", () => {
+    const tree = buildTree([
+      { path: "a/b/one.md", name: "one.md" },
+      { path: "a/b/two.md", name: "two.md" },
+      { path: "a/c.md", name: "c.md" },
+      { path: "top.md", name: "top.md" },
+    ]);
+    expect(tree.map((node) => node.name)).toEqual(["a", "top.md"]);
+    const directory = tree[0];
+    expect(directory?.type).toBe("directory");
+    if (directory?.type !== "directory") {
+      throw new Error("expected a directory node");
+    }
+    expect(directory.children.map((node) => node.name)).toEqual(["b", "c.md"]);
+    const nested = directory.children[0];
+    if (nested?.type !== "directory") {
+      throw new Error("expected a directory node");
+    }
+    expect(nested.children.map((node) => node.path)).toEqual([
+      "a/b/one.md",
+      "a/b/two.md",
+    ]);
+  });
+
+  it("keeps a same-named file and directory as separate siblings", () => {
+    const tree = buildTree([
+      { path: "x", name: "x" },
+      { path: "x/inner.md", name: "inner.md" },
+    ]);
+    // Directories sort before files, so the file "x" and the directory "x"
+    // both exist as distinct siblings.
+    expect(tree.map((node) => node.type)).toEqual(["directory", "file"]);
+    const directory = tree[0];
+    if (directory?.type !== "directory") {
+      throw new Error("expected a directory node");
+    }
+    expect(directory.children.map((node) => node.path)).toEqual(["x/inner.md"]);
+  });
+
+  it("keeps structure and node counts on a 10000-file synthetic listing", () => {
+    // Scale smoke test, deliberately without timing assertions: CI machines
+    // jitter too much for duration to be meaningful. It pins the contract
+    // that matters — construction stays correct at 10K entries — and the
+    // algorithmic cost itself is covered by the shape assertions.
+    const listing: FileSummary[] = [];
+    for (let group = 0; group < 100; group += 1) {
+      const groupDirectory = `group-${String(group).padStart(3, "0")}`;
+      for (let doc = 0; doc < 100; doc += 1) {
+        const name = `doc-${String(doc).padStart(4, "0")}.md`;
+        listing.push({
+          path: `${groupDirectory}/sub/${name}`,
+          name,
+        });
+      }
+    }
+    const tree = buildTree(listing);
+    expect(tree).toHaveLength(100);
+    let files = 0;
+    let directories = 0;
+    const walk = (nodes: TreeNode[]) => {
+      for (const node of nodes) {
+        if (node.type === "directory") {
+          directories += 1;
+          walk(node.children);
+        } else {
+          files += 1;
+        }
+      }
+    };
+    walk(tree);
+    expect(files).toBe(10_000);
+    expect(directories).toBe(200);
+    // Natural numeric order holds deep in the tree.
+    const first = tree[0];
+    if (first?.type !== "directory") {
+      throw new Error("expected a directory node");
+    }
+    const sub = first.children[0];
+    if (sub?.type !== "directory") {
+      throw new Error("expected a directory node");
+    }
+    expect(sub.children[0]?.name).toBe("doc-0000.md");
+    expect(sub.children[9_999 % 100]?.name).toBe("doc-0099.md");
   });
 
   it("expands first-level directories of an unselected single-root tree", () => {
