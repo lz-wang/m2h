@@ -215,8 +215,6 @@ export function App({ api }: AppProps) {
     [filteredRoots],
   );
   const multiRoot = preview.roots.length > 1;
-  const loading =
-    preview.phase === "loading-files" || preview.phase === "loading-document";
   // Transient feedback for document-tree copy actions. One status line at a
   // time, cleared by a timer; role=status announces it politely.
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
@@ -405,7 +403,17 @@ export function App({ api }: AppProps) {
   // passes, and no-op when the position already matches the URL. The spy only
   // reacts to real scroll events, so the native restore settles first and the
   // hash then reflects wherever the viewport landed.
+  // The funnel stays silent until the spy is live (phase ready): before that
+  // there is no reading position to reflect, and a mount-time write would
+  // strip a deep link's fragment before the landing effect has consumed it.
+  // A ref rather than a dep — the effect must key on position changes only,
+  // not re-run when the phase flips.
+  const spyReadyRef = useRef(false);
+  spyReadyRef.current = preview.phase === "ready";
   useEffect(() => {
+    if (!spyReadyRef.current) {
+      return;
+    }
     const currentID = decodeHeadingHash(window.location.hash);
     const nextID = activeHeadingID ?? "";
     if (nextID === currentID) {
@@ -577,11 +585,16 @@ export function App({ api }: AppProps) {
                       )
                     ) : (
                       <p className="tree-placeholder">
-                        {loading
+                        {/* The sidebar owns its own loading/failure state: a
+                         * file-list error never occupies the reader's error
+                         * panel — an open document stays on screen. */}
+                        {preview.filesLoading
                           ? "正在加载文件…"
-                          : fileFilterQuery.trim() !== ""
-                            ? "没有匹配的文档"
-                            : "目录中没有 Markdown 文件"}
+                          : preview.filesError !== null
+                            ? "无法读取文件列表"
+                            : fileFilterQuery.trim() !== ""
+                              ? "没有匹配的文档"
+                              : "目录中没有 Markdown 文件"}
                       </p>
                     )}
                   </SidebarGroupContent>

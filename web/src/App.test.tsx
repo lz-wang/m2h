@@ -1216,6 +1216,9 @@ describe("App directory preview", () => {
     );
     view.unmount();
 
+    // From the workspace root a failing listing leaves no document to open:
+    // the reader owns the error (the sidebar shows the same text).
+    window.history.replaceState(null, "", "/");
     view = render(
       <App
         api={createAPI({
@@ -1225,6 +1228,21 @@ describe("App directory preview", () => {
     );
     const listAlert = await screen.findByRole("alert");
     expect(listAlert.textContent).toContain("无法读取 Markdown 文件列表");
+    view.unmount();
+
+    // A deep link keeps its document: the listing failure is the sidebar's
+    // own lightweight state and must not evict the rendered body.
+    window.history.replaceState(null, "", "/doc/README.md");
+    view = render(
+      <App
+        api={createAPI({
+          listFiles: vi.fn().mockRejectedValue(new Error("offline")),
+        })}
+      />,
+    );
+    expect(await screen.findByText("Body for README.md")).toBeTruthy();
+    expect(screen.getByText("无法读取文件列表")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
     view.unmount();
 
     // Set an explicit document route for the deleted-document request.

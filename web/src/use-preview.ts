@@ -10,6 +10,7 @@ import {
   APIError,
   browserAPI,
   type DocumentResponse,
+  type FileListResponse,
   type FileSummary,
   type PreviewAPI,
   type PreviewKind,
@@ -35,6 +36,10 @@ export type PreviewPhase =
   | "not-found"
   | "error";
 
+// Shared wording for the sidebar's failure and — when no document is open to
+// keep showing — the reader's full error panel.
+const filesErrorMessage = "无法读取 Markdown 文件列表，请检查服务日志后重试。";
+
 export interface PreviewState {
   kind: PreviewKind;
   version: string;
@@ -46,7 +51,16 @@ export interface PreviewState {
   resolvedMode: ResolvedMode;
   width: DocumentWidth;
   toc: boolean;
+  // The reader's own lifecycle. "loading-files" means only "the URL names no
+  // document and the workspace default must be picked from the file list" —
+  // it says nothing about the sidebar's freshness, which filesLoading below
+  // owns.
   phase: PreviewPhase;
+  // The sidebar's independent loading/failure state. A file-list refresh runs
+  // beside the document request and may finish later or fail without touching
+  // what the reader shows.
+  filesLoading: boolean;
+  filesError: string | null;
   error: string | null;
   visualError: string | null;
   refresh(): Promise<void>;
@@ -87,7 +101,14 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     initialRoute.current.width,
   );
   const [toc, setTOCState] = useState<boolean>(initialRoute.current.toc);
-  const [phase, setPhase] = useState<PreviewPhase>("loading-files");
+  // A deep link already names its document, so the reader starts on the
+  // document request itself; only a document-less URL must consult the file
+  // list first (to pick the workspace default).
+  const [phase, setPhase] = useState<PreviewPhase>(
+    initialRoute.current.path !== null ? "loading-document" : "loading-files",
+  );
+  const [filesLoading, setFilesLoading] = useState(true);
+  const [filesError, setFilesError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [visualError, setVisualError] = useState<string | null>(null);
   const filesRef = useRef<FileSummary[]>([]);
@@ -176,20 +197,20 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     writeRoute(null, "replace");
   }, [writeRoute]);
 
-  const loadFiles = useCallback(
-    async (requested: string | null, requestedHash = "") => {
+  // The sidebar's own fetch: request the file list and update only
+  // file-tree state. It never touches the reader's phase — a slow or failing
+  // listing must not hold the document hostage (or evict it once shown).
+  const fetchFileList =
+    useCallback(async (): Promise<FileListResponse | null> => {
       listController.current?.abort();
-      documentController.current?.abort();
-      documentRequest.current += 1;
       const controller = new AbortController();
       listController.current = controller;
-      setError(null);
-      setVisualError(null);
-      setPhase("loading-files");
+      setFilesLoading(true);
+      setFilesError(null);
       try {
         const loaded = await api.listFiles(controller.signal);
         if (controller.signal.aborted) {
-          return;
+          return null;
         }
         // Documents are addressed by their virtual key: a multi-root workspace
         // prefixes each root's files with the root id, a single root keeps
@@ -202,35 +223,59 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         setRoots(loaded.roots);
         setKind(loaded.kind);
         setVersion(loaded.version);
-        // Only an explicit /doc/... address picks a specific document here;
-        // otherwise the workspace's own default (single file, or the first
-        // root's README/index/first root-level document) opens. The URL then
-        // canonicalizes to that /doc/... address via the replace below.
-        const target = requested ?? autoOpenDocument(loaded.roots, loaded.kind);
-        if (target === null) {
-          settleWithoutDocument();
-          return;
-        }
-        const targetHash = target === requested ? requestedHash : "";
-        await loadDocument(target, "replace", targetHash);
+        setFilesLoading(false);
+        return loaded;
       } catch (reason: unknown) {
         if (controller.signal.aborted || isAbortError(reason)) {
-          return;
+          return null;
         }
-        setError("无法读取 Markdown 文件列表，请检查服务日志后重试。");
+        setFilesLoading(false);
+        setFilesError(filesErrorMessage);
+        return null;
+      }
+    }, [api]);
+
+  // The "/" starting point has no document in the URL: the workspace's own
+  // default (single file, or the first root's README/index/first root-level
+  // document) can only be chosen from the file list, so this path stays
+  // sequential by design. The URL then canonicalizes to the chosen /doc/...
+  // address via the replace inside loadDocument.
+  const loadWorkspaceDefault = useCallback(async () => {
+    setError(null);
+    setVisualError(null);
+    const loaded = await fetchFileList();
+    if (loaded === null) {
+      if (selectedPathRef.current === null) {
+        // No document is open whose body could survive the failure, so the
+        // reader owns the error (with a retry); the sidebar shows the same
+        // text through filesError.
+        setError(filesErrorMessage);
         setPhase("error");
       }
-    },
-    [api, loadDocument, settleWithoutDocument],
-  );
+      return;
+    }
+    const target = autoOpenDocument(loaded.roots, loaded.kind);
+    if (target === null) {
+      settleWithoutDocument();
+      return;
+    }
+    await loadDocument(target, "replace");
+  }, [fetchFileList, loadDocument, settleWithoutDocument]);
 
   useEffect(() => {
-    void loadFiles(initialRoute.current.path, initialRoute.current.hash);
-    return () => {
-      listController.current?.abort();
-      documentController.current?.abort();
-    };
-  }, [loadFiles]);
+    const route = initialRoute.current;
+    if (route.path !== null) {
+      // A deep link names its document: the reader fetches it right away
+      // while the sidebar's file list loads beside it — neither waits for
+      // the other. allSettled so one failure cannot cancel the other.
+      void Promise.allSettled([
+        fetchFileList(),
+        loadDocument(route.path, "none", route.hash),
+      ]);
+      return;
+    }
+    void loadWorkspaceDefault();
+  }, [fetchFileList, loadDocument, loadWorkspaceDefault]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -308,9 +353,21 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     document.title = documentResponse?.title ?? "m2h";
   }, [documentResponse]);
 
+  // The toolbar's refresh: an open document reloads beside its file list, and
+  // neither result may discard the other — allSettled, so a failing listing
+  // never blanks a document that reloaded fine (and vice versa). With no
+  // document open the workspace default is re-picked from a fresh list.
   const refresh = useCallback(async () => {
-    await loadFiles(selectedPathRef.current, window.location.hash);
-  }, [loadFiles]);
+    const path = selectedPathRef.current;
+    if (path === null) {
+      await loadWorkspaceDefault();
+      return;
+    }
+    await Promise.allSettled([
+      fetchFileList(),
+      loadDocument(path, "none", window.location.hash),
+    ]);
+  }, [fetchFileList, loadDocument, loadWorkspaceDefault]);
 
   // The share menu's lazy fetch of the open document's raw Markdown. It uses
   // the injected API so tests keep full control, and reports null rather than
@@ -392,6 +449,8 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     width,
     toc,
     phase,
+    filesLoading,
+    filesError,
     error,
     visualError,
     refresh,
