@@ -34,6 +34,7 @@ function createAPI() {
     listFiles: vi.fn<PreviewAPI["listFiles"]>(),
     getDocument: vi.fn<PreviewAPI["getDocument"]>(),
     getMarkdown: vi.fn<PreviewAPI["getMarkdown"]>(),
+    getFileMetadata: vi.fn<PreviewAPI["getFileMetadata"]>(),
     search: vi.fn<PreviewAPI["search"]>(),
   };
 }

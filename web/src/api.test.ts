@@ -317,6 +317,62 @@ describe("browser API", () => {
     });
   });
 
+  it("validates file metadata responses and encodes the path", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            title: "Architecture",
+            description: "系统设计说明",
+          }),
+          { status: 200 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ title: "bare" }), { status: 200 }),
+      );
+    await expect(browserAPI.getFileMetadata("design/arch.md")).resolves.toEqual(
+      { title: "Architecture", description: "系统设计说明" },
+    );
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      `/api/file-metadata?path=${encodeURIComponent("design/arch.md")}`,
+    );
+
+    // Absent (not empty) is the "no description" state.
+    await expect(browserAPI.getFileMetadata("bare.md")).resolves.toEqual({
+      title: "bare",
+    });
+    expect(fetchMock.mock.calls[1]?.[0]).toBe(
+      "/api/file-metadata?path=bare.md",
+    );
+
+    // A missing or non-string field is a malformed response.
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ description: "no title" }), {
+        status: 200,
+      }),
+    );
+    await expect(browserAPI.getFileMetadata("a.md")).rejects.toThrow(
+      "文件元数据响应格式无效",
+    );
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ title: 42 }), { status: 200 }),
+    );
+    await expect(browserAPI.getFileMetadata("a.md")).rejects.toThrow(
+      "文件元数据响应格式无效",
+    );
+
+    // HTTP errors surface through the shared JSON error path.
+    fetchMock.mockResolvedValueOnce(
+      new Response(JSON.stringify({ error: "document not found" }), {
+        status: 404,
+      }),
+    );
+    await expect(
+      browserAPI.getFileMetadata("missing.md"),
+    ).rejects.toMatchObject({ name: "APIError", status: 404 });
+  });
+
   it("fetches raw Markdown through the encoded /raw/ address", async () => {
     const source = "---\ntitle: Raw\n---\n# Raw\n\nbody\n";
     fetchMock.mockResolvedValueOnce(

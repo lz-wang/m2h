@@ -1369,6 +1369,125 @@ func TestSymlinkAliasesCannotBypassPublishingPolicy(t *testing.T) {
 	}
 }
 
+func TestFileMetadataAPIResolvesDisplayMetadata(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	canonical := canonicalDirectory(t, root)
+	writeTestFile(t, filepath.Join(root, "frontmatter.md"),
+		"---\ntitle: Frontmatter Title\ndescription: 一句话描述\n---\n# H1 Title\n")
+	writeTestFile(t, filepath.Join(root, "h1.md"), "# H1 Title\n")
+	writeTestFile(t, filepath.Join(root, "bare.md"), "no heading at all\n")
+	writeTestFile(t, filepath.Join(root, "invalid.md"),
+		"---\ntitle: [unclosed\n---\n# Invalid Fallback\n")
+	writeTestFile(t, filepath.Join(root, ".hidden.md"), "# Hidden\n")
+	options := files.DiscoverOptions{Depth: 2, Pattern: "**/*.md", SkipHidden: true}
+	handler := newDocumentHandler(singleRootWorkspace(rootScope{root: canonical, discovery: options}), nil, directoryTestUI())
+
+	// A valid frontmatter title outranks the first H1 and the description
+	// rides along.
+	response := performRequest(handler, http.MethodGet, "/api/file-metadata?path=frontmatter.md")
+	if response.Code != http.StatusOK {
+		t.Fatalf("frontmatter metadata status = %d, body = %s", response.Code, response.Body.String())
+	}
+	var payload fileMetadataResponse
+	decodeJSON(t, response, &payload)
+	if payload.Title != "Frontmatter Title" || payload.Description != "一句话描述" {
+		t.Fatalf("frontmatter metadata = %+v", payload)
+	}
+
+	// Without frontmatter the H1 outranks the filename, and the omitempty
+	// description key must not appear in the raw JSON at all.
+	response = performRequest(handler, http.MethodGet, "/api/file-metadata?path=h1.md")
+	if response.Code != http.StatusOK {
+		t.Fatalf("h1 metadata status = %d, body = %s", response.Code, response.Body.String())
+	}
+	payload = fileMetadataResponse{}
+	decodeJSON(t, response, &payload)
+	if payload.Title != "H1 Title" || payload.Description != "" {
+		t.Fatalf("h1 metadata = %+v", payload)
+	}
+	if strings.Contains(response.Body.String(), `"description"`) {
+		t.Fatalf("description key present without a description: %s", response.Body.String())
+	}
+
+	// A file without any heading falls back to its filename.
+	response = performRequest(handler, http.MethodGet, "/api/file-metadata?path=bare.md")
+	if response.Code != http.StatusOK {
+		t.Fatalf("bare metadata status = %d, body = %s", response.Code, response.Body.String())
+	}
+	payload = fileMetadataResponse{}
+	decodeJSON(t, response, &payload)
+	if payload.Title != "bare.md" {
+		t.Fatalf("bare metadata = %+v", payload)
+	}
+
+	// An invalid frontmatter block falls back to plain title extraction —
+	// the listing always treated it as non-fatal, so the metadata endpoint
+	// must not turn it into an error either.
+	response = performRequest(handler, http.MethodGet, "/api/file-metadata?path=invalid.md")
+	if response.Code != http.StatusOK {
+		t.Fatalf("invalid frontmatter status = %d, body = %s", response.Code, response.Body.String())
+	}
+	payload = fileMetadataResponse{}
+	decodeJSON(t, response, &payload)
+	if payload.Title != "Invalid Fallback" || payload.Description != "" {
+		t.Fatalf("invalid frontmatter metadata = %+v", payload)
+	}
+
+	// Unknown, hidden and non-document paths all answer 404.
+	for _, path := range []string{"missing.md", ".hidden.md"} {
+		response := performRequest(handler, http.MethodGet, "/api/file-metadata?path="+path)
+		if response.Code != http.StatusNotFound {
+			t.Errorf("path %q status = %d, want 404", path, response.Code)
+		}
+	}
+
+	// Malformed requests answer 400: missing path, repeated path, an extra
+	// query parameter, and an encoded traversal.
+	for _, target := range []string{
+		"/api/file-metadata",
+		"/api/file-metadata?path=a.md&path=b.md",
+		"/api/file-metadata?path=a.md&extra=1",
+		"/api/file-metadata?path=..%2Fsecret.md",
+	} {
+		if response := performRequest(handler, http.MethodGet, target); response.Code != http.StatusBadRequest {
+			t.Errorf("GET %s status = %d, want 400", target, response.Code)
+		}
+	}
+	if response := performRequest(handler, http.MethodPost, "/api/file-metadata?path=a.md"); response.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("POST metadata status = %d, want 405", response.Code)
+	}
+}
+
+func TestFileMetadataAPIRoutesVirtualPathsPerRoot(t *testing.T) {
+	t.Parallel()
+
+	workspace := multiRootFixture(t)
+	handler := newDocumentHandler(workspace, nil, directoryTestUI())
+
+	// Identical relative paths in two roots resolve to their own root's file.
+	for virtual, want := range map[string]string{
+		"r0/README.md": "Alpha Readme",
+		"r1/README.md": "Beta Readme",
+	} {
+		response := performRequest(handler, http.MethodGet, "/api/file-metadata?path="+virtual)
+		if response.Code != http.StatusOK {
+			t.Fatalf("metadata %q status = %d, body = %s", virtual, response.Code, response.Body.String())
+		}
+		var payload fileMetadataResponse
+		decodeJSON(t, response, &payload)
+		if payload.Title != want {
+			t.Errorf("metadata %q title = %q, want %q", virtual, payload.Title, want)
+		}
+	}
+
+	// A path naming no known root never falls into another root's tree.
+	if response := performRequest(handler, http.MethodGet, "/api/file-metadata?path=r9/README.md"); response.Code != http.StatusNotFound {
+		t.Fatalf("unknown root status = %d, want 404", response.Code)
+	}
+}
+
 func directoryFixture(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()

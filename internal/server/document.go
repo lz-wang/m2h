@@ -29,6 +29,14 @@ type fileSummary struct {
 	Description string `json:"description,omitempty"`
 }
 
+// fileMetadataResponse is the on-demand display metadata of one document:
+// the per-file complement to the file listing, fetched when the WebUI
+// actually shows a sidebar entry instead of reading every Markdown up front.
+type fileMetadataResponse struct {
+	Title       string `json:"title"`
+	Description string `json:"description,omitempty"`
+}
+
 // rootSummary groups one workspace root's documents. Files carry root-relative
 // paths; the id prefixes the addressable (virtual) path in a multi-root
 // workspace (see workspace.publicPath). The summary deliberately carries only
@@ -115,6 +123,7 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 	mux.HandleFunc("/healthz", handler.serveHealth)
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
+	mux.HandleFunc("/api/file-metadata", requireGET(handler.serveFileMetadata))
 	mux.HandleFunc("/api/search", requireGET(handler.serveSearch))
 	mux.HandleFunc("/api/", jsonNotFound)
 	mux.Handle("/assets/", newAssetHandler(handler.workspace))
@@ -184,13 +193,24 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 	})
 }
 
-func (handler *documentHandler) serveDocument(response http.ResponseWriter, request *http.Request) {
+// singlePathQuery extracts the single "path" query parameter shared by the
+// document and file-metadata endpoints, so both keep identical parsing rules:
+// exactly one query parameter named path, anything else is a bad request.
+func singlePathQuery(request *http.Request) (string, bool) {
 	values, exists := request.URL.Query()["path"]
 	if !exists || len(values) != 1 || len(request.URL.Query()) != 1 {
+		return "", false
+	}
+	return values[0], true
+}
+
+func (handler *documentHandler) serveDocument(response http.ResponseWriter, request *http.Request) {
+	value, ok := singlePathQuery(request)
+	if !ok {
 		writeJSONError(response, http.StatusBadRequest, "exactly one path query parameter is required")
 		return
 	}
-	virtual, err := files.DecodeRelativePath(values[0])
+	virtual, err := files.DecodeRelativePath(value)
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "invalid document path")
 		return
@@ -235,6 +255,45 @@ func (handler *documentHandler) serveDocument(response http.ResponseWriter, requ
 		HTML:        rendered.Body,
 		FrontMatter: frontMatterResponseFrom(frontMatter),
 		TOC:         tocEntriesFrom(rendered.Headings),
+	})
+}
+
+// serveFileMetadata answers the display metadata (title, description) of one
+// addressable document: GET /api/file-metadata?path=... lets the WebUI fetch
+// a single file's sidebar metadata on demand. Resolution goes through
+// resolveVisibleDocument — the same boundary as /api/document, so unknown
+// roots, hidden paths, traversal and symlink escapes fail identically — and
+// an invalid frontmatter block falls back to plain title extraction instead
+// of failing the request, exactly like the file listing always treated it.
+func (handler *documentHandler) serveFileMetadata(response http.ResponseWriter, request *http.Request) {
+	value, ok := singlePathQuery(request)
+	if !ok {
+		writeJSONError(response, http.StatusBadRequest, "exactly one path query parameter is required")
+		return
+	}
+	virtual, err := files.DecodeRelativePath(value)
+	if err != nil {
+		writeJSONError(response, http.StatusBadRequest, "invalid document path")
+		return
+	}
+	_, relative, target, err := handler.resolveVisibleDocument(virtual)
+	if err != nil {
+		writeJSONError(response, http.StatusNotFound, "document not found")
+		return
+	}
+	contents, err := os.ReadFile(target)
+	if err != nil {
+		writeJSONError(response, http.StatusNotFound, "document not found")
+		return
+	}
+	metadata, err := fileDisplayMetadata(contents, relative)
+	if err != nil {
+		writeJSONError(response, http.StatusInternalServerError, "extract Markdown title")
+		return
+	}
+	writeJSON(response, http.StatusOK, fileMetadataResponse{
+		Title:       metadata.Title,
+		Description: metadata.Description,
 	})
 }
 

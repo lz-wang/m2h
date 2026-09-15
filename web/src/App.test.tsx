@@ -2573,6 +2573,15 @@ function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
       }
       return `# Raw source of ${path}\n`;
     }),
+    getFileMetadata: vi.fn().mockImplementation(async (path: string) => {
+      const file = initialFiles.roots[0]?.files.find(
+        (candidate) => candidate.path === path,
+      );
+      if (file === undefined) {
+        throw new APIError(404, "not found");
+      }
+      return { title: file.title, description: undefined };
+    }),
     search: vi.fn().mockResolvedValue({ query: "", results: [] }),
     ...overrides,
   };

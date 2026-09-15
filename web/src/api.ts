@@ -13,6 +13,15 @@ export interface FileSummary {
   description?: string;
 }
 
+// FileMetadata is the on-demand display metadata of one document, fetched
+// per file when the sidebar actually shows it — the per-file complement to
+// the (topology-only) file listing.
+export interface FileMetadata {
+  title: string;
+  // Same "absent means none" contract as the file summary above.
+  description?: string;
+}
+
 // RootSummary groups one preview root's documents. Files carry root-relative
 // paths; in a multi-root workspace the root id prefixes the addressable
 // (virtual) document path, so identity stays unique across roots. The summary
@@ -93,6 +102,10 @@ export interface SearchResponse {
 export interface PreviewAPI {
   listFiles(signal?: AbortSignal): Promise<FileListResponse>;
   getDocument(path: string, signal?: AbortSignal): Promise<DocumentResponse>;
+  // Fetches one document's sidebar display metadata (title, description)
+  // from /api/file-metadata on demand. Callers dedupe; the endpoint reads
+  // exactly the one named Markdown file.
+  getFileMetadata(path: string, signal?: AbortSignal): Promise<FileMetadata>;
   // Fetches the document's original Markdown source (frontmatter included)
   // from /raw/<virtual-path> on demand — sharing keeps it out of every
   // /api/document response until the reader actually asks for the full text.
@@ -309,6 +322,20 @@ function parseDocument(payload: unknown): DocumentResponse {
   };
 }
 
+function parseFileMetadata(payload: unknown): FileMetadata {
+  if (!isRecord(payload) || typeof payload.title !== "string") {
+    throw new Error("文件元数据响应格式无效");
+  }
+  const metadata: FileMetadata = { title: payload.title };
+  if (payload.description !== undefined) {
+    if (typeof payload.description !== "string") {
+      throw new Error("文件元数据响应格式无效");
+    }
+    metadata.description = payload.description;
+  }
+  return metadata;
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -359,6 +386,12 @@ export const browserAPI: PreviewAPI = {
     const query = new URLSearchParams({ path });
     return parseDocument(
       await requestJSON(`/api/document?${query.toString()}`, signal),
+    );
+  },
+  async getFileMetadata(path, signal) {
+    const query = new URLSearchParams({ path });
+    return parseFileMetadata(
+      await requestJSON(`/api/file-metadata?${query.toString()}`, signal),
     );
   },
   async getMarkdown(path, signal) {

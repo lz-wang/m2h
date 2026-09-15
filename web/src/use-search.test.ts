@@ -28,6 +28,7 @@ function createAPIMock(): {
     listFiles: vi.fn(),
     getDocument: vi.fn(),
     getMarkdown: vi.fn(),
+    getFileMetadata: vi.fn(),
     search: vi.fn((_query: string, signal?: AbortSignal) => {
       const response: SearchResponse = { query: "", results: [] };
       calls.push({
