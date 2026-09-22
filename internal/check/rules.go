@@ -143,6 +143,7 @@ const (
 	notServedSingleFile notServedReason = "single-file"
 	notServedDepth      notServedReason = "depth"
 	notServedGlob       notServedReason = "glob"
+	notServedIgnored    notServedReason = "ignored"
 )
 
 func (reason notServedReason) message() string {
@@ -153,6 +154,8 @@ func (reason notServedReason) message() string {
 		return "is excluded by the depth limit"
 	case notServedGlob:
 		return "is excluded by the glob filter"
+	case notServedIgnored:
+		return "is ignored by the .gitignore rules"
 	}
 	return "is not served by this workspace"
 }

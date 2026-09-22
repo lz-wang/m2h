@@ -53,6 +53,11 @@ type Options struct {
 	EnableRules []string
 	// DisableRules names rules to skip, always winning over EnableRules.
 	DisableRules []string
+	// Gitignore makes a directory input respect the .gitignore files inside
+	// it, mirroring the serve command's default: ignored documents leave the
+	// scope, and references pointing at them are reported unreachable.
+	// Single-file inputs stay checked whatever their rules say.
+	Gitignore bool
 }
 
 // Result summarizes one completed check run. Files counts every Markdown
@@ -96,10 +101,22 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		}
 		scope = newSingleFileScope(options.Input, input.Path)
 	} else {
-		scope, err = newDirectoryScope(ctx, options.Input, input.Path, files.DiscoverOptions{
+		// The ignore snapshot is built once per run: check reads the tree a
+		// single time, so its scope and every reference verdict share one
+		// consistent view of the rules — the same contract the server's
+		// per-request snapshot gives one request.
+		discovery := files.DiscoverOptions{
 			Depth:   options.Depth,
 			Pattern: options.Pattern,
-		})
+		}
+		if options.Gitignore {
+			matcher, err := files.NewGitIgnore(input.Path)
+			if err != nil {
+				return Result{}, err
+			}
+			discovery.Ignore = matcher
+		}
+		scope, err = newDirectoryScope(ctx, options.Input, input.Path, discovery)
 	}
 	if err != nil {
 		return Result{}, err
@@ -143,7 +160,11 @@ func Run(ctx context.Context, options Options) (Result, error) {
 			if !ok || !indexed.inspectable {
 				continue
 			}
-			result.Diagnostics = append(result.Diagnostics, checkDocumentReferences(scope, index, resolver, indexed, rules)...)
+			found, err := checkDocumentReferences(scope, index, resolver, indexed, rules)
+			if err != nil {
+				return Result{}, err
+			}
+			result.Diagnostics = append(result.Diagnostics, found...)
 		}
 	}
 

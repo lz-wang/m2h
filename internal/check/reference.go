@@ -100,19 +100,24 @@ func (resolver *targetResolver) inspect(reference string) targetStatus {
 
 // checkDocumentReferences resolves every reference of one indexed document
 // against the scope, the index and the filesystem, returning diagnostics in
-// document order.
+// document order. An error means the check itself cannot continue (an
+// ignore-rule file became unreadable); it is never a document finding.
 func checkDocumentReferences(
 	scope documentScope,
 	index map[string]*indexedDocument,
 	resolver *targetResolver,
 	current *indexedDocument,
 	rules RuleSet,
-) []Diagnostic {
+) ([]Diagnostic, error) {
 	diagnostics := make([]Diagnostic, 0)
 	for _, reference := range current.inspection.References {
-		diagnostics = append(diagnostics, checkReference(scope, index, resolver, current, reference, rules)...)
+		found, err := checkReference(scope, index, resolver, current, reference, rules)
+		if err != nil {
+			return nil, err
+		}
+		diagnostics = append(diagnostics, found...)
 	}
-	return diagnostics
+	return diagnostics, nil
 }
 
 // checkReference resolves one local reference. Scheme and protocol-relative
@@ -125,7 +130,7 @@ func checkReference(
 	current *indexedDocument,
 	reference markdown.Reference,
 	rules RuleSet,
-) []Diagnostic {
+) ([]Diagnostic, error) {
 	diagnostics := make([]Diagnostic, 0)
 	if reference.Kind == markdown.ReferenceImage && rules.Enabled(RuleImageAltEmpty) && strings.TrimSpace(reference.Text) == "" {
 		// Reported alongside, not instead of, the target checks: an image can
@@ -138,13 +143,13 @@ func checkReference(
 			diagnostics = append(diagnostics, current.diagnostic(RuleLinkEmptyDestination,
 				emptyDestinationMessage(reference.Kind), reference))
 		}
-		return diagnostics
+		return diagnostics, nil
 	}
 	if !rules.NeedsTargetResolution() {
-		return diagnostics
+		return diagnostics, nil
 	}
 	if reference.Destination == "#" {
-		return diagnostics
+		return diagnostics, nil
 	}
 
 	// A bare fragment addresses the referencing document itself; it is not a
@@ -154,7 +159,7 @@ func checkReference(
 			diagnostics = append(diagnostics, current.diagnostic(RuleAnchorMissing,
 				fmt.Sprintf("heading %q does not exist in %q", "#"+fragment, current.relative), reference))
 		}
-		return diagnostics
+		return diagnostics, nil
 	}
 
 	local, ok := markdown.ParseLocalDestination(reference.Destination)
@@ -164,16 +169,16 @@ func checkReference(
 			diagnostics = append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
 				fmt.Sprintf("target %q is not accessible: invalid URL encoding", reference.Destination), reference))
 		}
-		return diagnostics
+		return diagnostics, nil
 	}
 
 	resolved, ok := markdown.ResolveLocalDestination(current.relative, "", local)
 	if !ok {
 		if rules.Enabled(RuleLocalTargetOutsideRoot) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetOutsideRoot,
-				fmt.Sprintf("target %q resolves outside the workspace root", localReferencePath(local)), reference))
+				fmt.Sprintf("target %q resolves outside the workspace root", localReferencePath(local)), reference)), nil
 		}
-		return diagnostics
+		return diagnostics, nil
 	}
 
 	status := resolver.resolve(resolved)
@@ -197,31 +202,31 @@ func checkReference(
 	case targetMissing:
 		if local.Base == markdown.DestinationBaseRoot && errors.Is(status.err, files.ErrPathTraversal) && rules.Enabled(RuleLocalTargetOutsideRoot) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetOutsideRoot,
-				fmt.Sprintf("target %q resolves outside the workspace root", localReferencePath(local)), reference))
+				fmt.Sprintf("target %q resolves outside the workspace root", localReferencePath(local)), reference)), nil
 		}
 		if rules.Enabled(RuleLocalTargetMissing) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
-				missingMessage(status.target, status.err), reference))
+				missingMessage(status.target, status.err), reference)), nil
 		}
-		return diagnostics
+		return diagnostics, nil
 	case targetNotRegular:
 		if rules.Enabled(RuleLocalTargetNotRegular) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetNotRegular,
-				fmt.Sprintf("target %q is not a regular file", status.target), reference))
+				fmt.Sprintf("target %q is not a regular file", status.target), reference)), nil
 		}
-		return diagnostics
+		return diagnostics, nil
 	case targetCrossesSymlink:
 		if rules.Enabled(RuleLocalTargetOutsideRoot) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetOutsideRoot,
-				fmt.Sprintf("target %q crosses a symlink directory the workspace refuses to follow", status.target), reference))
+				fmt.Sprintf("target %q crosses a symlink directory the workspace refuses to follow", status.target), reference)), nil
 		}
-		return diagnostics
+		return diagnostics, nil
 	case targetOutsideRoot:
 		if rules.Enabled(RuleLocalTargetOutsideRoot) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetOutsideRoot,
-				fmt.Sprintf("target %q resolves outside the workspace root", localReferencePath(local)), reference))
+				fmt.Sprintf("target %q resolves outside the workspace root", localReferencePath(local)), reference)), nil
 		}
-		return diagnostics
+		return diagnostics, nil
 	}
 
 	// Mirror the web renderer's routing, decided from the raw destination:
@@ -234,18 +239,41 @@ func checkReference(
 	if reference.Route != markdown.ReferenceRouteLink || (!directoryLink && !markdown.RoutesToDocument(local.Path)) {
 		if files.IsMarkdown(status.target) && rules.Enabled(RuleLocalTargetMissing) {
 			return append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
-				fmt.Sprintf("target %q is not accessible: the assets route never serves Markdown files", status.target), reference))
+				fmt.Sprintf("target %q is not accessible: the assets route never serves Markdown files", status.target), reference)), nil
 		}
-		// Assets only need to exist and be regular; the glob and depth
-		// filters never applied to them.
-		return diagnostics
+		// Assets only need to exist and be regular — but the .gitignore rules
+		// still decide reachability: the server refuses an ignored asset, so
+		// the reference reads as broken here too.
+		ignored, err := scope.ignoredByPolicy(status.target)
+		if err != nil {
+			return nil, err
+		}
+		if ignored && rules.Enabled(RuleLocalTargetMissing) {
+			return append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
+				fmt.Sprintf("target %q is not accessible: %s", status.target, notServedIgnored.message()), reference)), nil
+		}
+		return diagnostics, nil
 	}
 	if !scope.allowsDocument(status.target) {
 		if rules.Enabled(RuleMarkdownTargetNotServed) {
 			return append(diagnostics, current.diagnostic(RuleMarkdownTargetNotServed,
-				fmt.Sprintf("Markdown target %q exists but %s", status.target, scope.notServedReason(status.target).message()), reference))
+				fmt.Sprintf("Markdown target %q exists but %s", status.target, scope.notServedReason(status.target).message()), reference)), nil
 		}
-		return diagnostics
+		return diagnostics, nil
+	}
+	// The document exists and passes depth and glob — the ignore rules are
+	// the last gate before the anchor check: a target the server will not
+	// serve cannot carry the heading the link promises.
+	ignored, err := scope.ignoredByPolicy(status.target)
+	if err != nil {
+		return nil, err
+	}
+	if ignored {
+		if rules.Enabled(RuleMarkdownTargetNotServed) {
+			return append(diagnostics, current.diagnostic(RuleMarkdownTargetNotServed,
+				fmt.Sprintf("Markdown target %q exists but %s", status.target, notServedIgnored.message()), reference)), nil
+		}
+		return diagnostics, nil
 	}
 	// A target whose frontmatter failed to parse is never inspected, so its
 	// headings are unknown; the frontmatter error already explains the break,
@@ -254,7 +282,7 @@ func checkReference(
 		diagnostics = append(diagnostics, current.diagnostic(RuleAnchorMissing,
 			fmt.Sprintf("heading %q does not exist in %q", "#"+local.Fragment, status.target), reference))
 	}
-	return diagnostics
+	return diagnostics, nil
 }
 
 func localReferencePath(local markdown.LocalDestination) string {

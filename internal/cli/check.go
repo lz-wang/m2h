@@ -22,13 +22,14 @@ func checkCommand() *urfavecli.Command {
 }
 
 // checkFlags returns the document-scope and reporting options for the check
-// subcommand. --glob and --depth mirror the root serve command's flags so
-// "m2h docs" and "m2h check docs" always see the same document scope, while
-// --enable/--disable select which rules run: the defaults, widened by
-// --enable and narrowed by --disable (which wins).
+// subcommand. --glob, --depth and --gitignore mirror the root serve
+// command's flags so "m2h docs" and "m2h check docs" always see the same
+// document scope, while --enable/--disable select which rules run: the
+// defaults, widened by --enable and narrowed by --disable (which wins).
 func checkFlags() []urfavecli.Flag {
 	return []urfavecli.Flag{
 		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
+		&urfavecli.BoolWithInverseFlag{Name: "gitignore", Value: true, Usage: "respect .gitignore files within directory roots", Local: true},
 		&urfavecli.IntFlag{
 			Name:    "depth",
 			Aliases: []string{"d"},
@@ -93,6 +94,7 @@ func checkAction(ctx context.Context, command *urfavecli.Command) error {
 		Input:        command.Args().First(),
 		Pattern:      command.String("glob"),
 		Depth:        command.Int("depth"),
+		Gitignore:    command.Bool("gitignore"),
 		EnableRules:  command.StringSlice("enable"),
 		DisableRules: command.StringSlice("disable"),
 	})

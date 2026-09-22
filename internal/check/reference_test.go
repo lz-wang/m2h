@@ -11,12 +11,15 @@ func TestCheckReferenceWarningsDoNotNeedTargetResolver(t *testing.T) {
 
 	current := &indexedDocument{document: document{relative: "guide.md", display: "guide.md"}}
 	rules := RuleSet{enabled: map[string]struct{}{RuleImageAltEmpty: {}}}
-	diagnostics := checkReference(documentScope{}, nil, nil, current, markdown.Reference{
+	diagnostics, err := checkReference(documentScope{}, nil, nil, current, markdown.Reference{
 		Kind:        markdown.ReferenceImage,
 		Destination: "missing.png",
 		Line:        3,
 		Column:      4,
 	}, rules)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	if len(diagnostics) != 1 || diagnostics[0].Rule != RuleImageAltEmpty {
 		t.Fatalf("diagnostics = %+v, want only %s", diagnostics, RuleImageAltEmpty)

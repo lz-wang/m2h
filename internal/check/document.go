@@ -35,6 +35,11 @@ type documentScope struct {
 	single    bool
 	file      string // single-file scope: the only admitted document
 	discovery files.DiscoverOptions
+	// ignore carries the run-scoped .gitignore matcher for directory scopes
+	// (nil when gitignore is off or the scope is single-file). Documents it
+	// ignores leave the scope, and reference targets it ignores read as
+	// unreachable — check must agree with the served workspace.
+	ignore    files.IgnoreMatcher
 	documents []document
 }
 
@@ -72,6 +77,7 @@ func newDirectoryScope(ctx context.Context, input string, resolved string, disco
 	scope := documentScope{
 		root:      resolved,
 		discovery: discovery,
+		ignore:    discovery.Ignore,
 		documents: make([]document, 0, len(found.Markdown)),
 	}
 	for _, entry := range found.Markdown {
@@ -110,6 +116,16 @@ func (scope documentScope) notServedReason(relative string) notServedReason {
 		return notServedDepth
 	}
 	return notServedGlob
+}
+
+// ignoredByPolicy reports whether the scope's .gitignore rules exclude the
+// target. Single-file scopes and gitignore-off runs never ignore. The error
+// (an unreadable rule file) propagates: check aborts rather than guessing.
+func (scope documentScope) ignoredByPolicy(relative string) (bool, error) {
+	if scope.single || scope.ignore == nil {
+		return false, nil
+	}
+	return scope.ignore.Ignored(relative, false)
 }
 
 // indexedDocument is one parsed document of a check run. inspectable is
