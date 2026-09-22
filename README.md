@@ -108,6 +108,7 @@ m2h /srv/docs --host 127.0.0.1 --port 8793 --no-open
 | `--toc` / `--no-toc` | 是否显示文档目录，默认开启（`true`）；只接受开关形式，不接受 `=值` |
 | `--glob` | Markdown 文件过滤规则 |
 | `--depth`, `-d` | 目录最大递归深度，默认 `4` |
+| `--gitignore` / `--no-gitignore` | 是否遵循目录内的 `.gitignore` 规则，默认开启（`true`） |
 
 更多选项：
 
@@ -207,6 +208,24 @@ m2h check docs --enable all --disable image.alt-empty
 与带 scheme 的外链一样不会映射到本地文件。已经识别为本地、但解析后越出
 当前 root 的引用会在 WebUI 中改写到专用的 404 地址，不再把原始相对 URL
 交给浏览器重新解析；`m2h check` 同时报告 `local-target.outside-root`。
+
+### .gitignore 过滤
+
+目录输入默认遵循其中的 `.gitignore` 规则：被忽略的 Markdown 不出现在侧边栏
+与全文搜索中，被忽略的文档、图片等资源通过 URL 直接访问时一律返回 404；
+`m2h check` 同样默认跳过被忽略的文件，并把指向它们的引用报告为无法访问。
+规则文件修改后立即生效（下一次请求重新读取），无需重启。
+
+显式指定的单个文件不受影响——`m2h README.md` 总是照常发布与检查。
+不读取 `.gitignore` 时使用 `--no-gitignore`：
+
+```console
+m2h --no-gitignore ./docs
+m2h check --no-gitignore ./docs
+```
+
+隐藏文件限制、符号链接边界与 root 隔离等安全规则独立于该开关，始终生效。
+完整的规则语法、嵌套覆盖关系与实现边界见 [Git Ignore 过滤](docs/gitignore.md)。
 
 ## Markdown 支持
 
