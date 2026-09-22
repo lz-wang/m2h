@@ -23,14 +23,7 @@ let root: string;
 async function startServer(): Promise<void> {
   server = spawn(
     "./build/e2e/m2h",
-    [
-      "--no-open",
-      "--host",
-      "127.0.0.1",
-      "--port",
-      String(port),
-      root,
-    ],
+    ["--no-open", "--host", "127.0.0.1", "--port", String(port), root],
     {
       cwd: path.resolve(import.meta.dirname, "..", ".."),
       stdio: "ignore",
@@ -91,9 +84,7 @@ test("rewriting the rules updates the next API answer at once", async () => {
 
   // A document route answers 404 for the ignored file the moment the rule
   // lands; the asset route refuses the same way.
-  const document = await fetch(
-    `${baseURL}/api/document?path=hidden.md`,
-  );
+  const document = await fetch(`${baseURL}/api/document?path=hidden.md`);
   expect(document.status).toBe(404);
   const asset = await fetch(`${baseURL}/assets/picture.png`);
   expect(asset.status).toBe(200);
@@ -108,9 +99,7 @@ test("rewriting the rules updates the next API answer at once", async () => {
   expect(await listedFiles()).toEqual(["hidden.md", "visible.md"]);
 });
 
-test("the sidebar catches up after a reload, not before", async ({
-  page,
-}) => {
+test("the sidebar catches up after a reload, not before", async ({ page }) => {
   writeRules("");
   await page.goto("/");
   const tree = page.locator('[aria-label^="Markdown 文件树"]');
