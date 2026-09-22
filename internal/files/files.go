@@ -48,6 +48,11 @@ type DiscoverOptions struct {
 	// hidden documents possible.
 	SkipHidden bool
 	Log        io.Writer
+	// Ignore applies the root's publishing rules (.gitignore today) on top
+	// of the structural filters. A nil matcher disables the check entirely,
+	// so single-file inputs and opt-out callers keep their exact behavior.
+	// Like every rule here it filters discovery only — it never widens it.
+	Ignore IgnoreMatcher
 }
 
 // Discovery separates Markdown inputs from other assets.
@@ -170,6 +175,23 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 			}
 			return nil
 		}
+		// The ignore rules run after the structural exclusions and before
+		// depth, glob and the safe-file checks: an ignored directory prunes
+		// its subtree exactly like a hidden one, and every failure inside
+		// the rule files surfaces as a discovery error instead of a silent
+		// widening of the visible set.
+		if options.Ignore != nil {
+			ignored, err := options.Ignore.Ignored(relative, entry.IsDir())
+			if err != nil {
+				return fmt.Errorf("walk %q: %w", current, err)
+			}
+			if ignored {
+				if entry.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+		}
 		if entry.IsDir() {
 			if directoryDepth(relative) > options.Depth {
 				return filepath.SkipDir
@@ -197,6 +219,22 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 				return fmt.Errorf("make %q relative to %q: %w", safe.target, input.Path, relErr)
 			}
 			if IsHiddenPath(NormalizeRelativePath(resolvedRelative)) {
+				return nil
+			}
+		}
+		// The same alias argument applies to the ignore rules: an entry whose
+		// canonical target is ignored stays unpublished even when it is
+		// reached through a visible symlink.
+		if options.Ignore != nil {
+			resolvedRelative, relErr := filepath.Rel(input.Path, safe.target)
+			if relErr != nil {
+				return fmt.Errorf("make %q relative to %q: %w", safe.target, input.Path, relErr)
+			}
+			ignored, err := options.Ignore.Ignored(NormalizeRelativePath(resolvedRelative), false)
+			if err != nil {
+				return fmt.Errorf("walk %q: %w", current, err)
+			}
+			if ignored {
 				return nil
 			}
 		}

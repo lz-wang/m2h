@@ -70,11 +70,22 @@ func pickEntryDocument(children, descendants []string) string {
 
 // reachableMarkdown reports whether one directory entry is a publishable
 // Markdown file under options: a regular file — resolving file symlinks
-// within the root, refusing anything else — whose canonical target is not
-// hidden when SkipHidden applies, and that passes depth and glob rules on
-// its requested path. It mirrors Discover's per-file decisions so a document
-// FindDirectoryDocument picks is one Discover would have listed.
+// within the root, refusing anything else — that is not ignored when an
+// Ignore matcher applies (on both the alias path and the canonical target),
+// whose canonical target is not hidden when SkipHidden applies, and that
+// passes depth and glob rules on its requested path. It mirrors Discover's
+// per-file decisions so a document FindDirectoryDocument picks is one
+// Discover would have listed.
 func reachableMarkdown(root, current string, entry os.DirEntry, relative string, options DiscoverOptions) (bool, error) {
+	if options.Ignore != nil {
+		ignored, err := options.Ignore.Ignored(relative, false)
+		if err != nil {
+			return false, err
+		}
+		if ignored {
+			return false, nil
+		}
+	}
 	target := current
 	if entry.Type()&os.ModeSymlink != 0 {
 		resolved, err := filepath.EvalSymlinks(current)
@@ -111,6 +122,21 @@ func reachableMarkdown(root, current string, entry os.DirEntry, relative string,
 			return false, nil
 		}
 	}
+	// A visible symlink must not publish an ignored canonical target, the
+	// same alias rule Discover applies after its own safety resolution.
+	if options.Ignore != nil && target != current {
+		resolvedRelative, err := filepath.Rel(root, target)
+		if err != nil {
+			return false, err
+		}
+		ignored, err := options.Ignore.Ignored(NormalizeRelativePath(resolvedRelative), false)
+		if err != nil {
+			return false, err
+		}
+		if ignored {
+			return false, nil
+		}
+	}
 	return IsMarkdown(relative) && Matches(relative, options), nil
 }
 
@@ -134,6 +160,14 @@ func FindDirectoryDocument(ctx context.Context, root, directory string, options 
 	if directory != "." {
 		if err := RequireExactPath(root, directory); err != nil {
 			return ""
+		}
+		// An ignored directory has no entry document: discovery never lists
+		// anything inside it, and the BFS below must not either.
+		if options.Ignore != nil {
+			ignored, err := options.Ignore.Ignored(directory, true)
+			if err != nil || ignored {
+				return ""
+			}
 		}
 	}
 	info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(directory)))
@@ -184,6 +218,15 @@ func FindDirectoryDocument(ctx context.Context, root, directory string, options 
 			}
 			if isExcluded(excludeRoot, excludes, current) {
 				continue
+			}
+			if options.Ignore != nil {
+				ignored, err := options.Ignore.Ignored(relative, entry.IsDir())
+				if err != nil {
+					return nil, nil, err
+				}
+				if ignored {
+					continue
+				}
 			}
 			if entry.IsDir() {
 				// A directory at relative depth d can only hold files at

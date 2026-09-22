@@ -2,12 +2,14 @@ package files
 
 import (
 	"bufio"
+	"context"
 	"errors"
 	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -321,5 +323,125 @@ func TestNewGitIgnoreRequiresADirectoryRoot(t *testing.T) {
 	}
 	if _, err := NewGitIgnore(root); err != nil {
 		t.Fatalf("NewGitIgnore(%q): %v", root, err)
+	}
+}
+
+// buildDiscoveryTree lays out the workspace the discovery tests share.
+func buildDiscoveryTree(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	for name, contents := range map[string]string{
+		"README.md":            "# Root",
+		"draft/note.md":        "# Draft",
+		"draft/deep/inner.md":  "# Inner draft",
+		"images/diagram.png":   "PNG",
+		"images/temporary.png": "PNG",
+		"app.log":              "log",
+		"keep.log":             "log",
+		"secret/hidden.md":     "# Hidden target",
+	} {
+		writeTestFile(t, filepath.Join(root, filepath.FromSlash(name)), contents)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("draft/\nimages/temporary.png\n*.log\n!keep.log\nsecret/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(root, "secret", "hidden.md"), filepath.Join(root, "alias.md")); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+func TestDiscoverAppliesIgnoreToMarkdownAndAssets(t *testing.T) {
+	root := buildDiscoveryTree(t)
+	matcher, err := NewGitIgnore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	discovered, err := Discover(context.Background(), root, DiscoverOptions{
+		Depth:      4,
+		SkipHidden: true,
+		Ignore:     matcher,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	markdown := entryPaths(discovered.Markdown)
+	if len(markdown) != 1 || markdown[0] != "README.md" {
+		t.Errorf("Markdown = %v, want [README.md]", markdown)
+	}
+	assets := entryPaths(discovered.Assets)
+	if !slices.Equal(assets, []string{"images/diagram.png", "keep.log"}) {
+		t.Errorf("Assets = %v, want [images/diagram.png keep.log]", assets)
+	}
+}
+
+func TestDiscoverWithoutIgnoreKeepsEverything(t *testing.T) {
+	root := buildDiscoveryTree(t)
+	discovered, err := Discover(context.Background(), root, DiscoverOptions{Depth: 4, SkipHidden: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// alias.md, draft/deep/inner.md, draft/note.md, README.md and
+	// secret/hidden.md as Markdown, plus the four assets — everything but
+	// dot paths.
+	if got := len(discovered.Markdown) + len(discovered.Assets); got != 9 {
+		t.Fatalf("Markdown+Assets = %d entries (%v / %v), want 9",
+			got, entryPaths(discovered.Markdown), entryPaths(discovered.Assets))
+	}
+}
+
+func TestDiscoverSkipsAliasPointingAtIgnoredTarget(t *testing.T) {
+	root := buildDiscoveryTree(t)
+	matcher, err := NewGitIgnore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	discovered, err := Discover(context.Background(), root, DiscoverOptions{
+		Depth:      4,
+		SkipHidden: true,
+		Ignore:     matcher,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range discovered.Markdown {
+		if entry.RelativePath == "alias.md" {
+			t.Error("alias.md resolves to the ignored secret/hidden.md and must not be discovered")
+		}
+	}
+}
+
+func TestFindDirectoryDocumentSkipsIgnoredDocuments(t *testing.T) {
+	root := t.TempDir()
+	for name, contents := range map[string]string{
+		"docs/README.md":     "# Docs",
+		"docs/guide.md":      "# Guide",
+		"notes/README.md":    "# Notes",
+		"archive/README.md":  "# Archive",
+		"archive/history.md": "# History",
+	} {
+		writeTestFile(t, filepath.Join(root, filepath.FromSlash(name)), contents)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".gitignore"), []byte("docs/README.md\narchive/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	matcher, err := NewGitIgnore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := DiscoverOptions{Depth: 4, SkipHidden: true, Ignore: matcher}
+
+	// docs/README.md is ignored, so the next Markdown in the level wins.
+	if document := FindDirectoryDocument(context.Background(), root, "docs", options); document != "docs/guide.md" {
+		t.Errorf("FindDirectoryDocument(docs) = %q, want docs/guide.md", document)
+	}
+	// archive/ is ignored as a whole: no entry document, no BFS inside.
+	if document := FindDirectoryDocument(context.Background(), root, "archive", options); document != "" {
+		t.Errorf("FindDirectoryDocument(archive) = %q, want an empty result", document)
+	}
+	// notes/ carries no rule of its own and keeps picking its README.
+	if document := FindDirectoryDocument(context.Background(), root, "notes", options); document != "notes/README.md" {
+		t.Errorf("FindDirectoryDocument(notes) = %q, want notes/README.md", document)
 	}
 }
