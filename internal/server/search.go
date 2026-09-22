@@ -88,6 +88,13 @@ func (handler *documentHandler) serveSearch(response http.ResponseWriter, reques
 			virtual := handler.workspace.publicPath(root.id, entry.RelativePath)
 			_, relative, target, err := handler.resolveVisibleDocument(virtual)
 			if err != nil {
+				// An ignore-rule failure is a server fault even mid-scan;
+				// everything else mirrors the document routes' 404 answer:
+				// the entry is simply absent from this scan.
+				if errors.Is(err, errIgnoreUnavailable) {
+					writeJSONError(response, http.StatusInternalServerError, "evaluate ignore rules")
+					return
+				}
 				continue
 			}
 			contents, err := os.ReadFile(target)

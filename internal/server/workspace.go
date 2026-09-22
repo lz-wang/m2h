@@ -32,13 +32,14 @@ type workspace struct {
 // the CLI received them; the first root is the primary root. Inputs that
 // canonicalize to the same tree are rejected: two ids for one directory would
 // double-serve identical documents and confuse both the sidebar and the
-// default-document selection.
-func newWorkspace(inputs []files.Input, discovery files.DiscoverOptions) (workspace, error) {
+// default-document selection. ignore applies to every directory root;
+// single-file roots never consult rules.
+func newWorkspace(inputs []files.Input, discovery files.DiscoverOptions, ignore bool) (workspace, error) {
 	roots := make([]workspaceRoot, 0, len(inputs))
 	seen := make(map[string]string, len(inputs))
 	labelCounts := make(map[string]int, len(inputs))
 	for index, input := range inputs {
-		scope := newRootScope(input, discovery)
+		scope := newRootScope(input, discovery, ignore)
 		identity := scope.root
 		if scope.isSingleFile() {
 			identity = filepath.Join(scope.root, filepath.FromSlash(scope.file))

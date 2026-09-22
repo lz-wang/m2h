@@ -205,12 +205,12 @@ func (handler *documentHandler) serveDocument(response http.ResponseWriter, requ
 	}
 	root, relative, target, err := handler.resolveVisibleDocument(virtual)
 	if err != nil {
-		writeJSONError(response, http.StatusNotFound, "document not found")
+		writeJSONError(response, resolveVisibleStatus(err), "document not found")
 		return
 	}
 	contents, err := os.ReadFile(target)
 	if err != nil {
-		writeJSONError(response, http.StatusNotFound, "document not found")
+		writeJSONError(response, resolveVisibleStatus(err), "document not found")
 		return
 	}
 	body, frontMatter, err := markdown.ParseFrontMatter(contents)
@@ -266,12 +266,12 @@ func (handler *documentHandler) serveFileMetadata(response http.ResponseWriter, 
 	}
 	_, relative, target, err := handler.resolveVisibleDocument(virtual)
 	if err != nil {
-		writeJSONError(response, http.StatusNotFound, "document not found")
+		writeJSONError(response, resolveVisibleStatus(err), "document not found")
 		return
 	}
 	contents, err := os.ReadFile(target)
 	if err != nil {
-		writeJSONError(response, http.StatusNotFound, "document not found")
+		writeJSONError(response, resolveVisibleStatus(err), "document not found")
 		return
 	}
 	metadata, err := fileDisplayMetadata(contents, relative)
@@ -323,22 +323,49 @@ func fileDisplayMetadata(contents []byte, relativePath string) (fileDisplayInfo,
 // refused here too — the publishing policy runs on the requested identity and
 // again on the canonical one. Callers keep their own HTTP error shape and
 // rendering.
+// errIgnoreUnavailable marks a failure inside a root's ignore-rule files
+// (.gitignore unreadable or unparsable). Resolution failures carrying it are
+// server-side faults and answer 500, while every plain refusal stays 404 —
+// the visitor never learns why a document is hidden, only that it is.
+var errIgnoreUnavailable = errors.New("ignore rules are unavailable")
+
 func (handler *documentHandler) resolveVisibleDocument(virtual string) (workspaceRoot, string, string, error) {
 	root, relative, err := handler.workspace.locate(virtual)
 	if err != nil {
 		return workspaceRoot{}, "", "", err
 	}
-	if !root.scope.allowsDocument(relative) {
+	// The alias path is judged first, then the canonical target after
+	// filesystem resolution — so a visible symlink cannot hand out an
+	// ignored file, and an ignored alias cannot hand out anything at all.
+	admitted, err := root.scope.admittedByPolicy(relative)
+	if err != nil {
+		return workspaceRoot{}, "", "", fmt.Errorf("%w: %v", errIgnoreUnavailable, err)
+	}
+	if !admitted {
 		return workspaceRoot{}, "", "", fmt.Errorf("document %q is not served by its root", virtual)
 	}
 	resolved, err := resolveRequestFile(root.scope.root, relative)
 	if err != nil {
 		return workspaceRoot{}, "", "", err
 	}
-	if !root.scope.allowsResolvedDocument(resolved.relative) {
-		return workspaceRoot{}, "", "", fmt.Errorf("document %q resolves to a hidden target", virtual)
+	resolvedAdmitted, err := root.scope.resolvedAdmittedByPolicy(resolved.relative)
+	if err != nil {
+		return workspaceRoot{}, "", "", fmt.Errorf("%w: %v", errIgnoreUnavailable, err)
+	}
+	if !resolvedAdmitted {
+		return workspaceRoot{}, "", "", fmt.Errorf("document %q resolves to an ignored target", virtual)
 	}
 	return root, relative, resolved.target, nil
+}
+
+// resolveVisibleStatus maps a resolveVisibleDocument error onto an HTTP
+// status: ignore-rule failures are server faults (500), everything else —
+// including every policy refusal — is a plain miss (404).
+func resolveVisibleStatus(err error) int {
+	if errors.Is(err, errIgnoreUnavailable) {
+		return http.StatusInternalServerError
+	}
+	return http.StatusNotFound
 }
 
 // serveRawMarkdown streams the original Markdown source of one addressable
@@ -363,7 +390,7 @@ func (handler *documentHandler) serveRawMarkdown(response http.ResponseWriter, r
 	}
 	_, _, target, err := handler.resolveVisibleDocument(virtual)
 	if err != nil {
-		http.NotFound(response, request)
+		http.Error(response, http.StatusText(resolveVisibleStatus(err)), resolveVisibleStatus(err))
 		return
 	}
 	contents, err := os.ReadFile(target)
@@ -404,7 +431,7 @@ func (handler *documentHandler) serveDirectoryIndex(response http.ResponseWriter
 			return
 		}
 		if _, _, _, err := handler.resolveVisibleDocument(virtual); err != nil {
-			status = http.StatusNotFound
+			status = resolveVisibleStatus(err)
 		}
 	}
 	response.Header().Set("Content-Type", "text/html; charset=utf-8")

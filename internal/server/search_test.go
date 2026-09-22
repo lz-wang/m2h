@@ -246,7 +246,7 @@ func TestSearchHonorsPublishingScope(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		handler := newDocumentHandler(singleRootWorkspace(newRootScope(input, files.DiscoverOptions{Depth: 2})), nil, directoryTestUI())
+		handler := newDocumentHandler(singleRootWorkspace(newRootScope(input, files.DiscoverOptions{Depth: 2}, false)), nil, directoryTestUI())
 
 		payload := searchResultsFor(t, handler, "single-file-token")
 		if len(payload.Results) != 1 || payload.Results[0].Path != "chosen.md" {

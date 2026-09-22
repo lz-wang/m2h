@@ -21,7 +21,7 @@ func TestNewPreviewScopeSingleFileIgnoresDiscovery(t *testing.T) {
 
 	// Even with depth/glob options, a single file becomes a literal scope so
 	// names like foo[1].md are never reinterpreted as a glob.
-	scope := newRootScope(input, files.DiscoverOptions{Depth: 5, Pattern: "**/*.md"})
+	scope := newRootScope(input, files.DiscoverOptions{Depth: 5, Pattern: "**/*.md"}, false)
 	if !scope.isSingleFile() {
 		t.Fatal("single-file scope reports as a directory")
 	}
@@ -47,7 +47,7 @@ func TestNewPreviewScopeDirectoryPreservesDiscovery(t *testing.T) {
 	}
 	options := files.DiscoverOptions{Depth: 3, Pattern: "**/*.md"}
 
-	scope := newRootScope(input, options)
+	scope := newRootScope(input, options, false)
 	if scope.isSingleFile() {
 		t.Fatal("directory scope reports as a single file")
 	}

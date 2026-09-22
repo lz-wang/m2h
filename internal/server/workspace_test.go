@@ -36,6 +36,7 @@ func TestNewWorkspaceAssignsIDsAndLabelsInInputOrder(t *testing.T) {
 			resolveTestInput(t, beta),
 		},
 		files.DiscoverOptions{Depth: 4},
+		false,
 	)
 	if err != nil {
 		t.Fatalf("newWorkspace() error = %v", err)
@@ -80,6 +81,7 @@ func TestNewWorkspaceKeepsSingleFileAndDirectoryRootsIndependent(t *testing.T) {
 			resolveTestInput(t, docs),
 		},
 		files.DiscoverOptions{Depth: 4},
+		false,
 	)
 	if err != nil {
 		t.Fatalf("newWorkspace() error = %v", err)
@@ -126,6 +128,7 @@ func TestNewWorkspaceLabelsDuplicateBasenamesUniquely(t *testing.T) {
 			resolveTestInput(t, three),
 		},
 		files.DiscoverOptions{Depth: 4},
+		false,
 	)
 	if err != nil {
 		t.Fatalf("newWorkspace() error = %v", err)
@@ -163,6 +166,7 @@ func TestNewWorkspaceRejectsDuplicateCanonicalRoots(t *testing.T) {
 				resolveTestInput(t, docs+string(os.PathSeparator)),
 			},
 			files.DiscoverOptions{Depth: 4},
+			false,
 		)
 		if err == nil || !strings.Contains(err.Error(), "duplicate workspace root") {
 			t.Fatalf("duplicate directory error = %v", err)
@@ -176,6 +180,7 @@ func TestNewWorkspaceRejectsDuplicateCanonicalRoots(t *testing.T) {
 				resolveTestInput(t, filepath.Join(docs, "README.md")),
 			},
 			files.DiscoverOptions{Depth: 4},
+			false,
 		)
 		if err == nil || !strings.Contains(err.Error(), "duplicate workspace root") {
 			t.Fatalf("duplicate file error = %v", err)
@@ -193,6 +198,7 @@ func TestNewWorkspaceRejectsDuplicateCanonicalRoots(t *testing.T) {
 				resolveTestInput(t, alias),
 			},
 			files.DiscoverOptions{Depth: 4},
+			false,
 		)
 		if err == nil || !strings.Contains(err.Error(), "duplicate workspace root") {
 			t.Fatalf("symlink alias error = %v", err)

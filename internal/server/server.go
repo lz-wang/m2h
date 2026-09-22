@@ -50,9 +50,14 @@ type Options struct {
 	PatternSet bool
 	DepthSet   bool
 	TOCSet     bool
-	Log        io.Writer
-	UI         fs.FS
-	Version    string
+	// Gitignore makes every directory root respect the .gitignore files
+	// inside it — discovery, document admission, assets and search alike.
+	// The zero value keeps the check off for library callers; the CLI flag
+	// defaults to true and always passes an explicit value.
+	Gitignore bool
+	Log       io.Writer
+	UI        fs.FS
+	Version   string
 
 	OnListening func(string)
 }
@@ -123,7 +128,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		Pattern:    normalized.Pattern,
 		SkipHidden: true,
 		Log:        logger,
-	})
+	}, normalized.Gitignore)
 	if err != nil {
 		return err
 	}

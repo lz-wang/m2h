@@ -23,7 +23,7 @@ func TestDirectoryLinksInThreeRootWorkspace(t *testing.T) {
 		writeTestFile(t, filepath.Join(root, "docs", "empty", "LICENSE"), "license")
 		inputs = append(inputs, resolveTestInput(t, root))
 	}
-	workspace, err := newWorkspace(inputs, files.DiscoverOptions{Depth: 4, SkipHidden: true})
+	workspace, err := newWorkspace(inputs, files.DiscoverOptions{Depth: 4, SkipHidden: true}, false)
 	if err != nil {
 		t.Fatal(err)
 	}

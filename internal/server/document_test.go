@@ -191,7 +191,7 @@ func TestFilesAPIRootSummariesCarryNoServerPaths(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
 
-			workspace, err := newWorkspace(test.inputs, files.DiscoverOptions{Depth: 2})
+			workspace, err := newWorkspace(test.inputs, files.DiscoverOptions{Depth: 2}, false)
 			if err != nil {
 				t.Fatalf("newWorkspace() error = %v", err)
 			}
@@ -857,6 +857,7 @@ func multiRootFixture(t *testing.T) workspace {
 			resolveTestInput(t, beta),
 		},
 		files.DiscoverOptions{Depth: 4},
+		false,
 	)
 	if err != nil {
 		t.Fatalf("newWorkspace() error = %v", err)
@@ -883,6 +884,7 @@ func TestWorkspaceFilesAPILabelsRootsAndPrefersThePrimaryRoot(t *testing.T) {
 	workspace, err := newWorkspace(
 		[]files.Input{resolveTestInput(t, alpha), resolveTestInput(t, beta)},
 		files.DiscoverOptions{Depth: 4},
+		false,
 	)
 	if err != nil {
 		t.Fatalf("newWorkspace() error = %v", err)
@@ -1037,6 +1039,7 @@ func TestWorkspaceDocumentRendersVirtualLinkRouting(t *testing.T) {
 			resolveTestInput(t, beta),
 		},
 		files.DiscoverOptions{Depth: 4},
+		false,
 	)
 	if err != nil {
 		t.Fatalf("newWorkspace() error = %v", err)
@@ -1208,6 +1211,7 @@ func TestRawMarkdownServesSingleFileRoot(t *testing.T) {
 	singleFile, err := newWorkspace(
 		[]files.Input{resolveTestInput(t, filepath.Join(base, "solo.md"))},
 		files.DiscoverOptions{Depth: 2},
+		false,
 	)
 	if err != nil {
 		t.Fatalf("newWorkspace() error = %v", err)
