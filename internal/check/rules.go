@@ -143,6 +143,8 @@ const (
 	notServedSingleFile notServedReason = "single-file"
 	notServedDepth      notServedReason = "depth"
 	notServedGlob       notServedReason = "glob"
+	notServedHidden     notServedReason = "hidden"
+	notServedProtected  notServedReason = "protected"
 	notServedIgnored    notServedReason = "ignored"
 )
 
@@ -154,6 +156,10 @@ func (reason notServedReason) message() string {
 		return "is excluded by the depth limit"
 	case notServedGlob:
 		return "is excluded by the glob filter"
+	case notServedHidden:
+		return "is excluded as a hidden path"
+	case notServedProtected:
+		return "is protected from publishing"
 	case notServedIgnored:
 		return "is ignored by the .gitignore rules"
 	}

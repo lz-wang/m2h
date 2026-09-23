@@ -121,10 +121,14 @@ func (scope rootScope) discover(ctx context.Context) (files.Discovery, error) {
 // A single-file scope serves its explicit input whatever the file is named —
 // naming a hidden file on the command line is an explicit publishing act, not
 // an accidental exposure by directory discovery. A directory scope honors the
-// discovery's SkipHidden so the file tree and document admission never drift.
+// discovery's SkipHidden so the file tree and document admission never drift,
+// while protected paths (.git, .ssh, .env) are refused whatever the option.
 func (scope rootScope) allowsDocument(relative string) bool {
 	if scope.isSingleFile() {
 		return relative == scope.file
+	}
+	if files.IsProtectedPath(relative) {
+		return false
 	}
 	if scope.discovery.SkipHidden && files.IsHiddenPath(relative) {
 		return false
@@ -132,29 +136,38 @@ func (scope rootScope) allowsDocument(relative string) bool {
 	return files.IsMarkdown(relative) && files.Matches(relative, scope.discovery)
 }
 
-// allowsResolvedDocument re-checks only the security property — a hidden
-// canonical target — after filesystem resolution. It deliberately skips the
-// glob/depth rules: those belong to the alias path the reader addressed, so
-// a shallow symlink to a deeper document keeps serving exactly as before.
-// A single-file scope serves its explicitly named input whatever it resolves
-// through, so there is nothing left to refuse.
+// allowsResolvedDocument re-checks only the security properties — a hidden
+// or protected canonical target — after filesystem resolution. It
+// deliberately skips the glob/depth rules: those belong to the alias path the
+// reader addressed, so a shallow symlink to a deeper document keeps serving
+// exactly as before. A single-file scope serves its explicitly named input
+// whatever it resolves through, so there is nothing left to refuse.
 func (scope rootScope) allowsResolvedDocument(relative string) bool {
 	if scope.isSingleFile() {
 		return true
+	}
+	if files.IsProtectedPath(relative) {
+		return false
 	}
 	return !scope.discovery.SkipHidden || !files.IsHiddenPath(relative)
 }
 
 // allowsAsset reports whether a normalized relative path may be served
-// through /assets. Markdown files belong to the document routes only, hidden
-// paths are never publishable, and active web documents (HTML/JS/CSS) must
-// not become same-origin content on the m2h origin — every other regular
-// file is an ordinary passive attachment.
+// through /assets. Markdown files belong to the document routes only, active
+// web documents (HTML/JS/CSS) must not become same-origin content on the m2h
+// origin, and protected paths are never publishable — every other regular
+// file is an ordinary passive attachment. Hidden paths follow the same
+// SkipHidden option as documents, with one guard: a single-file scope has no
+// --hidden decision of its own, so its neighborhood keeps the default
+// filtering instead of quietly widening the explicit input's reach.
 func (scope rootScope) allowsAsset(relative string) bool {
 	if files.IsMarkdown(relative) {
 		return false
 	}
-	if files.IsHiddenPath(relative) {
+	if files.IsProtectedPath(relative) {
+		return false
+	}
+	if (scope.isSingleFile() || scope.discovery.SkipHidden) && files.IsHiddenPath(relative) {
 		return false
 	}
 	return !isActiveWebAsset(relative)

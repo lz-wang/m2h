@@ -26,12 +26,16 @@ const (
 
 // targetStatus is the resolved state of one unique reference target path.
 // target is the percent-decoded root-relative path (set whenever decoding
-// succeeded), and err carries the underlying lookup failure for targets that
-// exist on disk but cannot be inspected, so the missing message can say why.
+// succeeded), resolved is the canonical root-relative path after symlink
+// resolution (its own spelling when the target is not a symlink; empty
+// whenever the target never resolved far enough to canonicalize), and err
+// carries the underlying lookup failure for targets that exist on disk but
+// cannot be inspected, so the missing message can say why.
 type targetStatus struct {
-	state  targetState
-	target string
-	err    error
+	state    targetState
+	target   string
+	resolved string
+	err      error
 }
 
 // targetResolver resolves and caches filesystem lookups for reference
@@ -95,7 +99,15 @@ func (resolver *targetResolver) inspect(reference string) targetStatus {
 	if !info.Mode().IsRegular() {
 		return targetStatus{state: targetNotRegular, target: target}
 	}
-	return targetStatus{state: targetOK, target: target}
+	canonicalRelative, err := filepath.Rel(resolver.root, resolved)
+	if err != nil {
+		return targetStatus{state: targetMissing, target: target, err: err}
+	}
+	return targetStatus{
+		state:    targetOK,
+		target:   target,
+		resolved: files.NormalizeRelativePath(canonicalRelative),
+	}
 }
 
 // checkDocumentReferences resolves every reference of one indexed document
@@ -241,6 +253,14 @@ func checkReference(
 			return append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
 				fmt.Sprintf("target %q is not accessible: the assets route never serves Markdown files", status.target), reference)), nil
 		}
+		// The assets route applies the same hidden/protected policy as the
+		// server, on both identities: a hidden image stays unreachable
+		// without --hidden, and .git/.ssh/.env files stay unreachable
+		// whatever the flag says.
+		if reason, refused := scope.assetNotServed(status); refused && rules.Enabled(RuleLocalTargetMissing) {
+			return append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
+				fmt.Sprintf("target %q is not accessible: %s", status.target, reason.message()), reference)), nil
+		}
 		// Assets only need to exist and be regular — but the .gitignore rules
 		// still decide reachability: the server refuses an ignored asset, so
 		// the reference reads as broken here too.
@@ -272,6 +292,16 @@ func checkReference(
 		if rules.Enabled(RuleMarkdownTargetNotServed) {
 			return append(diagnostics, current.diagnostic(RuleMarkdownTargetNotServed,
 				fmt.Sprintf("Markdown target %q exists but %s", status.target, notServedIgnored.message()), reference)), nil
+		}
+		return diagnostics, nil
+	}
+	// The server re-judges the resolved identity after filesystem
+	// resolution, so check does too: a visible alias must not publish a
+	// hidden or protected canonical target.
+	if reason, refused := scope.resolvedNotServed(status.resolved); refused {
+		if rules.Enabled(RuleMarkdownTargetNotServed) {
+			return append(diagnostics, current.diagnostic(RuleMarkdownTargetNotServed,
+				fmt.Sprintf("Markdown target %q exists but %s", status.target, reason.message()), reference)), nil
 		}
 		return diagnostics, nil
 	}

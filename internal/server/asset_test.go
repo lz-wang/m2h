@@ -9,6 +9,8 @@ import (
 	"runtime"
 	"strconv"
 	"testing"
+
+	"github.com/lz-wang/m2h/internal/files"
 )
 
 func TestAssetPathDecodingAndValidation(t *testing.T) {
@@ -74,7 +76,12 @@ func TestAssetAdmissionMatrix(t *testing.T) {
 		writeTestFile(t, filepath.Join(root, filepath.FromSlash(name)), contents)
 	}
 
-	handler := newAssetHandler(singleRootWorkspace(rootScope{root: root}))
+	// The production serving shape: directory scope with the default hidden
+	// filtering on (the --hidden shape is pinned in hidden_test.go).
+	handler := newAssetHandler(singleRootWorkspace(rootScope{
+		root:      root,
+		discovery: files.DiscoverOptions{Depth: 4, SkipHidden: true},
+	}))
 
 	tests := []struct {
 		target string
@@ -199,7 +206,10 @@ func TestAssetSymlinksCannotBypassPublishingPolicy(t *testing.T) {
 		}
 	}
 
-	handler := newAssetHandler(singleRootWorkspace(rootScope{root: root}))
+	handler := newAssetHandler(singleRootWorkspace(rootScope{
+		root:      root,
+		discovery: files.DiscoverOptions{Depth: 4, SkipHidden: true},
+	}))
 	for _, refused := range []string{
 		"/assets/public.pdf",
 		"/assets/safe.js.txt",

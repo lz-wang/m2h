@@ -97,25 +97,79 @@ func newDocument(root string, inputDir string, relative string) document {
 // allowsDocument reports whether a normalized relative path is reachable
 // through the scope, mirroring rootScope.allowsDocument on the server: a
 // single-file scope admits only itself; a directory scope admits Markdown
-// files that pass the depth and glob rules.
+// files that pass the hidden, depth and glob rules, while protected paths
+// are refused whatever the options say.
 func (scope documentScope) allowsDocument(relative string) bool {
 	if scope.single {
 		return relative == scope.file
+	}
+	if files.IsProtectedPath(relative) {
+		return false
+	}
+	if scope.discovery.SkipHidden && files.IsHiddenPath(relative) {
+		return false
 	}
 	return files.IsMarkdown(relative) && files.Matches(relative, scope.discovery)
 }
 
 // notServedReason explains why an existing Markdown target is unreachable in
-// the scope, distinguishing the single-file boundary from the depth and glob
-// filters so the diagnostic can say which rule excluded it.
+// the scope, distinguishing the single-file boundary from the hidden,
+// protected, depth and glob filters so the diagnostic can say which rule
+// excluded it. The order mirrors allowsDocument, so a refused target always
+// reports the rule that actually refused it.
 func (scope documentScope) notServedReason(relative string) notServedReason {
 	if scope.single {
 		return notServedSingleFile
+	}
+	if files.IsProtectedPath(relative) {
+		return notServedProtected
+	}
+	if scope.discovery.SkipHidden && files.IsHiddenPath(relative) {
+		return notServedHidden
 	}
 	if relative == "." || files.FileDepth(relative) > scope.discovery.Depth {
 		return notServedDepth
 	}
 	return notServedGlob
+}
+
+// resolvedNotServed re-judges only the security properties — hidden or
+// protected — on a target's canonical path after symlink resolution,
+// mirroring rootScope.resolvedAdmittedByPolicy on the server: a visible
+// alias must not publish a canonical target the discovery would refuse.
+// A single-file scope serves its explicitly named input whatever it resolves
+// through, so there is nothing left to refuse.
+func (scope documentScope) resolvedNotServed(resolvedRelative string) (notServedReason, bool) {
+	if scope.single {
+		return "", false
+	}
+	if files.IsProtectedPath(resolvedRelative) {
+		return notServedProtected, true
+	}
+	if scope.discovery.SkipHidden && files.IsHiddenPath(resolvedRelative) {
+		return notServedHidden, true
+	}
+	return "", false
+}
+
+// assetNotServed reports why the assets route would refuse a non-Markdown
+// target, mirroring rootScope.allowsAsset on both identities: the alias the
+// reference names and the canonical path it resolves to. A single-file scope
+// keeps the default hidden filtering — it has no --hidden decision of its
+// own, so its neighborhood never widens the explicit input's reach.
+func (scope documentScope) assetNotServed(status targetStatus) (notServedReason, bool) {
+	canonical := status.resolved
+	if canonical == "" {
+		canonical = status.target
+	}
+	if files.IsProtectedPath(status.target) || files.IsProtectedPath(canonical) {
+		return notServedProtected, true
+	}
+	if (scope.single || scope.discovery.SkipHidden) &&
+		(files.IsHiddenPath(status.target) || files.IsHiddenPath(canonical)) {
+		return notServedHidden, true
+	}
+	return "", false
 }
 
 // ignoredByPolicy reports whether the scope's .gitignore rules exclude the
