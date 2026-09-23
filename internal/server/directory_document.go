@@ -62,7 +62,20 @@ func (handler *documentHandler) directoryDocumentResolver(ctx context.Context, r
 			return "", false
 		}
 		cache[encoded] = decision{directory: true}
-		document := files.FindDirectoryDocument(ctx, root.scope.root, directory, root.scope.discovery)
+		// The BFS must judge the same publishable set as the document
+		// routes: the scope carries no matcher by design (rules are read
+		// per request), so the walk without it would pick an ignored
+		// README.md over a publishable index.md and the admission check
+		// below would refuse the pick, killing the directory link entirely.
+		// A rule file that cannot be read degrades the link to unresolved
+		// here; the document routes still answer 500 for the same state.
+		matcher, err := root.scope.ignoreSnapshot()
+		if err != nil {
+			return "", false
+		}
+		discovery := root.scope.discovery
+		discovery.Ignore = matcher
+		document := files.FindDirectoryDocument(ctx, root.scope.root, directory, discovery)
 		if document == "" {
 			return "", true
 		}

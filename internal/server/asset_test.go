@@ -29,27 +29,6 @@ func TestAssetPathDecodingAndValidation(t *testing.T) {
 	}
 }
 
-func TestIsActiveWebAsset(t *testing.T) {
-	t.Parallel()
-
-	for _, active := range []string{
-		"page.html", "page.htm", "page.xhtml", "app.js", "app.mjs", "app.cjs",
-		"style.css", "nested/PAGE.HTML", "nested/App.JS",
-	} {
-		if !isActiveWebAsset(active) {
-			t.Errorf("isActiveWebAsset(%q) = false, want true", active)
-		}
-	}
-	for _, passive := range []string{
-		"image.png", "diagram.svg", "manual.pdf", "archive.zip", "movie.mp4",
-		"data.json", "notes.txt", "noext", "htmlish.md.txt",
-	} {
-		if isActiveWebAsset(passive) {
-			t.Errorf("isActiveWebAsset(%q) = true, want false", passive)
-		}
-	}
-}
-
 func TestAssetAdmissionMatrix(t *testing.T) {
 	root := canonicalDirectory(t, t.TempDir())
 	for name, contents := range map[string]string{

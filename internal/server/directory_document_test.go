@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -72,5 +73,58 @@ func TestDirectoryLinkResolverScopeAndEncoding(t *testing.T) {
 	handler = &documentHandler{workspace: singleRootWorkspace(single)}
 	if got, _ := handler.directoryDocumentResolver(t.Context(), handler.workspace.primary())("topic%20space"); got != "" {
 		t.Fatal(got)
+	}
+}
+
+// TestDirectoryEntrySkipsIgnoredDocuments pins the entry-document policy:
+// the walk must judge the request's ignore snapshot, so an ignored
+// README.md never blocks a publishable index.md and the admission check
+// admits the pick. The fixtures sit in a hidden directory, the combination
+// --hidden brings into entry resolution.
+func TestDirectoryEntrySkipsIgnoredDocuments(t *testing.T) {
+	t.Parallel()
+	root := canonicalDirectory(t, t.TempDir())
+	writeTestFile(t, filepath.Join(root, ".gitignore"), ".notes/README.md\n")
+	writeTestFile(t, filepath.Join(root, ".notes", "README.md"), "# Ignored\n")
+	writeTestFile(t, filepath.Join(root, ".notes", "index.md"), "# Notes index\n")
+	scope := rootScope{
+		root:      root,
+		discovery: files.DiscoverOptions{Depth: 4, SkipHidden: false},
+		ignore:    true,
+	}
+	handler := &documentHandler{workspace: singleRootWorkspace(scope)}
+	resolve := handler.directoryDocumentResolver(t.Context(), handler.workspace.primary())
+	if got, _ := resolve(".notes"); got != ".notes/index.md" {
+		t.Fatalf("directory entry = %q, want .notes/index.md", got)
+	}
+
+	// The same workspace with ignore disabled publishes the README entry.
+	scope.ignore = false
+	handler = &documentHandler{workspace: singleRootWorkspace(scope)}
+	resolve = handler.directoryDocumentResolver(t.Context(), handler.workspace.primary())
+	if got, _ := resolve(".notes"); got != ".notes/README.md" {
+		t.Fatalf("entry without ignore rules = %q, want .notes/README.md", got)
+	}
+}
+
+// TestDirectoryLinkResolverDegradesOnUnreadableRules pins the failure mode
+// for rule files that cannot be read: the link stays unresolved instead of
+// widening the walk, while the document routes keep answering 500.
+func TestDirectoryLinkResolverDegradesOnUnreadableRules(t *testing.T) {
+	t.Parallel()
+	root := canonicalDirectory(t, t.TempDir())
+	if err := os.Mkdir(filepath.Join(root, ".gitignore"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeTestFile(t, filepath.Join(root, "topic", "a.md"), "# A")
+	scope := rootScope{
+		root:      root,
+		discovery: files.DiscoverOptions{Depth: 4, SkipHidden: true},
+		ignore:    true,
+	}
+	handler := &documentHandler{workspace: singleRootWorkspace(scope)}
+	resolve := handler.directoryDocumentResolver(t.Context(), handler.workspace.primary())
+	if got, _ := resolve("topic"); got != "" {
+		t.Fatalf("directory entry = %q, want empty on unreadable rules", got)
 	}
 }

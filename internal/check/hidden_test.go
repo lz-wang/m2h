@@ -158,6 +158,53 @@ func TestCheckRejectsProtectedInputs(t *testing.T) {
 	}
 }
 
+// TestCheckActiveWebAssetsFollowServer pins the assets-route refusal for
+// HTML/JS/CSS on both identities: the server refuses active web documents
+// so nothing in the published root becomes same-origin executable content,
+// and a reference to one reads as broken here instead of falsely valid.
+func TestCheckActiveWebAssetsFollowServer(t *testing.T) {
+	t.Run("direct references through the assets route", func(t *testing.T) {
+		result, err := runCheck(t, map[string]string{
+			"README.md":  "# Readme\n\n[App](app.js)\n\n<img src=\"style.css\">\n\n![Manual](manual.pdf)\n",
+			"app.js":     "console.log(1)",
+			"style.css":  "body{}",
+			"manual.pdf": "pdf",
+		}, Options{Depth: 4, Hidden: true})
+		summary := summarize(t, result, err)
+
+		if len(summary) != 2 {
+			t.Fatalf("diagnostics = %v, want exactly the two active-web findings", summary)
+		}
+		for _, diagnostic := range result.Diagnostics {
+			if diagnostic.Rule != "local-target.missing" {
+				t.Errorf("rule = %q, want local-target.missing", diagnostic.Rule)
+			}
+			if !strings.Contains(diagnostic.Message, "active web documents") {
+				t.Errorf("message %q must name the active-web rule", diagnostic.Message)
+			}
+		}
+	})
+
+	t.Run("passive alias to an active canonical target", func(t *testing.T) {
+		base := setupCheckRoot(t, map[string]string{
+			"README.md": "# Readme\n\n![Safe](safe.js.txt)\n",
+			"app.js":    "console.log(1)",
+		})
+		if err := os.Symlink(filepath.Join(base, "app.js"), filepath.Join(base, "safe.js.txt")); err != nil {
+			t.Fatal(err)
+		}
+
+		result, err := Run(context.Background(), Options{Input: base, Depth: 4, Hidden: true})
+		summary := summarize(t, result, err)
+		if len(summary) != 1 || !strings.Contains(summary[0], "local-target.missing") {
+			t.Fatalf("diagnostics = %v, want the canonical active-web finding", summary)
+		}
+		if !strings.Contains(result.Diagnostics[0].Message, "active web documents") {
+			t.Errorf("message %q must name the active-web rule", result.Diagnostics[0].Message)
+		}
+	})
+}
+
 // TestCheckHiddenSymlinkAliasFollowsServer pins the canonical-target rule on
 // both routes: a visible alias to a hidden document is refused by default
 // and served with --hidden, while an alias to a protected file never serves.

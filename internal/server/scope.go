@@ -170,7 +170,7 @@ func (scope rootScope) allowsAsset(relative string) bool {
 	if (scope.isSingleFile() || scope.discovery.SkipHidden) && files.IsHiddenPath(relative) {
 		return false
 	}
-	return !isActiveWebAsset(relative)
+	return !files.IsActiveWebAsset(relative)
 }
 
 // The policy checks below layer the root's ignore rules on top of the

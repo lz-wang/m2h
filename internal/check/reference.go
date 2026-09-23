@@ -261,6 +261,14 @@ func checkReference(
 			return append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
 				fmt.Sprintf("target %q is not accessible: %s", status.target, reason.message()), reference)), nil
 		}
+		// Active web documents (HTML/JS/CSS) are refused by the assets route
+		// so nothing in the published root becomes same-origin executable
+		// content — the reference reads as broken here too, on the alias and
+		// the canonical identity alike.
+		if (files.IsActiveWebAsset(status.target) || (status.resolved != "" && files.IsActiveWebAsset(status.resolved))) && rules.Enabled(RuleLocalTargetMissing) {
+			return append(diagnostics, current.diagnostic(RuleLocalTargetMissing,
+				fmt.Sprintf("target %q is not accessible: the assets route never serves active web documents", status.target), reference)), nil
+		}
 		// Assets only need to exist and be regular — but the .gitignore rules
 		// still decide reachability: the server refuses an ignored asset, so
 		// the reference reads as broken here too.
