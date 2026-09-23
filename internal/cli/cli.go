@@ -88,6 +88,7 @@ func serverFlags() []urfavecli.Flag {
 		widthFlag(),
 		&urfavecli.BoolWithInverseFlag{Name: "toc", Value: defaultTOC, Usage: "show the document table of contents", Local: true},
 		&urfavecli.BoolWithInverseFlag{Name: "gitignore", Value: true, Usage: "respect .gitignore files within directory roots", Local: true},
+		&urfavecli.BoolWithInverseFlag{Name: "hidden", Value: false, Usage: "include hidden files and directories", Local: true},
 		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
 		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
 	}
@@ -140,6 +141,7 @@ func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buil
 		Pattern:    command.String("glob"),
 		Depth:      command.Int("depth"),
 		Gitignore:  command.Bool("gitignore"),
+		Hidden:     command.Bool("hidden"),
 		PatternSet: command.IsSet("glob"),
 		DepthSet:   command.IsSet("depth"),
 		TOCSet:     command.IsSet("toc"),

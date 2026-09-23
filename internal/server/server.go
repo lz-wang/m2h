@@ -55,6 +55,12 @@ type Options struct {
 	// The zero value keeps the check off for library callers; the CLI flag
 	// defaults to true and always passes an explicit value.
 	Gitignore bool
+	// Hidden admits dot-prefixed paths into the published scope: discovery,
+	// document admission, assets and search alike. The zero value keeps the
+	// default hidden-path filtering on; the CLI passes the --hidden flag's
+	// explicit value. Protected paths (.git, .ssh, .env) stay unpublished
+	// whatever this says.
+	Hidden bool
 	Log       io.Writer
 	UI        fs.FS
 	Version   string
@@ -119,14 +125,15 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	}
 	runContext, cancel := context.WithCancel(ctx)
 	defer cancel()
-	// Web publishing hides dot-prefixed paths: anything under a dot component
-	// of a directory root (.git/, .env, foo/.private/) is not publishable
-	// content. Static analysis (m2h check) keeps its own discovery without
-	// SkipHidden, so this policy never narrows what check can inspect.
+	// Web publishing hides dot-prefixed paths unless --hidden says otherwise:
+	// anything under a dot component of a directory root (.git/, .env,
+	// foo/.private/) stays out of the published scope, while protected paths
+	// are refused even with the flag. Static analysis (m2h check) derives its
+	// own discovery from the same flag, so both commands see one scope.
 	workspace, err := newWorkspace(inputs, files.DiscoverOptions{
 		Depth:      normalized.Depth,
 		Pattern:    normalized.Pattern,
-		SkipHidden: true,
+		SkipHidden: !normalized.Hidden,
 		Log:        logger,
 	}, normalized.Gitignore)
 	if err != nil {

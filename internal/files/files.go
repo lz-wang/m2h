@@ -43,9 +43,10 @@ type DiscoverOptions struct {
 	ExcludeRoot string
 	Excludes    []string
 	// SkipHidden keeps every dot-prefixed path component out of the results.
-	// Web publishing turns it on so implicitly published directory content
-	// never exposes dotfiles; static analysis leaves it off to keep checking
-	// hidden documents possible.
+	// Both published scopes (serve, check) turn it on by default so
+	// implicitly published directory content never exposes dotfiles; the
+	// caller's Hidden option decides the value. Protected paths are pruned
+	// regardless of this flag.
 	SkipHidden bool
 	Log        io.Writer
 	// Ignore applies the root's publishing rules (.gitignore today) on top

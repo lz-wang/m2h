@@ -58,6 +58,11 @@ type Options struct {
 	// scope, and references pointing at them are reported unreachable.
 	// Single-file inputs stay checked whatever their rules say.
 	Gitignore bool
+	// Hidden admits dot-prefixed Markdown documents and assets into the
+	// scope, mirroring the serve command's --hidden: by default hidden paths
+	// stay unchecked and references pointing at them report not-served.
+	// Protected paths (.git, .ssh, .env) stay excluded whatever this says.
+	Hidden bool
 }
 
 // Result summarizes one completed check run. Files counts every Markdown
@@ -106,8 +111,9 @@ func Run(ctx context.Context, options Options) (Result, error) {
 		// consistent view of the rules — the same contract the server's
 		// per-request snapshot gives one request.
 		discovery := files.DiscoverOptions{
-			Depth:   options.Depth,
-			Pattern: options.Pattern,
+			Depth:      options.Depth,
+			Pattern:    options.Pattern,
+			SkipHidden: !options.Hidden,
 		}
 		if options.Gitignore {
 			matcher, err := files.NewGitIgnore(input.Path)
