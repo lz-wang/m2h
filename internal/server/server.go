@@ -60,10 +60,10 @@ type Options struct {
 	// default hidden-path filtering on; the CLI passes the --hidden flag's
 	// explicit value. Protected paths (.git, .ssh, .env) stay unpublished
 	// whatever this says.
-	Hidden bool
-	Log       io.Writer
-	UI        fs.FS
-	Version   string
+	Hidden  bool
+	Log     io.Writer
+	UI      fs.FS
+	Version string
 
 	OnListening func(string)
 }

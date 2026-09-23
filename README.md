@@ -18,7 +18,7 @@
 - 正文图片（含链接、picture、SVG）与 Mermaid、Vega-Lite 图表统一居中，WebUI 与 HTML 导出保持一致
 - 正文图片延迟加载：接近视口时才请求实际资源，加载中显示内置占位图，失败折叠为统一占位并提示原始路径
 - 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
-- 输入 root 即发布边界：目录服务隐藏点开头路径，附件路由拒绝 HTML/JS/CSS 等主动 Web 内容，响应携带统一浏览器安全头
+- 输入 root 即发布边界：目录默认隐藏点开头路径（`--hidden` 可包含），附件路由拒绝 HTML/JS/CSS 等主动 Web 内容，响应携带统一浏览器安全头
 - 可将单个 Markdown 文件导出为 HTML
 - 可检查 Markdown 文档的 Frontmatter、本地引用、锚点与结构问题（[28 条规则与演示](docs/demos/checkers/00-index.md)）
 
@@ -109,6 +109,7 @@ m2h /srv/docs --host 127.0.0.1 --port 8793 --no-open
 | `--glob` | Markdown 文件过滤规则 |
 | `--depth`, `-d` | 目录最大递归深度，默认 `4` |
 | `--gitignore` / `--no-gitignore` | 是否遵循目录内的 `.gitignore` 规则，默认开启（`true`） |
+| `--hidden` / `--no-hidden` | 是否包含隐藏文件和目录，默认关闭（`false`）；`.git`、`.ssh`、`.env` 等保护路径始终排除 |
 
 更多选项：
 
@@ -226,6 +227,24 @@ m2h check --no-gitignore ./docs
 
 隐藏文件限制、符号链接边界与 root 隔离等安全规则独立于该开关，始终生效。
 完整的规则语法、嵌套覆盖关系与实现边界见 [Git Ignore 过滤](docs/gitignore.md)。
+
+### 隐藏文件发布
+
+目录输入默认隐藏点前缀路径：`.draft.md`、`.notes/` 等不出现在侧边栏与全文搜索中，
+文档与资源通过 URL 直接访问时一律返回 404；`m2h check` 同样默认跳过。需要发布
+隐藏内容时使用 `--hidden`，侧边栏、文档路由、静态资源、全文搜索与 check 同步生效：
+
+```console
+m2h --hidden ./docs
+m2h check --hidden ./docs
+```
+
+`--hidden` 只放宽隐藏路径过滤，不覆盖 `.gitignore`、`--glob`、`--depth` 与符号链接
+边界；被 `.gitignore` 排除的隐藏文档需要同时 `--hidden --no-gitignore` 才会纳入。
+`.git`、`.ssh`、`.env` 及 `.env.*` 等敏感路径受独立的永久保护，任何开关都无法发布。
+显式指定的单个文件不受影响——`m2h .draft.md` 照常预览与检查。
+
+完整的入口表、保护规则与链接一致性说明见 [隐藏文件发布](docs/hidden.md)。
 
 ## Markdown 支持
 
