@@ -11,12 +11,17 @@ import (
 
 // DirectoryDocument selects a visible Markdown entry inside a real
 // directory. Callers supply their discovered scope, preserving depth/glob and
-// root isolation. Directory symlinks are never followed.
-func DirectoryDocument(root, directory string, visible []string) string {
-	if IsHiddenPath(directory) && directory != "." {
-		return ""
-	}
+// root isolation. skipHidden mirrors the scope's discovery policy: off, a
+// hidden directory is as good an entry target as a visible one. Protected
+// directories are refused either way. Directory symlinks are never followed.
+func DirectoryDocument(root, directory string, visible []string, skipHidden bool) string {
 	if directory != "." {
+		if skipHidden && IsHiddenPath(directory) {
+			return ""
+		}
+		if IsProtectedPath(directory) {
+			return ""
+		}
 		if err := RequireExactPath(root, directory); err != nil {
 			return ""
 		}
@@ -25,13 +30,19 @@ func DirectoryDocument(root, directory string, visible []string) string {
 	if err != nil || !info.IsDir() {
 		return ""
 	}
+	publishable := func(candidate string) bool {
+		if !IsMarkdown(candidate) || IsProtectedPath(candidate) {
+			return false
+		}
+		return !skipHidden || !IsHiddenPath(candidate)
+	}
 	children := make([]string, 0)
 	descendants := make([]string, 0)
 	for _, candidate := range visible {
-		if IsMarkdown(candidate) && !IsHiddenPath(candidate) && (directory == "." || strings.HasPrefix(candidate, directory+"/")) {
+		if publishable(candidate) && (directory == "." || strings.HasPrefix(candidate, directory+"/")) {
 			descendants = append(descendants, candidate)
 		}
-		if path.Dir(candidate) == directory && IsMarkdown(candidate) && !IsHiddenPath(candidate) {
+		if path.Dir(candidate) == directory && publishable(candidate) {
 			children = append(children, candidate)
 		}
 	}
@@ -70,13 +81,16 @@ func pickEntryDocument(children, descendants []string) string {
 
 // reachableMarkdown reports whether one directory entry is a publishable
 // Markdown file under options: a regular file — resolving file symlinks
-// within the root, refusing anything else — that is not ignored when an
-// Ignore matcher applies (on both the alias path and the canonical target),
-// whose canonical target is not hidden when SkipHidden applies, and that
-// passes depth and glob rules on its requested path. It mirrors Discover's
-// per-file decisions so a document FindDirectoryDocument picks is one
-// Discover would have listed.
+// within the root, refusing anything else — that is not protected and not
+// ignored when an Ignore matcher applies (on both the alias path and the
+// canonical target), whose canonical target is not hidden when SkipHidden
+// applies, and that passes depth and glob rules on its requested path. It
+// mirrors Discover's per-file decisions so a document FindDirectoryDocument
+// picks is one Discover would have listed.
 func reachableMarkdown(root, current string, entry os.DirEntry, relative string, options DiscoverOptions) (bool, error) {
+	if IsProtectedPath(relative) {
+		return false, nil
+	}
 	if options.Ignore != nil {
 		ignored, err := options.Ignore.Ignored(relative, false)
 		if err != nil {
@@ -113,23 +127,21 @@ func reachableMarkdown(root, current string, entry os.DirEntry, relative string,
 			return false, nil
 		}
 	}
-	if options.SkipHidden {
-		resolvedRelative, err := filepath.Rel(root, target)
-		if err != nil {
-			return false, err
-		}
-		if IsHiddenPath(NormalizeRelativePath(resolvedRelative)) {
-			return false, nil
-		}
+	resolvedRelative, err := filepath.Rel(root, target)
+	if err != nil {
+		return false, err
+	}
+	resolvedRelative = NormalizeRelativePath(resolvedRelative)
+	if options.SkipHidden && IsHiddenPath(resolvedRelative) {
+		return false, nil
+	}
+	if IsProtectedPath(resolvedRelative) {
+		return false, nil
 	}
 	// A visible symlink must not publish an ignored canonical target, the
 	// same alias rule Discover applies after its own safety resolution.
 	if options.Ignore != nil && target != current {
-		resolvedRelative, err := filepath.Rel(root, target)
-		if err != nil {
-			return false, err
-		}
-		ignored, err := options.Ignore.Ignored(NormalizeRelativePath(resolvedRelative), false)
+		ignored, err := options.Ignore.Ignored(resolvedRelative, false)
 		if err != nil {
 			return false, err
 		}
@@ -154,10 +166,13 @@ func FindDirectoryDocument(ctx context.Context, root, directory string, options 
 	if err := ValidateDiscoverOptions(options); err != nil {
 		return ""
 	}
-	if IsHiddenPath(directory) && directory != "." {
-		return ""
-	}
 	if directory != "." {
+		if options.SkipHidden && IsHiddenPath(directory) {
+			return ""
+		}
+		if IsProtectedPath(directory) {
+			return ""
+		}
 		if err := RequireExactPath(root, directory); err != nil {
 			return ""
 		}
@@ -213,6 +228,9 @@ func FindDirectoryDocument(ctx context.Context, root, directory string, options 
 				relative = level + "/" + relative
 			}
 			current := filepath.Join(root, filepath.FromSlash(relative))
+			if IsProtectedPath(relative) {
+				continue
+			}
 			if options.SkipHidden && IsHiddenPath(relative) {
 				continue
 			}

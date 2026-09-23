@@ -166,9 +166,19 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 			return fmt.Errorf("make %q relative to %q: %w", current, input.Path, err)
 		}
 		relative = NormalizeRelativePath(relative)
+		// Protected paths are pruned before every other rule: .git/, .ssh/
+		// and .env files stay unpublished whatever SkipHidden or the ignore
+		// rules say, and SkipDir keeps the walk out of their subtrees
+		// entirely.
+		if IsProtectedPath(relative) {
+			if entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
 		// Hidden components are pruned during the walk, not filtered after it:
-		// SkipDir keeps the walker out of .git/ and friends entirely, so a
-		// large hidden subtree costs nothing.
+		// SkipDir keeps the walker out of the subtree entirely, so a large
+		// hidden directory costs nothing.
 		if options.SkipHidden && IsHiddenPath(relative) {
 			if entry.IsDir() {
 				return filepath.SkipDir
@@ -209,28 +219,26 @@ func Discover(ctx context.Context, root string, options DiscoverOptions) (Discov
 		if !reachable {
 			return nil
 		}
-		// The hidden rule runs on the canonical target as well: a visible
+		// The publishing rules run on the canonical target as well: a visible
 		// alias (public.md → .secret.md) would otherwise publish — and even
 		// title-leak — a file the walk never surfaced. Only the security
-		// property is re-checked; glob/depth keep judging the alias path.
-		if options.SkipHidden {
-			resolvedRelative, relErr := filepath.Rel(input.Path, safe.target)
-			if relErr != nil {
-				return fmt.Errorf("make %q relative to %q: %w", safe.target, input.Path, relErr)
-			}
-			if IsHiddenPath(NormalizeRelativePath(resolvedRelative)) {
-				return nil
-			}
+		// properties are re-checked; glob/depth keep judging the alias path.
+		resolvedRelative, relErr := filepath.Rel(input.Path, safe.target)
+		if relErr != nil {
+			return fmt.Errorf("make %q relative to %q: %w", safe.target, input.Path, relErr)
+		}
+		resolvedRelative = NormalizeRelativePath(resolvedRelative)
+		if options.SkipHidden && IsHiddenPath(resolvedRelative) {
+			return nil
+		}
+		if IsProtectedPath(resolvedRelative) {
+			return nil
 		}
 		// The same alias argument applies to the ignore rules: an entry whose
 		// canonical target is ignored stays unpublished even when it is
 		// reached through a visible symlink.
 		if options.Ignore != nil {
-			resolvedRelative, relErr := filepath.Rel(input.Path, safe.target)
-			if relErr != nil {
-				return fmt.Errorf("make %q relative to %q: %w", safe.target, input.Path, relErr)
-			}
-			ignored, err := options.Ignore.Ignored(NormalizeRelativePath(resolvedRelative), false)
+			ignored, err := options.Ignore.Ignored(resolvedRelative, false)
 			if err != nil {
 				return fmt.Errorf("walk %q: %w", current, err)
 			}
@@ -303,6 +311,27 @@ func IsHiddenPath(relative string) bool {
 	relative = NormalizeRelativePath(relative)
 	for segment := range strings.SplitSeq(relative, "/") {
 		if strings.HasPrefix(segment, ".") {
+			return true
+		}
+	}
+	return false
+}
+
+// IsProtectedPath reports whether a normalized root-relative path crosses a
+// component the publishing policy never serves: .git, .ssh, .env and its
+// derived spellings (.env.local, .env.production, ...). Hidden admission is
+// configurable (--hidden), this protection is not — publishing an option
+// must not turn version-control internals, credential stores or environment
+// files into web content, so every caller applies the rule before and after
+// symlink resolution. Like IsHiddenPath it is a structural rule judged on
+// the path's own components.
+func IsProtectedPath(relative string) bool {
+	relative = NormalizeRelativePath(relative)
+	for segment := range strings.SplitSeq(relative, "/") {
+		switch {
+		case segment == ".git" || segment == ".ssh":
+			return true
+		case segment == ".env" || strings.HasPrefix(segment, ".env."):
 			return true
 		}
 	}

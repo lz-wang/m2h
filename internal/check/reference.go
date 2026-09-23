@@ -192,7 +192,7 @@ func checkReference(
 		if resolved == "." {
 			directory = "."
 		}
-		if document := files.DirectoryDocument(scope.root, directory, visible); document != "" {
+		if document := files.DirectoryDocument(scope.root, directory, visible, scope.discovery.SkipHidden); document != "" {
 			encoded := url.URL{Path: document}
 			status = resolver.resolve(encoded.EscapedPath())
 			directoryLink = true

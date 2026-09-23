@@ -29,27 +29,27 @@ func TestDirectoryDocumentSelection(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := DirectoryDocument(root, "topic", tt.visible); got != tt.want {
+			if got := DirectoryDocument(root, "topic", tt.visible, true); got != tt.want {
 				t.Fatalf("got %q want %q", got, tt.want)
 			}
 		})
 	}
-	if got := DirectoryDocument(root, ".", []string{"README.md"}); got != "README.md" {
+	if got := DirectoryDocument(root, ".", []string{"README.md"}, true); got != "README.md" {
 		t.Fatal(got)
 	}
-	if got := DirectoryDocument(root, "absent", []string{"absent/README.md"}); got != "" {
+	if got := DirectoryDocument(root, "absent", []string{"absent/README.md"}, true); got != "" {
 		t.Fatal(got)
 	}
 	if err := os.WriteFile(filepath.Join(root, "file"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if got := DirectoryDocument(root, "file", []string{"file/README.md"}); got != "" {
+	if got := DirectoryDocument(root, "file", []string{"file/README.md"}, true); got != "" {
 		t.Fatal(got)
 	}
 	if err := os.Symlink(filepath.Join(root, "topic"), filepath.Join(root, "alias")); err != nil {
 		t.Skip(err)
 	}
-	if got := DirectoryDocument(root, "alias", []string{"alias/README.md"}); got != "" {
+	if got := DirectoryDocument(root, "alias", []string{"alias/README.md"}, true); got != "" {
 		t.Fatal("directory symlink accepted")
 	}
 }
