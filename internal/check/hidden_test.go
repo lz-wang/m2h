@@ -130,6 +130,34 @@ func TestCheckHiddenLinkConsistencyWithServer(t *testing.T) {
 	}
 }
 
+// TestCheckRejectsProtectedInputs pins the root boundary on the check side:
+// a protected path cannot become the input, directly or as a file beneath a
+// protected directory, mirroring the server's refusal.
+func TestCheckRejectsProtectedInputs(t *testing.T) {
+	t.Parallel()
+
+	base := setupCheckRoot(t, map[string]string{
+		"docs/README.md":  "# Docs\n",
+		".git/config":     "[core]",
+		".ssh/notes.md":   "# Notes\n",
+		".env.production": "TOKEN=1",
+	})
+
+	for _, protected := range []string{
+		filepath.Join(base, ".git"),
+		filepath.Join(base, ".ssh", "notes.md"),
+		filepath.Join(base, ".env.production"),
+	} {
+		result, err := Run(context.Background(), Options{Input: protected, Depth: 4, Hidden: true})
+		if err == nil || !strings.Contains(err.Error(), "protected path") {
+			t.Errorf("Run(%q) error = %v, want protected-path refusal", protected, err)
+		}
+		if result.Files != 0 {
+			t.Errorf("Run(%q) inspected %d files, want none", protected, result.Files)
+		}
+	}
+}
+
 // TestCheckHiddenSymlinkAliasFollowsServer pins the canonical-target rule on
 // both routes: a visible alias to a hidden document is refused by default
 // and served with --hidden, while an alias to a protected file never serves.

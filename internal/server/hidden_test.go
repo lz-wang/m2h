@@ -1,6 +1,9 @@
 package server
 
 import (
+	"context"
+	"errors"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -9,6 +12,7 @@ import (
 	"testing"
 
 	"github.com/lz-wang/m2h/internal/files"
+	"github.com/lz-wang/m2h/internal/markdown"
 )
 
 // hiddenWorkspace builds one directory root containing plain, hidden,
@@ -201,6 +205,49 @@ func TestHiddenSingleFileInputStaysExplicit(t *testing.T) {
 		paths := hiddenFileList(t, handler)
 		if len(paths) != 1 || paths[0] != ".draft.md" {
 			t.Errorf("hidden=%v: single-file listing = %v, want [.draft.md]", hidden, paths)
+		}
+	}
+}
+
+// TestRunRejectsProtectedRoots pins the input-root boundary: a protected
+// path cannot become an input root even with --hidden, through a direct
+// name or through one root among several, and the server never reaches the
+// network for such a workspace.
+func TestRunRejectsProtectedRoots(t *testing.T) {
+	t.Parallel()
+
+	base := t.TempDir()
+	docs := filepath.Join(base, "docs")
+	writeTestFile(t, filepath.Join(docs, "README.md"), "# Docs")
+	writeTestFile(t, filepath.Join(base, ".git", "config"), "[core]")
+	writeTestFile(t, filepath.Join(base, ".env.production"), "TOKEN=1")
+
+	tests := []struct {
+		name   string
+		inputs []string
+		hidden bool
+	}{
+		{name: "protected git directory", inputs: []string{filepath.Join(base, ".git")}, hidden: true},
+		{name: "derived env file", inputs: []string{filepath.Join(base, ".env.production")}, hidden: true},
+		{name: "one protected root among several", inputs: []string{docs, filepath.Join(base, ".git")}, hidden: true},
+	}
+	for _, test := range tests {
+		called := false
+		deps := testDependencies()
+		deps.listen = func(string, string) (net.Listener, error) {
+			called = true
+			return nil, errors.New("unexpected")
+		}
+		err := run(context.Background(), Options{
+			Inputs: test.inputs,
+			Mode:   markdown.ModeAuto,
+			Hidden: test.hidden,
+		}, deps)
+		if err == nil || !strings.Contains(err.Error(), "protected path") {
+			t.Errorf("%s error = %v, want protected-path refusal", test.name, err)
+		}
+		if called {
+			t.Errorf("%s reached network before validation", test.name)
 		}
 	}
 }

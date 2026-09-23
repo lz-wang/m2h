@@ -5,8 +5,68 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 )
+
+// TestResolveRejectsProtectedInputs pins the root boundary: a protected
+// path cannot become an input root, directly or through a symlink alias,
+// whatever its kind — inside such a root the protected name disappears from
+// every root-relative judgment, so refusing the root is the only guard.
+func TestResolveRejectsProtectedInputs(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	for _, relative := range []string{
+		".git/config",
+		".ssh/id_ed25519",
+		".env/hosts.md",
+		".env.production",
+		"docs/README.md",
+	} {
+		writeTestFile(t, filepath.Join(root, filepath.FromSlash(relative)), "x")
+	}
+
+	for _, protected := range []string{
+		filepath.Join(root, ".git"),
+		filepath.Join(root, ".ssh"),
+		filepath.Join(root, ".env"),
+		filepath.Join(root, ".env.production"),
+		filepath.Join(root, ".ssh", "id_ed25519"),
+	} {
+		if _, err := Resolve(protected); err == nil || !strings.Contains(err.Error(), "protected path") {
+			t.Errorf("Resolve(%q) error = %v, want protected-path refusal", protected, err)
+		}
+	}
+
+	// Symlink aliases resolve to the protected target before the check.
+	if err := os.Symlink(filepath.Join(root, ".git"), filepath.Join(root, "alias")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Resolve(filepath.Join(root, "alias")); err == nil || !strings.Contains(err.Error(), "protected path") {
+		t.Errorf("Resolve(alias) error = %v, want protected-path refusal", err)
+	}
+	if err := os.Symlink(filepath.Join(root, ".env.production"), filepath.Join(root, "config.md")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Resolve(filepath.Join(root, "config.md")); err == nil || !strings.Contains(err.Error(), "protected path") {
+		t.Errorf("Resolve(config.md) error = %v, want protected-path refusal", err)
+	}
+
+	// A visible root that merely contains protected entries keeps resolving.
+	input, err := Resolve(filepath.Join(root, "docs"))
+	if err != nil {
+		t.Fatalf("Resolve(docs) error = %v", err)
+	}
+	if input.Kind != KindDirectory {
+		t.Fatalf("docs kind = %d, want directory", input.Kind)
+	}
+
+	// The walking entry-document selection inherits the same refusal.
+	if got := FindDirectoryDocument(context.Background(), filepath.Join(root, ".git"), ".", DiscoverOptions{Depth: 4, SkipHidden: false}); got != "" {
+		t.Fatalf("FindDirectoryDocument on protected root = %q, want empty", got)
+	}
+}
 
 // TestIsProtectedPathCoversSensitiveComponents pins the permanent protection
 // policy: .git, .ssh, .env and derived .env.* spellings are protected at any

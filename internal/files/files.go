@@ -63,6 +63,11 @@ type Discovery struct {
 }
 
 // Resolve normalizes an input and permits a root file or directory symlink.
+// The resolved path must not itself cross a protected component: when a
+// protected directory becomes the input root, its contents are judged by
+// root-relative paths that no longer carry the protected name, so refusing
+// the root here is the only thing that keeps the permanent protection true
+// for explicitly named inputs too — whatever their kind.
 func Resolve(input string) (Input, error) {
 	if strings.TrimSpace(input) == "" {
 		return Input{}, fmt.Errorf("resolve input: path is required")
@@ -74,6 +79,9 @@ func Resolve(input string) (Input, error) {
 	info, err := os.Stat(resolved)
 	if err != nil {
 		return Input{}, fmt.Errorf("inspect input %q: %w", resolved, err)
+	}
+	if IsProtectedPath(resolved) {
+		return Input{}, fmt.Errorf("resolve input %q: %q is a protected path and cannot be published", input, resolved)
 	}
 	if info.IsDir() {
 		return Input{Path: resolved, Kind: KindDirectory}, nil
