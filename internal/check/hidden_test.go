@@ -205,6 +205,79 @@ func TestCheckActiveWebAssetsFollowServer(t *testing.T) {
 	})
 }
 
+// TestCheckCombinedPublishingRules walks one tree stacking every publishing
+// rule at once — a hidden directory, a gitignored entry candidate, a
+// publishable entry document, an ordinary attachment and an active web
+// file — and pins both run shapes end to end.
+func TestCheckCombinedPublishingRules(t *testing.T) {
+	sources := map[string]string{
+		".gitignore":       ".notes/README.md\n",
+		"README.md":        "# Readme\n\n[Notes](.notes/)\n\n![Logo](.notes/logo.png)\n\n[App](.notes/app.js)\n\n[Manual](manual.pdf)\n\n[Leak](alias.md)\n",
+		".notes/README.md": "# Ignored\n",
+		".notes/index.md":  "# Notes\n\n## Install\n\nnotes index text\n",
+		".notes/logo.png":  "PNG",
+		".notes/app.js":    "console.log(1)",
+		"manual.pdf":       "pdf",
+		".env/hosts.md":    "# Env doc\n",
+	}
+	base := setupCheckRoot(t, sources)
+	if err := os.Symlink(filepath.Join(base, ".env", "hosts.md"), filepath.Join(base, "alias.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("default reports every hidden target and the directory miss", func(t *testing.T) {
+		result, err := Run(context.Background(), Options{Input: base, Depth: 4, Gitignore: true})
+		summary := summarize(t, result, err)
+
+		if result.Files != 1 {
+			t.Fatalf("Files = %d, want 1", result.Files)
+		}
+		joined := strings.Join(summary, "\n")
+		for _, want := range []string{
+			"local-target.not-regular",   // the .notes/ directory link
+			"local-target.missing",       // logo.png, app.js — hidden assets
+			"markdown-target.not-served", // alias.md — canonical target is protected
+		} {
+			if !strings.Contains(joined, want) {
+				t.Errorf("missing %q finding: %v", want, summary)
+			}
+		}
+		if len(summary) != 4 {
+			t.Fatalf("diagnostics = %v, want four findings", summary)
+		}
+		for _, diagnostic := range result.Diagnostics {
+			if !strings.Contains(diagnostic.Message, "excluded as a hidden path") &&
+				!strings.Contains(diagnostic.Message, "not a regular file") &&
+				!strings.Contains(diagnostic.Message, "protected from publishing") {
+				t.Errorf("message %q must name the rule that refused it", diagnostic.Message)
+			}
+		}
+	})
+
+	t.Run("hidden keeps only the active-web and protected findings", func(t *testing.T) {
+		result, err := Run(context.Background(), Options{Input: base, Depth: 4, Gitignore: true, Hidden: true})
+		summary := summarize(t, result, err)
+
+		if result.Files != 2 {
+			t.Fatalf("Files = %d, want 2 (the gitignored README stays out)", result.Files)
+		}
+		if len(summary) != 2 {
+			t.Fatalf("diagnostics = %v, want the two findings", summary)
+		}
+		// The directory link resolved to the publishable index.md, the logo
+		// is an ordinary attachment, and the two survivors name their rules.
+		wantMessages := []string{
+			"the assets route never serves active web documents", // .notes/app.js
+			"is protected from publishing",                       // alias.md → .env/hosts.md
+		}
+		for index, diagnostic := range result.Diagnostics {
+			if !strings.Contains(diagnostic.Message, wantMessages[index]) {
+				t.Errorf("message %q, want %q", diagnostic.Message, wantMessages[index])
+			}
+		}
+	})
+}
+
 // TestCheckHiddenSymlinkAliasFollowsServer pins the canonical-target rule on
 // both routes: a visible alias to a hidden document is refused by default
 // and served with --hidden, while an alias to a protected file never serves.

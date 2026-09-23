@@ -240,4 +240,15 @@ func TestFindDirectoryDocumentHonorsHiddenPolicy(t *testing.T) {
 	if got := FindDirectoryDocument(context.Background(), root, "topic", DiscoverOptions{Depth: 4, SkipHidden: true}); got != "" {
 		t.Fatalf("alias to hidden target = %q, want empty", got)
 	}
+
+	// A visible alias whose canonical target is protected stays excluded
+	// even with SkipHidden off: the walk judges the resolved identity too.
+	writeTestFile(t, filepath.Join(root, "leaks", ".env.production"), "TOKEN=1")
+	writeTestFile(t, filepath.Join(root, "leaks", "public.md"), "# Public")
+	if err := os.Symlink(filepath.Join(root, "leaks", ".env.production"), filepath.Join(root, "leaks", "alias.md")); err != nil {
+		t.Fatal(err)
+	}
+	if got := FindDirectoryDocument(context.Background(), root, "leaks", DiscoverOptions{Depth: 4, SkipHidden: false}); got != "leaks/public.md" {
+		t.Fatalf("entry with a protected canonical alias = %q, want leaks/public.md", got)
+	}
 }

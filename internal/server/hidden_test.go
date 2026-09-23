@@ -252,6 +252,63 @@ func TestRunRejectsProtectedRoots(t *testing.T) {
 	}
 }
 
+// TestHiddenCombinedPublishingRules serves one tree stacking every
+// publishing rule at once — a hidden directory, a gitignored entry
+// candidate, a publishable entry document, an ordinary attachment and an
+// active web file — and pins the routes and entry resolution end to end.
+func TestHiddenCombinedPublishingRules(t *testing.T) {
+	root := t.TempDir()
+	for name, contents := range map[string]string{
+		".gitignore":       ".notes/README.md\n",
+		"README.md":        "# Readme\n\n[Notes](.notes/)\n\n![Logo](.notes/logo.png)\n",
+		".notes/README.md": "# Ignored\n",
+		".notes/index.md":  "# Notes\n\nnotes index text\n",
+		".notes/logo.png":  "PNG",
+		".notes/app.js":    "console.log(1)",
+	} {
+		writeTestFile(t, filepath.Join(root, filepath.FromSlash(name)), contents)
+	}
+	input, err := files.Resolve(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	built, err := newWorkspace([]files.Input{input}, files.DiscoverOptions{Depth: 4, SkipHidden: false}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := newDocumentHandler(built, nil, directoryTestUI())
+
+	// The rendered directory link resolves to the publishable entry, not
+	// the ignored README — the walk judges the request's ignore snapshot.
+	response := performRequest(handler, http.MethodGet, "/api/document?path=README.md")
+	if response.Code != http.StatusOK {
+		t.Fatalf("render README status = %d, want 200", response.Code)
+	}
+	var payload documentResponse
+	decodeJSON(t, response, &payload)
+	if !strings.Contains(payload.HTML, `href="/doc/.notes/index.md"`) {
+		t.Errorf("directory link unresolved to the publishable entry: %s", payload.HTML)
+	}
+
+	// The routes agree with the rendered links: the entry opens, the ignored
+	// candidate is refused, the attachment serves, the active web file does
+	// not.
+	for target, status := range map[string]int{
+		"/api/document?path=.notes/index.md":  http.StatusOK,
+		"/api/document?path=.notes/README.md": http.StatusNotFound,
+		"/assets/.notes/logo.png":             http.StatusOK,
+		"/assets/.notes/app.js":               http.StatusNotFound,
+		"/assets/.notes/README.md":            http.StatusNotFound,
+	} {
+		if response := performRequest(handler, http.MethodGet, target); response.Code != status {
+			t.Errorf("GET %s status = %d, want %d", target, response.Code, status)
+		}
+	}
+	if paths := hiddenSearchPaths(t, handler, "notes+index+text"); len(paths) != 1 || paths[0] != ".notes/index.md" {
+		t.Errorf("search = %v, want [.notes/index.md]", paths)
+	}
+}
+
 // TestHiddenDocumentBodyRenders pins that an admitted hidden document serves
 // real rendered content, not just a 200 shell.
 func TestHiddenDocumentBodyRenders(t *testing.T) {

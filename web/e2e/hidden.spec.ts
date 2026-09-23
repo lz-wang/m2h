@@ -61,14 +61,26 @@ async function startServer(port: number, extraFlags: string[]): Promise<void> {
 
 test.beforeAll(async () => {
   root = mkdtempSync(path.join(os.tmpdir(), "m2h-hidden-"));
-  writeFileSync(path.join(root, "README.md"), "# Root\n\nvisible text\n");
+  writeFileSync(
+    path.join(root, "README.md"),
+    "# Root\n\nvisible text\n\n[Notes](.notes/)\n",
+  );
   writeFileSync(path.join(root, ".draft.md"), "# Draft\n\ndraft text\n");
+  writeFileSync(path.join(root, ".gitignore"), ".notes/README.md\n");
   mkdirSync(path.join(root, ".notes"));
   writeFileSync(
     path.join(root, ".notes", "guide.md"),
     "# Guide\n\nnotes guide text\n",
   );
+  // The entry-document candidates stack the rules: the README is ignored,
+  // so the directory link must resolve to the publishable index.
+  writeFileSync(path.join(root, ".notes", "README.md"), "# Ignored\n");
+  writeFileSync(
+    path.join(root, ".notes", "index.md"),
+    "# Notes\n\nnotes index text\n",
+  );
   writeFileSync(path.join(root, ".notes", "image.png"), "png");
+  writeFileSync(path.join(root, ".notes", "app.js"), "console.log(1)");
   writeFileSync(path.join(root, ".env.production"), "TOKEN=1");
   await startServer(ports.hidden, ["--hidden"]);
   await startServer(ports.plain, []);
@@ -150,6 +162,38 @@ test("--hidden admits hidden documents to search, protected paths stay refused",
           `http://127.0.0.1:${port}/api/document?path=.env.production`,
         )
       ).status,
+    ).toBe(404);
+  }
+});
+
+test("combined rules keep the directory entry and asset policy aligned", async ({
+  page,
+}) => {
+  // The directory link resolves through the ignored README to the
+  // publishable index — --hidden and .gitignore compose instead of
+  // fighting over the entry.
+  await page.goto("/doc/README.md");
+  await page
+    .locator(".markdown-body")
+    .getByRole("link", { name: "Notes" })
+    .click();
+  await expect(page.locator(".markdown-body")).toContainText(
+    "notes index text",
+  );
+  await expect(page).toHaveURL(/\/doc\/\.notes\/index\.md$/);
+
+  // The assets route holds every rule in both shapes: the ignored entry
+  // candidate and the active web file stay refused, the attachment serves.
+  expect(
+    (await fetch(`http://127.0.0.1:${ports.hidden}/assets/.notes/image.png`))
+      .status,
+  ).toBe(200);
+  for (const port of [ports.hidden, ports.plain]) {
+    expect(
+      (await fetch(`http://127.0.0.1:${port}/assets/.notes/README.md`)).status,
+    ).toBe(404);
+    expect(
+      (await fetch(`http://127.0.0.1:${port}/assets/.notes/app.js`)).status,
     ).toBe(404);
   }
 });
