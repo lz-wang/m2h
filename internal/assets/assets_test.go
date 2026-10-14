@@ -424,3 +424,17 @@ func TestRichFontsAreWoff2Only(t *testing.T) {
 		}
 	}
 }
+
+func TestTabbedSharedStyles(t *testing.T) {
+	for _, mode := range []string{"light", "dark", "auto"} {
+		css, err := Stylesheet(mode)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{".m2h-tabbed-labels", "overflow-x: auto", "flex-wrap: nowrap", "clip-path: inset(50%)", "nth-of-type(32):checked", ":focus-visible", ".m2h-tabbed-stacked", "var(--m2h-copy-accent)"} {
+			if !strings.Contains(css, want) {
+				t.Errorf("%s missing %s", mode, want)
+			}
+		}
+	}
+}

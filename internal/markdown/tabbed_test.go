@@ -1,6 +1,8 @@
 package markdown
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/yuin/goldmark/ast"
@@ -57,5 +59,32 @@ func TestTabbedParserBoundaries(t *testing.T) {
 		if _, ok := parseTabs(source).FirstChild().(*TabSet); !ok {
 			t.Fatalf("not recognized: %q", source)
 		}
+	}
+}
+
+func TestTabbedHTML(t *testing.T) {
+	source := "=== \"<script>& label\"\n\n    first\n\n===+ \"Second\"\n\n    second\n\n===+ \"Third\"\n\n    third\n"
+	result, err := Render([]byte(source), RenderOptions{SourcePath: "tabs.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`role="group"`, `id="m2h-tab-1-2" checked`, `data-m2h-tab-id="m2h-tab-1-3"`, `&lt;script&gt;&amp; label`, `for="m2h-tab-1-1"`} {
+		if !strings.Contains(result.Body, want) {
+			t.Errorf("missing %q: %s", want, result.Body)
+		}
+	}
+	if strings.Count(result.Body, " checked") != 1 || strings.Contains(result.Body, `role="tab"`) {
+		t.Fatal("radio semantics")
+	}
+	var many strings.Builder
+	for i := 0; i < 33; i++ {
+		fmt.Fprintf(&many, "=== \"Tab %d\"\n\n    content%d\n\n", i, i)
+	}
+	result, err = Render([]byte(many.String()), RenderOptions{SourcePath: "many.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(result.Body, `type="radio"`) || !strings.Contains(result.Body, "m2h-tabbed-stacked") || strings.Count(result.Body, `<section class="m2h-tabbed-panel"`) != 33 || !strings.Contains(result.Body, "content32") {
+		t.Fatal("overflow lost content")
 	}
 }

@@ -3,10 +3,12 @@ package markdown
 import (
 	"bytes"
 	"fmt"
+	"html"
 
 	"github.com/yuin/goldmark"
 	"github.com/yuin/goldmark/ast"
 	"github.com/yuin/goldmark/parser"
+	"github.com/yuin/goldmark/renderer"
 	"github.com/yuin/goldmark/text"
 	"github.com/yuin/goldmark/util"
 )
@@ -126,5 +128,55 @@ func (*tabbedTransformer) Transform(document *ast.Document, _ text.Reader, _ par
 type tabbedExtension struct{}
 
 func (*tabbedExtension) Extend(m goldmark.Markdown) {
+	m.Renderer().AddOptions(renderer.WithNodeRenderers(util.Prioritized(&tabbedRenderer{}, 500)))
 	m.Parser().AddOptions(parser.WithBlockParsers(util.Prioritized(&tabbedParser{}, 650)), parser.WithASTTransformers(util.Prioritized(&tabbedTransformer{}, 900)))
+}
+
+// Groups above the CSS limit are readable stacked sections, never inaccessible
+// unchecked panels. Rendering and projection share the transformer's IDs.
+const maxInteractiveTabs = 32
+
+type tabbedRenderer struct{}
+
+func (*tabbedRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
+	reg.Register(kindTabSet, renderTabSet)
+	reg.Register(kindTabItem, renderTabItem)
+}
+func renderTabSet(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	set := node.(*TabSet)
+	if !entering {
+		_, _ = w.WriteString("</div></div>\n")
+		return ast.WalkContinue, nil
+	}
+	if set.ChildCount() > maxInteractiveTabs {
+		_, _ = w.WriteString(`<div class="m2h-tabbed-set m2h-tabbed-stacked"><div class="m2h-tabbed-content">`)
+		return ast.WalkContinue, nil
+	}
+	_, _ = w.WriteString(`<div class="m2h-tabbed-set" role="group" aria-label="标签内容">`)
+	index := 0
+	for child := set.FirstChild(); child != nil; child = child.NextSibling() {
+		item := child.(*TabItem)
+		checked := ""
+		if index == set.Selected {
+			checked = " checked"
+		}
+		_, _ = fmt.Fprintf(w, `<input class="m2h-tabbed-radio" type="radio" name="m2h-tab-set-%d" id="%s"%s>`, set.Number, item.ID, checked)
+		index++
+	}
+	_, _ = w.WriteString(`<div class="m2h-tabbed-labels">`)
+	for child := set.FirstChild(); child != nil; child = child.NextSibling() {
+		item := child.(*TabItem)
+		_, _ = fmt.Fprintf(w, `<label for="%s">%s</label>`, item.ID, html.EscapeString(item.Title))
+	}
+	_, _ = w.WriteString(`</div><div class="m2h-tabbed-content">`)
+	return ast.WalkContinue, nil
+}
+func renderTabItem(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
+	item := node.(*TabItem)
+	if entering {
+		_, _ = fmt.Fprintf(w, `<section class="m2h-tabbed-panel" data-m2h-tab-id="%s"><div class="m2h-tabbed-panel-title">%s</div>`, item.ID, html.EscapeString(item.Title))
+	} else {
+		_, _ = w.WriteString("</section>\n")
+	}
+	return ast.WalkContinue, nil
 }
