@@ -2313,3 +2313,21 @@ describe("math runtime detection", () => {
     },
   );
 });
+
+it("keeps hidden-tab Mermaid geometry independent of the hidden panel", async () => {
+  vi.resetModules();
+  mermaidMock.render.mockReset();
+  mermaidMock.render.mockResolvedValue({
+    svg: '<svg viewBox="0 0 240 120"></svg>',
+  });
+  const { renderRichContent } = await import("./render-rich-content");
+  const root = document.createElement("article");
+  root.innerHTML = `<div class="m2h-tabbed-set"><input type="radio" class="m2h-tabbed-radio" id="hidden"><section class="m2h-tabbed-panel" data-m2h-tab-id="hidden" style="display:none"><pre><code class="language-mermaid">graph TD; A--&gt;B</code></pre></section></div>`;
+  await renderRichContent(root, { mode: "light" });
+  expect(root.querySelector("svg")?.getAttribute("viewBox")).toBe(
+    "0 0 240 120",
+  );
+  await renderRichContent(root, { mode: "light" });
+  expect(mermaidMock.render).toHaveBeenCalledTimes(1);
+  expect(root.querySelectorAll(".m2h-lightbox-trigger")).toHaveLength(1);
+});

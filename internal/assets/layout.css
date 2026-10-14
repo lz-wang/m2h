@@ -894,3 +894,11 @@ html .markdown-body .keys > kbd {
 .markdown-body .m2h-tabbed-radio:nth-of-type(32):checked ~ .m2h-tabbed-content > .m2h-tabbed-panel:nth-child(32) { display: block; }
 .markdown-body .m2h-tabbed-radio:nth-of-type(32):checked ~ .m2h-tabbed-labels > label:nth-child(32) { border-bottom-color: var(--m2h-copy-accent); color: inherit; }
 .markdown-body .m2h-tabbed-radio:nth-of-type(32):focus-visible ~ .m2h-tabbed-labels > label:nth-child(32) { outline: 2px solid var(--m2h-copy-accent); outline-offset: -3px; }
+
+@media print {
+  .markdown-body .m2h-tabbed-labels,
+  .markdown-body .m2h-tabbed-radio { display: none; }
+  .markdown-body .m2h-tabbed-panel,
+  .markdown-body .m2h-tabbed-panel-title { display: block; }
+  .markdown-body .m2h-tabbed-panel-title { margin-bottom: .75rem; }
+}

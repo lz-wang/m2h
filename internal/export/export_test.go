@@ -515,3 +515,24 @@ func TestRunExportLoadsKatexOnlyForEligibleText(t *testing.T) {
 		})
 	}
 }
+
+func TestTabbedExportSharesHTMLAndNeedsNoCDNForSwitching(t *testing.T) {
+	root := t.TempDir()
+	source := writeFixture(t, root, "tabs.md", "# Tabs\n\n=== \"One\"\n\n    ## 安装\n\n    first\n\n===+ \"Two\"\n\n    ## 安装\n\n    second\n")
+	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
+		t.Fatal(err)
+	}
+	output, err := os.ReadFile(filepath.Join(root, "tabs.html"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(output)
+	for _, want := range []string{`id="m2h-tab-1-2" checked`, `data-m2h-tab-id="m2h-tab-1-2"`, `id="安装-1"`, `@media print`, `restoreTabbedHash`, `hashchange`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	if strings.Contains(body, "cdn.jsdelivr.net") {
+		t.Fatal("tab-only export needs CDN")
+	}
+}

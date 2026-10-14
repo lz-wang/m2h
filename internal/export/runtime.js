@@ -86,6 +86,25 @@
     if (root === null) {
       return;
     }
+    // Radio controls own selection; hashes only reveal the target panel.
+    function restoreTabbedHash() {
+      var id;
+      try { id = decodeURIComponent(window.location.hash.slice(1)); }
+      catch (_) { return; }
+      if (!id) { return; }
+      var heading = Array.from(root.querySelectorAll("[id]")).find(function (node) { return node.id === id; });
+      if (!heading) { return; }
+      var panel = heading.closest(".m2h-tabbed-panel");
+      if (!panel) { return; }
+      var set = panel.closest(".m2h-tabbed-set");
+      var radio = Array.from(set.querySelectorAll(":scope > .m2h-tabbed-radio")).find(function (input) {
+        return input.id === panel.getAttribute("data-m2h-tab-id");
+      });
+      if (radio) { radio.checked = true; }
+      heading.scrollIntoView({ block: "start", behavior: "auto" });
+    }
+    restoreTabbedHash();
+    window.addEventListener("hashchange", restoreTabbedHash);
     var hasMermaid = typeof mermaid !== "undefined" && typeof mermaid.initialize === "function";
     if (hasMermaid) {
       // Prevent the CDN window-load listener from scanning containers twice.
@@ -135,10 +154,21 @@
       mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "default" });
     };
     var runDiagrams = function () {
-      var pending = hasMermaid && typeof mermaid.run === "function" && nodes.length > 0
-        ? mermaid.run({ nodes: nodes, suppressErrors: true })
-        : null;
-      Promise.resolve(pending).then(finish, finish);
+      // Like the WebUI, render offscreen instead of measuring a display:none
+      // panel. All diagrams (including print-only hidden panels) get an SVG
+      // with intrinsic geometry; switching tabs never initializes them twice.
+      var pending = Promise.resolve();
+      if (hasMermaid && typeof mermaid.render === "function") {
+        nodes.forEach(function (node, index) {
+          pending = pending.then(function () {
+            return mermaid.render("m2h-export-mermaid-" + index, node.textContent || "").then(function (result) {
+              node.innerHTML = result.svg;
+              if (result.bindFunctions) { result.bindFunctions(node); }
+            }).catch(function () { node.textContent = "Mermaid 图表渲染失败"; });
+          });
+        });
+      }
+      pending.then(finish, finish);
     };
     initializeTheme();
     runDiagrams();
