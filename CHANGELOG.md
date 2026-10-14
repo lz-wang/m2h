@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.23.0] - 2026-10-14
+
 ### 变更
 
 - `export` 仅为可渲染的 Mermaid 代码块加载运行时，纯 ZenUML 文档不再加载 Mermaid。
