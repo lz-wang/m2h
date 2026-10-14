@@ -2583,28 +2583,24 @@ describe("App global full-text search", () => {
       const user = userEvent.setup();
       const html = `<h2 id="outer">Outer</h2><div class="m2h-tabbed-set"><input class="m2h-tabbed-radio" type="radio" name="searchtab" id="first" checked><input class="m2h-tabbed-radio" type="radio" name="searchtab" id="second"><div class="m2h-tabbed-content"><section class="m2h-tabbed-panel" data-m2h-tab-id="first">First</section><section class="m2h-tabbed-panel" data-m2h-tab-id="second">needle</section></div></div>`;
       const api = createAPI({
-        getDocument: vi
-          .fn()
-          .mockImplementation(async (requested: string) => ({
-            path: requested,
-            title: "Tabs",
-            html,
-            frontmatter: null,
-            toc: [{ id: "outer", text: "Outer", level: 2 }],
-          })),
-        search: vi
-          .fn()
-          .mockResolvedValue({
-            query: "needle",
-            results: [
-              {
-                path,
-                title: "Tabs",
-                tabId: "second",
-                heading: { id: "outer", text: "Outer" },
-              },
-            ],
-          }),
+        getDocument: vi.fn().mockImplementation(async (requested: string) => ({
+          path: requested,
+          title: "Tabs",
+          html,
+          frontmatter: null,
+          toc: [{ id: "outer", text: "Outer", level: 2 }],
+        })),
+        search: vi.fn().mockResolvedValue({
+          query: "needle",
+          results: [
+            {
+              path,
+              title: "Tabs",
+              tabId: "second",
+              heading: { id: "outer", text: "Outer" },
+            },
+          ],
+        }),
       });
       const scroll = vi
         .spyOn(Element.prototype, "scrollIntoView")

@@ -262,6 +262,7 @@ WebUI 富内容运行时默认从本地加载，也可通过 `--cdn` 切换到�
 | 元数据 | YAML Frontmatter；标题、日期别名、描述（description）与回退规则见 [Frontmatter 演示](docs/demos/frontmatter/00-index.md) |
 | 本地引用 | 当前文档相对路径与 `/` 开头的当前 root 相对路径；检查行为见 [本地目标演示](docs/demos/checkers/02-local-target-missing.md) |
 | 行内扩展 | `==高亮==`、`^^插入^^` 与 [`++ctrl+alt+del++` 键盘按键](docs/demos/pymarkdown/keyboards.md) |
+| 标签内容 | [PyMdown Tabbed 基础语法](docs/demos/pymarkdown/tabbed.md)，支持独立分组、默认标签、TOC/锚点与搜索自动定位，HTML 打印展开全部内容 |
 | 协作标记 | [Critic Markup 行内与块级语法](docs/demos/pymarkdown/critic.md) |
 | 图片排版 | 普通图片、链接图片、picture、SVG 与图表在正文中居中显示（WebUI 与 HTML 导出） |
 | WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开、正文图片临近视口延迟加载，以及图片、Mermaid 图表 Lightbox（使用整个视口缩放与拖动，工具栏浮于图像上方，支持滚轮平滑缩放；图表以原生 SVG 放大，SVG 不显示图片信息） |

@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="120" viewBox="0 0 320 120" role="img" aria-label="Markdown 到标签内容">
+  <rect x="1" y="1" width="318" height="118" rx="12" fill="#f6f8fa" stroke="#8c959f"/>
+  <rect x="18" y="32" width="110" height="56" rx="8" fill="#0969da"/>
+  <text x="73" y="66" text-anchor="middle" fill="white" font-family="sans-serif" font-size="16">Markdown</text>
+  <path d="M140 60h32m-8-7 8 7-8 7" fill="none" stroke="#57606a" stroke-width="2"/>
+  <rect x="184" y="32" width="118" height="56" rx="8" fill="#1a7f37"/>
+  <text x="243" y="66" text-anchor="middle" fill="white" font-family="sans-serif" font-size="16">Tabbed</text>
+</svg>
