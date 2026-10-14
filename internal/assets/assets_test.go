@@ -369,9 +369,6 @@ func TestRichAssetsEmbedded(t *testing.T) {
 		"katex.min.js",
 		"auto-render.min.js",
 		"mermaid.min.js",
-		"mermaid-zenuml/mermaid-zenuml.esm.min.mjs",
-		"mermaid-zenuml/chunks/mermaid-zenuml.esm.min/zenuml-definition-EPHX7WPJ.mjs",
-		"mermaid-zenuml/chunks/mermaid-zenuml.esm.min/chunk-PPGA74DV.mjs",
 		"tablesort.min.js",
 		"tablesort.number.js",
 		"tablesort.date.js",
@@ -381,8 +378,6 @@ func TestRichAssetsEmbedded(t *testing.T) {
 		"fonts/KaTeX_AMS-Regular.woff2",
 		"LICENSE.katex",
 		"LICENSE.mermaid",
-		"LICENSE.mermaid-zenuml",
-		"LICENSE.zenuml-core",
 		"LICENSE.tablesort",
 	} {
 		info, err := fs.Stat(rich, name)

@@ -2,8 +2,8 @@
 
 Vendored browser assets embedded into the m2h binary so the WebUI renders rich
 content offline by default, without a CDN. With `--cdn`, the WebUI instead
-loads the same pinned releases directly from jsDelivr, including KaTeX fonts,
-ZenUML ESM chunks, and all five Tablesort comparators. Its URL mapping lives in
+loads the same pinned releases directly from jsDelivr, including KaTeX fonts
+and all five Tablesort comparators. Its URL mapping lives in
 `web/src/lib/runtime-loader.ts` and must track version updates here and in
 `internal/export/page.go`. The document server serves embedded assets under
 `/runtime/*`; the WebUI loads them on demand instead of bundling a second copy
@@ -15,12 +15,7 @@ Tablesort core: the five comparator builds below stay WebUI-only.
 | ----------------- | ------------------------------------- | ------- | ------------------- |
 | KaTeX             | https://github.com/KaTeX/KaTeX        | 0.18.4  | MIT (`LICENSE.katex`)   |
 | Mermaid           | https://github.com/mermaid-js/mermaid | 11.16.1 | MIT (`LICENSE.mermaid`) |
-| mermaid-zenuml    | https://github.com/mermaid-js/mermaid (packages/mermaid-zenuml) | 0.2.3 | MIT (`LICENSE.mermaid-zenuml`) |
-| @zenuml/core      | https://github.com/mermaid-js/zenuml (bundled inside mermaid-zenuml) | 3.47.2 | MIT (`LICENSE.zenuml-core`) |
 | Tablesort         | https://github.com/tristen/tablesort  | 5.3.0   | MIT (`LICENSE.tablesort`) |
-| Vega              | https://github.com/vega/vega          | 6.4.0   | BSD-3-Clause (`LICENSE.vega`) |
-| Vega-Lite         | https://github.com/vega/vega-lite     | 6.4.3   | BSD-3-Clause (`LICENSE.vega-lite`) |
-| Vega-Embed        | https://github.com/vega/vega-embed    | 7.1.0   | BSD-3-Clause (`LICENSE.vega-embed`) |
 
 `katex.min.css` references `./fonts/*.woff2` relative to itself, so the
 `fonts/` directory must stay next to `katex.min.css` in every output location.
@@ -33,41 +28,3 @@ directory; the comparators are the upstream minified `dist/sorts` builds renamed
 without the `.min` infix. Note the 5.3.0 npm package ships dist builds whose
 banner still reads v5.2.1 — upstream published the release without rebuilding
 dist — so the npm version, not the banner, is authoritative here.
-
-ZenUML lives in `mermaid-zenuml/` and keeps the upstream `dist/` file names and
-relative paths (`mermaid-zenuml.esm.min.mjs` plus
-`chunks/mermaid-zenuml.esm.min/*`), because the entry module lazy-imports its
-diagram chunk through a relative URL at registration time — renaming or
-flattening the chunks would break that import. It is the browser-side,
-self-contained build: the npm `module` entry (`mermaid-zenuml.core.mjs`) keeps
-`@zenuml/core` as a bare bundler external, which no browser can resolve, while
-`mermaid-zenuml.esm.min.mjs` bundles the ZenUML engine and exports the same
-`{ id, detector, loader }` external-diagram plugin. Source maps are not
-vendored. The WebUI fetches this directory only when a document actually
-contains a `zenuml` diagram; Mermaid Core (`mermaid.min.js`) alone handles every
-other diagram type. Exported HTML does not embed this copy — the page carries
-the pinned jsDelivr URL of the same release, and its bootstrap downloads the
-plugin on demand under the same leading-keyword rule.
-
-The 0.2.3 browser build bundles @zenuml/core 3.47.2 exactly. Its registration
-path injects the core's application stylesheet into the host `<head>`, even
-though the native SVG renderer already returns self-styled SVG markup. Both
-the WebUI loader and exported-page bootstrap therefore treat registration as a
-no-host-stylesheet boundary: stylesheets added during import/registration are
-removed on success or failure before Mermaid renders the returned SVG.
-
-The core's static SVG output is light-only in this pinned release. m2h leaves
-that upstream palette unchanged in light mode and appends a constant, SVG-root
-scoped dark palette when the resolved reader mode is dark. The scoped rules are
-part of the SVG itself (including Lightbox snapshots and exported HTML) and do
-not alter host stylesheets or theme variables.
-
-The Vega-Lite runtime is the three flat UMD builds above, refreshed by
-`scripts/update-vega-runtime.sh` from npm package artifacts. They must load in
-dependency order — `vega.min.js` (attaches `window.vega`), then
-`vega-lite.min.js` (`window.vegaLite`, compiled against the Vega runtime), then
-`vega-embed.min.js` (`window.vegaEmbed`, receives both as globals) — so the
-loader never requests them concurrently. Source maps are not vendored. The
-WebUI fetches the trio only when a document actually contains a `vega-lite` /
-`vegalite` fenced block; exported HTML does not embed this copy — the page
-carries the pinned jsDelivr URLs of the same releases.

@@ -2,7 +2,7 @@ import { type ConsoleMessage, expect, type Page, test } from "@playwright/test";
 
 // Real-browser regression for the security-header baseline. The Go header
 // unit tests pin the exact strings; this spec proves what they actually do
-// in a genuine browser: rich content (Mermaid, ZenUML, KaTeX, sortable
+// in a genuine browser: rich content (Mermaid, KaTeX, sortable
 // tables, SVG/external images, code blocks) renders without a single CSP
 // refusal, while raw-HTML inline event scripts stay unexecuted. Asserting
 // rendered outcomes — not header text — is what catches a policy that
@@ -37,27 +37,15 @@ test("renders rich content under the strict CSP without refusals", async ({
     () => document.querySelector(".markdown-body") !== null,
   );
 
-  // Both diagrams (flowchart + ZenUML) finish rendering — a plugin or
+  // The flowchart finishes rendering — a
   // runtime blocked by the policy degrades into source text or a syntax
   // error long before these selectors pass.
   await page.waitForFunction(
     () =>
       document.querySelectorAll(".m2h-mermaid-frame .mermaid > svg").length ===
-      2,
+      1,
   );
   await expect(page.getByText("Syntax error in text")).toHaveCount(0);
-
-  // The Vega-Lite chart draws real data marks through the AST interpreter:
-  // with generated-code evaluation the strict policy (no 'unsafe-eval')
-  // would refuse every expression and the chart would stay source text.
-  await page.waitForFunction(() => {
-    const container = document.querySelector(".m2h-vega-lite");
-    return (
-      container !== null &&
-      container.querySelector("svg") !== null &&
-      container.querySelectorAll("g[class~='role-mark'] > *").length > 0
-    );
-  });
 
   // KaTeX math is rendered, not left as dollar-sign source.
   await expect(page.locator(".katex").first()).toBeVisible();

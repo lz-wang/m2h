@@ -313,7 +313,7 @@ func TestProjectForSearchChunks(t *testing.T) {
 			},
 		},
 		{
-			name:   "mermaid and vega sources are searchable",
+			name:   "supported and removed diagram sources are searchable",
 			source: "```mermaid\ngraph TD\n  A-->B\n```\n\n```vega-lite\n{\"mark\": \"bar\"}\n```\n",
 			want: []SearchChunk{
 				{Kind: SearchChunkCode, Text: "graph TD\n  A-->B"},

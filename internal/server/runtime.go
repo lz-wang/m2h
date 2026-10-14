@@ -9,8 +9,7 @@ import (
 )
 
 // newRuntimeHandler serves the rich-content runtime embedded in the Go
-// binary — Mermaid Core, the ZenUML external-diagram plugin, KaTeX, the
-// Vega-Lite trio, and Tablesort — so the WebUI renders rich content offline
+// binary — Mermaid Core, KaTeX and Tablesort — so the WebUI renders rich content offline
 // at the same pinned releases the export command loads from the CDN instead
 // of bundling a second copy through Vite. Directory requests are refused so
 // the embedded file server never renders a listing; path traversal is

@@ -31,18 +31,6 @@ flowchart LR
   A[图片] --> B[居中]
 ```
 
-```vega-lite
-{
-  "width": 160,
-  "height": 100,
-  "data": {"values": [{"x": "甲", "y": 2}, {"x": "乙", "y": 3}]},
-  "mark": "bar",
-  "encoding": {
-    "x": {"field": "x", "type": "nominal"},
-    "y": {"field": "y", "type": "quantitative"}
-  }
-}
-```
 
 > [!NOTE]
 > Alert layout regression.

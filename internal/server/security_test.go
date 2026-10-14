@@ -108,9 +108,8 @@ func TestDefaultContentSecurityPolicyDirectives(t *testing.T) {
 			t.Errorf("default CSP is missing %q: %s", directive, defaultContentSecurityPolicy)
 		}
 	}
-	// Code evaluation stays forbidden: Vega charts run through the AST
-	// interpreter precisely so no 'unsafe-eval' is needed, and inline scripts
-	// stay blocked everywhere — 'unsafe-inline' must not reach script-src.
+	// Code evaluation and inline scripts stay blocked everywhere:
+	// 'unsafe-eval' and 'unsafe-inline' must not reach script-src.
 	for _, forbidden := range []string{"script-src 'unsafe-eval'", "default-src 'unsafe-eval'", "script-src 'unsafe-inline'"} {
 		if containsDirective(defaultContentSecurityPolicy, forbidden) {
 			t.Errorf("default CSP must not contain %q", forbidden)

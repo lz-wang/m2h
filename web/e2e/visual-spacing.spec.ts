@@ -1,7 +1,7 @@
 import { expect, type Page, test } from "@playwright/test";
 
 // Real-browser geometry regression for the visual block spacing contract: a
-// standalone image paragraph and the rich-visual frames (Mermaid, Vega-Lite)
+// standalone image paragraph and the rich-visual frames (Mermaid)
 // share one external spacing rule — the same 1rem to the surrounding prose on
 // both sides. jsdom computes no geometry, so only a genuine layout engine can
 // compare the actual gaps; the failure it guards against is the image
@@ -25,9 +25,7 @@ async function openDocument(page: Page) {
       ".m2h-image-block img[data-m2h-lazy-state='loaded']",
     );
     return (
-      image !== null &&
-      body.querySelector(".m2h-mermaid-frame svg") !== null &&
-      body.querySelector(".m2h-vega-lite-frame svg") !== null
+      image !== null && body.querySelector(".m2h-mermaid-frame svg") !== null
     );
   });
 }
@@ -72,20 +70,12 @@ function readGaps(page: Page): Promise<Record<string, VisualGaps>> {
     };
     const imageBlock = body.querySelector<HTMLElement>(".m2h-image-block");
     const mermaidFrame = body.querySelector<HTMLElement>(".m2h-mermaid-frame");
-    const vegaLiteFrame = body.querySelector<HTMLElement>(
-      ".m2h-vega-lite-frame",
-    );
     return {
       image: read(imageBlock, imageBlock?.querySelector("img"), "image"),
       mermaid: read(
         mermaidFrame,
         mermaidFrame?.querySelector("svg"),
         "mermaid",
-      ),
-      "vega-lite": read(
-        vegaLiteFrame,
-        vegaLiteFrame?.querySelector("svg"),
-        "vega-lite",
       ),
     };
   });
@@ -98,17 +88,13 @@ test("gives every visual kind the same gap to the surrounding prose", async ({
 
   const gaps = await readGaps(page);
 
-  // The contract is cross-kind consistency: image, Mermaid, and Vega-Lite
+  // The contract is cross-kind consistency: image and Mermaid
   // keep the same distance to the prose above and below. A paragraph strut
   // (the pre-contract image layout) or a frame margin drift shows up as a
-  // spread between the three, so the comparison — not a magic number — is
+  // spread between the two, so the comparison — not a magic number — is
   // the assertion, with ±1px of engine rounding slack.
   for (const side of ["above", "below"] as const) {
-    const values = [
-      gaps.image[side],
-      gaps.mermaid[side],
-      gaps["vega-lite"][side],
-    ];
+    const values = [gaps.image[side], gaps.mermaid[side]];
     expect(Math.max(...values) - Math.min(...values)).toBeLessThanOrEqual(1);
     // Each visual keeps a real gap on both sides; a collapsed or negative
     // margin would put the visual flush against (or under) the text.
@@ -131,5 +117,5 @@ test("marks standalone image paragraphs while retaining prose line height", asyn
   }));
   expect(counts.blocks).toBe(1);
   expect(counts.frames).toBe(1);
-  expect(counts.prose).toBeGreaterThanOrEqual(5);
+  expect(counts.prose).toBeGreaterThanOrEqual(4);
 });

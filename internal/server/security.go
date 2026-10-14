@@ -7,16 +7,9 @@ import (
 
 // defaultContentSecurityPolicy is the browser policy for m2h's own pages.
 //
-//	script-src 'self'         — every script (app bundle, Mermaid, KaTeX,
-//	                            ZenUML ESM, the Vega trio) loads from this
-//	                            origin; no CDN, no inline script, no inline
-//	                            event handlers, and no 'unsafe-eval': Vega
-//	                            charts run their expressions through the AST
-//	                            interpreter Vega-Embed bundles (embed option
-//	                            ast: true) instead of the runtime's
-//	                            generated-code path, so raw HTML in a
-//	                            Markdown document — or a chart spec — can
-//	                            never gain code evaluation.
+//	script-src 'self'         — app, Mermaid, KaTeX and Tablesort scripts load
+//	                            from this origin; inline scripts, event
+//	                            handlers and 'unsafe-eval' stay disallowed.
 //	style-src 'unsafe-inline' — React, Mermaid and KaTeX all emit element
 //	                            styles, so inline styles stay allowed for now.
 //	img/media-src http(s:)    — Markdown legitimately embeds remote media.

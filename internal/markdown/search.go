@@ -22,8 +22,8 @@ const (
 	// SearchChunkText is visible prose: paragraphs, list items, table rows
 	// and blockquotes.
 	SearchChunkText
-	// SearchChunkCode is fenced or indented code — the diagram sources
-	// (Mermaid, Vega-Lite) are fenced code and are included.
+	// SearchChunkCode includes all fenced or indented code, including
+	// diagram source and unsupported fence languages.
 	SearchChunkCode
 )
 

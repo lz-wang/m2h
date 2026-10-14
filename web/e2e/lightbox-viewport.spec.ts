@@ -4,11 +4,6 @@ const cases = [
   { name: "PNG", path: "image-lightbox.md", frame: ".m2h-image-frame" },
   { name: "SVG", path: "image-lightbox.md", frame: ".m2h-image-frame" },
   { name: "Mermaid", path: "mermaid-lightbox.md", frame: ".m2h-mermaid-frame" },
-  {
-    name: "Vega-Lite",
-    path: "vega-lite-lightbox.md",
-    frame: ".m2h-vega-lite-frame",
-  },
 ];
 
 for (const visual of cases) {

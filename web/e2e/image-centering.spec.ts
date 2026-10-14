@@ -22,7 +22,6 @@ async function expectCenteredImages(page: Page) {
       .toBe(true);
   }
   await expect(page.locator(".mermaid > svg")).toHaveCount(1);
-  await expect(page.locator(".m2h-vega-lite > svg")).toHaveCount(1);
 
   const geometry = await page.evaluate(() => {
     const body = document.querySelector(".markdown-body");
@@ -31,7 +30,7 @@ async function expectCenteredImages(page: Page) {
     const center = (bodyRect.left + bodyRect.right) / 2;
     return Array.from(
       body.querySelectorAll(
-        'img, svg[role="img"]:not(svg svg), .mermaid > svg, .m2h-vega-lite > svg',
+        'img, svg[role="img"]:not(svg svg), .mermaid > svg',
       ),
     ).map((visual) => {
       const rect = visual.getBoundingClientRect();
@@ -42,7 +41,7 @@ async function expectCenteredImages(page: Page) {
       };
     });
   });
-  expect(geometry).toHaveLength(11);
+  expect(geometry).toHaveLength(10);
   for (const visual of geometry) {
     expect(visual.width, visual.label ?? "SVG").toBeGreaterThan(0);
     expect(visual.delta, visual.label ?? "SVG").toBeLessThanOrEqual(1);
