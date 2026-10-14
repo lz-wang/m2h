@@ -3,15 +3,10 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import { APIError, type FileListResponse, type PreviewAPI } from "./api";
-import {
-  renderRichContent,
-  rerenderThemeSensitiveContent,
-} from "./lib/render-rich-content";
+import { renderRichContent, rerenderMermaid } from "./lib/render-rich-content";
 
 const renderRichContentMock = vi.mocked(renderRichContent);
-const rerenderThemeSensitiveContentMock = vi.mocked(
-  rerenderThemeSensitiveContent,
-);
+const rerenderMermaidMock = vi.mocked(rerenderMermaid);
 
 // The render-generation protocol between PreviewContent and the rich-content
 // renderer, pinned at the component level. App.test.tsx exercises the real
@@ -22,8 +17,7 @@ const rerenderThemeSensitiveContentMock = vi.mocked(
 
 vi.mock("./lib/render-rich-content", () => ({
   renderRichContent: vi.fn(),
-  rerenderThemeSensitiveContent: vi.fn(),
-  finalizeVegaLiteViews: vi.fn(),
+  rerenderMermaid: vi.fn(),
 }));
 
 const initialFiles: FileListResponse = {
@@ -63,7 +57,7 @@ beforeEach(() => {
       initialGates.push({ resolve });
     });
   });
-  rerenderThemeSensitiveContentMock.mockResolvedValue(undefined);
+  rerenderMermaidMock.mockResolvedValue(undefined);
 });
 
 function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
@@ -126,10 +120,10 @@ describe("theme repaint scheduling", () => {
     await openDocument();
 
     // Toggle while the initial enhancement is still parked on its gate — the
-    // Vega runtime is "still downloading" and no chart container exists yet.
+    // Mermaid runtime is still downloading.
     await pickTheme(user, "深色");
     expect(document.documentElement.classList.contains("dark")).toBe(true);
-    expect(rerenderThemeSensitiveContentMock).not.toHaveBeenCalled();
+    expect(rerenderMermaidMock).not.toHaveBeenCalled();
 
     // The toggle must not retire the initial render: its freshness token is
     // scoped to body swaps only.
@@ -137,15 +131,13 @@ describe("theme repaint scheduling", () => {
 
     await resolveInitialGate(0);
     await waitFor(() => {
-      expect(rerenderThemeSensitiveContentMock).toHaveBeenCalledTimes(1);
+      expect(rerenderMermaidMock).toHaveBeenCalledTimes(1);
     });
-    expect(rerenderThemeSensitiveContentMock).toHaveBeenCalledWith(
+    expect(rerenderMermaidMock).toHaveBeenCalledWith(
       expect.any(HTMLElement),
-      {
-        mode: "dark",
-        isCurrent: expect.any(Function),
-        onVisualError: expect.any(Function),
-      },
+      "dark",
+      expect.any(Function),
+      expect.any(Function),
     );
   });
 
@@ -165,19 +157,17 @@ describe("theme repaint scheduling", () => {
         setTimeout(resolve, 0);
       });
     });
-    expect(rerenderThemeSensitiveContentMock).not.toHaveBeenCalled();
+    expect(rerenderMermaidMock).not.toHaveBeenCalled();
 
     // The queue is not wedged: a fresh toggle after the skipped pair still
     // repaints.
     await pickTheme(user, "深色");
     await waitFor(() => {
-      expect(rerenderThemeSensitiveContentMock).toHaveBeenCalledWith(
+      expect(rerenderMermaidMock).toHaveBeenCalledWith(
         expect.any(HTMLElement),
-        {
-          mode: "dark",
-          isCurrent: expect.any(Function),
-          onVisualError: expect.any(Function),
-        },
+        "dark",
+        expect.any(Function),
+        expect.any(Function),
       );
     });
   });
@@ -190,7 +180,7 @@ describe("theme repaint scheduling", () => {
 
     // Park the dark repaint mid-flight, then queue the light one behind it.
     let finishDark: () => void = () => {};
-    rerenderThemeSensitiveContentMock.mockImplementationOnce(
+    rerenderMermaidMock.mockImplementationOnce(
       () =>
         new Promise<void>((resolve) => {
           finishDark = resolve;
@@ -198,7 +188,7 @@ describe("theme repaint scheduling", () => {
     );
     await pickTheme(user, "深色");
     await waitFor(() => {
-      expect(rerenderThemeSensitiveContentMock).toHaveBeenCalledTimes(1);
+      expect(rerenderMermaidMock).toHaveBeenCalledTimes(1);
     });
 
     await pickTheme(user, "浅色");
@@ -206,22 +196,20 @@ describe("theme repaint scheduling", () => {
       await Promise.resolve();
     });
     // Still serialized behind the pending dark repaint — never overlapped.
-    expect(rerenderThemeSensitiveContentMock).toHaveBeenCalledTimes(1);
+    expect(rerenderMermaidMock).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       finishDark();
       await Promise.resolve();
     });
     await waitFor(() => {
-      expect(rerenderThemeSensitiveContentMock).toHaveBeenCalledTimes(2);
+      expect(rerenderMermaidMock).toHaveBeenCalledTimes(2);
     });
-    expect(rerenderThemeSensitiveContentMock).toHaveBeenLastCalledWith(
+    expect(rerenderMermaidMock).toHaveBeenLastCalledWith(
       expect.any(HTMLElement),
-      {
-        mode: "light",
-        isCurrent: expect.any(Function),
-        onVisualError: expect.any(Function),
-      },
+      "light",
+      expect.any(Function),
+      expect.any(Function),
     );
   });
 
@@ -246,7 +234,7 @@ describe("theme repaint scheduling", () => {
         setTimeout(resolve, 0);
       });
     });
-    expect(rerenderThemeSensitiveContentMock).not.toHaveBeenCalled();
+    expect(rerenderMermaidMock).not.toHaveBeenCalled();
 
     // The new body painted in the already-toggled dark theme, so nothing is
     // pending once its own initial render settles either.
@@ -256,6 +244,6 @@ describe("theme repaint scheduling", () => {
         setTimeout(resolve, 0);
       });
     });
-    expect(rerenderThemeSensitiveContentMock).not.toHaveBeenCalled();
+    expect(rerenderMermaidMock).not.toHaveBeenCalled();
   });
 });

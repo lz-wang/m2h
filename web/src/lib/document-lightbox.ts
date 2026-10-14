@@ -13,7 +13,7 @@
 // them as inline SVG and change their rendered dimensions without routing a
 // diagram through an <img> compositor layer.
 
-export type LightboxItemKind = "image" | "mermaid" | "vega-lite";
+export type LightboxItemKind = "image" | "mermaid";
 
 interface LightboxItemBase {
   alt: string;
@@ -33,7 +33,7 @@ export interface ImageLightboxItem extends LightboxItemBase {
 }
 
 export interface SVGLightboxItem extends LightboxItemBase {
-  kind: "mermaid" | "vega-lite";
+  kind: "mermaid";
   markup: string;
   intrinsicWidth: number;
   intrinsicHeight: number;
@@ -53,9 +53,8 @@ export interface LightboxState {
 }
 
 // The marker the enhancement layer stamps on every Lightbox-eligible element
-// (an <img> or a rendered visual container — a Mermaid diagram or a Vega-Lite
-// chart). One marker for all kinds keeps the click-time collection a single
-// query in DOM order.
+// (an <img> or a rendered Mermaid container). One marker for both kinds
+// keeps the click-time collection a single query in DOM order.
 const LIGHTBOX_ITEM_SELECTOR = '[data-m2h-lightbox-item="true"]';
 
 // Snapshot the body's Lightbox items in *current* DOM order and locate the
@@ -138,16 +137,6 @@ function snapshotLightboxItem(
       alt: element.alt,
       title: element.title || null,
     };
-  }
-  // Non-image items are the enhanced visual containers; their class names
-  // the engine, which picks the snapshot's kind and alt text.
-  if (element.classList.contains("m2h-vega-lite")) {
-    return snapshotSVGVisual(
-      element,
-      "vega-lite",
-      "Vega-Lite 图表",
-      snapshotIndex,
-    );
   }
   return snapshotSVGVisual(element, "mermaid", "Mermaid 图表", snapshotIndex);
 }
@@ -311,7 +300,7 @@ function neutralizeEmbeddedLinks(svg: SVGSVGElement): void {
   }
 }
 
-// Snapshot only the rendered SVG element. Mermaid and Vega-Lite bake the
+// Snapshot only the rendered SVG element. Mermaid bakes the
 // active palette into this markup, preserving it across a body replacement.
 // Rewriting local identifiers keeps the inline copy isolated from its source
 // SVG and every other snapshot in the document.

@@ -516,7 +516,7 @@ export function DocumentLightbox({
     >
       <Dialog.Portal>
         {/* The backdrop is the modal's full-viewport canvas: SVG visuals
-         * (Mermaid, Vega-Lite) bake a white/black page into their palette,
+         * (Mermaid) bake a white/black page into their palette,
          * and their kind marker here lets the stylesheet paint the whole
          * modal — not just the stage — with that canvas, riding the
          * backdrop's own enter/exit fade. Bitmap images keep the near-black

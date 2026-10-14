@@ -764,41 +764,6 @@ body,
   height: auto;
 }
 
-/*
- * Vega-Lite chart frame, injected by render-rich-content.ts around every
- * rendered chart. Same structure and contract as the Mermaid frame above
- * (shared m2h-rich-visual-frame class plus this engine-specific one); the
- * chart container keeps Vega-Embed's output centered and horizontally
- * scrollable like a diagram, and holds the JSON source text until the embed
- * succeeds (and again after a failed re-embed).
- */
-.markdown-body .m2h-vega-lite-frame {
-  position: relative;
-}
-
-.markdown-body .m2h-vega-lite {
-  margin: 1rem 0;
-  overflow-x: auto;
-  text-align: center;
-}
-
-.markdown-body .m2h-vega-lite-frame > .m2h-vega-lite {
-  /* Vega-Embed stamps its own .vega-embed class (display: inline-block) on
-   * the container, which would sit the chart on the frame's text baseline
-   * and hang the line-box descent below it — 6px of phantom space the frame
-   * never asked for. Block flow keeps the frame's box exactly the chart's,
-   * so the shared external margin above stays the only spacing.
-   * (0,3,0) here outranks the injected .vega-embed (0,1,0) without
-   * !important; the export output uses the shared block container rule. */
-  display: block;
-  margin: 0;
-}
-
-.markdown-body .m2h-vega-lite svg {
-  max-width: 100%;
-  height: auto;
-}
-
 .markdown-body .katex-display {
   overflow-x: auto;
   overflow-y: hidden;
@@ -1134,7 +1099,7 @@ body,
   opacity: 0.85;
 }
 
-/* The same contract for rich visuals: a Mermaid diagram or Vega-Lite chart
+/* The same contract for rich visuals: a Mermaid diagram
  * whose first paint failed collapses into the placeholder inside its stable
  * frame, one short title naming the engine. Source text (a Mermaid grammar,
  * a chart's JSON) never reappears as page content — diagnostics live in the
@@ -1197,8 +1162,7 @@ body,
  * carries live zoom/rotate/pan and must never transition (a transition there
  * would lag pointer pans and blur the zoom/pan clamp).
  */
-/* The diagram canvas inside the Lightbox: SVG visuals (Mermaid diagrams,
- * Vega-Lite charts) bake a white (light) / black (dark) page into their
+/* The diagram canvas inside the Lightbox: SVG visuals (Mermaid diagrams) bake a white (light) / black (dark) page into their
  * palette. The full-viewport backdrop mirrors that canvas, so the whole
  * modal reads as one seamless page behind the diagram instead of a diagram
  * slab floating on the dark scrim. Ordinary bitmap images keep the
@@ -1213,8 +1177,7 @@ body,
   --m2h-lightbox-diagram-bg: #000;
 }
 
-.image-lightbox-backdrop[data-visual-kind="mermaid"],
-.image-lightbox-backdrop[data-visual-kind="vega-lite"] {
+.image-lightbox-backdrop[data-visual-kind="mermaid"] {
   background: var(--m2h-lightbox-diagram-bg);
 }
 

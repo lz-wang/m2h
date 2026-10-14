@@ -10,9 +10,6 @@ import type {
   MathAutoRenderOptions,
   MermaidRenderResult,
   MermaidRuntime,
-  VegaEmbedOptions,
-  VegaEmbedResult,
-  VegaEmbedRuntime,
 } from "./runtime-loader";
 
 interface MermaidRunOptions {
@@ -22,7 +19,6 @@ interface MermaidRunOptions {
 
 const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn<(config: unknown) => void>(),
-  registerExternalDiagrams: vi.fn(async () => {}),
   run: vi.fn<(options: MermaidRunOptions) => Promise<void>>(async () => {}),
   render: vi.fn<(id: string, text: string) => Promise<MermaidRenderResult>>(
     async () => ({ svg: '<svg data-mock="mermaid"></svg>' }),
@@ -37,40 +33,16 @@ const loadMermaidMock = vi.hoisted(() =>
   vi.fn(async (): Promise<MermaidRuntime> => mermaidMock),
 );
 
-const ensureZenUMLRegisteredMock = vi.hoisted(() => vi.fn(async () => {}));
-
 const loadKatexMock = vi.hoisted(() =>
   vi.fn(async (): Promise<MathAutoRenderer> => renderMathInElementMock),
 );
 
 const loadTablesortMock = vi.hoisted(() => vi.fn());
 
-// Mirrors the real vegaEmbed contract closely enough for the enhancement
-// layer: the container's content is replaced wholesale with the rendered
-// visual, and the resolved result exposes finalize for lifecycle tests.
-const vegaEmbedMock = vi.hoisted(() =>
-  vi.fn<
-    (
-      element: HTMLElement,
-      spec: object,
-      options: VegaEmbedOptions,
-    ) => Promise<VegaEmbedResult>
-  >(async (element: HTMLElement) => {
-    element.innerHTML = '<svg data-mock="vega-lite"></svg>';
-    return { view: {}, finalize: vi.fn() };
-  }),
-);
-
-const loadVegaLiteMock = vi.hoisted(() =>
-  vi.fn(async (): Promise<VegaEmbedRuntime> => vegaEmbedMock),
-);
-
 vi.mock("./runtime-loader", () => ({
   loadMermaid: loadMermaidMock,
   loadKatex: loadKatexMock,
   loadTablesort: loadTablesortMock,
-  ensureZenUMLRegistered: ensureZenUMLRegisteredMock,
-  loadVegaLite: loadVegaLiteMock,
 }));
 
 // The vendored tablesort bundles, concatenated in the same order the runtime
@@ -107,23 +79,15 @@ describe("renderRichContent", () => {
     // Each test re-imports the module so the lazy mermaid singleton resets.
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
-    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
-    loadVegaLiteMock.mockClear();
-    vegaEmbedMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({
       svg: '<svg data-mock="mermaid"></svg>',
-    });
-    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
-      element.innerHTML = '<svg data-mock="vega-lite"></svg>';
-      return { view: {}, finalize: vi.fn() };
     });
   });
 
@@ -514,12 +478,10 @@ describe("collapsible code blocks", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
-    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
@@ -687,12 +649,10 @@ describe("code line numbers", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
-    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
@@ -839,12 +799,10 @@ describe("image lightbox triggers", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
-    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
@@ -1472,8 +1430,7 @@ describe("image lightbox triggers", () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML =
-      '<pre><code class="language-mermaid">not a diagram [[</code></pre>' +
-      `<pre><code class="language-vega-lite">{ broken json</code></pre>`;
+      '<pre><code class="language-mermaid">not a diagram [[</code></pre>';
 
     const visualErrors: string[] = [];
     await renderRichContent(root, {
@@ -1485,12 +1442,9 @@ describe("image lightbox triggers", () => {
 
     // One stable, reader-facing message per failed visual, in document order;
     // the detailed reasons went to the console instead of the page.
-    expect(visualErrors).toEqual([
-      "Mermaid 图表渲染失败",
-      "Vega-Lite 图表渲染失败",
-    ]);
+    expect(visualErrors).toEqual(["Mermaid 图表渲染失败"]);
     expect(root.querySelectorAll(".m2h-rich-visual-error-title").length).toBe(
-      2,
+      1,
     );
   });
 
@@ -1859,12 +1813,10 @@ describe("rerenderMermaid", () => {
     // mermaidSources WeakMap reset between cases.
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
-    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
@@ -1962,197 +1914,14 @@ describe("rerenderMermaid", () => {
   });
 });
 
-describe("mermaid external diagrams (ZenUML)", () => {
-  beforeEach(() => {
-    // Each test re-imports the module so the lazy mermaid singleton and the
-    // ZenUML registration state reset between cases.
-    vi.resetModules();
-    mermaidMock.initialize.mockClear();
-    mermaidMock.registerExternalDiagrams.mockClear();
-    mermaidMock.run.mockClear();
-    mermaidMock.render.mockClear();
-    renderMathInElementMock.mockClear();
-    loadMermaidMock.mockClear();
-    ensureZenUMLRegisteredMock.mockClear();
-    loadKatexMock.mockClear();
-    loadTablesortMock.mockClear();
-    mermaidMock.run.mockResolvedValue(undefined);
-    mermaidMock.render.mockResolvedValue({
-      svg: '<svg data-mock="mermaid"></svg>',
-    });
-    ensureZenUMLRegisteredMock.mockReset();
-    ensureZenUMLRegisteredMock.mockResolvedValue(undefined);
-  });
-
-  it("does not fetch the ZenUML plugin for plain Mermaid diagrams", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML =
-      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
-
-    await renderRichContent(root, { mode: "light" });
-
-    expect(loadMermaidMock).toHaveBeenCalledTimes(1);
-    expect(ensureZenUMLRegisteredMock).not.toHaveBeenCalled();
-    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
-  });
-
-  it("does not treat prose mentioning zenuml as a ZenUML diagram", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    // Only a leading zenuml keyword identifies the diagram type; the word
-    // appearing elsewhere is ordinary diagram content.
-    root.innerHTML =
-      '<pre><code class="language-mermaid">flowchart TD\nA[zenuml inside a label]</code></pre>';
-
-    await renderRichContent(root, { mode: "light" });
-
-    expect(ensureZenUMLRegisteredMock).not.toHaveBeenCalled();
-    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
-  });
-
-  it("registers ZenUML once in load → register → initialize → render order", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML =
-      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>';
-
-    await renderRichContent(root, { mode: "light" });
-
-    expect(ensureZenUMLRegisteredMock).toHaveBeenCalledTimes(1);
-    expect(ensureZenUMLRegisteredMock).toHaveBeenCalledWith(mermaidMock);
-    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
-    // Mermaid's integration order: the plugin must be known before
-    // initialize configures the runtime and before any diagram renders.
-    expect(loadMermaidMock.mock.invocationCallOrder[0]).toBeLessThan(
-      ensureZenUMLRegisteredMock.mock.invocationCallOrder[0],
-    );
-    expect(ensureZenUMLRegisteredMock.mock.invocationCallOrder[0]).toBeLessThan(
-      mermaidMock.initialize.mock.invocationCallOrder[0],
-    );
-    expect(mermaidMock.initialize.mock.invocationCallOrder[0]).toBeLessThan(
-      mermaidMock.render.mock.invocationCallOrder[0],
-    );
-  });
-
-  it("keeps the light SVG intact and adds a scoped dark ZenUML palette on rerender", async () => {
-    const { renderRichContent, rerenderMermaid } = await import(
-      "./render-rich-content"
-    );
-    mermaidMock.render.mockResolvedValue({
-      svg: `<svg data-mock="zenuml"><defs><style data-upstream="true">
-        .participant-box { fill: #ffffff; stroke: #666; }
-        .participant-label { fill: #222; }
-      </style></defs><rect class="participant-box"></rect><text class="participant-label">Alice</text></svg>`,
-    });
-    const root = document.createElement("div");
-    root.innerHTML =
-      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>';
-
-    await renderRichContent(root, { mode: "light" });
-
-    const lightSVG = root.querySelector<SVGSVGElement>(".mermaid > svg");
-    expect(lightSVG?.dataset.m2hZenumlTheme).toBe("light");
-    expect(
-      lightSVG?.querySelector('[data-m2h-zenuml-theme-style="dark"]'),
-    ).toBeNull();
-    expect(lightSVG?.querySelector('[data-upstream="true"]')).not.toBeNull();
-
-    await rerenderMermaid(root, "dark");
-
-    const darkSVG = root.querySelector<SVGSVGElement>(".mermaid > svg");
-    const darkStyle = darkSVG?.querySelector(
-      '[data-m2h-zenuml-theme-style="dark"]',
-    );
-    expect(darkSVG).not.toBe(lightSVG);
-    expect(darkSVG?.dataset.m2hZenumlTheme).toBe("dark");
-    expect(darkSVG?.querySelector('[data-upstream="true"]')).not.toBeNull();
-    expect(darkStyle?.textContent).toContain(
-      'svg[data-m2h-zenuml-theme="dark"] .participant-box',
-    );
-    expect(darkStyle?.textContent).toContain("fill: #1f2020");
-    expect(darkStyle?.textContent).toContain("fill: #cccccc");
-  });
-
-  it("registers the plugin once for several ZenUML diagrams", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML =
-      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>' +
-      '<pre><code class="language-mermaid">zenuml\n    Bob->Alice: Hi</code></pre>';
-
-    await renderRichContent(root, { mode: "light" });
-
-    expect(ensureZenUMLRegisteredMock).toHaveBeenCalledTimes(1);
-    expect(mermaidMock.render).toHaveBeenCalledTimes(2);
-  });
-
-  it("renders ZenUML and flowchart together after one registration", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML =
-      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>' +
-      '<pre><code class="language-mermaid">flowchart TD\nA--&gt;B</code></pre>';
-
-    await renderRichContent(root, { mode: "light" });
-
-    expect(ensureZenUMLRegisteredMock).toHaveBeenCalledTimes(1);
-    expect(mermaidMock.render).toHaveBeenCalledTimes(2);
-    expect(root.querySelectorAll("div.mermaid svg")).toHaveLength(2);
-  });
-
-  it("re-attempts registration when a theme rerender repaints ZenUML diagrams", async () => {
-    const { renderRichContent, rerenderMermaid } = await import(
-      "./render-rich-content"
-    );
-    const root = document.createElement("div");
-    root.innerHTML =
-      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>';
-
-    await renderRichContent(root, { mode: "light" });
-    mermaidMock.render.mockClear();
-
-    await rerenderMermaid(root, "dark");
-
-    // The rerender re-runs preparation (the loader singleton decides whether
-    // a second network fetch happens), so a first-attempt failure or a
-    // reloaded runtime can still recover on theme switch.
-    expect(ensureZenUMLRegisteredMock).toHaveBeenCalledTimes(2);
-    expect(mermaidMock.initialize).toHaveBeenCalledWith(
-      expect.objectContaining({ theme: "dark" }),
-    );
-    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
-  });
-
-  it("fails the render when plugin registration fails", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    ensureZenUMLRegisteredMock.mockRejectedValueOnce(
-      new Error("zenuml plugin unavailable"),
-    );
-    const root = document.createElement("div");
-    root.innerHTML =
-      '<pre><code class="language-mermaid">zenuml\n    Alice->Bob: Hello</code></pre>';
-
-    // A plugin that cannot be registered is a runtime failure like a failed
-    // mermaid.min.js fetch — the document cannot render its diagrams, so the
-    // error surfaces instead of silently skipping every zenuml block.
-    await expect(renderRichContent(root, { mode: "light" })).rejects.toThrow(
-      "zenuml plugin unavailable",
-    );
-    expect(mermaidMock.render).not.toHaveBeenCalled();
-  });
-});
-
 describe("sortable tables", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.registerExternalDiagrams.mockClear();
     mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
-    ensureZenUMLRegisteredMock.mockClear();
     loadKatexMock.mockClear();
     mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({
@@ -2451,574 +2220,68 @@ function replaceProperty(
   };
 }
 
-describe("Vega-Lite charts", () => {
-  const VALID_SPEC = JSON.stringify({
-    $schema: "https://vega.github.io/schema/vega-lite/v6.json",
-    data: { values: [{ month: "Jan", revenue: 120 }] },
-    mark: "bar",
-    encoding: {
-      x: { field: "month", type: "nominal" },
-      y: { field: "revenue", type: "quantitative" },
-    },
-  });
-
-  let warnSpy: ReturnType<typeof vi.spyOn>;
-
+describe("removed renderer code blocks", () => {
   beforeEach(() => {
     vi.resetModules();
-    loadVegaLiteMock.mockClear();
-    vegaEmbedMock.mockClear();
     loadMermaidMock.mockClear();
     mermaidMock.render.mockClear();
     mermaidMock.render.mockResolvedValue({
       svg: '<svg data-mock="mermaid"></svg>',
     });
-    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
-      element.innerHTML = '<svg data-mock="vega-lite"></svg>';
-      return { view: {}, finalize: vi.fn() };
-    });
-    warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   });
 
-  afterEach(() => {
-    warnSpy.mockRestore();
-  });
-
-  it("replaces vega-lite code blocks with an embedded SVG chart", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-
-    await renderRichContent(root, { mode: "light" });
-
-    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
-    expect(container).not.toBeNull();
-    expect(container?.innerHTML).toContain('data-mock="vega-lite"');
-    expect(root.querySelector("pre")).toBeNull();
-    expect(root.querySelector("code.language-vega-lite")).toBeNull();
-    // Charts never grow a code frame, gutter, or copy control either.
-    expect(root.querySelector(".m2h-code-frame")).toBeNull();
-
-    const frame = root.querySelector(
-      ".m2h-rich-visual-frame.m2h-vega-lite-frame",
-    );
-    expect(frame).not.toBeNull();
-    const trigger = frame?.querySelector<HTMLButtonElement>(
-      ":scope > .m2h-lightbox-trigger",
-    );
-    expect(trigger?.hidden).toBe(false);
-    expect(container?.dataset.m2hLightboxItem).toBe("true");
-    expect(trigger?.getAttribute("aria-label")).toBe("查看 Vega-Lite 图表");
-  });
-
-  it("renders the vegalite alias through the same path", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-vegalite">${VALID_SPEC}</code></pre>`;
-
-    await renderRichContent(root, { mode: "light" });
-
-    expect(root.querySelector("div.m2h-vega-lite svg")).not.toBeNull();
-    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("embeds with pinned host policy options", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-
-    await renderRichContent(root, { mode: "light" });
-
-    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
-    const [, , options] = vegaEmbedMock.mock.calls[0] ?? [];
-    expect(options?.mode).toBe("vega-lite");
-    expect(options?.renderer).toBe("svg");
-    expect(options?.actions).toBe(false);
-    // Expressions run through the AST interpreter so the strict CSP stays
-    // eval-free.
-    expect(options?.ast).toBe(true);
-    expect(options?.tooltip).toBe(true);
-    // The deny-network loader rejects external fetches instead of relying
-    // on a page CSP, so the WebUI and exported HTML share one contract.
-    const loader = options?.loader;
-    expect(loader).toBeDefined();
-    await expect(
-      loader?.load("https://example.invalid/data.csv"),
-    ).rejects.toThrow("external Vega-Lite data loading is not supported");
-    await expect(
-      loader?.load("https://example.invalid/data.csv", {
-        context: "dataflow",
-      }),
-    ).rejects.toThrow("external Vega-Lite data loading is not supported");
-    const sanitize = loader?.sanitize;
-    expect(sanitize).toBeDefined();
-    await expect(sanitize?.("./sales.csv")).rejects.toThrow(
-      "external Vega-Lite data loading is not supported",
-    );
-    await expect(
-      sanitize?.("./sales.csv", { context: "dataflow" }),
-    ).rejects.toThrow("external Vega-Lite data loading is not supported");
-    await expect(
-      sanitize?.("https://example.invalid/badge.png", { context: "image" }),
-    ).rejects.toThrow("external Vega-Lite data loading is not supported");
-    // Hyperlink clicks are navigation, not fetches: the sanitized result's
-    // keys become the attributes of the anchor Vega synthesizes, which is
-    // how the reader link policy is expressed.
-    await expect(
-      sanitize?.("javascript:alert(1)", { context: "href" }),
-    ).rejects.toThrow("external Vega-Lite data loading is not supported");
-    await expect(
-      sanitize?.("mailto:a@b.c", { context: "href" }),
-    ).rejects.toThrow("external Vega-Lite data loading is not supported");
-    await expect(
-      sanitize?.("/doc/other.md", { context: "href" }),
-    ).resolves.toEqual({ href: `${window.location.origin}/doc/other.md` });
-    await expect(
-      sanitize?.("https://example.invalid/linked", { context: "href" }),
-    ).resolves.toEqual({
-      href: "https://example.invalid/linked",
-      target: "_blank",
-      rel: "noopener noreferrer",
-    });
-  });
-
-  it("strips usermeta.embedOptions so the document cannot override host policy", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const spec = JSON.parse(VALID_SPEC) as Record<string, unknown>;
-    spec.usermeta = {
-      embedOptions: {
-        actions: true,
-        renderer: "canvas",
-        editorUrl: "https://evil.example",
-      },
-      note: "author data",
-    };
-    const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-vega-lite">${JSON.stringify(spec)}</code></pre>`;
-
-    await renderRichContent(root, { mode: "light" });
-
-    const [element, embedded] = vegaEmbedMock.mock.calls[0] ?? [];
-    expect(element.classList.contains("m2h-vega-lite")).toBe(true);
-    const embeddedSpec = embedded as Record<string, unknown>;
-    const usermeta = embeddedSpec.usermeta as Record<string, unknown>;
-    expect("embedOptions" in usermeta).toBe(false);
-    expect(usermeta.note).toBe("author data");
-  });
-
-  it("isolates an invalid JSON spec behind the failure placeholder", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML =
-      '<pre><code class="language-vega-lite">{ not json</code></pre>' +
-      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-
-    await renderRichContent(root, { mode: "light" });
-
-    const containers =
-      root.querySelectorAll<HTMLDivElement>("div.m2h-vega-lite");
-    expect(containers).toHaveLength(2);
-    // The broken chart collapses into the placeholder (never raw JSON on the
-    // page), gains no SVG, no marker, and a hidden trigger; the valid one
-    // after it still renders.
-    expect(containers[0]?.textContent).not.toContain("{ not json");
-    expect(
-      containers[0]?.querySelector(".m2h-rich-visual-error-title")?.textContent,
-    ).toBe("Vega-Lite 图表渲染失败");
-    expect(containers[0]?.querySelector("svg")).toBeNull();
-    expect(containers[0]?.dataset.m2hLightboxItem).toBeUndefined();
-    const firstTrigger = containers[0]
-      ?.closest(".m2h-vega-lite-frame")
-      ?.querySelector<HTMLButtonElement>(":scope > .m2h-lightbox-trigger");
-    expect(firstTrigger?.hidden).toBe(true);
-    expect(containers[1]?.querySelector("svg")).not.toBeNull();
-    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
-    expect(warnSpy).toHaveBeenCalledWith("Failed to render Vega-Lite chart", {
-      error: new Error("Vega-Lite specification must be valid JSON"),
-    });
-  });
-
-  it("rejects a JSON array instead of a spec object", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML =
-      '<pre><code class="language-vega-lite">[1, 2, 3]</code></pre>';
-
-    await renderRichContent(root, { mode: "light" });
-
-    expect(vegaEmbedMock).not.toHaveBeenCalled();
-    expect(warnSpy).toHaveBeenCalledWith("Failed to render Vega-Lite chart", {
-      error: new Error("Vega-Lite specification must be a JSON object"),
-    });
-    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
-    expect(container?.textContent).not.toContain("[1, 2, 3]");
-    expect(container?.querySelector(".m2h-rich-visual-error")).not.toBeNull();
-  });
-
-  it("rejects specs whose data sources point at URLs before embedding", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    // Every data position Vega itself reads: top-level data, datasets
-    // entries, lookup from.data, and the same spots inside composed
-    // children. Vega swallows a loader denial and resolves with an empty
-    // SVG, so the preflight — not the loader — defines the failure contract.
-    const cases: Array<{
-      name: string;
-      spec: Record<string, unknown>;
-      url: string;
-    }> = [
-      {
-        name: "top-level data.url",
-        spec: {
-          data: { url: "https://example.invalid/data.csv" },
-          mark: "bar",
-        },
-        url: "https://example.invalid/data.csv",
-      },
-      {
-        name: "datasets entry url",
-        spec: {
-          datasets: { sales: { url: "https://example.invalid/sales.json" } },
-          data: { name: "sales" },
-          mark: "bar",
-        },
-        url: "https://example.invalid/sales.json",
-      },
-      {
-        name: "layer child data.url",
-        spec: {
-          layer: [
-            {
-              data: { url: "https://example.invalid/layer.csv" },
-              mark: "point",
-            },
-          ],
-        },
-        url: "https://example.invalid/layer.csv",
-      },
-      {
-        name: "concat child data.url",
-        spec: {
-          concat: [
-            {
-              data: { url: "https://example.invalid/concat.csv" },
-              mark: "point",
-            },
-          ],
-        },
-        url: "https://example.invalid/concat.csv",
-      },
-      {
-        name: "facet child data.url",
-        spec: {
-          facet: { field: "a", type: "nominal" },
-          spec: {
-            data: { url: "https://example.invalid/facet.csv" },
-            mark: "point",
-          },
-        },
-        url: "https://example.invalid/facet.csv",
-      },
-      {
-        name: "lookup transform from.data url",
-        spec: {
-          data: { values: [{ a: 1 }] },
-          transform: [
-            {
-              lookup: "a",
-              from: {
-                data: { url: "https://example.invalid/lookup.csv" },
-                key: "a",
-                fields: ["b"],
-              },
-            },
-          ],
-          mark: "point",
-        },
-        url: "https://example.invalid/lookup.csv",
-      },
-    ];
-
-    for (const testCase of cases) {
-      const source = JSON.stringify(testCase.spec);
-      const root = document.createElement("div");
-      root.innerHTML = `<pre><code class="language-vega-lite">${source}</code></pre>`;
-
-      await renderRichContent(root, { mode: "light" });
-
-      const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
-      expect(container?.querySelector("svg"), testCase.name).toBeNull();
-      expect(container?.dataset.m2hLightboxItem, testCase.name).toBeUndefined();
-      expect(container?.textContent, testCase.name).not.toContain(testCase.url);
-      expect(
-        container?.querySelector(".m2h-rich-visual-error"),
-        testCase.name,
-      ).not.toBeNull();
-      expect(vegaEmbedMock, testCase.name).not.toHaveBeenCalled();
-      expect(warnSpy, testCase.name).toHaveBeenCalledWith(
-        "Failed to render Vega-Lite chart",
-        {
-          error: new Error(
-            `Vega-Lite specification must be self-contained: external data.url (${testCase.url}) is not supported`,
-          ),
-        },
+  it.each([
+    ["vega-lite", '{"mark":"bar"}'],
+    ["vegalite", "{ not valid JSON"],
+    ["mermaid", " \nzenuml\nAlice->Bob: Hello"],
+    ["zenuml", "Alice->Bob: Hello"],
+  ])(
+    "keeps %s source, copy, line numbers and folding across themes",
+    async (language, prefix) => {
+      const { renderRichContent, rerenderMermaid } = await import(
+        "./render-rich-content"
       );
-      warnSpy.mockClear();
-    }
-  });
+      const root = document.createElement("div");
+      const source = `${prefix}\n${Array.from({ length: 30 }, (_, index) => `source line ${index}`).join("\n")}\n`;
+      const pre = document.createElement("pre");
+      const code = document.createElement("code");
+      code.className = `language-${language}`;
+      code.textContent = source;
+      pre.append(code);
+      root.append(pre);
+      const onVisualError = vi.fn();
+      await renderRichContent(root, { mode: "light", onVisualError });
+      await rerenderMermaid(root, "dark", undefined, onVisualError);
+      await renderRichContent(root, { mode: "dark", onVisualError });
+      expect(root.querySelector("pre > code")).toBe(code);
+      expect(code.textContent).toBe(source);
+      expect(root.querySelectorAll(".m2h-code-copy")).toHaveLength(1);
+      expect(root.querySelector(".m2h-code-line-numbers")).not.toBeNull();
+      expect(root.querySelector(".m2h-code-toggle")).not.toBeNull();
+      expect(
+        root.querySelector("[data-m2h-lightbox-item], .m2h-rich-visual-error"),
+      ).toBeNull();
+      expect(loadMermaidMock).not.toHaveBeenCalled();
+      expect(onVisualError).not.toHaveBeenCalled();
+    },
+  );
 
-  it("keeps non-data url fields out of the external-data preflight", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    // The image and href encoding channels, descriptions and usermeta may
-    // all carry URLs that are not data sources; those flow through the
-    // loader and the link policy instead of the preflight.
-    const spec = {
-      data: { values: [{ a: 1 }] },
-      mark: { type: "point" },
-      encoding: {
-        x: { field: "a", type: "quantitative" },
-        url: { value: "https://example.invalid/badge.png" },
-        href: { value: "https://example.invalid/linked" },
-      },
-      description: "chart about https://example.invalid/notes",
-      usermeta: { source: "https://example.invalid/source" },
-    };
-    const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-vega-lite">${JSON.stringify(spec)}</code></pre>`;
-
-    await renderRichContent(root, { mode: "light" });
-
-    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
-    expect(root.querySelector("div.m2h-vega-lite svg")).not.toBeNull();
-    expect(warnSpy).not.toHaveBeenCalledWith(
-      "Failed to render Vega-Lite chart",
-      expect.anything(),
-    );
-  });
-
-  it("collapses into the placeholder and keeps going when the embed rejects", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    vegaEmbedMock.mockRejectedValueOnce(new Error("compile failed"));
-    const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-
-    await renderRichContent(root, { mode: "light" });
-
-    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
-    expect(container?.textContent).not.toContain(VALID_SPEC);
-    expect(container?.querySelector(".m2h-rich-visual-error")).not.toBeNull();
-    expect(container?.dataset.m2hLightboxItem).toBeUndefined();
-    expect(warnSpy).toHaveBeenCalledWith("Failed to render Vega-Lite chart", {
-      error: new Error("compile failed"),
-    });
-  });
-
-  it("does not load the Vega-Lite runtime without chart blocks", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML = '<pre><code class="language-go">func main()</code></pre>';
-
-    await renderRichContent(root, { mode: "light" });
-
-    expect(loadVegaLiteMock).not.toHaveBeenCalled();
-  });
-
-  it("does not load the Vega-Lite runtime for Mermaid-only documents", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML =
-      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
-
-    await renderRichContent(root, { mode: "light" });
-
-    expect(loadVegaLiteMock).not.toHaveBeenCalled();
-    expect(vegaEmbedMock).not.toHaveBeenCalled();
-  });
-
-  it("finalizes and aborts remaining charts when the render goes stale", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const finalize = vi.fn();
-    // The document goes away as soon as the first embed settles: the next
-    // freshness check reports stale, so that result is finalized and the
-    // second chart is never embedded.
-    let current = true;
-    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
-      element.innerHTML = '<svg data-mock="vega-lite"></svg>';
-      current = false;
-      return { view: {}, finalize };
-    });
-    const root = document.createElement("div");
-    root.innerHTML =
-      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>` +
-      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-
-    await renderRichContent(root, { mode: "light", isCurrent: () => current });
-
-    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
-    expect(finalize).toHaveBeenCalledTimes(1);
-    const containers =
-      root.querySelectorAll<HTMLDivElement>("div.m2h-vega-lite");
-    // The aborted chart keeps its source text instead of an SVG.
-    expect(containers[1]?.textContent).toBe(VALID_SPEC);
-  });
-
-  it("overlays the reader theme chrome without touching data colors", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-
-    await renderRichContent(root, { mode: "light" });
-
-    const [, , options] = vegaEmbedMock.mock.calls[0] ?? [];
-    const config = options?.config;
-    expect(config).toBeDefined();
-    // Chrome only: a transparent chart surface and themed axis/legend/title
-    // text. Mark colors and scale ranges never appear in the host config.
-    expect(config?.background).toBeNull();
-    expect(config?.view).toEqual({ stroke: null });
-    expect(config?.axis).toMatchObject({
-      labelColor: expect.any(String),
-      titleColor: expect.any(String),
-      gridColor: expect.any(String),
-      domainColor: expect.any(String),
-      tickColor: expect.any(String),
-    });
-    expect(config?.legend).toMatchObject({
-      labelColor: expect.any(String),
-      titleColor: expect.any(String),
-    });
-    expect(config?.title).toEqual({ color: expect.any(String) });
-  });
-
-  it("re-embeds charts on a theme switch, finalizing the previous view", async () => {
-    const { renderRichContent, rerenderThemeSensitiveContent } = await import(
-      "./render-rich-content"
-    );
-    const firstFinalize = vi.fn();
-    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
-      element.innerHTML = '<svg data-mock="vega-lite"></svg>';
-      return { view: {}, finalize: firstFinalize };
-    });
-    const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-    await renderRichContent(root, { mode: "light" });
-
-    const frame = root.querySelector(".m2h-vega-lite-frame");
-    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
-    const trigger = frame?.querySelector<HTMLButtonElement>(
-      ":scope > .m2h-lightbox-trigger",
-    );
-    const secondFinalize = vi.fn();
-    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
-      element.innerHTML = '<svg data-mock="vega-lite-dark"></svg>';
-      return { view: {}, finalize: secondFinalize };
-    });
-
-    await rerenderThemeSensitiveContent(root, { mode: "dark" });
-
-    // The old view was finalized exactly once, the chart re-embedded, and
-    // the frame/container/trigger kept their DOM identity.
-    expect(firstFinalize).toHaveBeenCalledTimes(1);
-    expect(secondFinalize).not.toHaveBeenCalled();
-    expect(vegaEmbedMock).toHaveBeenCalledTimes(2);
-    expect(container?.innerHTML).toContain('data-mock="vega-lite-dark"');
-    expect(root.querySelector(".m2h-vega-lite-frame")).toBe(frame);
-    expect(
-      frame?.querySelector<HTMLButtonElement>(":scope > .m2h-lightbox-trigger"),
-    ).toBe(trigger);
-    expect(container?.dataset.m2hLightboxItem).toBe("true");
-  });
-
-  it("retries a chart whose first render failed on the theme switch", async () => {
-    const { renderRichContent, rerenderThemeSensitiveContent } = await import(
-      "./render-rich-content"
-    );
-    vegaEmbedMock.mockRejectedValueOnce(new Error("compile failed"));
-    const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-    await renderRichContent(root, { mode: "light" });
-
-    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
-    // The failed first render shows the placeholder, not the JSON source.
-    expect(container?.querySelector(".m2h-rich-visual-error")).not.toBeNull();
-
-    await rerenderThemeSensitiveContent(root, { mode: "dark" });
-
-    // The theme-switch retry recovers: placeholder out, chart in.
-    expect(container?.querySelector(".m2h-rich-visual-error")).toBeNull();
-    expect(container?.querySelector("svg")).not.toBeNull();
-    expect(container?.dataset.m2hLightboxItem).toBe("true");
-  });
-
-  it("keeps the previous SVG when a theme re-embed fails mid-render", async () => {
-    const { renderRichContent, rerenderThemeSensitiveContent } = await import(
-      "./render-rich-content"
-    );
-    const root = document.createElement("div");
-    root.innerHTML = `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-    await renderRichContent(root, { mode: "light" });
-
-    // The re-embed clears the container (Vega-Embed renders into it) and
-    // then fails: the slot collapses into the placeholder — never an empty
-    // frame, and never the JSON source back as page content.
-    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
-      element.innerHTML = "";
-      throw new Error("renderer crashed");
-    });
-    await rerenderThemeSensitiveContent(root, { mode: "dark" });
-
-    const container = root.querySelector<HTMLDivElement>("div.m2h-vega-lite");
-    expect(container?.querySelector(".m2h-rich-visual-error")).not.toBeNull();
-    expect(container?.textContent).not.toContain(VALID_SPEC);
-    expect(container?.dataset.m2hLightboxItem).toBeUndefined();
-  });
-
-  it("does not load the Vega runtime on a theme switch without charts", async () => {
-    const { rerenderThemeSensitiveContent } = await import(
-      "./render-rich-content"
-    );
-    const root = document.createElement("div");
-    root.innerHTML = "<p>no visuals at all</p>";
-
-    await rerenderThemeSensitiveContent(root, { mode: "dark" });
-
-    expect(loadVegaLiteMock).not.toHaveBeenCalled();
-    expect(loadMermaidMock).not.toHaveBeenCalled();
-  });
-
-  it("repaints Mermaid diagrams and Vega-Lite charts together", async () => {
-    const { renderRichContent, rerenderThemeSensitiveContent } = await import(
+  it("renders ordinary Mermaid mentioning zenuml alongside excluded blocks", async () => {
+    const { renderRichContent, rerenderMermaid } = await import(
       "./render-rich-content"
     );
     const root = document.createElement("div");
     root.innerHTML =
-      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>` +
-      '<pre><code class="language-mermaid">graph TD\nA--&gt;B</code></pre>';
+      '<pre><code class="language-mermaid">zenuml\nAlice-&gt;Bob: Hello</code></pre><pre><code class="language-mermaid">flowchart LR\nA[zenuml label]--&gt;B</code></pre>';
+    const excluded = root.querySelector("code");
     await renderRichContent(root, { mode: "light" });
-
-    mermaidMock.render.mockClear();
-    vegaEmbedMock.mockClear();
-    await rerenderThemeSensitiveContent(root, { mode: "dark" });
-
-    expect(mermaidMock.render).toHaveBeenCalledTimes(1);
-    expect(vegaEmbedMock).toHaveBeenCalledTimes(1);
-  });
-
-  it("finalizes every view before the body DOM is replaced", async () => {
-    const { renderRichContent, finalizeVegaLiteViews } = await import(
-      "./render-rich-content"
+    await rerenderMermaid(root, "dark");
+    expect(root.querySelector("pre > code")).toBe(excluded);
+    expect(root.querySelectorAll(".mermaid svg")).toHaveLength(1);
+    expect(mermaidMock.render).toHaveBeenCalledTimes(2);
+    expect(mermaidMock.render).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "flowchart LR\nA[zenuml label]-->B",
     );
-    const finalize = vi.fn();
-    vegaEmbedMock.mockImplementation(async (element: HTMLElement) => {
-      element.innerHTML = '<svg data-mock="vega-lite"></svg>';
-      return { view: {}, finalize };
-    });
-    const root = document.createElement("div");
-    root.innerHTML =
-      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>` +
-      `<pre><code class="language-vega-lite">${VALID_SPEC}</code></pre>`;
-    await renderRichContent(root, { mode: "light" });
-
-    finalizeVegaLiteViews(root);
-    expect(finalize).toHaveBeenCalledTimes(2);
   });
 });

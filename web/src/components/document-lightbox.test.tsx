@@ -131,11 +131,11 @@ describe("DocumentLightbox", () => {
         format: "SVG",
       },
       {
-        kind: "vega-lite",
+        kind: "mermaid",
         markup: '<svg viewBox="0 0 100 50"></svg>',
         intrinsicWidth: 100,
         intrinsicHeight: 50,
-        alt: "Vega-Lite 图表",
+        alt: "Mermaid 图表",
         title: null,
         format: "SVG",
       },
@@ -189,8 +189,8 @@ describe("DocumentLightbox", () => {
         onClosed={() => {}}
       />,
     );
-    expect(stage()?.dataset.visualKind).toBe("vega-lite");
-    expect(backdrop()?.dataset.visualKind).toBe("vega-lite");
+    expect(stage()?.dataset.visualKind).toBe("mermaid");
+    expect(backdrop()?.dataset.visualKind).toBe("mermaid");
     expect(
       stage()?.querySelectorAll(".image-lightbox-vector > svg"),
     ).toHaveLength(1);
@@ -715,7 +715,7 @@ describe("DocumentLightbox", () => {
     );
   });
 
-  it.each(["mermaid", "vega-lite"] as const)(
+  it.each(["mermaid"] as const)(
     "hides information for %s while keeping its accessible name",
     (kind) => {
       renderLightbox([{ ...vectorItem, kind }], 0);

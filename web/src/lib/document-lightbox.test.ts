@@ -22,7 +22,7 @@ function mixedRoot(): HTMLElement {
       </div>
       <button type="button" class="m2h-lightbox-trigger"></button>
     </div>
-    <div class="m2h-vega-lite" data-m2h-lightbox-item="true">
+    <div class="mermaid" data-m2h-lightbox-item="true">
       <svg viewBox="0 0 600 300"><rect width="600" height="300"></rect></svg>
     </div>
     <p><img src="/c.png" alt="C" data-m2h-lightbox-item="true"></p>
@@ -175,7 +175,7 @@ describe("collectLightboxState", () => {
   it("keeps embedded vector links in the markup but takes them out of tab order", () => {
     const root = document.createElement("div");
     root.innerHTML = `
-      <div class="m2h-vega-lite" data-m2h-lightbox-item="true">
+      <div class="mermaid" data-m2h-lightbox-item="true">
         <svg viewBox="0 0 100 50">
           <a href="https://example.invalid/linked">
             <rect width="10" height="10"></rect>
@@ -183,9 +183,8 @@ describe("collectLightboxState", () => {
         </svg>
       </div>
     `;
-    const selected = root.querySelector<HTMLElement>(".m2h-vega-lite");
-    if (selected === null)
-      throw new Error("Vega-Lite container was not created");
+    const selected = root.querySelector<HTMLElement>(".mermaid");
+    if (selected === null) throw new Error("Mermaid container was not created");
 
     const state = collectLightboxState(root, selected);
     const item = state?.items[0];
@@ -387,7 +386,7 @@ describe("collectLightboxState", () => {
     });
   });
 
-  it("interleaves bitmap, Mermaid, and Vega-Lite snapshots in document order", () => {
+  it("interleaves bitmap, Mermaid, and Mermaid snapshots in document order", () => {
     const root = mixedRoot();
     const selected = root.querySelector<HTMLElement>("div.mermaid");
     if (selected === null) throw new Error("mermaid container was not created");
@@ -398,12 +397,12 @@ describe("collectLightboxState", () => {
     expect(itemPaths(state?.items ?? [])).toEqual([
       "/a.png",
       "mermaid",
-      "vega-lite",
+      "mermaid",
       "/c.png",
     ]);
     const mermaid = state?.items[1];
-    const vegaLite = state?.items[2];
-    if (mermaid?.kind === "image" || vegaLite?.kind === "image") {
+    const secondMermaid = state?.items[2];
+    if (mermaid?.kind === "image" || secondMermaid?.kind === "image") {
       throw new Error("expected SVG visuals");
     }
     expect(mermaid).toMatchObject({
@@ -416,16 +415,16 @@ describe("collectLightboxState", () => {
       // reports that underlying format, not the engine name.
       format: "SVG",
     });
-    expect(vegaLite).toMatchObject({
-      kind: "vega-lite",
+    expect(secondMermaid).toMatchObject({
+      kind: "mermaid",
       intrinsicWidth: 600,
       intrinsicHeight: 300,
-      alt: "Vega-Lite 图表",
+      alt: "Mermaid 图表",
       title: null,
       format: "SVG",
     });
     expect(mermaid?.markup).toContain("<svg");
-    expect(vegaLite?.markup).toContain("<svg");
+    expect(secondMermaid?.markup).toContain("<svg");
     expect(mermaid?.markup).not.toContain("data:image/svg+xml");
   });
 

@@ -3,45 +3,19 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type {
   MathAutoRenderer,
-  MermaidExternalDiagramDefinition,
   MermaidRuntime,
   TablesortConstructor,
-  VegaEmbedResult,
-  VegaEmbedRuntime,
 } from "./runtime-loader";
 
 const mermaidRuntime: MermaidRuntime = {
   initialize: vi.fn(),
-  registerExternalDiagrams: vi.fn(async () => {}),
   run: vi.fn(async () => {}),
   render: vi.fn(async () => ({ svg: "<svg></svg>" })),
-};
-
-// Same shape as the vendored plugin's default export: an id, the official
-// leading-keyword detector, and a loader producing the diagram.
-const zenumlPlugin: MermaidExternalDiagramDefinition = {
-  id: "zenuml",
-  detector: (text: string) => /^\s*zenuml/.test(text),
-  loader: async () => ({ id: "zenuml", diagram: {} }),
 };
 
 const renderMathInElement: MathAutoRenderer = vi.fn();
 
 const tablesortCtor = vi.fn() as unknown as TablesortConstructor;
-
-const vegaEmbedRuntime: VegaEmbedRuntime = vi.fn(
-  async () =>
-    ({
-      view: {},
-      finalize: vi.fn(),
-    }) as VegaEmbedResult,
-);
-
-const VEGA_SCRIPTS = [
-  "/runtime/vega.min.js",
-  "/runtime/vega-lite.min.js",
-  "/runtime/vega-embed.min.js",
-];
 
 const TABLESORT_SCRIPTS = [
   "/runtime/tablesort.min.js",
@@ -82,9 +56,7 @@ describe("runtime loader", () => {
     delete window.mermaid;
     delete window.renderMathInElement;
     delete window.Tablesort;
-    delete window.vegaEmbed;
     vi.mocked(mermaidRuntime.initialize).mockClear();
-    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockClear();
   });
 
   it("injects the mermaid script and resolves with window.mermaid", async () => {
@@ -107,12 +79,9 @@ describe("runtime loader", () => {
       document.head.innerHTML = '<meta name="m2h-cdn" content="true">';
     });
 
-    it("loads pinned Mermaid on demand, deduplicates, and selects the ZenUML ESM tree", async () => {
+    it("loads pinned Mermaid on demand, deduplicates", async () => {
       const loader = await import("./runtime-loader");
       expect(document.head.querySelector("script")).toBeNull();
-      expect(loader.ZENUML_MODULE_URL).toBe(
-        `${base}@mermaid-js/mermaid-zenuml@0.2.3/dist/mermaid-zenuml.esm.min.mjs`,
-      );
       const first = loader.loadMermaid();
       const second = loader.loadMermaid();
       expect(document.head.querySelectorAll("script")).toHaveLength(1);
@@ -180,25 +149,6 @@ describe("runtime loader", () => {
       }
       await expect(pending).resolves.toBe(tablesortCtor);
       expect(document.head.querySelectorAll("script")).toHaveLength(6);
-    });
-
-    it("loads the pinned Vega trio in dependency order", async () => {
-      const loader = await import("./runtime-loader");
-      const pending = loader.loadVegaLite();
-      let count = 0;
-      for (const path of [
-        "vega@6.4.0/build/vega.min.js",
-        "vega-lite@6.4.3/build/vega-lite.min.js",
-        "vega-embed@7.1.0/build/vega-embed.min.js",
-      ]) {
-        const script = await waitForHeadElement<HTMLScriptElement>(
-          `script[src="${base}${path}"]`,
-        );
-        expect(document.head.querySelectorAll("script")).toHaveLength(++count);
-        window.vegaEmbed = vegaEmbedRuntime;
-        fire(script, "load");
-      }
-      await expect(pending).resolves.toBe(vegaEmbedRuntime);
     });
   });
 
@@ -430,239 +380,5 @@ describe("runtime loader", () => {
     }
 
     await expect(retry).resolves.toBe(tablesortCtor);
-  });
-
-  it("loads the vega trio strictly in dependency order", async () => {
-    const loader = await import("./runtime-loader");
-    const pending = loader.loadVegaLite();
-    const vega = await waitForHeadElement<HTMLScriptElement>(
-      'script[src="/runtime/vega.min.js"]',
-    );
-
-    // vega-lite and vega-embed must not appear before vega resolves: each
-    // script receives its predecessor's window global at evaluation time.
-    expect(
-      document.head.querySelector('script[src="/runtime/vega-lite.min.js"]'),
-    ).toBeNull();
-    expect(
-      document.head.querySelector('script[src="/runtime/vega-embed.min.js"]'),
-    ).toBeNull();
-
-    fire(vega, "load");
-    const vegaLite = await waitForHeadElement<HTMLScriptElement>(
-      'script[src="/runtime/vega-lite.min.js"]',
-    );
-    expect(
-      document.head.querySelector('script[src="/runtime/vega-embed.min.js"]'),
-    ).toBeNull();
-
-    fire(vegaLite, "load");
-    const vegaEmbed = await waitForHeadElement<HTMLScriptElement>(
-      'script[src="/runtime/vega-embed.min.js"]',
-    );
-
-    window.vegaEmbed = vegaEmbedRuntime;
-    fire(vegaEmbed, "load");
-
-    await expect(pending).resolves.toBe(vegaEmbedRuntime);
-  });
-
-  it("deduplicates concurrent vega loads to a single script set", async () => {
-    const loader = await import("./runtime-loader");
-    const first = loader.loadVegaLite();
-    const second = loader.loadVegaLite();
-
-    for (const src of VEGA_SCRIPTS) {
-      const script = await waitForHeadElement<HTMLScriptElement>(
-        `script[src="${src}"]`,
-      );
-      if (src === "/runtime/vega-embed.min.js") {
-        window.vegaEmbed = vegaEmbedRuntime;
-      }
-      fire(script, "load");
-    }
-
-    await Promise.all([first, second]);
-    for (const src of VEGA_SCRIPTS) {
-      expect(
-        document.head.querySelectorAll(`script[src="${src}"]`),
-      ).toHaveLength(1);
-    }
-  });
-
-  it("rejects a failed vega load and allows a retry", async () => {
-    const loader = await import("./runtime-loader");
-    const first = loader.loadVegaLite();
-    const vega = await waitForHeadElement<HTMLScriptElement>(
-      'script[src="/runtime/vega.min.js"]',
-    );
-
-    fire(vega, "error");
-    await expect(first).rejects.toThrow(
-      "load runtime script /runtime/vega.min.js",
-    );
-    expect(
-      document.head.querySelector('script[src="/runtime/vega.min.js"]'),
-    ).toBeNull();
-
-    const retry = loader.loadVegaLite();
-    for (const src of VEGA_SCRIPTS) {
-      const script = await waitForHeadElement<HTMLScriptElement>(
-        `script[src="${src}"]`,
-      );
-      if (src === "/runtime/vega-embed.min.js") {
-        window.vegaEmbed = vegaEmbedRuntime;
-      }
-      fire(script, "load");
-    }
-
-    await expect(retry).resolves.toBe(vegaEmbedRuntime);
-  });
-
-  it("rejects when the vega chain does not attach window.vegaEmbed", async () => {
-    const loader = await import("./runtime-loader");
-    const pending = loader.loadVegaLite();
-
-    for (const src of VEGA_SCRIPTS) {
-      const script = await waitForHeadElement<HTMLScriptElement>(
-        `script[src="${src}"]`,
-      );
-      // Every script reports a successful load, yet the global never appears.
-      fire(script, "load");
-    }
-
-    await expect(pending).rejects.toThrow(
-      "Vega Embed runtime did not attach window.vegaEmbed",
-    );
-  });
-});
-
-describe("ensureZenUMLRegistered", () => {
-  const importZenUML = vi.fn(async () => ({ default: zenumlPlugin }));
-
-  beforeEach(() => {
-    // Each test re-imports the module so the registration singleton resets.
-    vi.resetModules();
-    document.head.innerHTML = "";
-    delete window.mermaid;
-    vi.mocked(mermaidRuntime.initialize).mockClear();
-    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockReset();
-    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockResolvedValue(
-      undefined,
-    );
-    importZenUML.mockReset();
-    importZenUML.mockResolvedValue({ default: zenumlPlugin });
-  });
-
-  it("registers the plugin with lazy loading disabled", async () => {
-    const loader = await import("./runtime-loader");
-
-    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
-
-    expect(importZenUML).toHaveBeenCalledTimes(1);
-    // lazyLoad stays off: registration itself downloads the diagram chunk so
-    // the following render never hits a second, hidden lazy load.
-    expect(mermaidRuntime.registerExternalDiagrams).toHaveBeenCalledWith(
-      [zenumlPlugin],
-      { lazyLoad: false },
-    );
-    // Registration never configures the theme; that stays with the caller.
-    expect(mermaidRuntime.initialize).not.toHaveBeenCalled();
-  });
-
-  it("removes host stylesheets injected while the plugin registers", async () => {
-    const existing = document.createElement("style");
-    existing.dataset.owner = "m2h";
-    existing.textContent = ":root { --background: white; }";
-    document.head.append(existing);
-    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockImplementationOnce(
-      async () => {
-        const pollutedStyle = document.createElement("style");
-        pollutedStyle.textContent =
-          ":root { --background: #282a36; } *, ::before, ::after { --tw-shadow: 0 0 #0000; }";
-        const pollutedLink = document.createElement("link");
-        pollutedLink.rel = "stylesheet";
-        pollutedLink.href = "/zenuml-global.css";
-        document.head.append(pollutedStyle, pollutedLink);
-      },
-    );
-    const loader = await import("./runtime-loader");
-
-    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
-
-    expect(document.head.querySelector('[data-owner="m2h"]')).toBe(existing);
-    expect(document.head.querySelector('style:not([data-owner="m2h"])')).toBe(
-      null,
-    );
-    expect(
-      document.head.querySelector('link[href$="/zenuml-global.css"]'),
-    ).toBe(null);
-  });
-
-  it("removes injected host stylesheets when registration fails", async () => {
-    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockImplementationOnce(
-      async () => {
-        const pollution = document.createElement("style");
-        pollution.textContent = ":root { --background: #282a36; }";
-        document.head.append(pollution);
-        throw new Error("register rejected after loading the renderer");
-      },
-    );
-    const loader = await import("./runtime-loader");
-
-    await expect(
-      loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML),
-    ).rejects.toThrow("register rejected after loading the renderer");
-
-    expect(document.head.querySelector("style")).toBe(null);
-  });
-
-  it("deduplicates concurrent registrations into one plugin import", async () => {
-    const loader = await import("./runtime-loader");
-
-    const first = loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
-    const second = loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
-    await Promise.all([first, second]);
-
-    expect(importZenUML).toHaveBeenCalledTimes(1);
-    expect(mermaidRuntime.registerExternalDiagrams).toHaveBeenCalledTimes(1);
-  });
-
-  it("reuses the completed registration for later documents", async () => {
-    const loader = await import("./runtime-loader");
-
-    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
-    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
-
-    expect(importZenUML).toHaveBeenCalledTimes(1);
-    expect(mermaidRuntime.registerExternalDiagrams).toHaveBeenCalledTimes(1);
-  });
-
-  it("drops a failed import so the next document retries", async () => {
-    const loader = await import("./runtime-loader");
-    importZenUML.mockRejectedValueOnce(new Error("plugin fetch failed"));
-
-    await expect(
-      loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML),
-    ).rejects.toThrow("plugin fetch failed");
-    // The rejected promise is not cached forever: a later document can retry.
-    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
-
-    expect(importZenUML).toHaveBeenCalledTimes(2);
-    expect(mermaidRuntime.registerExternalDiagrams).toHaveBeenCalledTimes(1);
-  });
-
-  it("drops a failed registration so the next attempt retries", async () => {
-    const loader = await import("./runtime-loader");
-    vi.mocked(mermaidRuntime.registerExternalDiagrams).mockRejectedValueOnce(
-      new Error("register rejected"),
-    );
-
-    await expect(
-      loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML),
-    ).rejects.toThrow("register rejected");
-    await loader.ensureZenUMLRegistered(mermaidRuntime, importZenUML);
-
-    expect(mermaidRuntime.registerExternalDiagrams).toHaveBeenCalledTimes(2);
   });
 });

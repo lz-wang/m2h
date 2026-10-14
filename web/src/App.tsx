@@ -73,9 +73,8 @@ import {
 import { enhanceDocumentLinks } from "./lib/document-links";
 import { observeLazyImages, prepareLazyImages } from "./lib/lazy-images";
 import {
-  finalizeVegaLiteViews,
   renderRichContent,
-  rerenderThemeSensitiveContent,
+  rerenderMermaid,
   revealLazyImage,
 } from "./lib/render-rich-content";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
@@ -293,7 +292,7 @@ export function App({ api }: AppProps) {
   );
   // Search-result activation mirrors Markdown-link navigation exactly: a hit
   // in the already-open document scrolls in place (never refetching, so
-  // Mermaid/Vega/图片 etc. are not re-rendered), a hit in another document
+  // Mermaid/图片 etc. are not re-rendered), a hit in another document
   // goes through the normal select path with the section hash encoded by the
   // one canonical encoder. A metadata-only hit on the current document just
   // clears the fragment and returns to the top.
@@ -1005,16 +1004,7 @@ function PreviewContent({
   // has moved on — while a theme switch queues behind the initial render
   // instead of invalidating it (see the theme effect below).
   const bodyGenerationRef = useRef(0);
-  // The initial enhancement of the current body, awaited by every theme
-  // repaint: Vega-Lite chart containers only exist once the initial render
-  // has created them, so repainting while the runtime is still downloading
-  // would find no targets — and a toggle that invalidated the initial render
-  // instead would leave the raw fenced blocks behind for good.
   const initialRenderRef = useRef<Promise<void> | null>(null);
-  // Theme repaints of one body run strictly one after another here. vegaEmbed
-  // mutates its target container during the await, so two concurrent repaints
-  // interleave their DOM writes nondeterministically — a freshness check
-  // after the embed resolves cannot un-write what a stale embed already did.
   const themeQueueRef = useRef<Promise<void>>(Promise.resolve());
   // The lightbox snapshot and its open flag are deliberately separate states:
   // closing only flips the flag, the popup stays mounted through its exit
@@ -1050,11 +1040,11 @@ function PreviewContent({
   // Width and sidebar are likewise excluded.
   //
   // The separate theme effect below regenerates only the theme-sensitive
-  // rich visuals (Mermaid diagrams and Vega-Lite charts), whose colors are
+  // rich visuals (Mermaid diagrams), whose colors are
   // baked into their SVG at render time. The body generation guard pairs
   // with the renderers' freshness checks so a slow render that outlives its
   // document is not applied after the body has moved on; cleanup invalidates
-  // the in-flight render and finalizes Vega views.
+  // the in-flight render.
   useLayoutEffect(() => {
     if (phase !== "ready") {
       return;
@@ -1100,16 +1090,12 @@ function PreviewContent({
     return () => {
       bodyGenerationRef.current++;
       initialRenderRef.current = null;
-      // Vega views hold timers and document-level listeners that only
-      // finalize detaches; this cleanup runs while the old body DOM is still
-      // in place, right before the next paint replaces it wholesale.
-      finalizeVegaLiteViews(root);
       lazyImages.disconnect();
     };
   }, [html, phase, onVisualError]);
 
   // A theme switch repaints only the theme-sensitive rich visuals (Mermaid
-  // diagrams and Vega-Lite charts), leaving the article DOM, KaTeX, copy
+  // diagrams), leaving the article DOM, KaTeX, copy
   // buttons, and any in-body focus untouched. On the initial render the body
   // effect above has already painted the current theme, so renderedModeRef
   // matches resolvedMode and this effect is a no-op; it only does work on a
@@ -1155,13 +1141,12 @@ function PreviewContent({
       if (renderedModeRef.current !== mode || paintedModeRef.current === mode) {
         return;
       }
-      await rerenderThemeSensitiveContent(root, {
+      await rerenderMermaid(
+        root,
         mode,
-        isCurrent: () => {
-          return bodyGenerationRef.current === generation;
-        },
+        () => bodyGenerationRef.current === generation,
         onVisualError,
-      });
+      );
       if (bodyGenerationRef.current === generation) {
         paintedModeRef.current = mode;
       }
@@ -1192,7 +1177,7 @@ function PreviewContent({
       // injected, so a recorded position could address another item than the
       // one under this trigger.
       const root = contentRef.current;
-      // Image frames and rich-visual frames (Mermaid, and later Vega-Lite)
+      // Image frames and rich-visual frames (Mermaid)
       // share the trigger button; the shared class keeps this lookup from
       // enumerating every visual engine.
       const frame = candidate.closest(
