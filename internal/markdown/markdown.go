@@ -169,6 +169,7 @@ func sanitizeDangerousURLs(document ast.Node) error {
 func newEngine() goldmark.Markdown {
 	engine := newGFM(
 		&mathExtension{},
+		&tabbedExtension{},
 		extension.Footnote,
 		emoji.New(emoji.WithRenderingMethod(emoji.Unicode)),
 		AlertExtension,
