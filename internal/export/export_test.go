@@ -3,6 +3,7 @@ package export
 import (
 	"bytes"
 	"context"
+	"html"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -332,152 +333,6 @@ func TestRunExportPreservesRichContent(t *testing.T) {
 	}
 }
 
-func TestRunExportRegistersZenUMLPluginOnDemand(t *testing.T) {
-	t.Parallel()
-
-	// A zenuml diagram needs both Mermaid Core and the external-diagram
-	// plugin: the page pins the core CDN script and carries the plugin module
-	// URL the bootstrap imports at runtime.
-	root := t.TempDir()
-	source := writeFixture(t, root, "zenuml.md",
-		"# ZenUML\n\n```mermaid\nzenuml\n    Alice->John: Hello\n```\n")
-	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
-		t.Fatal(err)
-	}
-	html, err := os.ReadFile(filepath.Join(root, "zenuml.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := string(html)
-	for _, want := range []string{
-		`<script src="https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.min.js"></script>`,
-		`window.m2hZenUMLModuleURL = "https://cdn.jsdelivr.net/npm/@mermaid-js/mermaid-zenuml@0.2.3/dist/mermaid-zenuml.esm.min.mjs"`,
-		`mermaid.startOnLoad = false`,
-		`function withoutAddedHostStylesheets(operation)`,
-		`if (!retained.has(stylesheet))`,
-		`function applyZenUMLTheme(root, dark)`,
-		`data-m2h-zenuml-theme-style`,
-		`fill: #1f2020`,
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("zenuml export missing %q", want)
-		}
-	}
-
-	// A plain flowchart must not carry the plugin URL: the inlined bootstrap
-	// always contains the detector text and the global's read site, but only
-	// the CDN assignment makes the browser download the multi-megabyte plugin.
-	flowRoot := t.TempDir()
-	flow := writeFixture(t, flowRoot, "flow.md",
-		"# Flow\n\n```mermaid\nflowchart LR\n    A-->B\n```\n")
-	if _, err := Run(context.Background(), defaultOptions(flow)); err != nil {
-		t.Fatal(err)
-	}
-	flowHTML, err := os.ReadFile(filepath.Join(flowRoot, "flow.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(flowHTML), `https://cdn.jsdelivr.net/npm/mermaid@11.16.1/dist/mermaid.min.js`) {
-		t.Error("flowchart export missing the Mermaid core CDN script")
-	}
-	if strings.Contains(string(flowHTML), "@mermaid-js/mermaid-zenuml@") {
-		t.Error("flowchart export unexpectedly carries the ZenUML plugin URL")
-	}
-}
-
-func TestRunExportEmbedsVegaLiteRuntimeOnDemand(t *testing.T) {
-	t.Parallel()
-
-	// A chart needs the whole dependency chain: vega attaches the runtime,
-	// vega-lite compiles against it, and vega-embed receives both as globals —
-	// so the page pins all three CDN scripts in exactly that order and the
-	// bootstrap embeds under the same host policy as the WebUI.
-	root := t.TempDir()
-	source := writeFixture(t, root, "chart.md",
-		"# Chart\n\n```vega-lite\n{\"data\":{\"values\":[{\"a\":1}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"a\",\"type\":\"quantitative\"}}}\n```\n")
-	if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
-		t.Fatal(err)
-	}
-
-	html, err := os.ReadFile(filepath.Join(root, "chart.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := string(html)
-	vega := `<script src="https://cdn.jsdelivr.net/npm/vega@6.4.0/build/vega.min.js"></script>`
-	vegaLite := `<script src="https://cdn.jsdelivr.net/npm/vega-lite@6.4.3/build/vega-lite.min.js"></script>`
-	vegaEmbed := `<script src="https://cdn.jsdelivr.net/npm/vega-embed@7.1.0/build/vega-embed.min.js"></script>`
-	for _, want := range []string{
-		`class="language-vega-lite"`,
-		vega, vegaLite, vegaEmbed,
-		"embedVegaLiteCharts",
-		`mode: "vega-lite"`,
-		`renderer: "svg"`,
-		"actions: false",
-		"ast: true",
-		"firstExternalDataUrl",
-		"external Vega-Lite data loading is not supported",
-		"function withoutEmbedOptions(spec)",
-		"vegaLiteHostConfig",
-	} {
-		if !strings.Contains(body, want) {
-			t.Errorf("vega-lite export missing %q", want)
-		}
-	}
-	// The dependency order is load-bearing: each script reads its
-	// predecessor's window global when it evaluates.
-	if !((strings.Index(body, vega) < strings.Index(body, vegaLite)) &&
-		(strings.Index(body, vegaLite) < strings.Index(body, vegaEmbed))) {
-		t.Error("vega CDN scripts are not emitted in dependency order")
-	}
-
-	// The `vegalite` alias drives the same trio through the same detection.
-	aliasRoot := t.TempDir()
-	alias := writeFixture(t, aliasRoot, "alias.md",
-		"# Alias\n\n```vegalite\n{\"data\":{\"values\":[{\"a\":1}]},\"mark\":\"bar\",\"encoding\":{\"x\":{\"field\":\"a\",\"type\":\"quantitative\"}}}\n```\n")
-	if _, err := Run(context.Background(), defaultOptions(alias)); err != nil {
-		t.Fatal(err)
-	}
-	aliasHTML, err := os.ReadFile(filepath.Join(aliasRoot, "alias.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	aliasBody := string(aliasHTML)
-	if !strings.Contains(aliasBody, `class="language-vegalite"`) {
-		t.Error("alias export missing the vegalite language class")
-	}
-	for _, want := range []string{vega, vegaLite, vegaEmbed} {
-		if !strings.Contains(aliasBody, want) {
-			t.Errorf("alias export missing CDN script %q", want)
-		}
-	}
-
-	// A document that only mentions the string "vega-lite" in plain or fenced
-	// code must not trigger the runtime trio.
-	plainRoot := t.TempDir()
-	plain := writeFixture(t, plainRoot, "plain.md",
-		"# Plain\n\nThe word vega-lite here is prose.\n\n```text\nvega-lite mentioned in code\n```\n\n```html\n<pre><code class=\"language-vega-lite\">escaped</code></pre>\n```\n")
-	if _, err := Run(context.Background(), defaultOptions(plain)); err != nil {
-		t.Fatal(err)
-	}
-	plainHTML, err := os.ReadFile(filepath.Join(plainRoot, "plain.html"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	plainBody := string(plainHTML)
-	// Goldmark escapes the raw-HTML sample's quotes, so a bare class
-	// attribute never appears; prose and fenced text carry no class at all.
-	for _, unwanted := range []string{
-		`<script src="https://cdn.jsdelivr.net/npm/vega@`,
-		`<script src="https://cdn.jsdelivr.net/npm/vega-lite@`,
-		`<script src="https://cdn.jsdelivr.net/npm/vega-embed@`,
-	} {
-		if strings.Contains(plainBody, unwanted) {
-			t.Errorf("plain vega-lite mention unexpectedly loads %q", unwanted)
-		}
-	}
-}
-
 func TestRunExportWithoutRichContentStaysLean(t *testing.T) {
 	t.Parallel()
 
@@ -551,5 +406,37 @@ func TestRunExportKeepsImageReferences(t *testing.T) {
 	}
 	if strings.Contains(body, "base64") {
 		t.Errorf("images should not be embedded: %s", body)
+	}
+}
+
+func TestRunExportPreservesRemovedRendererCode(t *testing.T) {
+	t.Parallel()
+	for _, item := range []struct{ language, source string }{
+		{"vega-lite", `{"mark":"bar"}`},
+		{"vegalite", `{ not valid JSON`},
+		{"mermaid", " \nzenuml\nAlice->Bob: Hello"},
+		{"zenuml", "Alice->Bob: Hello"},
+	} {
+		t.Run(item.language, func(t *testing.T) {
+			root := t.TempDir()
+			source := writeFixture(t, root, "removed.md", "# Removed\n\n```"+item.language+"\n"+item.source+"\n```\n")
+			if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
+				t.Fatal(err)
+			}
+			output, err := os.ReadFile(filepath.Join(root, "removed.html"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			body := string(output)
+			want := `<pre><code class="language-` + item.language + `">` + strings.ReplaceAll(html.EscapeString(item.source), "&#34;", "&quot;") + "\n</code></pre>"
+			if !strings.Contains(body, want) {
+				t.Errorf("export lost original code: want %q", want)
+			}
+			for _, unwanted := range []string{"vega@", "vega-lite@", "vega-embed@", "mermaid-zenuml@", "registerExternalDiagrams", "vegaEmbed"} {
+				if strings.Contains(body, unwanted) {
+					t.Errorf("export contains removed runtime %q", unwanted)
+				}
+			}
+		})
 	}
 }
