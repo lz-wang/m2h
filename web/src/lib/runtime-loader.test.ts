@@ -9,7 +9,6 @@ import type {
 
 const mermaidRuntime: MermaidRuntime = {
   initialize: vi.fn(),
-  run: vi.fn(async () => {}),
   render: vi.fn(async () => ({ svg: "<svg></svg>" })),
 };
 

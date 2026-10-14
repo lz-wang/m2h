@@ -1,7 +1,7 @@
 // Rich-content enhancement for rendered Markdown HTML.
 //
 // m2h keeps its Markdown parser on stable GFM/CommonMark semantics; math,
-// diagram, chart, and sortable-table support is an HTML presentation layer
+// diagram and sortable-table support is an HTML presentation layer
 // applied after the browser receives the body. This module is the single
 // entry point so callers never have to know about KaTeX, Mermaid,
 // or Tablesort individually.
@@ -83,10 +83,6 @@ function isRenderableMermaidCode(code: HTMLElement): boolean {
   );
 }
 
-function isRichVisualCode(code: HTMLElement): boolean {
-  return isRenderableMermaidCode(code);
-}
-
 // Monotonic id handed to every collapsed code block so the toggle's
 // aria-controls always points at the <pre> it manages.
 let codeBlockSequence = 0;
@@ -116,7 +112,7 @@ let codeBlockSequence = 0;
  */
 // Options for one rich-content enhancement pass. `isCurrent` is the freshness
 // check consulted after every async step (see below); `onVisualError` receives
-// a short, reader-facing message for every diagram/chart/image-adjacent visual
+// a short, reader-facing message for every diagram or image visual
 // that failed to render — the detailed reason goes to the console, the page
 // shows the stable placeholder plus this message in the top warning.
 export interface RichContentOptions {
@@ -431,7 +427,7 @@ function addCodeCopyButtons(root: HTMLElement): void {
     // Rich-visual blocks are skipped: their pass replaces the <pre> with a
     // rendered visual, so a frame and button would only flash before dying
     // with the pre.
-    if (code === null || isRichVisualCode(code)) {
+    if (code === null || isRenderableMermaidCode(code)) {
       continue;
     }
     const frame = ensureCodeFrame(pre);
@@ -484,7 +480,7 @@ function addCollapsibleCodeBlocks(root: HTMLElement): void {
     if (code === null) {
       continue;
     }
-    if (isRichVisualCode(code)) {
+    if (isRenderableMermaidCode(code)) {
       continue;
     }
     if (pre.closest(".m2h-code-block") !== null) {
@@ -511,7 +507,7 @@ function addCollapsibleCodeBlocks(root: HTMLElement): void {
 function addCodeLineNumbers(root: HTMLElement): void {
   for (const pre of root.querySelectorAll<HTMLPreElement>("pre")) {
     const code = directCodeChild(pre);
-    if (code === null || isRichVisualCode(code)) {
+    if (code === null || isRenderableMermaidCode(code)) {
       continue;
     }
     if (pre.querySelector(":scope > .m2h-code-line-numbers") !== null) {

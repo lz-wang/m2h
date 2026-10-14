@@ -1094,19 +1094,17 @@ function PreviewContent({
     };
   }, [html, phase, onVisualError]);
 
-  // A theme switch repaints only the theme-sensitive rich visuals (Mermaid
-  // diagrams), leaving the article DOM, KaTeX, copy
-  // buttons, and any in-body focus untouched. On the initial render the body
-  // effect above has already painted the current theme, so renderedModeRef
+  // A theme switch repaints only Mermaid diagrams, leaving the article DOM,
+  // KaTeX, copy buttons, and any in-body focus untouched. On the initial render
+  // the body effect has already painted the current theme, so renderedModeRef
   // matches resolvedMode and this effect is a no-op; it only does work on a
   // subsequent light/dark toggle.
   //
   // The repaint is queued, never run inline. Each queued repaint waits for
   // the initial enhancement of the current body — a toggle while a runtime
-  // is still downloading must not look for chart containers that do not
-  // exist yet — and for any earlier repaint, so one container never has two
-  // embeds in flight. A queued repaint is skipped when a newer toggle has
-  // claimed a different theme (rapid light → dark → light ends with one
+  // is still downloading must wait for the first Mermaid render to finish —
+  // and for any earlier repaint, so one diagram never has two paints in flight.
+  // A queued repaint is skipped when a newer toggle has claimed a different theme (rapid light → dark → light ends with one
   // light repaint at most), when its result is already on screen, or when
   // the body it belonged to is gone.
   useEffect(() => {

@@ -723,7 +723,7 @@ body,
  * Visual blocks share one external spacing contract: a standalone image
  * paragraph (m2h-image-block, stamped by render-rich-content.ts) and every
  * rich-visual frame keep the same 1rem to the surrounding prose — the rhythm
- * github-markdown-css gives paragraphs. The inner image, diagram, or chart
+ * github-markdown-css gives paragraphs. The inner image or diagram
  * container never decides the block's external distance itself; adjacent
  * paragraph margins collapse into these, so the gap reads identically around
  * every visual kind.
@@ -1101,9 +1101,9 @@ body,
 
 /* The same contract for rich visuals: a Mermaid diagram
  * whose first paint failed collapses into the placeholder inside its stable
- * frame, one short title naming the engine. Source text (a Mermaid grammar,
- * a chart's JSON) never reappears as page content — diagnostics live in the
- * console; the top warning carries the same stable message. */
+ * frame, one short title naming the engine. Mermaid source text never
+ * reappears as page content — diagnostics live in the console; the top
+ * warning carries the same stable message. */
 .markdown-body .m2h-rich-visual-error {
   display: flex;
   flex-direction: column;

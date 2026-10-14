@@ -16,10 +16,6 @@ export interface MermaidRenderResult {
 
 export interface MermaidRuntime {
   initialize(options: MermaidInitializeOptions): void;
-  run(options: {
-    nodes: HTMLElement[];
-    suppressErrors: boolean;
-  }): Promise<void>;
   render(id: string, text: string): Promise<MermaidRenderResult>;
 }
 

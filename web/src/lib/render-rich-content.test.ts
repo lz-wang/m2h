@@ -12,14 +12,8 @@ import type {
   MermaidRuntime,
 } from "./runtime-loader";
 
-interface MermaidRunOptions {
-  nodes: HTMLElement[];
-  suppressErrors: boolean;
-}
-
 const mermaidMock = vi.hoisted(() => ({
   initialize: vi.fn<(config: unknown) => void>(),
-  run: vi.fn<(options: MermaidRunOptions) => Promise<void>>(async () => {}),
   render: vi.fn<(id: string, text: string) => Promise<MermaidRenderResult>>(
     async () => ({ svg: '<svg data-mock="mermaid"></svg>' }),
   ),
@@ -79,13 +73,11 @@ describe("renderRichContent", () => {
     // Each test re-imports the module so the lazy mermaid singleton resets.
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
-    mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({
       svg: '<svg data-mock="mermaid"></svg>',
     });
@@ -108,16 +100,14 @@ describe("renderRichContent", () => {
     // so an eagerly-created frame would linger as an empty wrapper.
     expect(root.querySelector(".m2h-code-frame")).toBeNull();
 
-    // The legacy mermaid.run path is gone; each diagram renders offscreen via
-    // mermaid.render with the decoded source text, then swaps in atomically.
-    expect(mermaidMock.run).not.toHaveBeenCalled();
+    // Diagrams render offscreen with decoded source, then swap in atomically.
     expect(mermaidMock.render).toHaveBeenCalledTimes(1);
     const [id, text] = mermaidMock.render.mock.calls[0] ?? [];
     expect(id).toMatch(/^m2h-mermaid-\d+$/);
     expect(text).toBe("graph TD\nA-->B");
   });
 
-  it("leaves non-mermaid code blocks untouched and skips mermaid.run", async () => {
+  it("keeps non-mermaid code blocks and skips the Mermaid runtime", async () => {
     const { renderRichContent } = await import("./render-rich-content");
     const root = document.createElement("div");
     root.innerHTML = '<pre><code class="language-go">func main()</code></pre>';
@@ -267,7 +257,6 @@ describe("renderRichContent", () => {
 
     await renderRichContent(root, { mode: "light" });
 
-    expect(mermaidMock.run).not.toHaveBeenCalled();
     expect(root.querySelector("code.language-mermaid")).not.toBeNull();
   });
 
@@ -478,13 +467,11 @@ describe("collapsible code blocks", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
-    mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({
       svg: '<svg data-mock="mermaid"></svg>',
     });
@@ -649,13 +636,11 @@ describe("code line numbers", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
-    mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({
       svg: '<svg data-mock="mermaid"></svg>',
     });
@@ -799,13 +784,11 @@ describe("image lightbox triggers", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
-    mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({
       svg: '<svg data-mock="mermaid"></svg>',
     });
@@ -1813,13 +1796,11 @@ describe("rerenderMermaid", () => {
     // mermaidSources WeakMap reset between cases.
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
     loadKatexMock.mockClear();
     loadTablesortMock.mockClear();
-    mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({
       svg: '<svg data-mock="mermaid"></svg>',
     });
@@ -1918,12 +1899,10 @@ describe("sortable tables", () => {
   beforeEach(() => {
     vi.resetModules();
     mermaidMock.initialize.mockClear();
-    mermaidMock.run.mockClear();
     mermaidMock.render.mockClear();
     renderMathInElementMock.mockClear();
     loadMermaidMock.mockClear();
     loadKatexMock.mockClear();
-    mermaidMock.run.mockResolvedValue(undefined);
     mermaidMock.render.mockResolvedValue({
       svg: '<svg data-mock="mermaid"></svg>',
     });

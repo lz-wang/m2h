@@ -72,8 +72,7 @@
   }
 
   // The resolved theme, computed once: an explicit m2h-mode-* class wins,
-  // otherwise auto follows the system preference. Shared by Mermaid's
-  // official theme and the chart chrome palette.
+  // otherwise auto follows the system preference for Mermaid's theme.
   function resolveDark() {
     var rootClasses = document.documentElement.classList;
     return rootClasses.contains("m2h-mode-dark") ||
