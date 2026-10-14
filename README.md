@@ -14,7 +14,7 @@
 - 文件树与文件名/路径筛选、全文搜索（Ctrl/Cmd+K，支持从结果直接跳转到匹配章节）、文档目录、主题和正文宽度切换
 - 支持 GFM、语法高亮、数学公式、Mermaid、脚注、Emoji 和 GitHub Alerts
 - 支持 [Frontmatter 标题与日期元数据](docs/demos/frontmatter/00-index.md)、可排序表格、代码行号与长代码块折叠
-- 图片与 Mermaid 图表支持全屏 Lightbox 查看，可切换、通过工具栏或鼠标滚轮平滑缩放、拖动和旋转；图表以原生 SVG 渲染，放大时保持清晰；SVG 不显示底部图片信息
+- 图片与 Mermaid 图表支持全屏 Lightbox 查看，可切换、平滑缩放、拖动和旋转；普通 SVG 与图表保持矢量清晰度，正文及 Lightbox 中可选中文字（远程 SVG 需允许 CORS）；[SVG 演示与兼容说明](docs/demos/svg-images.md)
 - 正文图片（含链接、picture、SVG）与 Mermaid 图表统一居中，WebUI 与 HTML 导出保持一致
 - 正文图片延迟加载：接近视口时才请求实际资源，加载中显示内置占位图，失败折叠为统一占位并提示原始路径
 - 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
@@ -264,8 +264,8 @@ WebUI 富内容运行时默认从本地加载，也可通过 `--cdn` 切换到�
 | 行内扩展 | `==高亮==`、`^^插入^^` 与 [`++ctrl+alt+del++` 键盘按键](docs/demos/pymarkdown/keyboards.md) |
 | 标签内容 | [PyMdown Tabbed 基础语法](docs/demos/pymarkdown/tabbed.md)，支持独立分组、默认标签、TOC/锚点与搜索自动定位，HTML 打印展开全部内容 |
 | 协作标记 | [Critic Markup 行内与块级语法](docs/demos/pymarkdown/critic.md) |
-| 图片排版 | 普通图片、链接图片、picture、SVG 与图表在正文中居中显示（WebUI 与 HTML 导出） |
-| WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开、正文图片临近视口延迟加载，以及图片、Mermaid 图表 Lightbox（使用整个视口缩放与拖动，工具栏浮于图像上方，支持滚轮平滑缩放；图表以原生 SVG 放大，SVG 不显示图片信息） |
+| 图片排版 | 普通图片、链接图片、picture、SVG 与图表在正文中居中显示（WebUI 与 HTML 导出）；[普通 SVG](docs/demos/svg-images.md) 在 WebUI 正文与 Lightbox 中保持矢量清晰度并支持文字选择 |
+| WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开、正文图片临近视口延迟加载，以及图片、Mermaid 图表 Lightbox（使用整个视口缩放与拖动，工具栏浮于图像上方，支持滚轮平滑缩放；普通 SVG 与图表以原生 SVG 放大，文字可选中，SVG 不显示图片信息） |
 
 ## 许可证
 

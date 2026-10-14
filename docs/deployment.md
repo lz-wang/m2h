@@ -57,6 +57,10 @@ m2h 自身不负责身份认证，发布边界由以下规则构成：
 5. 不要试图把秘密文件放进 root 再依赖文件名规则保护：真正的秘密必须位于 root 之外。
 6. VPS 反向代理部署默认只监听 `127.0.0.1`。
 
+WebUI 为普通 SVG 的矢量显示读取图片源码，`connect-src` 允许同源、HTTP(S)、data
+与 blob 图片来源。远程 SVG 仍受浏览器 CORS 限制；源码清理后在独立样式作用域中
+显示，不执行脚本、事件处理器或链接导航。反向代理叠加 CSP 时需允许所用图片来源。
+
 ## 安装与启动
 
 从 [GitHub Releases](https://github.com/lz-wang/m2h/releases/latest) 下载对应平台的二进制放到 `/usr/local/bin/m2h`，或使用 Homebrew（Linux 同样支持 `brew install lz-wang/tap/m2h`）。

@@ -916,6 +916,17 @@ body,
   max-width: 100%;
 }
 
+.markdown-body .m2h-svg-image {
+  display: block;
+  max-width: 100%;
+  margin-inline: auto;
+  user-select: text;
+}
+
+.markdown-body .m2h-image-frame img[hidden] {
+  display: none;
+}
+
 /* Standalone image paragraphs keep whitespace between image frames from
  * adding line boxes; their shared 1rem margins set the distance to prose. */
 .markdown-body .m2h-image-block {

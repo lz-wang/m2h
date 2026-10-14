@@ -13,7 +13,9 @@
 // them as inline SVG and change their rendered dimensions without routing a
 // diagram through an <img> compositor layer.
 
-export type LightboxItemKind = "image" | "mermaid";
+import { getInlineSVGImage } from "./svg-images";
+
+export type LightboxItemKind = "image" | "svg" | "mermaid";
 
 interface LightboxItemBase {
   alt: string;
@@ -33,7 +35,7 @@ export interface ImageLightboxItem extends LightboxItemBase {
 }
 
 export interface SVGLightboxItem extends LightboxItemBase {
-  kind: "mermaid";
+  kind: "svg" | "mermaid";
   markup: string;
   intrinsicWidth: number;
   intrinsicHeight: number;
@@ -103,6 +105,13 @@ function snapshotLightboxItem(
   snapshotIndex: number,
 ): LightboxItem | null {
   if (element instanceof HTMLImageElement) {
+    const svg = getInlineSVGImage(element);
+    if (svg !== null) {
+      return snapshotSVGImage(svg, element.alt, element.title || null, {
+        width: element.naturalWidth,
+        height: element.naturalHeight,
+      });
+    }
     // A source-only <picture>'s <img> parks no source of its own — its real
     // candidate lives on the <source> element. While the lazy machine is
     // unsettled there is nothing true to snapshot (the live src is still
@@ -314,7 +323,32 @@ function snapshotSVGVisual(
   if (svg === null) {
     return null;
   }
-  const { width, height } = getSVGIntrinsicSize(svg);
+  return snapshotSVGElement(svg, kind, alt, null, snapshotIndex);
+}
+
+export function snapshotSVGImage(
+  svg: SVGSVGElement,
+  alt: string,
+  title: string | null,
+  intrinsicSize?: Size,
+): SVGLightboxItem {
+  return snapshotSVGElement(svg, "svg", alt, title, 0, intrinsicSize);
+}
+
+function snapshotSVGElement(
+  svg: SVGSVGElement,
+  kind: SVGLightboxItem["kind"],
+  alt: string,
+  title: string | null,
+  snapshotIndex: number,
+  intrinsicSize?: Size,
+): SVGLightboxItem {
+  const { width, height } =
+    intrinsicSize !== undefined &&
+    intrinsicSize.width > 0 &&
+    intrinsicSize.height > 0
+      ? intrinsicSize
+      : getSVGIntrinsicSize(svg);
   const snapshot = rewriteSVGIDReferences(svg, snapshotIndex);
   normalizeSVGSnapshotGeometry(snapshot, { width, height });
   neutralizeEmbeddedLinks(snapshot);
@@ -325,7 +359,7 @@ function snapshotSVGVisual(
     intrinsicWidth: width,
     intrinsicHeight: height,
     alt,
-    title: null,
+    title,
     format: "SVG",
   };
 }

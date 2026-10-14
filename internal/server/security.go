@@ -13,6 +13,8 @@ import (
 //	style-src 'unsafe-inline' — React, Mermaid and KaTeX all emit element
 //	                            styles, so inline styles stay allowed for now.
 //	img/media-src http(s:)    — Markdown legitimately embeds remote media.
+//	connect-src http(s:)      — read CORS-enabled SVG images for native vector
+//	                            rendering; same-origin app APIs remain allowed.
 //	frame-src 'none'          — m2h publishes no iframe embeds.
 //
 // HSTS is deliberately absent: m2h never sees the TLS connection. A reverse
@@ -28,7 +30,7 @@ const defaultContentSecurityPolicy = "default-src 'self'; " +
 	"img-src 'self' data: blob: http: https:; " +
 	"media-src 'self' blob: http: https:; " +
 	"font-src 'self' data:; " +
-	"connect-src 'self'; " +
+	"connect-src 'self' data: blob: http: https:; " +
 	"worker-src 'self' blob:"
 
 // securityHeaders wraps the whole mux so every response — pages, JSON APIs,

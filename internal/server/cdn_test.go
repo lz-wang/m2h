@@ -57,7 +57,7 @@ func TestCDNConfigurationInShellAndSecurityHeaders(t *testing.T) {
 					"script-src 'self' https://cdn.jsdelivr.net;",
 					"style-src 'self' https://cdn.jsdelivr.net 'unsafe-inline';",
 					"font-src 'self' https://cdn.jsdelivr.net data:;",
-					"connect-src 'self';", "base-uri 'none';", "object-src 'none';",
+					"connect-src 'self' data: blob: http: https:;", "base-uri 'none';", "object-src 'none';",
 				} {
 					if !strings.Contains(policy, directive) {
 						t.Errorf("CDN policy missing %q: %s", directive, policy)

@@ -446,6 +446,129 @@ describe("DocumentLightbox", () => {
     format: "SVG",
   };
 
+  it("zooms an ordinary SVG by resizing its native viewport and preserves shadow text selection", async () => {
+    renderLightbox(
+      [
+        {
+          ...vectorItem,
+          kind: "svg",
+          markup: vectorItem.markup.replace(
+            "<svg",
+            '<svg xmlns="http://www.w3.org/2000/svg"',
+          ),
+        },
+      ],
+      0,
+    );
+    const wrapper = currentVectorWrapper();
+    const viewport = wrapper.querySelector<HTMLElement>(
+      ".image-lightbox-vector",
+    );
+    const text = viewport
+      ?.querySelector(".m2h-svg-content")
+      ?.shadowRoot?.querySelector("text");
+    if (text === null || text === undefined)
+      throw new Error("missing SVG text");
+    expect(screen.getByRole("dialog").querySelector("img")).toBeNull();
+    expect(viewport?.style.width).toBe("100px");
+    await userEvent.click(screen.getByRole("button", { name: "放大图片" }));
+    expect(viewport?.style.width).toBe("125px");
+    expect(wrapper.style.transform).not.toContain("scale(");
+    const press = new Event("pointerdown", {
+      bubbles: true,
+      composed: true,
+      cancelable: true,
+    });
+    Object.defineProperties(press, {
+      pointerType: { value: "mouse" },
+      button: { value: 0 },
+      pointerId: { value: 1 },
+      clientX: { value: 10 },
+      clientY: { value: 10 },
+    });
+    expect(text.dispatchEvent(press)).toBe(true);
+    expect(wrapper.dataset.panning).toBeUndefined();
+    expect(document.querySelector(".image-lightbox-info")).toBeNull();
+  });
+
+  it("loads a lazy SVG image into the native vector viewer using its selected source", async () => {
+    const fetcher = vi
+      .fn()
+      .mockResolvedValue(
+        new Response(
+          '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><text>普通 SVG</text></svg>',
+        ),
+      );
+    vi.stubGlobal("fetch", fetcher);
+    renderLightbox([{ ...makeItems(1)[0], src: "/lazy.svg" }], 0);
+    const image = currentItem();
+    Object.defineProperty(image, "currentSrc", {
+      value: "http://localhost/selected.svg",
+    });
+    fireEvent.load(image);
+    await waitFor(() =>
+      expect(screen.getByRole("dialog").querySelector("img")).toBeNull(),
+    );
+    expect(fetcher).toHaveBeenCalledWith("http://localhost/selected.svg", {
+      credentials: "same-origin",
+    });
+    const host = currentVectorWrapper().querySelector(
+      ".image-lightbox-vector",
+    )?.firstElementChild;
+    expect(
+      host?.querySelector(".m2h-svg-content")?.shadowRoot?.querySelector("text")
+        ?.textContent,
+    ).toBe("普通 SVG");
+  });
+
+  it("discards an SVG download when the viewer switches to another image", async () => {
+    let finish: (response: Response) => void = () => {};
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockImplementation(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    );
+    const items: LightboxItem[] = [
+      { ...makeItems(1)[0], src: "/lazy.svg" },
+      makeItems(2)[1],
+    ];
+    const view = render(
+      <DocumentLightbox
+        items={items}
+        index={0}
+        open
+        onIndexChange={() => {}}
+        onClose={() => {}}
+        onClosed={() => {}}
+      />,
+    );
+    fireEvent.load(currentItem());
+    view.rerender(
+      <DocumentLightbox
+        items={items}
+        index={1}
+        open
+        onIndexChange={() => {}}
+        onClose={() => {}}
+        onClosed={() => {}}
+      />,
+    );
+    finish(
+      new Response(
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 50"><text>旧图</text></svg>',
+      ),
+    );
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(currentItem().getAttribute("src")).toBe("/img-1.png");
+    expect(
+      screen.getByRole("dialog").querySelector(".image-lightbox-vector"),
+    ).toBeNull();
+  });
+
   function currentVectorWrapper(): HTMLElement {
     const wrapper = screen
       .getByRole("dialog")

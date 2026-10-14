@@ -8,7 +8,11 @@ async function expectCenteredImages(page: Page) {
   const images = page.locator(".markdown-body img");
   await expect(images).toHaveCount(7);
   for (const image of await images.all()) {
-    await image.scrollIntoViewIfNeeded();
+    await image.evaluate((node) =>
+      (node.closest(".m2h-image-frame") ?? node).scrollIntoView({
+        block: "nearest",
+      }),
+    );
     await expect
       .poll(() =>
         image.evaluate(
@@ -30,7 +34,7 @@ async function expectCenteredImages(page: Page) {
     const center = (bodyRect.left + bodyRect.right) / 2;
     return Array.from(
       body.querySelectorAll(
-        'img, svg[role="img"]:not(svg svg), .mermaid > svg',
+        'img:not([hidden]), .m2h-svg-image, svg[role="img"]:not(svg svg), .mermaid > svg',
       ),
     ).map((visual) => {
       const rect = visual.getBoundingClientRect();

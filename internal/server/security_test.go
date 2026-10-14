@@ -96,7 +96,7 @@ func TestDefaultContentSecurityPolicyDirectives(t *testing.T) {
 		"img-src 'self' data: blob: http: https:",
 		"media-src 'self' blob: http: https:",
 		"font-src 'self' data:",
-		"connect-src 'self'",
+		"connect-src 'self' data: blob: http: https:",
 		"worker-src 'self' blob:",
 		"base-uri 'none'",
 		"object-src 'none'",

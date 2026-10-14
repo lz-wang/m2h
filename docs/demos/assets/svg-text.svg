@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="320" viewBox="0 0 960 320">
+  <defs>
+    <linearGradient id="background" x2="1" y2="1">
+      <stop stop-color="#e0f2fe"/>
+      <stop offset="1" stop-color="#f0fdf4"/>
+    </linearGradient>
+  </defs>
+  <rect width="960" height="320" rx="16" fill="url(#background)"/>
+  <g font-family="sans-serif" fill="#0f172a">
+    <text x="64" y="96" font-size="32">普通 SVG：清晰缩放，可选择文字</text>
+    <text x="64" y="156" font-size="22">试着选中这行文字，再打开右上角的 Lightbox。</text>
+    <text x="64" y="204" font-size="22">放大后选择文字，拖动图形区域则平移图片。</text>
+    <text x="64" y="264" font-size="18" fill="#475569">SVG text · vector scaling · native selection</text>
+  </g>
+</svg>

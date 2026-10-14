@@ -17,6 +17,7 @@ import {
   type MermaidRuntime,
   type TablesortConstructor,
 } from "./runtime-loader";
+import { enhanceSVGImage } from "./svg-images";
 
 const COPY_ICON =
   '<svg aria-hidden="true" focusable="false" viewBox="0 0 16 16"><rect x="5.25" y="5.25" width="7.25" height="7.25" rx="1.25"></rect><path d="M10.75 5.25V3.5c0-.69-.56-1.25-1.25-1.25H3.5c-.69 0-1.25.56-1.25 1.25v6c0 .69.56 1.25 1.25 1.25h1.75"></path></svg>';
@@ -609,6 +610,7 @@ function addImageEnhancements(root: HTMLElement): void {
       addImageLightbox(image, frame);
     }
     trackImageFailure(image);
+    enhanceSVGImage(image);
     // A lazy image still shows the shared loading placeholder: its frame is
     // marked loading so the presentation holds back (the magnifier hides,
     // the tooltip via the stylesheet). The Lightbox marker stays — the item

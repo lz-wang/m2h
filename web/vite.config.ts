@@ -29,6 +29,7 @@ export default defineConfig({
         "src/App.tsx",
         "src/api.ts",
         "src/lib/lazy-images.ts",
+        "src/lib/svg-images.ts",
         "src/lib/tabbed.ts",
         "src/use-heading-navigation.ts",
         "src/use-heading-spy.ts",

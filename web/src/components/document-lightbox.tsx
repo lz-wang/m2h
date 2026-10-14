@@ -41,8 +41,13 @@ import {
   useState,
 } from "react";
 
-import type { LightboxItem } from "../lib/document-lightbox";
+import {
+  type LightboxItem,
+  type SVGLightboxItem,
+  snapshotSVGImage,
+} from "../lib/document-lightbox";
 import { imageFormat, imageFormatFromSource } from "../lib/image-metadata";
+import { loadSVGImage, mountSVGImage } from "../lib/svg-images";
 
 // zoom 1 is the fitted size; each step scales by 1.25 up to 5x. Dividing and
 // multiplying by the same factor makes the zoom-out path retrace the zoom-in
@@ -108,6 +113,19 @@ function isVectorTextTarget(target: EventTarget | null): boolean {
   );
 }
 
+function SVGImage({ markup }: { markup: string }) {
+  const hostRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const svg = new DOMParser()
+      .parseFromString(markup, "image/svg+xml")
+      .querySelector("svg");
+    if (hostRef.current !== null && svg instanceof SVGSVGElement) {
+      mountSVGImage(hostRef.current, svg);
+    }
+  }, [markup]);
+  return <div ref={hostRef} style={{ width: "100%", height: "100%" }} />;
+}
+
 export interface DocumentLightboxProps {
   items: LightboxItem[];
   index: number;
@@ -125,7 +143,39 @@ export function DocumentLightbox({
   onClose,
   onClosed,
 }: DocumentLightboxProps) {
-  const item = items[index];
+  const sourceItem = items[index];
+  const [loadedSVG, setLoadedSVG] = useState<{
+    source: LightboxItem;
+    item: SVGLightboxItem;
+  } | null>(null);
+  const svgRequest = useRef(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: item changes invalidate pending SVG loads before a later response can replace the current visual.
+  useEffect(() => {
+    svgRequest.current++;
+    return () => {
+      svgRequest.current++;
+    };
+  }, [sourceItem]);
+  const item =
+    loadedSVG !== null && loadedSVG.source === sourceItem
+      ? loadedSVG.item
+      : sourceItem;
+
+  const promoteLoadedSVG = (image: HTMLImageElement) => {
+    const request = ++svgRequest.current;
+    if (sourceItem === undefined || imageFormat(image) !== "SVG") return;
+    void loadSVGImage(image.currentSrc || image.src).then((svg) => {
+      if (svg !== null && request === svgRequest.current) {
+        setLoadedSVG({
+          source: sourceItem,
+          item: snapshotSVGImage(svg, sourceItem.alt, sourceItem.title, {
+            width: image.naturalWidth,
+            height: image.naturalHeight,
+          }),
+        });
+      }
+    });
+  };
 
   // Base UI applies data-starting-style only when `open` flips false→true on
   // an already-mounted Root — a Root that first-mounts with open=true renders
@@ -384,7 +434,8 @@ export function DocumentLightbox({
     if (
       item?.kind !== "image" &&
       event.pointerType === "mouse" &&
-      isVectorTextTarget(event.target)
+      (isVectorTextTarget(event.target) ||
+        event.nativeEvent.composedPath().some(isVectorTextTarget))
     ) {
       return;
     }
@@ -570,6 +621,7 @@ export function DocumentLightbox({
                     height: event.currentTarget.naturalHeight,
                   });
                   setNaturalFormat(imageFormat(event.currentTarget));
+                  promoteLoadedSVG(event.currentTarget);
                 }}
                 style={{
                   transform: `translate3d(${pan.x}px, ${pan.y}px, 0) rotate(${rotation}deg) scale(${scale})`,
@@ -599,15 +651,27 @@ export function DocumentLightbox({
                 onPointerCancel={handleVisualPointerEnd}
                 onClickCapture={handleVectorClickCapture}
               >
-                <div
-                  className="image-lightbox-vector"
-                  style={{
-                    width: `${renderedWidth}px`,
-                    height: `${renderedHeight}px`,
-                  }}
-                  // biome-ignore lint/security/noDangerouslySetInnerHtml: markup is serialized from the rendered SVG selected from the current document DOM.
-                  dangerouslySetInnerHTML={{ __html: item.markup }}
-                />
+                {item.kind === "svg" ? (
+                  <div
+                    className="image-lightbox-vector"
+                    style={{
+                      width: `${renderedWidth}px`,
+                      height: `${renderedHeight}px`,
+                    }}
+                  >
+                    <SVGImage markup={item.markup} />
+                  </div>
+                ) : (
+                  <div
+                    className="image-lightbox-vector"
+                    style={{
+                      width: `${renderedWidth}px`,
+                      height: `${renderedHeight}px`,
+                    }}
+                    // biome-ignore lint/security/noDangerouslySetInnerHtml: markup is serialized from the rendered SVG selected from the current document DOM.
+                    dangerouslySetInnerHTML={{ __html: item.markup }}
+                  />
+                )}
               </div>
             ) : null}
           </div>
