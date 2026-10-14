@@ -83,7 +83,7 @@ test("export preserves removed code and renders retained rich content", async ({
     expect(await page.locator(removedCode).allTextContents()).toEqual([
       '{"mark":"bar","description":"removed-renderer-search-token"}\n',
       "{ invalid JSON\n",
-      " \nzenuml\n  Alice->Bob: Hello\n",
+      "\nzenuml\n  Alice->Bob: Hello\n",
       "Alice->Bob: Hello\n",
       Array.from(
         { length: 30 },

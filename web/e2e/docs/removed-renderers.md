@@ -18,7 +18,7 @@ update_date: 2026-10-14
 ```
 
 ```mermaid
- 
+
 zenuml
   Alice->Bob: Hello
 ```
