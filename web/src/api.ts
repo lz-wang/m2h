@@ -92,6 +92,7 @@ export interface SearchResult {
   title: string;
   snippet?: string;
   heading?: SearchHeading;
+  tabId?: string;
 }
 
 export interface SearchResponse {
@@ -347,6 +348,10 @@ function parseSearchResponse(payload: unknown): SearchResponse {
       throw new Error("搜索响应格式无效");
     }
     const result: SearchResult = { path: value.path, title: value.title };
+    if (value.tabId !== undefined && value.tabId !== null) {
+      if (typeof value.tabId !== "string") throw new Error("搜索响应格式无效");
+      result.tabId = value.tabId;
+    }
     if (value.snippet !== undefined && value.snippet !== null) {
       if (typeof value.snippet !== "string") {
         throw new Error("搜索响应格式无效");

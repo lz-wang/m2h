@@ -87,6 +87,26 @@ describe("useHeadingNavigation", () => {
     expect(updateHash).toHaveBeenCalledWith("target");
   });
 
+  it("lands on the matched panel when its heading is outside that tab", () => {
+    const updateHash = vi.fn();
+    const scroll = vi
+      .spyOn(Element.prototype, "scrollIntoView")
+      .mockImplementation(() => {});
+    render(
+      <Harness updateHash={updateHash} id="" options={{ tabId: "tab-b" }} />,
+    );
+    act(() => {
+      document.querySelector<HTMLButtonElement>('[data-testid="go"]')?.click();
+    });
+    expect(document.querySelector<HTMLInputElement>("#tab-b")?.checked).toBe(
+      true,
+    );
+    expect(scroll.mock.instances.at(-1)).toBe(
+      document.querySelector('[data-m2h-tab-id="tab-b"]'),
+    );
+    expect(updateHash).toHaveBeenCalledWith(null);
+  });
+
   it("leaves the URL untouched when updateURL is false", () => {
     const updateHash = vi.fn();
     vi.spyOn(Element.prototype, "scrollIntoView").mockImplementation(() => {});

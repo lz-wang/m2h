@@ -445,3 +445,21 @@ func TestSearchStopsWhenRequestIsCancelled(t *testing.T) {
 		t.Fatalf("cancelled request wrote %q (status %d), want an empty body", response.Body.String(), response.Code)
 	}
 }
+
+func TestTabbedSearchResponseMatchesRenderedPanel(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "tabs.md"), "# Tabs\n\n=== \"One\"\n\n    first\n\n=== \"Two\"\n\n    uniquetabtoken\n")
+	handler := searchHandler(t, root, files.DiscoverOptions{Depth: 2})
+	payload := searchResultsFor(t, handler, "uniquetabtoken")
+	if len(payload.Results) != 1 || payload.Results[0].TabID != "m2h-tab-1-2" {
+		t.Fatalf("payload: %+v", payload)
+	}
+	response := performRequest(handler, http.MethodGet, "/api/document?path=tabs.md")
+	if !strings.Contains(response.Body.String(), `data-m2h-tab-id=\"m2h-tab-1-2\"`) {
+		t.Fatalf("panel absent: %s", response.Body.String())
+	}
+	plain := performRequest(handler, http.MethodGet, "/api/search?q=Tabs")
+	if strings.Contains(plain.Body.String(), `"tabId"`) {
+		t.Fatalf("metadata carried tab: %s", plain.Body.String())
+	}
+}

@@ -31,6 +31,7 @@ type searchHeadingResponse struct {
 }
 
 type searchResultResponse struct {
+	TabID   string                 `json:"tabId,omitempty"`
 	Path    string                 `json:"path"`
 	Title   string                 `json:"title"`
 	Snippet string                 `json:"snippet,omitempty"`
@@ -130,6 +131,7 @@ func (handler *documentHandler) serveSearch(response http.ResponseWriter, reques
 			Path:    match.Path,
 			Title:   match.Title,
 			Snippet: match.Snippet,
+			TabID:   match.TabID,
 		}
 		if match.HeadingID != "" {
 			result.Heading = &searchHeadingResponse{ID: match.HeadingID, Text: match.HeadingText}

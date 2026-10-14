@@ -415,6 +415,7 @@ describe("browser API", () => {
               title: "Markdown Rendering",
               snippet: "…Goldmark AST parser…",
               heading: { id: "parser", text: "Parser" },
+              tabId: "m2h-tab-1-2",
             },
             {
               path: "README.md",
@@ -436,9 +437,23 @@ describe("browser API", () => {
         title: "Markdown Rendering",
         snippet: "…Goldmark AST parser…",
         heading: { id: "parser", text: "Parser" },
+        tabId: "m2h-tab-1-2",
       },
       { path: "README.md", title: "Readme" },
     ]);
+  });
+
+  it("rejects malformed tab IDs in search responses", async () => {
+    fetchMock.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify({
+          query: "q",
+          results: [{ path: "a.md", title: "A", tabId: 42 }],
+        }),
+        { status: 200 },
+      ),
+    );
+    await expect(browserAPI.search("q")).rejects.toThrow("搜索响应格式无效");
   });
 
   it("surfaces search HTTP errors and malformed payloads", async () => {

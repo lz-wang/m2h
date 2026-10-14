@@ -1,12 +1,13 @@
 import { type RefObject, useCallback } from "react";
 
 import { findHeadingElement } from "./lib/heading";
-import { activateTabForElement } from "./lib/tabbed";
+import { activateTabForElement, findTabPanel } from "./lib/tabbed";
 
 export interface NavigateToHeadingOptions {
   // "smooth" for user-driven clicks, "auto" (instant) for deep-link restore.
   // prefers-reduced-motion always collapses to instant scrolling.
   behavior?: ScrollBehavior;
+  tabId?: string;
   // When false the URL hash is left untouched (e.g. restoring a fragment that
   // is already in the address bar). Defaults to true.
   updateURL?: boolean;
@@ -36,17 +37,27 @@ export function useHeadingNavigation(
       const reduceMotion =
         typeof window.matchMedia === "function" &&
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-      const heading = findHeadingElement(container, id);
-      if (heading !== null) {
-        activateTabForElement(heading);
-        heading.scrollIntoView({
+      const heading = id === "" ? null : findHeadingElement(container, id);
+      const panel =
+        options.tabId === undefined
+          ? null
+          : findTabPanel(container, options.tabId);
+      // A heading outside the matched tab describes its enclosing section;
+      // content without a local heading should land on the panel instead.
+      const target =
+        panel !== null && (heading === null || !panel.contains(heading))
+          ? panel
+          : heading;
+      if (target !== null) {
+        activateTabForElement(target);
+        target.scrollIntoView({
           block: "start",
           behavior:
             options.behavior === "smooth" && !reduceMotion ? "smooth" : "auto",
         });
       }
       if (options.updateURL !== false) {
-        updateHash(id);
+        updateHash(target === panel && panel !== null ? null : id || null);
       }
     },
     [containerRef, updateHash],

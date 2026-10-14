@@ -426,3 +426,30 @@ func TestMatchSingleResultPerDocument(t *testing.T) {
 		t.Errorf("section = %q, want backend (the strongest section)", result.HeadingID)
 	}
 }
+
+func TestTabbedBestMatchIsolatesPanels(t *testing.T) {
+	projection, err := markdown.ProjectForSearch([]byte("## Install\n\n=== \"Linux\"\n\n    common weak\n\n=== \"macOS\"\n\n    common brew unique\n"), "tabs.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	doc := Document{Path: "tabs.md", Title: "Guide", Chunks: projection.Chunks}
+	for _, query := range []string{"brew unique", "macOS"} {
+		result, ok := Match(doc, query)
+		if !ok || result.TabID != "m2h-tab-1-2" || result.HeadingID != "install" {
+			t.Fatalf("%s: %+v", query, result)
+		}
+	}
+	result, ok := Match(Document{Title: "Metadata", Chunks: projection.Chunks}, "Metadata")
+	if !ok || result.TabID != "" {
+		t.Fatalf("metadata navigation: %+v", result)
+	}
+	chunks := []markdown.SearchChunk{
+		{Text: "common", HeadingID: "outer", TabID: "a", Kind: markdown.SearchChunkText},
+		{Text: "common", HeadingID: "outer", TabID: "a", Kind: markdown.SearchChunkText},
+		{Text: "common", HeadingID: "outer", TabID: "b", Kind: markdown.SearchChunkHeading},
+	}
+	section, _, _ := bestSection(chunks, []bool{true, true, true}, []string{"common"})
+	if section.TabID != "a" {
+		t.Fatalf("panels were merged: %+v", section)
+	}
+}

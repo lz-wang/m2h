@@ -302,10 +302,12 @@ export function App({ api }: AppProps) {
   // goes through the normal select path with the section hash encoded by the
   // one canonical encoder. A metadata-only hit on the current document just
   // clears the fragment and returns to the top.
+  const pendingSearchRef = useRef<SearchResult | null>(null);
   const handleSearchSelect = (result: SearchResult) => {
     if (result.path === preview.selectedPath) {
-      if (result.heading !== undefined) {
-        navigateToHeading(result.heading.id, {
+      if (result.heading !== undefined || result.tabId !== undefined) {
+        navigateToHeading(result.heading?.id ?? "", {
+          tabId: result.tabId,
           behavior: "smooth",
           updateURL: true,
         });
@@ -315,6 +317,7 @@ export function App({ api }: AppProps) {
       }
       return;
     }
+    pendingSearchRef.current = result.tabId === undefined ? null : result;
     void preview.select(
       result.path,
       result.heading !== undefined ? encodeHeadingHash(result.heading.id) : "",
@@ -341,6 +344,16 @@ export function App({ api }: AppProps) {
   const landedPathRef = useRef<string | null>(null);
   useEffect(() => {
     if (preview.phase !== "ready" || documentPath === null) {
+      return;
+    }
+    const pending = pendingSearchRef.current;
+    pendingSearchRef.current = null;
+    if (pending !== null && pending.path === documentPath) {
+      landedPathRef.current = documentPath;
+      navigateToHeading(pending.heading?.id ?? "", {
+        tabId: pending.tabId,
+        behavior: "auto",
+      });
       return;
     }
     const isFirstLoad = landedPathRef.current === null;

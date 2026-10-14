@@ -2577,6 +2577,60 @@ describe("App global full-text search", () => {
     expect(window.location.hash).toBe("#section-two");
   });
 
+  it.each(["README.md", "guides/setup.md"])(
+    "activates a headingless tab search hit in %s",
+    async (path) => {
+      const user = userEvent.setup();
+      const html = `<h2 id="outer">Outer</h2><div class="m2h-tabbed-set"><input class="m2h-tabbed-radio" type="radio" name="searchtab" id="first" checked><input class="m2h-tabbed-radio" type="radio" name="searchtab" id="second"><div class="m2h-tabbed-content"><section class="m2h-tabbed-panel" data-m2h-tab-id="first">First</section><section class="m2h-tabbed-panel" data-m2h-tab-id="second">needle</section></div></div>`;
+      const api = createAPI({
+        getDocument: vi
+          .fn()
+          .mockImplementation(async (requested: string) => ({
+            path: requested,
+            title: "Tabs",
+            html,
+            frontmatter: null,
+            toc: [{ id: "outer", text: "Outer", level: 2 }],
+          })),
+        search: vi
+          .fn()
+          .mockResolvedValue({
+            query: "needle",
+            results: [
+              {
+                path,
+                title: "Tabs",
+                tabId: "second",
+                heading: { id: "outer", text: "Outer" },
+              },
+            ],
+          }),
+      });
+      const scroll = vi
+        .spyOn(Element.prototype, "scrollIntoView")
+        .mockImplementation(() => {});
+      render(<App api={api} />);
+      await screen.findByText("First");
+      fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+      const dialog = await searchFor(user, "needle");
+      await user.click(
+        await within(dialog).findByRole("button", { name: `Tabs，${path}` }),
+      );
+      await waitFor(() =>
+        expect(
+          document.querySelector<HTMLInputElement>("#second")?.checked,
+        ).toBe(true),
+      );
+      expect(scroll.mock.instances.at(-1)).toBe(
+        document.querySelector('[data-m2h-tab-id="second"]'),
+      );
+      expect(window.location.hash).toBe("");
+      expect(api.getDocument).toHaveBeenCalledTimes(
+        path === "README.md" ? 1 : 2,
+      );
+    },
+  );
+
   it("returns the reader to the top for a metadata-only hit", async () => {
     const user = userEvent.setup();
     const api = createAPI({

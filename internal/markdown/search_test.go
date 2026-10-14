@@ -400,3 +400,27 @@ func TestProjectForSearchEmptyDocument(t *testing.T) {
 		t.Errorf("Title = %q, want doc.md", projection.Title)
 	}
 }
+
+func TestTabbedSearchContext(t *testing.T) {
+	source := []byte("## Outer\n\n=== \"Linux\"\n\n    ### Local\n\n    linux-only\n\n=== \"macOS\"\n\n    brew-only\n\nOutside-after\n")
+	projection, err := ProjectForSearch(source, "tabs.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, chunk := range projection.Chunks {
+		switch chunk.Text {
+		case "linux-only":
+			if chunk.TabID != "m2h-tab-1-1" || chunk.HeadingID != "local" {
+				t.Fatalf("local context: %+v", chunk)
+			}
+		case "brew-only", "macOS":
+			if chunk.TabID != "m2h-tab-1-2" || chunk.HeadingID != "outer" {
+				t.Fatalf("inherited sibling heading: %+v", chunk)
+			}
+		case "Outside-after":
+			if chunk.TabID != "" || chunk.HeadingID != "outer" {
+				t.Fatalf("escaped tab context: %+v", chunk)
+			}
+		}
+	}
+}

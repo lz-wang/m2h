@@ -39,6 +39,7 @@ type SearchChunk struct {
 	Text        string
 	HeadingID   string
 	HeadingText string
+	TabID       string
 }
 
 // SearchProjection is the search-facing projection of one document. Title is
@@ -72,11 +73,19 @@ func ProjectForSearch(source []byte, sourcePath string) (SearchProjection, error
 	// that follows until the next heading inherits it.
 	section := SearchChunk{}
 	title := ""
+	outerSection := SearchChunk{}
 	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
 		if !entering {
+			if _, ok := node.(*TabItem); ok {
+				section = outerSection
+			}
 			return ast.WalkContinue, nil
 		}
 		switch typed := node.(type) {
+		case *TabItem:
+			outerSection = section
+			section.TabID = typed.ID
+			projection.appendText(typed.Title, section)
 		case *ast.Heading:
 			headingText := normalizeTitle(inlineText(typed, source))
 			id := headingAnchorID(typed)
@@ -86,6 +95,7 @@ func ProjectForSearch(source []byte, sourcePath string) (SearchProjection, error
 					Text:        headingText,
 					HeadingID:   id,
 					HeadingText: headingText,
+					TabID:       section.TabID,
 				})
 			}
 			if id != "" {
@@ -94,6 +104,7 @@ func ProjectForSearch(source []byte, sourcePath string) (SearchProjection, error
 					Text:        headingText,
 					HeadingID:   id,
 					HeadingText: headingText,
+					TabID:       section.TabID,
 				}
 			}
 			if typed.Level == 1 && title == "" {
@@ -154,6 +165,7 @@ func (projection *SearchProjection) appendText(raw string, section SearchChunk) 
 		Text:        text,
 		HeadingID:   section.HeadingID,
 		HeadingText: section.HeadingText,
+		TabID:       section.TabID,
 	})
 }
 
@@ -173,6 +185,7 @@ func (projection *SearchProjection) appendCode(lines *text.Segments, source []by
 		Text:        code,
 		HeadingID:   section.HeadingID,
 		HeadingText: section.HeadingText,
+		TabID:       section.TabID,
 	})
 }
 

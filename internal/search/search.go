@@ -59,6 +59,7 @@ type Result struct {
 	Snippet     string
 	HeadingID   string
 	HeadingText string
+	TabID       string
 
 	score      int
 	exactTitle bool
@@ -134,6 +135,7 @@ func Match(document Document, query string) (Result, bool) {
 	if bestTotal > 0 {
 		result.HeadingID = section.HeadingID
 		result.HeadingText = section.HeadingText
+		result.TabID = section.TabID
 		result.Snippet = snippetAround(bestChunk.Text, tokens)
 		return result, true
 	}
@@ -188,6 +190,7 @@ func chunkScore(chunk markdown.SearchChunk) int {
 type sectionMatch struct {
 	headingID   string
 	headingText string
+	tabID       string
 	total       int
 	bestChunk   markdown.SearchChunk
 	bestWeight  int
@@ -200,7 +203,7 @@ type sectionMatch struct {
 // the caller must fall back to metadata-only shaping.
 func bestSection(chunks []markdown.SearchChunk, chunkHits []bool, tokens []string) (markdown.SearchChunk, markdown.SearchChunk, int) {
 	type sectionKey struct {
-		id, text string
+		id, text, tabID string
 	}
 	var order []sectionKey
 	sections := make(map[sectionKey]*sectionMatch)
@@ -209,10 +212,10 @@ func bestSection(chunks []markdown.SearchChunk, chunkHits []bool, tokens []strin
 		if !chunkHits[index] {
 			continue
 		}
-		key := sectionKey{id: chunk.HeadingID, text: chunk.HeadingText}
+		key := sectionKey{id: chunk.HeadingID, text: chunk.HeadingText, tabID: chunk.TabID}
 		section := sections[key]
 		if section == nil {
-			section = &sectionMatch{headingID: chunk.HeadingID, headingText: chunk.HeadingText}
+			section = &sectionMatch{headingID: chunk.HeadingID, headingText: chunk.HeadingText, tabID: chunk.TabID}
 			sections[key] = section
 			order = append(order, key)
 		}
@@ -235,6 +238,7 @@ func bestSection(chunks []markdown.SearchChunk, chunkHits []bool, tokens []strin
 				Text:        section.headingText,
 				HeadingID:   section.headingID,
 				HeadingText: section.headingText,
+				TabID:       section.tabID,
 			}
 			bestChunk = section.bestChunk
 		}
