@@ -34,7 +34,11 @@ async function expectInViewport(page: Page, selector: string) {
     .toBe(true);
 }
 
-async function exportFixture(page: Page, source?: string): Promise<string> {
+async function exportFixture(
+  page: Page,
+  source?: string,
+  delayMermaid = false,
+): Promise<string> {
   const dir = mkdtempSync(join(tmpdir(), "m2h-tabbed-"));
   try {
     const input = join(dir, "input.md");
@@ -51,7 +55,15 @@ async function exportFixture(page: Page, source?: string): Promise<string> {
       const asset = path.includes("/fonts/") ? `fonts/${filename}` : filename;
       const response = await page.request.get(`/runtime/${asset}`);
       expect(response.ok()).toBe(true);
-      await route.fulfill({ response });
+      if (delayMermaid && filename === "mermaid.min.js") {
+        const gate = `; (function(){var render=mermaid.render;mermaid.render=function(id,source){return new Promise(function(resolve){window.__m2hReleaseDiagram=resolve;}).then(function(){return render.call(mermaid,id,source);});};})();`;
+        await route.fulfill({
+          contentType: "application/javascript",
+          body: (await response.text()) + gate,
+        });
+      } else {
+        await route.fulfill({ response });
+      }
     });
     return html;
   } finally {
@@ -331,3 +343,140 @@ test("export radios switch without JavaScript and 33 tabs keep all content", asy
     await context.close();
   }
 });
+
+function delayedAnchorSource(): string {
+  const edges = Array.from(
+    { length: 18 },
+    (_, i) => `    Node${i} --> Node${i + 1}`,
+  ).join("\n");
+  const equations = Array.from(
+    { length: 8 },
+    (_, i) => `    x_{${i}} &= ${i} \\\\`,
+  ).join("\n");
+  const tail = Array.from(
+    { length: 35 },
+    (_, i) => `Follow-up paragraph ${i}.`,
+  ).join("\n\n");
+  return [
+    "# Export anchor",
+    "",
+    '=== "Visible"',
+    "",
+    "    First panel.",
+    "",
+    '=== "Hidden"',
+    "",
+    "    ```mermaid",
+    "    graph TD",
+    edges,
+    "    ```",
+    "",
+    "    $$",
+    String.raw`    \begin{aligned}`,
+    equations,
+    String.raw`    \end{aligned}`,
+    "    $$",
+    "",
+    "    ## Target",
+    "",
+    "    Body.",
+    "",
+    "## After",
+    "",
+    tail,
+    "",
+  ].join("\n");
+}
+
+for (const browserName of ["chromium", "webkit"] as const) {
+  test.describe(`asynchronous export anchors in ${browserName}`, () => {
+    const engineTest = test.extend<{ enginePage: Page }>({
+      enginePage: async ({ playwright }, use) => {
+        const browser = await playwright[browserName].launch();
+        const page = await browser.newPage({
+          baseURL: "http://127.0.0.1:8873",
+        });
+        try {
+          await use(page);
+        } finally {
+          await browser.close();
+        }
+      },
+    });
+    engineTest(
+      "export hash stays on the target after delayed Mermaid and math layout",
+      async ({ enginePage: page }) => {
+        await exportFixture(page, delayedAnchorSource(), true);
+        await page.goto("/assets/tabbed-export.html#target");
+        await page.waitForFunction(
+          () =>
+            typeof (window as Window & { __m2hReleaseDiagram?: () => void })
+              .__m2hReleaseDiagram === "function",
+        );
+        await expect(page.locator(radio("m2h-tab-1-2"))).toBeChecked();
+        const target = page.locator("h2#target");
+        await expectInViewport(page, "h2#target");
+        await page.evaluate(() => {
+          (
+            window as Window & { __m2hReleaseDiagram?: () => void }
+          ).__m2hReleaseDiagram?.();
+        });
+        await expect(page.locator(".mermaid svg")).toHaveCount(1);
+        await expect(page.locator(".katex-display")).toHaveCount(1);
+        await expect(page.locator(".katex-error")).toHaveCount(0);
+        await page.evaluate(() => document.fonts.ready);
+        expect(
+          await page
+            .locator(".mermaid svg")
+            .evaluate((node) => node.getBoundingClientRect().height),
+        ).toBeGreaterThan(500);
+        await expect
+          .poll(() =>
+            target.evaluate((node) =>
+              Math.abs(node.getBoundingClientRect().top),
+            ),
+          )
+          .toBeLessThanOrEqual(2);
+        await expect(page).toHaveURL(/#target$/);
+      },
+    );
+
+    engineTest(
+      "delayed export enhancement preserves a user's scroll away from the hash",
+      async ({ enginePage: page }) => {
+        await exportFixture(page, delayedAnchorSource(), true);
+        await page.goto("/assets/tabbed-export.html#target");
+        await page.waitForFunction(
+          () =>
+            typeof (window as Window & { __m2hReleaseDiagram?: () => void })
+              .__m2hReleaseDiagram === "function",
+        );
+        await expectInViewport(page, "h2#target");
+        await page.mouse.wheel(0, 500);
+        await expect
+          .poll(() =>
+            page
+              .locator("h2#target")
+              .evaluate((node) => node.getBoundingClientRect().top),
+          )
+          .toBeLessThan(-200);
+        await page.evaluate(() => {
+          (
+            window as Window & { __m2hReleaseDiagram?: () => void }
+          ).__m2hReleaseDiagram?.();
+        });
+        await expect(page.locator(".mermaid svg")).toHaveCount(1);
+        await expect(page.locator(".katex-display")).toHaveCount(1);
+        await expect(page.locator(".katex-error")).toHaveCount(0);
+        await page.evaluate(() => document.fonts.ready);
+        await expect
+          .poll(() =>
+            page
+              .locator("h2#target")
+              .evaluate((node) => node.getBoundingClientRect().top),
+          )
+          .toBeLessThan(-200);
+      },
+    );
+  });
+}
