@@ -2,6 +2,7 @@ import { fireEvent, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 
 import { collectLightboxState } from "./document-lightbox";
+import { revealLazyImage } from "./render-rich-content";
 import { enhanceSVGImage, getInlineSVGImage, loadSVGImage } from "./svg-images";
 
 const markup = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 300">
@@ -152,8 +153,12 @@ describe("native SVG images", () => {
     image.dataset.m2hLazyState = "pending";
     enhanceSVGImage(image);
     expect(fetcher).not.toHaveBeenCalled();
+    image.dataset.m2hLazyState = "loading";
     fireEvent.load(image);
+    await Promise.resolve();
+    expect(fetcher).not.toHaveBeenCalled();
     image.dataset.m2hLazyState = "loaded";
+    revealLazyImage(image);
     await waitFor(() => expect(image.hidden).toBe(true));
     expect(fetcher).toHaveBeenCalledWith("http://localhost/selected.svg", {
       credentials: "same-origin",

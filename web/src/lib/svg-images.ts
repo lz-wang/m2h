@@ -4,6 +4,7 @@ import { imageFormat } from "./image-metadata";
 
 const SVG_NAMESPACE = "http://www.w3.org/2000/svg";
 const inlineImages = new WeakMap<HTMLImageElement, SVGSVGElement>();
+const svgPromoters = new WeakMap<HTMLImageElement, () => Promise<void>>();
 
 // Each resource gets its own shadow tree: SVG styles and fragment identifiers
 // must not collide with the article, another image, or a Lightbox snapshot.
@@ -114,6 +115,11 @@ export async function loadSVGImage(
 // The original img remains the lazy-loading and source-selection authority.
 // Only its visible presentation changes, after the selected SVG has loaded.
 export function enhanceSVGImage(image: HTMLImageElement): void {
+  const existing = svgPromoters.get(image);
+  if (existing !== undefined) {
+    void existing();
+    return;
+  }
   let requestedSource = "";
   const promote = async () => {
     const source = image.currentSrc || image.src;
@@ -166,8 +172,9 @@ export function enhanceSVGImage(image: HTMLImageElement): void {
     image.hidden = true;
     inlineImages.set(image, svg);
   };
-  // Lazy settlement runs after the image's load listeners. Wait one microtask
-  // before checking state, including cached images whose load already fired.
-  image.addEventListener("load", () => queueMicrotask(() => void promote()));
+  svgPromoters.set(image, promote);
+  // Browsers may run microtasks between load listeners. Lazy settlement must
+  // explicitly invoke us again once loaded; ordinary images use load directly.
+  image.addEventListener("load", () => void promote());
   if (image.complete && image.naturalWidth > 0) void promote();
 }

@@ -30,6 +30,10 @@ test("ordinary and picture SVGs retain native text in the article and zoomed Lig
     await frame.hover();
     await frame.locator(".m2h-lightbox-trigger").click();
     const vector = page.locator(".image-lightbox-vector");
+    await expect(page.locator(".image-lightbox-stage")).toHaveCSS(
+      "transform",
+      "matrix(1, 0, 0, 1, 0, 0)",
+    );
     const original = await vector.boundingBox();
     if (original === null) throw new Error("missing SVG viewport");
     await page.getByRole("button", { name: "放大图片" }).click();

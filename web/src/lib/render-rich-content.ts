@@ -873,6 +873,7 @@ export function revealLazyImage(image: HTMLImageElement): void {
   if (state !== "loaded") {
     return;
   }
+  enhanceSVGImage(image);
   const frame = image.closest(".m2h-image-frame");
   frame?.classList.remove("m2h-image-loading");
   const tooltip = frame?.querySelector(":scope > .m2h-image-name-tooltip");
