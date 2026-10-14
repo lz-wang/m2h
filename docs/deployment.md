@@ -5,7 +5,7 @@ tags:
   - 部署
   - 安全
 create_date: 2026-08-30
-update_date: 2026-09-10
+update_date: 2026-10-14
 ---
 
 # VPS 部署指南
@@ -80,8 +80,8 @@ m2h /srv/m2h/docs \
 m2h /srv/m2h/docs --host 127.0.0.1 --port 8793 --no-open --cdn
 ```
 
-浏览器会按需直接从 `https://cdn.jsdelivr.net` 加载固定版本的 Mermaid/ZenUML、
-KaTeX（含样式与字体）、Vega-Lite 和表格排序依赖；主程序、文档、API 与附件仍由
+浏览器会按需直接从 `https://cdn.jsdelivr.net` 加载固定版本的 Mermaid、
+KaTeX（含样式与字体）和表格排序依赖；主程序、文档、API 与附件仍由
 m2h 服务。下面的 systemd unit 若需启用，只需在 `ExecStart` 中追加 `--cdn`，
 执行 `systemctl daemon-reload` 并重启服务，刷新页面即可生效，文档深链接也使用同一配置。
 

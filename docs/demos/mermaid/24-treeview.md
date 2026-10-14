@@ -5,7 +5,7 @@ tags:
   - mermaid
   - treeview
 create_date: 2026-08-29
-update_date: 2026-08-29
+update_date: 2026-10-14
 ---
 
 树视图用于以目录结构形式表示分层数据，支持文件类型图标、连接线和可选注解。

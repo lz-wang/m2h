@@ -12,10 +12,10 @@
 
 - 直接浏览 Markdown 文件、目录或多个文档目录（打开目录时自动进入 README/index 或第一个根级文档）
 - 文件树与文件名/路径筛选、全文搜索（Ctrl/Cmd+K，支持从结果直接跳转到匹配章节）、文档目录、主题和正文宽度切换
-- 支持 GFM、语法高亮、数学公式、Mermaid、Vega-Lite 统计图表、脚注、Emoji 和 GitHub Alerts
+- 支持 GFM、语法高亮、数学公式、Mermaid、脚注、Emoji 和 GitHub Alerts
 - 支持 [Frontmatter 标题与日期元数据](docs/demos/frontmatter/00-index.md)、可排序表格、代码行号与长代码块折叠
-- 图片、Mermaid 图表与 Vega-Lite 图表支持全屏 Lightbox 查看，可切换、通过工具栏或鼠标滚轮平滑缩放、拖动和旋转；图表以原生 SVG 渲染，放大时保持清晰；SVG 不显示底部图片信息
-- 正文图片（含链接、picture、SVG）与 Mermaid、Vega-Lite 图表统一居中，WebUI 与 HTML 导出保持一致
+- 图片与 Mermaid 图表支持全屏 Lightbox 查看，可切换、通过工具栏或鼠标滚轮平滑缩放、拖动和旋转；图表以原生 SVG 渲染，放大时保持清晰；SVG 不显示底部图片信息
+- 正文图片（含链接、picture、SVG）与 Mermaid 图表统一居中，WebUI 与 HTML 导出保持一致
 - 正文图片延迟加载：接近视口时才请求实际资源，加载中显示内置占位图，失败折叠为统一占位并提示原始路径
 - 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
 - 输入 root 即发布边界：目录默认隐藏点开头路径（`--hidden` 可包含），附件路由拒绝 HTML/JS/CSS 等主动 Web 内容，响应携带统一浏览器安全头
@@ -117,8 +117,8 @@ m2h /srv/docs --host 127.0.0.1 --port 8793 --no-open
 m2h --help
 ```
 
-VPS 带宽受限时，可启用 CDN，让访问者的浏览器直接下载固定版本的 Mermaid/ZenUML、
-KaTeX（含样式与字体）、Vega-Lite 和表格排序运行时：
+VPS 带宽受限时，可启用 CDN，让访问者的浏览器直接下载固定版本的 Mermaid、
+KaTeX（含样式与字体）和表格排序运行时：
 
 ```console
 m2h /srv/docs --no-open --cdn
@@ -153,7 +153,7 @@ m2h export README.md -o index.html
 m2h export README.md --force
 ```
 
-导出的 HTML 内联 Markdown 页面样式；数学公式、Mermaid、Vega-Lite 和表格排序等
+导出的 HTML 内联 Markdown 页面样式；数学公式、Mermaid 和表格排序等
 增强功能按需加载网络资源。
 
 查看全部选项：
@@ -257,13 +257,13 @@ WebUI 富内容运行时默认从本地加载，也可通过 `--cdn` 切换到�
 | 类别 | 支持内容与演示 |
 | --- | --- |
 | GitHub 风格 | [语法高亮](docs/demos/syntax-highlight/00-index.md)（32 种编程语言与常用配置格式）、标题锚点、脚注、Emoji、GitHub Alerts 与可排序表格 |
-| 富内容 | [数学公式](docs/demos/math.md)（`$...$` / `$$...$$`，解析阶段保留公式原文，金额保持普通文本）、[Mermaid 图表](docs/demos/mermaid/00-index.md)（25 种图表类型与 ZenUML）、[Vega-Lite 统计图表](docs/demos/vega-lite/00-index.md)（自包含 JSON spec） |
+| 富内容 | [数学公式](docs/demos/math.md)（`$...$` / `$$...$$`，解析阶段保留公式原文，金额保持普通文本）、[Mermaid 图表](docs/demos/mermaid/00-index.md)（25 种图表类型） |
 | 元数据 | YAML Frontmatter；标题、日期别名、描述（description）与回退规则见 [Frontmatter 演示](docs/demos/frontmatter/00-index.md) |
 | 本地引用 | 当前文档相对路径与 `/` 开头的当前 root 相对路径；检查行为见 [本地目标演示](docs/demos/checkers/02-local-target-missing.md) |
 | 行内扩展 | `==高亮==`、`^^插入^^` 与 [`++ctrl+alt+del++` 键盘按键](docs/demos/pymarkdown/keyboards.md) |
 | 协作标记 | [Critic Markup 行内与块级语法](docs/demos/pymarkdown/critic.md) |
 | 图片排版 | 普通图片、链接图片、picture、SVG 与图表在正文中居中显示（WebUI 与 HTML 导出） |
-| WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开、正文图片临近视口延迟加载，以及图片、Mermaid 与 Vega-Lite 图表 Lightbox（使用整个视口缩放与拖动，工具栏浮于图像上方，支持滚轮平滑缩放；图表以原生 SVG 放大，SVG 不显示图片信息） |
+| WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开、正文图片临近视口延迟加载，以及图片、Mermaid 图表 Lightbox（使用整个视口缩放与拖动，工具栏浮于图像上方，支持滚轮平滑缩放；图表以原生 SVG 放大，SVG 不显示图片信息） |
 
 ## 许可证
 

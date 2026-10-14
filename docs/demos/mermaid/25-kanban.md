@@ -5,7 +5,7 @@ tags:
   - mermaid
   - kanban
 create_date: 2026-08-29
-update_date: 2026-08-29
+update_date: 2026-10-14
 ---
 
 看板图用于可视化任务在不同工作流阶段中的移动。
