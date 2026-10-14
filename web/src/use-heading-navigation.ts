@@ -1,6 +1,7 @@
 import { type RefObject, useCallback } from "react";
 
 import { findHeadingElement } from "./lib/heading";
+import { activateTabForElement } from "./lib/tabbed";
 
 export interface NavigateToHeadingOptions {
   // "smooth" for user-driven clicks, "auto" (instant) for deep-link restore.
@@ -37,6 +38,7 @@ export function useHeadingNavigation(
         window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const heading = findHeadingElement(container, id);
       if (heading !== null) {
+        activateTabForElement(heading);
         heading.scrollIntoView({
           block: "start",
           behavior:

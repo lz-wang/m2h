@@ -71,6 +71,7 @@ import {
   type LightboxState,
 } from "./lib/document-lightbox";
 import { enhanceDocumentLinks } from "./lib/document-links";
+import { findHeadingElement } from "./lib/heading";
 import { observeLazyImages, prepareLazyImages } from "./lib/lazy-images";
 import {
   renderRichContent,
@@ -78,6 +79,11 @@ import {
   revealLazyImage,
 } from "./lib/render-rich-content";
 import { readScrollPosition, saveScrollPosition } from "./lib/scroll-position";
+import {
+  activateTabForElement,
+  isElementInInactiveTab,
+  isTabRadio,
+} from "./lib/tabbed";
 import {
   type DocumentWidth,
   decodeHeadingHash,
@@ -348,6 +354,13 @@ export function App({ api }: AppProps) {
       navigateToHeading(fragment, { behavior: "auto", updateURL: false });
       return;
     }
+    // Restore visibility before a saved pixel offset; default selection may
+    // otherwise hide the heading carried by a reload's hash.
+    const target =
+      readerMainRef.current === null
+        ? null
+        : findHeadingElement(readerMainRef.current, fragment);
+    if (target !== null) activateTabForElement(target);
     const saved = readScrollPosition(documentPath);
     if (saved !== null) {
       window.scrollTo(0, saved);
@@ -357,6 +370,22 @@ export function App({ api }: AppProps) {
       navigateToHeading(fragment, { behavior: "auto", updateURL: false });
     }
   }, [documentPath, preview.phase, navigateToHeading]);
+
+  useEffect(() => {
+    const root = readerMainRef.current;
+    if (root === null || preview.phase !== "ready") return;
+    const changed = (event: Event) => {
+      if (!isTabRadio(event.target)) return;
+      const heading = findHeadingElement(
+        root,
+        decodeHeadingHash(window.location.hash),
+      );
+      if (heading !== null && isElementInInactiveTab(heading))
+        preview.replaceHash(null);
+    };
+    root.addEventListener("change", changed);
+    return () => root.removeEventListener("change", changed);
+  }, [preview.phase, preview.replaceHash]);
 
   // Persist the window's scroll offset per document — rAF-throttled so a long
   // scroll writes at most once per frame, and flushed synchronously on

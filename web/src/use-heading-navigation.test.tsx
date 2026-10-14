@@ -25,7 +25,26 @@ function Harness({
         go
       </button>
       <div className="markdown-body">
-        <h2 id="target">Target</h2>
+        <div className="m2h-tabbed-set">
+          <input
+            type="radio"
+            className="m2h-tabbed-radio"
+            name="nav"
+            id="tab-a"
+            defaultChecked
+          />
+          <input
+            type="radio"
+            className="m2h-tabbed-radio"
+            name="nav"
+            id="tab-b"
+          />
+          <div className="m2h-tabbed-content">
+            <section className="m2h-tabbed-panel" data-m2h-tab-id="tab-b">
+              <h2 id="target">Target</h2>
+            </section>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -58,6 +77,9 @@ describe("useHeadingNavigation", () => {
     act(() => {
       document.querySelector<HTMLButtonElement>('[data-testid="go"]')?.click();
     });
+    expect(document.querySelector<HTMLInputElement>("#tab-b")?.checked).toBe(
+      true,
+    );
     expect(scrollIntoView).toHaveBeenCalledWith({
       block: "start",
       behavior: "smooth",

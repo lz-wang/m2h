@@ -2,6 +2,7 @@ import { type RefObject, useEffect, useState } from "react";
 
 import type { TocItem } from "./api";
 import { findHeadingElement } from "./lib/heading";
+import { isElementInInactiveTab, isTabRadio } from "./lib/tabbed";
 
 // useHeadingSpy tracks the heading currently in view as the reader scrolls.
 //
@@ -61,7 +62,7 @@ export function useHeadingSpy<T extends HTMLElement>(
       let current: string | null = null;
       for (const item of items) {
         const heading = findHeadingElement(container, item.id);
-        if (heading === null) {
+        if (heading === null || isElementInInactiveTab(heading)) {
           continue;
         }
         if (heading.getBoundingClientRect().top <= viewportTop) {
@@ -77,10 +78,15 @@ export function useHeadingSpy<T extends HTMLElement>(
       frame = requestAnimationFrame(update);
     };
 
+    const handleChange = (event: Event) => {
+      if (isTabRadio(event.target)) handleScroll();
+    };
+    container.addEventListener("change", handleChange);
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("scroll", handleScroll);
+      container.removeEventListener("change", handleChange);
     };
   }, [items, containerRef, enabled]);
 

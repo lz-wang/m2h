@@ -11,7 +11,13 @@ const items: TocItem[] = [
   { level: 2, id: "b", text: "B" },
 ];
 
-function Harness({ enabled }: { enabled: boolean }) {
+function Harness({
+  enabled,
+  hiddenB = false,
+}: {
+  enabled: boolean;
+  hiddenB?: boolean;
+}) {
   const ref = useRef<HTMLDivElement>(null);
   const activeID = useHeadingSpy(items, ref, enabled);
   return (
@@ -19,7 +25,25 @@ function Harness({ enabled }: { enabled: boolean }) {
       <div className="markdown-body">
         <h1 id="title">Title</h1>
         <h2 id="a">A</h2>
-        <h2 id="b">B</h2>
+        <div className="m2h-tabbed-set">
+          <input
+            type="radio"
+            className="m2h-tabbed-radio"
+            name="spy"
+            id="tab-a"
+            defaultChecked={hiddenB}
+          />
+          <input
+            type="radio"
+            className="m2h-tabbed-radio"
+            name="spy"
+            id="tab-b"
+            defaultChecked={!hiddenB}
+          />
+          <section className="m2h-tabbed-panel" data-m2h-tab-id="tab-b">
+            <h2 id="b">B</h2>
+          </section>
+        </div>
       </div>
       <span data-testid="active">{activeID ?? "none"}</span>
     </div>
@@ -108,6 +132,22 @@ describe("useHeadingSpy", () => {
     // After scrolling further, "b" crosses the offset and becomes active.
     mockHeadingTops({ title: -600, a: -200, b: 0 });
     await fireScroll();
+    expect(screen.getByTestId("active").textContent).toBe("b");
+  });
+
+  it("ignores hidden headings and recomputes after a manual tab change", async () => {
+    mockHeadingTops({ title: -400, a: 0, b: 0 });
+    render(<Harness enabled={true} hiddenB={true} />);
+    windowScrollY(100);
+    await fireScroll();
+    expect(screen.getByTestId("active").textContent).toBe("a");
+    const radio = document.querySelector<HTMLInputElement>("#tab-b");
+    if (radio === null) throw new Error("fixture");
+    await act(async () => {
+      radio.checked = true;
+      fireEvent.change(radio);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
     expect(screen.getByTestId("active").textContent).toBe("b");
   });
 
