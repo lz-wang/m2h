@@ -113,14 +113,15 @@ func newRuntimeURLs() runtimeURLs {
 // rendered body uses it.
 func runtimeFragments(body string) (template.HTML, template.HTML) {
 	urls := newRuntimeURLs()
+	needs := inspectRuntimeNeeds(body)
 	var head strings.Builder
 	var scripts strings.Builder
-	if containsMathDelimiter(body) {
+	if needs.math {
 		fmt.Fprintf(&head, "  <link rel=\"stylesheet\" href=\"%s\">\n", urls.KatexCSS)
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.KatexJS)
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.KatexAutoRender)
 	}
-	if containsRenderableMermaid(body) {
+	if needs.mermaid {
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.MermaidJS)
 	}
 	if containsSortableTable(body) {
@@ -135,51 +136,66 @@ var zenumlKeyword = regexp.MustCompile(`^zenuml\b`)
 
 const browserWhitespace = " \t\n\v\f\r\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
 
-// Inspect real pre > code.language-mermaid nodes in the rendered HTML rather
-// than language names in attributes, comments or escaped code. HTML parsing
-// decodes entities and preserves nested text just like browser textContent.
-func containsRenderableMermaid(body string) bool {
+type runtimeNeeds struct {
+	math    bool
+	mermaid bool
+}
+
+// Parse the rendered HTML once to detect eligible math text and real
+// pre > code.language-mermaid nodes. Entities, comments and nested markup
+// follow browser semantics; math inside code or other ignored regions does
+// not trigger KaTeX. Parser-owned m2h-math containers remain eligible.
+func inspectRuntimeNeeds(body string) runtimeNeeds {
 	nodes, err := html.ParseFragment(strings.NewReader(body), &html.Node{Type: html.ElementNode, Data: "div", DataAtom: atom.Div})
 	if err != nil {
-		return false
+		return runtimeNeeds{}
 	}
-	var visit func(*html.Node) bool
-	visit = func(node *html.Node) bool {
-		if node.Type == html.ElementNode && node.DataAtom == atom.Code && node.Parent != nil && node.Parent.DataAtom == atom.Pre {
-			for _, attr := range node.Attr {
-				if attr.Key != "class" {
-					continue
+	var needs runtimeNeeds
+	var visit func(*html.Node, bool)
+	visit = func(node *html.Node, mathIgnored bool) {
+		if node.Type == html.ElementNode {
+			switch node.DataAtom {
+			case atom.Script, atom.Noscript, atom.Style, atom.Textarea, atom.Pre, atom.Code, atom.Option:
+				mathIgnored = true
+			}
+			mathIgnored = mathIgnored || hasHTMLClass(node, "katex") || hasHTMLClass(node, "m2h-literal-dollar")
+		}
+		if !mathIgnored && node.Type == html.TextNode && containsMathDelimiter(node.Data) {
+			needs.math = true
+		}
+		if !needs.mermaid && node.Type == html.ElementNode && node.DataAtom == atom.Code && node.Parent != nil && node.Parent.DataAtom == atom.Pre && hasHTMLClass(node, "language-mermaid") {
+			var source strings.Builder
+			var textContent func(*html.Node)
+			textContent = func(child *html.Node) {
+				if child.Type == html.TextNode {
+					source.WriteString(child.Data)
 				}
-				for _, class := range strings.FieldsFunc(attr.Val, func(r rune) bool { return strings.ContainsRune(" \t\n\r\f", r) }) {
-					if class == "language-mermaid" {
-						var source strings.Builder
-						var textContent func(*html.Node)
-						textContent = func(child *html.Node) {
-							if child.Type == html.TextNode {
-								source.WriteString(child.Data)
-							}
-							for descendant := child.FirstChild; descendant != nil; descendant = descendant.NextSibling {
-								textContent(descendant)
-							}
-						}
-						textContent(node)
-						if !zenumlKeyword.MatchString(strings.TrimLeft(source.String(), browserWhitespace)) {
-							return true
-						}
-					}
+				for descendant := child.FirstChild; descendant != nil; descendant = descendant.NextSibling {
+					textContent(descendant)
 				}
 			}
+			textContent(node)
+			needs.mermaid = !zenumlKeyword.MatchString(strings.TrimLeft(source.String(), browserWhitespace))
 		}
 		for child := node.FirstChild; child != nil; child = child.NextSibling {
-			if visit(child) {
-				return true
-			}
+			visit(child, mathIgnored)
 		}
-		return false
 	}
 	for _, node := range nodes {
-		if visit(node) {
-			return true
+		visit(node, false)
+	}
+	return needs
+}
+
+func hasHTMLClass(node *html.Node, name string) bool {
+	for _, attr := range node.Attr {
+		if attr.Key != "class" {
+			continue
+		}
+		for _, class := range strings.FieldsFunc(attr.Val, func(r rune) bool { return strings.ContainsRune(" \t\n\r\f", r) }) {
+			if class == name {
+				return true
+			}
 		}
 	}
 	return false
@@ -193,12 +209,12 @@ func containsSortableTable(body string) bool {
 	return strings.Contains(body, "<table>")
 }
 
-// containsMathDelimiter reports whether the rendered body could contain KaTeX
+// containsMathDelimiter reports whether eligible text could contain KaTeX
 // math. It matches the delimiter set handed to auto-render — every math span
 // contains "$", "\(" or "\[" — so the check can never miss real math; a false
 // positive (for example a literal dollar sign) only costs one extra runtime.
-func containsMathDelimiter(body string) bool {
-	return strings.Contains(body, "$") ||
-		strings.Contains(body, `\(`) ||
-		strings.Contains(body, `\[`)
+func containsMathDelimiter(text string) bool {
+	return strings.Contains(text, "$") ||
+		strings.Contains(text, `\(`) ||
+		strings.Contains(text, `\[`)
 }

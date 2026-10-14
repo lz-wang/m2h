@@ -353,9 +353,6 @@ func TestRunExportWithoutRichContentStaysLean(t *testing.T) {
 	if strings.Contains(body, "cdn.jsdelivr.net") {
 		t.Errorf("plain document unexpectedly loads CDN runtimes")
 	}
-	if strings.Contains(body, "m2hZenUMLModuleURL = ") {
-		t.Errorf("plain document unexpectedly carries the ZenUML plugin URL")
-	}
 }
 
 func TestRunExportWritesOnlyTheHTMLFile(t *testing.T) {
@@ -470,6 +467,50 @@ func TestRunExportLoadsMermaidOnlyForRenderableBlocks(t *testing.T) {
 			got := strings.Contains(string(output), `<script src="`+newRuntimeURLs().MermaidJS+`"></script>`)
 			if got != item.wantMermaid {
 				t.Errorf("Mermaid script present = %v, want %v", got, item.wantMermaid)
+			}
+		})
+	}
+}
+
+func TestRunExportLoadsKatexOnlyForEligibleText(t *testing.T) {
+	t.Parallel()
+	for _, item := range []struct {
+		name, source string
+		wantMath     bool
+	}{
+		{"schema fence", "```vega-lite\n{\"$schema\":\"https://example.com/schema.json\",\"mark\":\"bar\"}\n```\n", false},
+		{"inline code", "`$E=mc^2$`\n", false},
+		{"code and prose math", "```json\n{\"$schema\":\"ignored\"}\n```\n\n$E=mc^2$\n", true},
+		{"block math", "$$\nE=mc^2\n$$\n", true},
+		{"parenthesized math", `<p>\(E=mc^2\)</p>`, true},
+		{"bracketed math", `<p>\[E=mc^2\]</p>`, true},
+		{"script", `<script type="application/json">{"$schema":"ignored"}</script>`, false},
+		{"style", `<style>.math {content:"$ignored$"}</style>`, false},
+		{"noscript", `<noscript>$ignored$</noscript>`, false},
+		{"textarea", `<textarea>$ignored$</textarea>`, false},
+		{"option", `<select><option>$ignored$</option></select>`, false},
+		{"already rendered math", `<span class="extra katex"><span>$ignored$</span></span>`, false},
+		{"protected currency", `<span class="m2h-literal-dollar">$</span>`, false},
+		{"attributes", `<p title="$ignored$">plain</p>`, false},
+		{"HTML comment", `<!-- $ignored$ -->`, false},
+		{"decoded text", `<p>&#36;E=mc^2&#36;</p>`, true},
+		{"nested ignored code", `<pre><code><span>$ignored$</span></code></pre>`, false},
+	} {
+		t.Run(item.name, func(t *testing.T) {
+			root := t.TempDir()
+			source := writeFixture(t, root, "math.md", "# Runtime detection\n\n"+item.source+"\n")
+			if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
+				t.Fatal(err)
+			}
+			output, err := os.ReadFile(filepath.Join(root, "math.html"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			urls := newRuntimeURLs()
+			for _, asset := range []string{urls.KatexCSS, urls.KatexJS, urls.KatexAutoRender} {
+				if got := strings.Contains(string(output), asset); got != item.wantMath {
+					t.Errorf("runtime %s present = %v, want %v", asset, got, item.wantMath)
+				}
 			}
 		})
 	}

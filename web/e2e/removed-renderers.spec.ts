@@ -74,10 +74,12 @@ test("export preserves removed code and renders retained rich content", async ({
     await page.route("**/assets/removed-export.html", (route) =>
       route.fulfill({ contentType: "text/html", body: html }),
     );
+    const requestedAssets: string[] = [];
     await page.route("https://cdn.jsdelivr.net/**", async (route) => {
       expect(route.request().url()).not.toMatch(removedRuntime);
       const path = new URL(route.request().url()).pathname;
       const filename = path.split("/").at(-1);
+      if (filename !== undefined) requestedAssets.push(filename);
       const asset = path.includes("/fonts/") ? `fonts/${filename}` : filename;
       const response = await page.request.get(`/runtime/${asset}`);
       expect(response.ok()).toBe(true);
@@ -99,6 +101,15 @@ test("export preserves removed code and renders retained rich content", async ({
     await expect(page.locator(".katex").first()).toBeVisible();
     await expect(page.locator("table[data-m2h-sortable='true']")).toHaveCount(
       1,
+    );
+    expect(requestedAssets).toEqual(
+      expect.arrayContaining([
+        "katex.min.css",
+        "katex.min.js",
+        "auto-render.min.js",
+        "mermaid.min.js",
+        "tablesort.min.js",
+      ]),
     );
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -159,6 +170,49 @@ for (const mixed of [false, true]) {
       );
       await expect(page.locator(".mermaid > svg")).toHaveCount(mixed ? 1 : 0);
       expect(runtimeRequests).toHaveLength(mixed ? 1 : 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+for (const item of [
+  {
+    name: "schema fence",
+    source:
+      '```vega-lite\n{"$schema":"https://example.com/schema.json","mark":"bar"}\n```\n',
+    code: '{"$schema":"https://example.com/schema.json","mark":"bar"}\n',
+  },
+  { name: "inline math code", source: "`$E=mc^2$`\n", code: "$E=mc^2$" },
+]) {
+  test(`export ${item.name} keeps source without KaTeX requests`, async ({
+    page,
+  }) => {
+    const dir = mkdtempSync(join(tmpdir(), "m2h-code-export-"));
+    try {
+      const input = join(dir, "input.md");
+      writeFileSync(input, "# Code only\n\n" + item.source);
+      execFileSync("../build/e2e/m2h", ["export", input, "-o", "index.html"]);
+      const html = readFileSync(join(dir, "index.html"), "utf8");
+      expect(html).not.toContain("https://cdn.jsdelivr.net/");
+      await page.route("**/assets/code-export.html", (route) =>
+        route.fulfill({ contentType: "text/html", body: html }),
+      );
+      const runtimeRequests: string[] = [];
+      page.on("request", (request) => {
+        if (request.url().startsWith("https://cdn.jsdelivr.net/"))
+          runtimeRequests.push(request.url());
+      });
+      await page.goto("/assets/code-export.html");
+      await expect(page.locator(".markdown-body code")).toHaveCount(1);
+      expect(await page.locator(".markdown-body code").textContent()).toBe(
+        item.code,
+      );
+      await expect(
+        page.locator('script[src], link[rel="stylesheet"]'),
+      ).toHaveCount(0);
+      await expect(page.locator(".katex")).toHaveCount(0);
+      expect(runtimeRequests).toEqual([]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }

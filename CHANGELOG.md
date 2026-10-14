@@ -11,7 +11,7 @@
 ### 变更
 
 - `export` 仅为可渲染的 Mermaid 代码块加载运行时，纯 ZenUML 文档不再加载 Mermaid。
-- WebUI 中代码块的公式标记不再触发 KaTeX 运行时加载。
+- WebUI 与 `export` 中代码块的公式标记不再触发 KaTeX 运行时加载。
 
 ### 移除
 
