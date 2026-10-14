@@ -788,6 +788,11 @@ html .markdown-body .keys > kbd {
   color: var(--m2h-copy-fg);
   cursor: pointer;
 }
+@media (hover: hover) {
+  .markdown-body .m2h-tabbed-labels > label:hover {
+    color: var(--m2h-copy-accent);
+  }
+}
 .markdown-body .m2h-tabbed-panel {
   display: none;
   min-width: 0;

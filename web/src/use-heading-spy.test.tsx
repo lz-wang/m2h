@@ -3,6 +3,7 @@ import { useRef } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { TocItem } from "./api";
+import { activateTabForElement } from "./lib/tabbed";
 import { useHeadingSpy } from "./use-heading-spy";
 
 const items: TocItem[] = [
@@ -149,6 +150,38 @@ describe("useHeadingSpy", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
     expect(screen.getByTestId("active").textContent).toBe("b");
+  });
+
+  it("recomputes on programmatic activation without scrolling and removes its subscription", async () => {
+    mockHeadingTops({ title: -400, a: 0, b: 0 });
+    const view = render(<Harness enabled={true} hiddenB={true} />);
+    windowScrollY(100);
+    await fireScroll();
+    expect(screen.getByTestId("active").textContent).toBe("a");
+    const heading = document.querySelector<HTMLElement>("#b");
+    if (heading === null) throw new Error("fixture");
+    const scroll = vi.fn();
+    window.addEventListener("scroll", scroll);
+    try {
+      await act(async () => {
+        activateTabForElement(heading);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(scroll).not.toHaveBeenCalled();
+      expect(screen.getByTestId("active").textContent).toBe("b");
+      view.rerender(<Harness enabled={false} hiddenB={true} />);
+      const radio = document.querySelector<HTMLInputElement>("#tab-b");
+      if (radio === null) throw new Error("fixture");
+      radio.checked = false;
+      mockHeadingTops({ title: 100, a: 100, b: 100 });
+      await act(async () => {
+        activateTabForElement(heading);
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      });
+      expect(screen.getByTestId("active").textContent).toBe("b");
+    } finally {
+      window.removeEventListener("scroll", scroll);
+    }
   });
 
   it("does not attach a listener while disabled", async () => {

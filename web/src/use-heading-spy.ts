@@ -2,7 +2,11 @@ import { type RefObject, useEffect, useState } from "react";
 
 import type { TocItem } from "./api";
 import { findHeadingElement } from "./lib/heading";
-import { isElementInInactiveTab, isTabRadio } from "./lib/tabbed";
+import {
+  isElementInInactiveTab,
+  isTabRadio,
+  TAB_ACTIVATED_EVENT,
+} from "./lib/tabbed";
 
 // useHeadingSpy tracks the heading currently in view as the reader scrolls.
 //
@@ -19,7 +23,7 @@ import { isElementInInactiveTab, isTabRadio } from "./lib/tabbed";
 // edge of the sticky toolbar, plus a little lead so a heading becomes active as
 // it approaches the bar rather than only once it passes under it.
 //
-// The spy only reacts to real scroll events — it never computes an initial
+// The spy reacts to scroll and explicit tab activation — it never computes an initial
 // position on mount. The browser's own scroll restoration finishes by moving
 // the viewport (which fires scroll), and only then does the hash resync; an
 // eager first pass would pin the URL to a wrong heading while the restore is
@@ -82,11 +86,13 @@ export function useHeadingSpy<T extends HTMLElement>(
       if (isTabRadio(event.target)) handleScroll();
     };
     container.addEventListener("change", handleChange);
+    container.addEventListener(TAB_ACTIVATED_EVENT, handleChange);
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => {
       cancelAnimationFrame(frame);
       window.removeEventListener("scroll", handleScroll);
       container.removeEventListener("change", handleChange);
+      container.removeEventListener(TAB_ACTIVATED_EVENT, handleChange);
     };
   }, [items, containerRef, enabled]);
 

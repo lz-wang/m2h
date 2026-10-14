@@ -133,22 +133,91 @@ test("search activates headingless panels across documents and in place", async 
   await expectInViewport(page, 'h2[id="安装"]');
 });
 
-test("manual switching clears hidden hash without returning to top", async ({
+test("equal-height tab switching preserves scroll and duplicate-heading navigation", async ({
   page,
 }) => {
   await page.goto("/doc/tabbed.md#%E5%AE%89%E8%A3%85");
   await expect(page.locator(radio("m2h-tab-1-1"))).toBeChecked();
+  const first = page.locator(panel("m2h-tab-1-1"));
+  const second = page.locator(panel("m2h-tab-1-2"));
+  const set = first.locator("../..");
+  await set.evaluate((node) =>
+    window.scrollTo(0, window.scrollY + node.getBoundingClientRect().top - 120),
+  );
+  await page.locator(radio("m2h-tab-1-1")).focus();
   const before = await page.evaluate(() => window.scrollY);
-  expect(before).toBeGreaterThan(0);
-  await page.locator('label[for="m2h-tab-1-2"]').click();
-  await expect
-    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
-    .not.toBe("#安装");
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
-  await page.evaluate(() => window.dispatchEvent(new Event("scroll")));
-  await expect
-    .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
-    .not.toBe("#安装");
+  const height = await first.evaluate(
+    (node) => node.getBoundingClientRect().height,
+  );
+  for (const [key, id] of [
+    ["ArrowRight", "m2h-tab-1-2"],
+    ["ArrowLeft", "m2h-tab-1-1"],
+    ["ArrowRight", "m2h-tab-1-2"],
+  ]) {
+    await page.keyboard.press(key);
+    await expect(page.locator(radio(id))).toBeChecked();
+    await expect(page.locator(radio(id))).toBeFocused();
+    expect(
+      Math.abs((await page.evaluate(() => window.scrollY)) - before),
+    ).toBeLessThanOrEqual(2);
+  }
+  expect(
+    Math.abs(
+      (await second.evaluate((node) => node.getBoundingClientRect().height)) -
+        height,
+    ),
+  ).toBeLessThanOrEqual(2);
+  const toc = page.getByRole("navigation", { name: "文档目录" });
+  for (const id of ["安装", "安装-1", "安装"]) {
+    await toc.locator(`a[href="#${encodeURIComponent(id)}"]`).click();
+    await expectInViewport(page, `h2[id="${id}"]`);
+    await expect
+      .poll(() => page.evaluate(() => decodeURIComponent(location.hash)))
+      .toBe(`#${id}`);
+    await expect(
+      page.locator(radio(id === "安装" ? "m2h-tab-1-1" : "m2h-tab-1-2")),
+    ).toBeChecked();
+  }
+});
+
+test("different-height tab switching keeps the group visible and retains focus and navigation", async ({
+  page,
+}) => {
+  await page.goto("/doc/tabbed.md");
+  const set = page.locator(panel("m2h-tab-2-1")).locator("../..");
+  await expect(set).toBeVisible();
+  await set.evaluate((node) =>
+    window.scrollTo(0, window.scrollY + node.getBoundingClientRect().top - 120),
+  );
+  await page.locator(radio("m2h-tab-2-1")).focus();
+  const shortHeight = await set.evaluate(
+    (node) => node.getBoundingClientRect().height,
+  );
+  await page.keyboard.press("ArrowRight");
+  await expect(page.locator(radio("m2h-tab-2-2"))).toBeChecked();
+  await expect(
+    page.locator(panel("m2h-tab-2-2")).locator(".mermaid svg"),
+  ).toBeVisible();
+  expect(
+    await set.evaluate((node) => node.getBoundingClientRect().height),
+  ).toBeGreaterThan(shortHeight + 100);
+  for (const [key, id] of [
+    ["ArrowLeft", "m2h-tab-2-1"],
+    ["ArrowRight", "m2h-tab-2-2"],
+  ]) {
+    await page.keyboard.press(key);
+    await expect(page.locator(radio(id))).toBeChecked();
+    await expect(page.locator(radio(id))).toBeFocused();
+    await expect
+      .poll(() =>
+        set.evaluate((node) => {
+          const box = node.getBoundingClientRect();
+          return box.top >= 0 && box.top < window.innerHeight;
+        }),
+      )
+      .toBe(true);
+    expect(await page.evaluate(() => location.pathname)).toBe("/doc/tabbed.md");
+  }
 });
 
 test("hidden rich content, sorting, lazy image and Lightbox work on first activation", async ({
