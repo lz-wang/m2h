@@ -8,6 +8,11 @@
 
 ## [Unreleased]
 
+### 变更
+
+- `export` 仅为可渲染的 Mermaid 代码块加载运行时，纯 ZenUML 文档不再加载 Mermaid。
+- WebUI 中代码块的公式标记不再触发 KaTeX 运行时加载。
+
 ### 移除
 
 - 移除 Vega-Lite 与 ZenUML 图表渲染；现有围栏内容改为普通代码块，需要图表时请改用其他 Mermaid 语法。

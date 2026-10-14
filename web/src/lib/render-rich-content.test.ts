@@ -2285,3 +2285,52 @@ describe("removed renderer code blocks", () => {
     );
   });
 });
+
+describe("math runtime detection", () => {
+  beforeEach(() => {
+    vi.resetModules();
+    loadKatexMock.mockClear();
+    renderMathInElementMock.mockClear();
+  });
+
+  it.each([
+    '<pre><code class="language-vega-lite">{"$schema":"https://example.com/schema.json"}</code></pre>',
+    "<p><code>$E=mc^2$</code></p>",
+    '<script type="application/json">{"$schema":"ignored"}</script>',
+    "<noscript>$ignored$</noscript>",
+    '<style>.example { content: "$ignored$" }</style>',
+    "<textarea>$ignored$</textarea>",
+    "<select><option>$ignored$</option></select>",
+    '<span class="katex"><span>$already rendered$</span></span>',
+    '<span class="m2h-literal-dollar">$</span>',
+  ])("does not load KaTeX for ignored content: %s", async (html) => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = html;
+    await renderRichContent(root, { mode: "light" });
+    expect(loadKatexMock).not.toHaveBeenCalled();
+    expect(renderMathInElementMock).not.toHaveBeenCalled();
+  });
+
+  it.each(["$E=mc^2$", "\\(E=mc^2\\)", "\\[E=mc^2\\]"])(
+    "loads KaTeX for prose %s alongside ignored code",
+    async (math) => {
+      const { renderRichContent } = await import("./render-rich-content");
+      const root = document.createElement("div");
+      root.innerHTML =
+        '<pre><code class="language-vega-lite">{"$schema":"ignored"}</code></pre>';
+      const paragraph = document.createElement("p");
+      paragraph.className = "m2h-math";
+      paragraph.textContent = math;
+      root.append(paragraph);
+      const code = root.querySelector("code");
+      await renderRichContent(root, { mode: "light" });
+      expect(loadKatexMock).toHaveBeenCalledTimes(1);
+      expect(renderMathInElementMock).toHaveBeenCalledWith(
+        root,
+        expect.objectContaining({ throwOnError: false }),
+      );
+      expect(code?.textContent).toBe('{"$schema":"ignored"}');
+    },
+  );
+});

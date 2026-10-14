@@ -10,7 +10,7 @@ update_date: 2026-10-14
 # 已移除图表渲染器回归
 
 ```vega-lite
-{"mark":"bar","description":"removed-renderer-search-token"}
+{"$schema":"https://vega.github.io/schema/vega-lite/v6.json","mark":"bar","description":"removed-renderer-search-token"}
 ```
 
 ```vegalite

@@ -48,7 +48,8 @@ const MATH_DELIMITERS: MathAutoRenderDelimiter[] = [
 // opener followed by non-space, closer preceded by non-space and not followed
 // by a digit.
 const LITERAL_DOLLAR_CLASS = "m2h-literal-dollar";
-const KATEX_IGNORED_CONTENT_SELECTOR = `script, noscript, style, textarea, pre, code, option, .katex, .m2h-math, .${LITERAL_DOLLAR_CLASS}`;
+const KATEX_IGNORED_CONTENT_SELECTOR = `script, noscript, style, textarea, pre, code, option, .katex, .${LITERAL_DOLLAR_CLASS}`;
+const LITERAL_DOLLAR_PROTECTED_SELECTOR = `${KATEX_IGNORED_CONTENT_SELECTOR}, .m2h-math`;
 
 // Plain GFM tables Goldmark renders as bare <table>; a class attribute marks
 // user-authored HTML tables the client-side sorter must leave untouched, and
@@ -262,15 +263,27 @@ function syncTableSortState(table: HTMLTableElement): void {
   }
 }
 
-// Matches the delimiters handed to KaTeX: every math span contains "$", "\("
-// or "\[" in its text content. The check is deliberately conservative — a
-// false positive only costs one runtime scan, a false negative is impossible.
+// Check only text KaTeX can render; code, metadata and already-rendered math
+// must not trigger runtime downloads just because they contain delimiters.
 function hasMathText(root: HTMLElement): boolean {
-  const text = root.textContent;
-  return (
-    text !== null &&
-    (text.includes("$") || text.includes("\\(") || text.includes("\\["))
+  const walker = root.ownerDocument.createTreeWalker(
+    root,
+    NodeFilter.SHOW_TEXT,
   );
+  for (let node = walker.nextNode(); node !== null; node = walker.nextNode()) {
+    const parent = node.parentElement;
+    if (
+      parent === null ||
+      parent.closest(KATEX_IGNORED_CONTENT_SELECTOR) !== null
+    ) {
+      continue;
+    }
+    const text = node.textContent ?? "";
+    if (text.includes("$") || text.includes("\\(") || text.includes("\\[")) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function protectLiteralDollars(root: HTMLElement): void {
@@ -291,7 +304,7 @@ function protectLiteralDollars(root: HTMLElement): void {
     if (
       parent === null ||
       !source.includes("$") ||
-      parent.closest(KATEX_IGNORED_CONTENT_SELECTOR) !== null
+      parent.closest(LITERAL_DOLLAR_PROTECTED_SELECTOR) !== null
     ) {
       continue;
     }

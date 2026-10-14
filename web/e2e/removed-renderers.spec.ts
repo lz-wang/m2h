@@ -1,5 +1,11 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "@playwright/test";
@@ -81,7 +87,7 @@ test("export preserves removed code and renders retained rich content", async ({
     await expect(page.locator(".mermaid > svg")).toHaveCount(1);
     await expect(page.locator(removedCode)).toHaveCount(5);
     expect(await page.locator(removedCode).allTextContents()).toEqual([
-      '{"mark":"bar","description":"removed-renderer-search-token"}\n',
+      '{"$schema":"https://vega.github.io/schema/vega-lite/v6.json","mark":"bar","description":"removed-renderer-search-token"}\n',
       "{ invalid JSON\n",
       "\nzenuml\n  Alice->Bob: Hello\n",
       "Alice->Bob: Hello\n",
@@ -98,3 +104,63 @@ test("export preserves removed code and renders retained rich content", async ({
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("code-only documents do not load Mermaid or KaTeX", async ({ page }) => {
+  const runtimeRequests: string[] = [];
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/runtime/")) {
+      runtimeRequests.push(request.url());
+    }
+  });
+  await page.goto("/doc/runtime-code-only.md");
+  await expect(page.locator(".m2h-code-copy")).toHaveCount(2);
+  await expect(page.locator("pre > code.language-mermaid")).toHaveText(
+    "zenuml\n  Alice->Bob: Hello\n",
+  );
+  await expect(
+    page.locator('script[src*="/runtime/"], link[href*="/runtime/"]'),
+  ).toHaveCount(0);
+  await expect(
+    page.locator(".mermaid, .katex, .m2h-rich-visual-error"),
+  ).toHaveCount(0);
+  expect(runtimeRequests).toEqual([]);
+});
+
+for (const mixed of [false, true]) {
+  test(`export ${mixed ? "mixed Mermaid" : "pure ZenUML"} loads only needed runtimes`, async ({
+    page,
+  }) => {
+    const dir = mkdtempSync(join(tmpdir(), "m2h-runtime-"));
+    try {
+      const input = join(dir, "input.md");
+      writeFileSync(
+        input,
+        "# Export runtime\n\n```mermaid\nzenuml\n  Alice->Bob: Hello\n```\n" +
+          (mixed
+            ? "\n```mermaid\nflowchart LR\n  A[zenuml label] --> B\n```\n"
+            : ""),
+      );
+      execFileSync("../build/e2e/m2h", ["export", input, "-o", "index.html"]);
+      const html = readFileSync(join(dir, "index.html"), "utf8");
+      expect(html.includes("/mermaid@11.16.1/")).toBe(mixed);
+      await page.route("**/assets/runtime-export.html", (route) =>
+        route.fulfill({ contentType: "text/html", body: html }),
+      );
+      const runtimeRequests: string[] = [];
+      await page.route("https://cdn.jsdelivr.net/**", async (route) => {
+        runtimeRequests.push(route.request().url());
+        const response = await page.request.get("/runtime/mermaid.min.js");
+        await route.fulfill({ response });
+      });
+      await page.goto("/assets/runtime-export.html");
+      await expect(page.locator("pre > code.language-mermaid")).toHaveCount(1);
+      await expect(page.locator("pre > code.language-mermaid")).toHaveText(
+        "zenuml\n  Alice->Bob: Hello\n",
+      );
+      await expect(page.locator(".mermaid > svg")).toHaveCount(mixed ? 1 : 0);
+      expect(runtimeRequests).toHaveLength(mixed ? 1 : 0);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}

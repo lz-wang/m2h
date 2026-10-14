@@ -440,3 +440,37 @@ func TestRunExportPreservesRemovedRendererCode(t *testing.T) {
 		})
 	}
 }
+
+func TestRunExportLoadsMermaidOnlyForRenderableBlocks(t *testing.T) {
+	t.Parallel()
+	for _, item := range []struct {
+		name, source string
+		wantMermaid  bool
+	}{
+		{"pure ZenUML", "```mermaid\nzenuml\nAlice->Bob: Hello\n```\n", false},
+		{"mixed diagrams", "```mermaid\nzenuml\nAlice->Bob: Hello\n```\n\n```mermaid\nflowchart LR\nA-->B\n```\n", true},
+		{"word inside label", "```mermaid\nflowchart LR\nA[zenuml label]-->B\n```\n", true},
+		{"escaped HTML", "```html\n<pre><code class=\"language-mermaid\">flowchart LR</code></pre>\n```\n", false},
+		{"inline language class", "<code class=\"language-mermaid\">flowchart LR</code>\n", false},
+		{"HTML comment", "<!-- <pre><code class=\"language-mermaid\">flowchart LR</code></pre> -->\n", false},
+		{"decoded leading whitespace", "<pre><code class=\"extra language-mermaid\">&#xfeff;&#xa0;zenuml\nAlice-&gt;Bob</code></pre>\n", false},
+		{"nested source text", "<pre><code class=\"language-mermaid\"><span>zenuml</span>\nAlice-&gt;Bob</code></pre>\n", false},
+		{"keyword prefix is not ZenUML", "```mermaid\nzenumlOther\n```\n", true},
+	} {
+		t.Run(item.name, func(t *testing.T) {
+			root := t.TempDir()
+			source := writeFixture(t, root, "runtimes.md", "# Runtime detection\n\n"+item.source)
+			if _, err := Run(context.Background(), defaultOptions(source)); err != nil {
+				t.Fatal(err)
+			}
+			output, err := os.ReadFile(filepath.Join(root, "runtimes.html"))
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := strings.Contains(string(output), `<script src="`+newRuntimeURLs().MermaidJS+`"></script>`)
+			if got != item.wantMermaid {
+				t.Errorf("Mermaid script present = %v, want %v", got, item.wantMermaid)
+			}
+		})
+	}
+}

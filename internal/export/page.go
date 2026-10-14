@@ -3,7 +3,11 @@ package export
 import (
 	"fmt"
 	"html/template"
+	"regexp"
 	"strings"
+
+	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 
 	"github.com/lz-wang/m2h/internal/assets"
 	"github.com/lz-wang/m2h/internal/markdown"
@@ -116,15 +120,69 @@ func runtimeFragments(body string) (template.HTML, template.HTML) {
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.KatexJS)
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.KatexAutoRender)
 	}
-	if strings.Contains(body, "language-mermaid") {
+	if containsRenderableMermaid(body) {
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.MermaidJS)
-
 	}
 	if containsSortableTable(body) {
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.TablesortJS)
 	}
 	scripts.WriteString(exportBootstrapScript)
 	return template.HTML(head.String()), template.HTML(scripts.String())
+}
+
+// Match the browser's /^\s*zenuml\b/ after trimming ECMAScript whitespace.
+var zenumlKeyword = regexp.MustCompile(`^zenuml\b`)
+
+const browserWhitespace = " \t\n\v\f\r\u00a0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200a\u2028\u2029\u202f\u205f\u3000\ufeff"
+
+// Inspect real pre > code.language-mermaid nodes in the rendered HTML rather
+// than language names in attributes, comments or escaped code. HTML parsing
+// decodes entities and preserves nested text just like browser textContent.
+func containsRenderableMermaid(body string) bool {
+	nodes, err := html.ParseFragment(strings.NewReader(body), &html.Node{Type: html.ElementNode, Data: "div", DataAtom: atom.Div})
+	if err != nil {
+		return false
+	}
+	var visit func(*html.Node) bool
+	visit = func(node *html.Node) bool {
+		if node.Type == html.ElementNode && node.DataAtom == atom.Code && node.Parent != nil && node.Parent.DataAtom == atom.Pre {
+			for _, attr := range node.Attr {
+				if attr.Key != "class" {
+					continue
+				}
+				for _, class := range strings.FieldsFunc(attr.Val, func(r rune) bool { return strings.ContainsRune(" \t\n\r\f", r) }) {
+					if class == "language-mermaid" {
+						var source strings.Builder
+						var textContent func(*html.Node)
+						textContent = func(child *html.Node) {
+							if child.Type == html.TextNode {
+								source.WriteString(child.Data)
+							}
+							for descendant := child.FirstChild; descendant != nil; descendant = descendant.NextSibling {
+								textContent(descendant)
+							}
+						}
+						textContent(node)
+						if !zenumlKeyword.MatchString(strings.TrimLeft(source.String(), browserWhitespace)) {
+							return true
+						}
+					}
+				}
+			}
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			if visit(child) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, node := range nodes {
+		if visit(node) {
+			return true
+		}
+	}
+	return false
 }
 
 // containsSortableTable reports whether the rendered body contains a plain GFM

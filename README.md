@@ -154,7 +154,7 @@ m2h export README.md --force
 ```
 
 导出的 HTML 内联 Markdown 页面样式；数学公式、Mermaid 和表格排序等
-增强功能按需加载网络资源。
+增强功能按需加载网络资源；只有包含可渲染 Mermaid 代码块时才加载 Mermaid。
 
 查看全部选项：
 
@@ -252,7 +252,8 @@ m2h check --hidden ./docs
 m2h 支持常用 GFM Markdown，并提供以下扩展：
 
 WebUI 富内容运行时默认从本地加载，也可通过 `--cdn` 切换到固定版本的 CDN，
-渲染语法保持一致；HTML 导出继续按需使用 CDN。
+渲染语法保持一致；HTML 导出继续按需使用 CDN。WebUI 中，代码块内的公式标记不会
+触发公式运行时加载。
 
 | 类别 | 支持内容与演示 |
 | --- | --- |
