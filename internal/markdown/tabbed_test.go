@@ -42,7 +42,7 @@ func TestTabbedParser(t *testing.T) {
 
 func TestTabbedParserBoundaries(t *testing.T) {
 	for _, source := range []string{
-		"=== missing\n\n    body\n", "=== \"\"\n\n    body\n", "===\"title\"\n\n    body\n", "=== \"title\" trailing\n\n    body\n",
+		"=== missing\n\n    body\n", "=== + \"spaced modifier\"\n\n    body\n", "=== \"\"\n\n    body\n", "===\"title\"\n\n    body\n", "=== \"title\" trailing\n\n    body\n",
 		"    === \"code\"\n", "```\n=== \"code\"\n```\n", "- list\n\n    === \"nested\"\n\n        body\n", "> === \"quote\"\n>\n>     body\n",
 	} {
 		t.Run(source, func(t *testing.T) {
@@ -137,5 +137,32 @@ func TestTabbedStrictIndentAndNestedFallback(t *testing.T) {
 	outer := doc.FirstChild().(*TabSet).FirstChild()
 	if outer.FirstChild().Kind() != ast.KindParagraph {
 		t.Fatal("nested marker not literal")
+	}
+}
+
+func TestTabbedEmptyItemBeforeRootContent(t *testing.T) {
+	doc := parseTabs("=== \"Empty\"\n\n## After\n\nOutside\n")
+	if doc.ChildCount() != 3 || doc.FirstChild().Kind() != kindTabSet || doc.FirstChild().FirstChild().ChildCount() != 0 {
+		t.Fatal("empty tab consumed root content")
+	}
+}
+
+func TestTabbedIDsAvoidHeadingCollisions(t *testing.T) {
+	source := []byte("# m2h-tab-1-1\n\n## m2h-tab-1-1-1\n\n=== \"Tab\"\n\n    unique-collision-token\n")
+	rendered, err := Render(source, RenderOptions{SourcePath: "a.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rendered.Body, `id="m2h-tab-1-1-2"`) || strings.Count(rendered.Body, `id="m2h-tab-1-1"`) != 1 {
+		t.Fatalf("ambiguous native label IDs: %s", rendered.Body)
+	}
+	projection, err := ProjectForSearch(source, "a.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, chunk := range projection.Chunks {
+		if chunk.Text == "unique-collision-token" && chunk.TabID != "m2h-tab-1-1-2" {
+			t.Fatalf("projection drift: %+v", chunk)
+		}
 	}
 }

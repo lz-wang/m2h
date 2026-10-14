@@ -14,6 +14,7 @@ import (
 )
 
 var kindTabSet = ast.NewNodeKind("TabSet")
+
 var kindTabItem = ast.NewNodeKind("TabItem")
 
 // TabSet and TabItem keep children in the original parse and source coordinate
@@ -24,7 +25,8 @@ type TabSet struct {
 	Selected int
 }
 
-func (*TabSet) Kind() ast.NodeKind              { return kindTabSet }
+func (*TabSet) Kind() ast.NodeKind { return kindTabSet }
+
 func (n *TabSet) Dump(source []byte, level int) { ast.DumpHelper(n, source, level, nil, nil) }
 
 type TabItem struct {
@@ -36,14 +38,18 @@ type TabItem struct {
 	indent  int
 }
 
-func (*TabItem) Kind() ast.NodeKind              { return kindTabItem }
+func (*TabItem) Kind() ast.NodeKind { return kindTabItem }
+
 func (n *TabItem) Dump(source []byte, level int) { ast.DumpHelper(n, source, level, nil, nil) }
 
 type tabbedParser struct{}
 
-func (*tabbedParser) Trigger() []byte             { return []byte{'='} }
+func (*tabbedParser) Trigger() []byte { return []byte{'='} }
+
 func (*tabbedParser) CanInterruptParagraph() bool { return true }
+
 func (*tabbedParser) CanAcceptIndentedLine() bool { return false }
+
 func (*tabbedParser) Open(parent ast.Node, reader text.Reader, pc parser.Context) (ast.Node, parser.State) {
 	if parent.Kind() != ast.KindDocument {
 		return nil, parser.NoChildren
@@ -53,7 +59,7 @@ func (*tabbedParser) Open(parent ast.Node, reader text.Reader, pc parser.Context
 	if indent > 3 || !bytes.HasPrefix(line[pos:], []byte("===")) {
 		return nil, parser.NoChildren
 	}
-	marker := bytes.TrimSpace(line[pos+3:])
+	marker := line[pos+3:]
 	item := &TabItem{indent: indent + 4}
 	if len(marker) > 0 && (marker[0] == '!' || marker[0] == '+') {
 		item.NewSet = marker[0] == '!'
@@ -72,9 +78,10 @@ func (*tabbedParser) Open(parent ast.Node, reader text.Reader, pc parser.Context
 	if len(marker) < 3 || marker[0] != '"' || marker[len(marker)-1] != '"' || bytes.ContainsRune(marker[1:len(marker)-1], '"') {
 		return nil, parser.NoChildren
 	}
-	// Reject a marker followed by unindented prose; an empty item at EOF or
-	// before another marker is valid. Lookahead never modifies source or reader.
+	// Reject incomplete indented content. A blank separator followed by a
+	// root block ends an empty item. Lookahead never modifies source or reader.
 	rest := reader.Source()[segment.Stop:]
+	blankSeparator := false
 	for len(rest) > 0 {
 		end := bytes.IndexByte(rest, '\n')
 		if end < 0 {
@@ -83,10 +90,11 @@ func (*tabbedParser) Open(parent ast.Node, reader text.Reader, pc parser.Context
 		next := rest[:end+1]
 		rest = rest[end+1:]
 		if util.IsBlank(next) {
+			blankSeparator = true
 			continue
 		}
 		width, pos := util.IndentWidth(next, 0)
-		if width < item.indent && !(width <= 3 && bytes.HasPrefix(next[pos:], []byte("==="))) {
+		if width < item.indent && !(width == 0 && blankSeparator) && !(width <= 3 && bytes.HasPrefix(next[pos:], []byte("==="))) {
 			return nil, parser.NoChildren
 		}
 		break
@@ -95,6 +103,7 @@ func (*tabbedParser) Open(parent ast.Node, reader text.Reader, pc parser.Context
 	reader.AdvanceToEOL()
 	return item, parser.HasChildren
 }
+
 func (*tabbedParser) Continue(node ast.Node, reader text.Reader, _ parser.Context) parser.State {
 	line, _ := reader.PeekLine()
 	if util.IsBlank(line) {
@@ -109,11 +118,24 @@ func (*tabbedParser) Continue(node ast.Node, reader text.Reader, _ parser.Contex
 	reader.AdvanceAndSetPadding(pos, padding)
 	return parser.Continue | parser.HasChildren
 }
+
 func (*tabbedParser) Close(ast.Node, text.Reader, parser.Context) {}
 
 type tabbedTransformer struct{}
 
 func (*tabbedTransformer) Transform(document *ast.Document, _ text.Reader, _ parser.Context) {
+	// Preserve heading anchors while keeping native label targets unique.
+	usedIDs := map[string]bool{}
+	_ = ast.Walk(document, func(node ast.Node, entering bool) (ast.WalkStatus, error) {
+		if entering {
+			if raw, ok := node.AttributeString("id"); ok {
+				if id, ok := raw.([]byte); ok {
+					usedIDs[string(id)] = true
+				}
+			}
+		}
+		return ast.WalkContinue, nil
+	})
 	var set *TabSet
 	number := 0
 	for node := document.FirstChild(); node != nil; {
@@ -130,7 +152,12 @@ func (*tabbedTransformer) Transform(document *ast.Document, _ text.Reader, _ par
 			document.InsertBefore(document, item, set)
 		}
 		index := set.ChildCount()
-		item.ID = fmt.Sprintf("m2h-tab-%d-%d", number, index+1)
+		baseID := fmt.Sprintf("m2h-tab-%d-%d", number, index+1)
+		item.ID = baseID
+		for suffix := 1; usedIDs[item.ID]; suffix++ {
+			item.ID = fmt.Sprintf("%s-%d", baseID, suffix)
+		}
+		usedIDs[item.ID] = true
 		if item.Default && set.Selected < 0 {
 			set.Selected = index
 		}
@@ -161,6 +188,7 @@ func (*tabbedRenderer) RegisterFuncs(reg renderer.NodeRendererFuncRegisterer) {
 	reg.Register(kindTabSet, renderTabSet)
 	reg.Register(kindTabItem, renderTabItem)
 }
+
 func renderTabSet(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	set := node.(*TabSet)
 	if !entering {
@@ -190,6 +218,7 @@ func renderTabSet(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast
 	_, _ = w.WriteString(`</div><div class="m2h-tabbed-content">`)
 	return ast.WalkContinue, nil
 }
+
 func renderTabItem(w util.BufWriter, _ []byte, node ast.Node, entering bool) (ast.WalkStatus, error) {
 	item := node.(*TabItem)
 	if entering {
@@ -206,6 +235,7 @@ func renderTabItem(w util.BufWriter, _ []byte, node ast.Node, entering bool) (as
 type tabbedBoundaryParser struct{ parser.BlockParser }
 
 func (*tabbedBoundaryParser) CanInterruptParagraph() bool { return true }
+
 func (p *tabbedBoundaryParser) Open(parent ast.Node, reader text.Reader, pc parser.Context) (ast.Node, parser.State) {
 	if parent.Kind() != ast.KindDocument {
 		return nil, parser.NoChildren
