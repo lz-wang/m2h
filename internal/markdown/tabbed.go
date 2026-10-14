@@ -48,7 +48,7 @@ func (*tabbedParser) Open(parent ast.Node, reader text.Reader, pc parser.Context
 	if parent.Kind() != ast.KindDocument {
 		return nil, parser.NoChildren
 	}
-	line, _ := reader.PeekLine()
+	line, segment := reader.PeekLine()
 	indent, pos := util.IndentWidth(line, reader.LineOffset())
 	if indent > 3 || !bytes.HasPrefix(line[pos:], []byte("===")) {
 		return nil, parser.NoChildren
@@ -71,6 +71,25 @@ func (*tabbedParser) Open(parent ast.Node, reader text.Reader, pc parser.Context
 	marker = bytes.TrimSpace(marker)
 	if len(marker) < 3 || marker[0] != '"' || marker[len(marker)-1] != '"' || bytes.ContainsRune(marker[1:len(marker)-1], '"') {
 		return nil, parser.NoChildren
+	}
+	// Reject a marker followed by unindented prose; an empty item at EOF or
+	// before another marker is valid. Lookahead never modifies source or reader.
+	rest := reader.Source()[segment.Stop:]
+	for len(rest) > 0 {
+		end := bytes.IndexByte(rest, '\n')
+		if end < 0 {
+			end = len(rest) - 1
+		}
+		next := rest[:end+1]
+		rest = rest[end+1:]
+		if util.IsBlank(next) {
+			continue
+		}
+		width, pos := util.IndentWidth(next, 0)
+		if width < item.indent && !(width <= 3 && bytes.HasPrefix(next[pos:], []byte("==="))) {
+			return nil, parser.NoChildren
+		}
+		break
 	}
 	item.Title = string(marker[1 : len(marker)-1])
 	reader.AdvanceToEOL()
@@ -129,7 +148,7 @@ type tabbedExtension struct{}
 
 func (*tabbedExtension) Extend(m goldmark.Markdown) {
 	m.Renderer().AddOptions(renderer.WithNodeRenderers(util.Prioritized(&tabbedRenderer{}, 500)))
-	m.Parser().AddOptions(parser.WithBlockParsers(util.Prioritized(&tabbedParser{}, 650)), parser.WithASTTransformers(util.Prioritized(&tabbedTransformer{}, 900)))
+	m.Parser().AddOptions(parser.WithBlockParsers(util.Prioritized(&tabbedParser{}, 650), util.Prioritized(&tabbedBoundaryParser{BlockParser: parser.NewParagraphParser()}, 999)), parser.WithASTTransformers(util.Prioritized(&tabbedTransformer{}, 900)))
 }
 
 // Groups above the CSS limit are readable stacked sections, never inaccessible
@@ -179,4 +198,22 @@ func renderTabItem(w util.BufWriter, _ []byte, node ast.Node, entering bool) (as
 		_, _ = w.WriteString("</section>\n")
 	}
 	return ast.WalkContinue, nil
+}
+
+// Goldmark normally allows lazy paragraph continuations in containers. Tabbed
+// requires four columns, so a root-level prose line opens its own paragraph
+// before the default parser can lazily append it to the previous TabItem.
+type tabbedBoundaryParser struct{ parser.BlockParser }
+
+func (*tabbedBoundaryParser) CanInterruptParagraph() bool { return true }
+func (p *tabbedBoundaryParser) Open(parent ast.Node, reader text.Reader, pc parser.Context) (ast.Node, parser.State) {
+	if parent.Kind() != ast.KindDocument {
+		return nil, parser.NoChildren
+	}
+	for _, block := range pc.OpenedBlocks() {
+		if block.Node.Kind() == kindTabItem {
+			return p.BlockParser.Open(parent, reader, pc)
+		}
+	}
+	return nil, parser.NoChildren
 }

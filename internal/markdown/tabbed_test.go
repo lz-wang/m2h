@@ -88,3 +88,54 @@ func TestTabbedHTML(t *testing.T) {
 		t.Fatal("overflow lost content")
 	}
 }
+
+func TestTabbedInspectionContracts(t *testing.T) {
+	source := []byte("# Guide\n\n=== \"One\"\n\n    ## 安装\n\n    [missing](missing.md)\n\n    ![picture](image.png)\n\n    ```text\n    [ignored](ignored.md)\n    === \"literal\"\n    ```\n\n    $x^2$\n\n=== \"Two\"\n\n    ## 安装\n\n    [same](#安装)\n")
+	result, err := Render(source, RenderOptions{URLMode: URLWeb, SourcePath: "docs/tabs.md"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	facts := Inspect(source)
+	if len(facts.Headings) != 3 || facts.Headings[1].ID != "安装" || facts.Headings[2].ID != "安装-1" || facts.Headings[1].Line != 5 || facts.Headings[2].Line != 20 {
+		t.Fatalf("headings: %+v", facts.Headings)
+	}
+	for i, h := range facts.Headings {
+		if result.Headings[i].ID != h.ID || !strings.Contains(result.Body, `id="`+h.ID+`"`) {
+			t.Fatal("render/inspect anchors differ")
+		}
+	}
+	if len(facts.References) != 3 || facts.References[0].Line != 7 || facts.References[0].Destination != "missing.md" || facts.References[1].Line != 9 {
+		t.Fatalf("references: %+v", facts.References)
+	}
+	for _, want := range []string{`href="/doc/docs/missing.md"`, `src="/assets/docs/image.png"`, `class="m2h-math"`, `x^2`} {
+		if !strings.Contains(result.Body, want) {
+			t.Errorf("missing %s", want)
+		}
+	}
+	if len(facts.CodeFences) != 1 {
+		t.Fatalf("fences: %+v", facts.CodeFences)
+	}
+}
+
+func TestTabbedStrictIndentAndNestedFallback(t *testing.T) {
+	for _, source := range []string{"=== \"A\"\n    inside\noutside\n", "=== \"A\"\n    - inside\n      continued\noutside\n"} {
+		doc := parseTabs(source)
+		if doc.ChildCount() != 2 || doc.LastChild().Kind() != ast.KindParagraph {
+			t.Fatalf("lazy continuation crossed tab: %s", source)
+		}
+	}
+	for _, source := range []string{"=== \"A\"\nwrong indent\n", "=== \"A\"\n  wrong indent\n"} {
+		result, err := Render([]byte(source), RenderOptions{SourcePath: "a.md"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(result.Body, "m2h-tabbed-set") || !strings.Contains(result.Body, "wrong indent") || !strings.Contains(result.Body, "===") {
+			t.Fatalf("incomplete syntax lost: %s", result.Body)
+		}
+	}
+	doc := parseTabs("=== \"Outer\"\n\n    === \"Nested\"\n\n        code\n")
+	outer := doc.FirstChild().(*TabSet).FirstChild()
+	if outer.FirstChild().Kind() != ast.KindParagraph {
+		t.Fatal("nested marker not literal")
+	}
+}

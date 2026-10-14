@@ -62,3 +62,16 @@ func TestDirectoryLinksShareDocumentSelection(t *testing.T) {
 		t.Fatalf("anchor not checked: %+v", result.Diagnostics)
 	}
 }
+
+func TestTabbedReferencesAndDuplicateAnchors(t *testing.T) {
+	result, err := runCheck(t, map[string]string{
+		"index.md": "# Index\n\n[second](tabs.md#安装-1)\n",
+		"tabs.md":  "# Tabs\n\n=== \"One\"\n\n    ## 安装\n\n    [missing](missing.md)\n\n=== \"Two\"\n\n    ## 安装\n\n    ```text\n    [ignored](ignored.md)\n    ```\n",
+	}, Options{Depth: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Diagnostics) != 2 || result.Diagnostics[0].Rule != RuleLocalTargetMissing || result.Diagnostics[0].Line != 7 || result.Diagnostics[1].Rule != RuleHeadingDuplicate {
+		t.Fatalf("diagnostics: %+v", result.Diagnostics)
+	}
+}
