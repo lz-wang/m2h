@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.24.0] - 2026-10-14
+
 ### 新增
 
 - 默认支持 PyMdown Tabbed 基础语法，WebUI 与 HTML 导出均可切换标签内容。
