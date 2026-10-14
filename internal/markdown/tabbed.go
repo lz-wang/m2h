@@ -78,6 +78,10 @@ func (*tabbedParser) Open(parent ast.Node, reader text.Reader, pc parser.Context
 	if len(marker) < 3 || marker[0] != '"' || marker[len(marker)-1] != '"' || bytes.ContainsRune(marker[1:len(marker)-1], '"') {
 		return nil, parser.NoChildren
 	}
+	title := marker[1 : len(marker)-1]
+	if len(bytes.TrimSpace(title)) == 0 {
+		return nil, parser.NoChildren
+	}
 	// Reject incomplete indented content. A blank separator followed by a
 	// root block ends an empty item. Lookahead never modifies source or reader.
 	rest := reader.Source()[segment.Stop:]
@@ -99,7 +103,7 @@ func (*tabbedParser) Open(parent ast.Node, reader text.Reader, pc parser.Context
 		}
 		break
 	}
-	item.Title = string(marker[1 : len(marker)-1])
+	item.Title = string(title)
 	reader.AdvanceToEOL()
 	return item, parser.HasChildren
 }

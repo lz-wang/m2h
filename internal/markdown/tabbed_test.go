@@ -166,3 +166,72 @@ func TestTabbedIDsAvoidHeadingCollisions(t *testing.T) {
 		}
 	}
 }
+
+func TestTabbedLabelValidation(t *testing.T) {
+	for _, label := range []string{"   ", "\t", " \t ", "\u3000\u00a0"} {
+		t.Run(fmt.Sprintf("blank-%q", label), func(t *testing.T) {
+			source := []byte("=== \"" + label + "\"\n\n    original-body\n")
+			rendered, err := Render(source, RenderOptions{SourcePath: "a.md"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(rendered.Body, "m2h-tabbed-set") || !strings.Contains(rendered.Body, "===") || !strings.Contains(rendered.Body, "original-body") {
+				t.Fatalf("invalid label lost original Markdown: %s", rendered.Body)
+			}
+		})
+	}
+	for _, label := range []string{"中文标题", " 日本語 ", "\tGo 中文\t"} {
+		t.Run(fmt.Sprintf("valid-%q", label), func(t *testing.T) {
+			doc := parseTabs("=== \"" + label + "\"\n    content\n")
+			set, ok := doc.FirstChild().(*TabSet)
+			if !ok || set.FirstChild().(*TabItem).Title != label {
+				t.Fatalf("label trimmed or rejected: %q", label)
+			}
+		})
+	}
+}
+
+func TestTabbedSourceBoundaries(t *testing.T) {
+	cases := []struct {
+		name, source string
+		kinds        []ast.NodeKind
+	}{
+		{"no blank before body", "=== \"Tab\"\n    content\n", []ast.NodeKind{kindTabSet}},
+		{"empty tab then heading", "=== \"Tab\"\n\n## Outside\n", []ast.NodeKind{kindTabSet, ast.KindHeading}},
+		{"empty tab then paragraph", "=== \"Tab\"\n\nOutside\n", []ast.NodeKind{kindTabSet, ast.KindParagraph}},
+		{"tab then unseparated paragraph", "=== \"Tab\"\n    inside\noutside\n", []ast.NodeKind{kindTabSet, ast.KindParagraph}},
+	}
+	for _, item := range cases {
+		t.Run(item.name, func(t *testing.T) {
+			doc := parseTabs(item.source)
+			if doc.ChildCount() != len(item.kinds) {
+				t.Fatalf("root child count: %d", doc.ChildCount())
+			}
+			node := doc.FirstChild()
+			for _, kind := range item.kinds {
+				if node.Kind() != kind {
+					t.Fatalf("kind: %s, want %s", node.Kind(), kind)
+				}
+				node = node.NextSibling()
+			}
+		})
+	}
+	for _, newline := range []string{"\n", "\r\n"} {
+		t.Run(fmt.Sprintf("newline-%q", newline), func(t *testing.T) {
+			source := []byte(strings.ReplaceAll("# Guide\n\n=== \"One\"\n    ## 安装\n    [target](a.md)\n\n=== \"Two\"\n    ## 安装\n    ![image](image.png)\n", "\n", newline))
+			facts := Inspect(source)
+			if len(facts.Headings) != 3 || facts.Headings[1].Line != 4 || facts.Headings[2].Line != 8 || facts.Headings[2].ID != "安装-1" || len(facts.References) != 2 || facts.References[0].Line != 5 || facts.References[1].Line != 9 {
+				t.Fatalf("source facts: %+v", facts)
+			}
+			rendered, err := Render(source, RenderOptions{SourcePath: "a.md"})
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, h := range facts.Headings {
+				if !strings.Contains(rendered.Body, `id="`+h.ID+`"`) {
+					t.Fatal("render/inspection anchors diverged")
+				}
+			}
+		})
+	}
+}
