@@ -8,6 +8,11 @@
 
 ## [Unreleased]
 
+### 变更
+
+- Mermaid 升级至 12.2.0，WebUI 与 HTML 导出默认采用 ELK 布局；旧布局可设置 `layout: dagre`。
+- Mermaid 图表要求支持 ES2024 的浏览器（Safari 17.4+）；旧版浏览器请升级后使用。
+
 ## [0.24.0] - 2026-10-14
 
 ### 新增

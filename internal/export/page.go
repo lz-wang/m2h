@@ -30,7 +30,7 @@ var exportBootstrapScript = "\n  <script>\n" + runtimeJS + "\n</script>\n"
 // comparators, whose upstream location (dist/sorts/) differs from the core's.
 const (
 	katexVersion     = "0.18.4"
-	mermaidVersion   = "11.16.1"
+	mermaidVersion   = "12.2.0"
 	tablesortVersion = "5.3.0"
 )
 

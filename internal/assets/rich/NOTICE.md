@@ -14,8 +14,12 @@ Tablesort core: the five comparator builds below stay WebUI-only.
 | Asset             | Upstream                              | Version | License             |
 | ----------------- | ------------------------------------- | ------- | ------------------- |
 | KaTeX             | https://github.com/KaTeX/KaTeX        | 0.18.4  | MIT (`LICENSE.katex`)   |
-| Mermaid           | https://github.com/mermaid-js/mermaid | 11.16.1 | MIT (`LICENSE.mermaid`) |
+| Mermaid           | https://github.com/mermaid-js/mermaid | 12.2.0  | MIT (`LICENSE.mermaid`) |
 | Tablesort         | https://github.com/tristen/tablesort  | 5.3.0   | MIT (`LICENSE.tablesort`) |
+
+`mermaid.min.js` is copied verbatim from `dist/mermaid.min.js` in the
+[Mermaid 12.2.0 npm package](https://registry.npmjs.org/mermaid/-/mermaid-12.2.0.tgz).
+Its SHA-256 is `a8a6a6f805b074a8261a2825c86f99c8054acb3b35f50bb7e24a4f9f2c3c3b9f`.
 
 `katex.min.css` references `./fonts/*.woff2` relative to itself, so the
 `fonts/` directory must stay next to `katex.min.css` in every output location.

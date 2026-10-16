@@ -1,0 +1,2 @@
+# Preserve the upstream Mermaid distribution, including whitespace in strings.
+internal/assets/rich/mermaid.min.js -whitespace

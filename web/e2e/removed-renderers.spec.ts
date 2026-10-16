@@ -153,7 +153,7 @@ for (const mixed of [false, true]) {
       );
       execFileSync("../build/e2e/m2h", ["export", input, "-o", "index.html"]);
       const html = readFileSync(join(dir, "index.html"), "utf8");
-      expect(html.includes("/mermaid@11.16.1/")).toBe(mixed);
+      expect(html.includes("/mermaid@12.2.0/")).toBe(mixed);
       await page.route("**/assets/runtime-export.html", (route) =>
         route.fulfill({ contentType: "text/html", body: html }),
       );

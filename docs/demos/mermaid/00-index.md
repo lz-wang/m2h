@@ -6,15 +6,36 @@ tags:
   - diagram
   - docs
 create_date: 2026-08-29
-update_date: 2026-10-14
+update_date: 2026-10-16
 ---
 
-Mermaid 是一款基于文本的图表生成工具，通过简洁的语法定义各种图表，广泛用于技术文档、架构设计和流程说明。本分类收录 Mermaid 支持的所有图表类型语法参考。
+Mermaid 是一款基于文本的图表生成工具，通过简洁的语法定义各种图表，广泛用于技术文档、架构设计和流程说明。本分类收录常用图表类型的语法参考。
 
-WebUI 默认按需加载内嵌 Mermaid；启动时加 `--cdn` 可切换到同版本的 jsDelivr CDN。
+WebUI 默认按需加载内嵌 Mermaid 12.2.0；启动时加 `--cdn` 可切换到同版本的 jsDelivr CDN。
 HTML 导出继续使用固定版本的 CDN。
 
 Web 文档服务中，图表可通过右上角按钮进入 Lightbox，以原生 SVG 放大查看；SVG 不显示底部名称、尺寸与格式信息，保留可访问名称与查看工具栏。缩放、旋转适配与拖动使用整个视口，工具栏浮于图表上方。正文图表在 WebUI 与 HTML 导出中均居中显示。
+
+## 版本兼容与迁移
+
+Mermaid 12 要求支持 ES2024 的现代浏览器，Safari 最低为 17.4；旧版浏览器需要升级。
+流程图、类图、状态图等未指定布局时默认使用内置 ELK，图形外观也可能与 11.x 不同。
+需要保留旧版布局与外观时，在 Mermaid 代码块中显式设置 `layout: dagre` 和
+`look: classic`；m2h 仍根据页面明暗模式选择 `default` 或 `dark` 主题：
+
+```mermaid
+---
+config:
+  layout: dagre
+  look: classic
+---
+flowchart LR
+  A[开始] --> B[完成]
+```
+
+旧配置中的 `flowchart.defaultRenderer`、`class.defaultRenderer` 与
+`state.defaultRenderer` 不再选择布局；请改用 `config.layout`。
+完整变化见 [Mermaid 12 发布说明](https://github.com/mermaid-js/mermaid/releases/tag/mermaid%4012.0.0)。
 
 ## 文档目录
 

@@ -251,6 +251,8 @@ m2h check --hidden ./docs
 
 m2h 支持常用 GFM Markdown，并提供以下扩展：
 
+内置 Mermaid 12.2.0，图表需要支持 ES2024 的现代浏览器（Safari 17.4+）；
+默认布局与旧版迁移说明见 [Mermaid 图表](docs/demos/mermaid/00-index.md)。
 WebUI 富内容运行时默认从本地加载，也可通过 `--cdn` 切换到固定版本的 CDN，
 渲染语法保持一致；HTML 导出继续按需使用 CDN。WebUI 与 HTML 导出中，代码块内的
 公式标记不会触发公式运行时加载。
@@ -258,7 +260,7 @@ WebUI 富内容运行时默认从本地加载，也可通过 `--cdn` 切换到�
 | 类别 | 支持内容与演示 |
 | --- | --- |
 | GitHub 风格 | [语法高亮](docs/demos/syntax-highlight/00-index.md)（32 种编程语言与常用配置格式）、标题锚点、脚注、Emoji、GitHub Alerts 与可排序表格 |
-| 富内容 | [数学公式](docs/demos/math.md)（`$...$` / `$$...$$`，解析阶段保留公式原文，金额保持普通文本）、[Mermaid 图表](docs/demos/mermaid/00-index.md)（25 种图表类型） |
+| 富内容 | [数学公式](docs/demos/math.md)（`$...$` / `$$...$$`，解析阶段保留公式原文，金额保持普通文本）、[Mermaid 图表](docs/demos/mermaid/00-index.md)（常用图表语法与兼容说明） |
 | 元数据 | YAML Frontmatter；标题、日期别名、描述（description）与回退规则见 [Frontmatter 演示](docs/demos/frontmatter/00-index.md) |
 | 本地引用 | 当前文档相对路径与 `/` 开头的当前 root 相对路径；检查行为见 [本地目标演示](docs/demos/checkers/02-local-target-missing.md) |
 | 行内扩展 | `==高亮==`、`^^插入^^` 与 [`++ctrl+alt+del++` 键盘按键](docs/demos/pymarkdown/keyboards.md) |

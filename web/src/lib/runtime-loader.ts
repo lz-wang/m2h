@@ -67,7 +67,7 @@ const useCDN =
     ?.content === "true";
 const CDN_BASE = "https://cdn.jsdelivr.net/npm/";
 const CDN_PATHS = {
-  "mermaid.min.js": "mermaid@11.16.1/dist/mermaid.min.js",
+  "mermaid.min.js": "mermaid@12.2.0/dist/mermaid.min.js",
   "katex.min.css": "katex@0.18.4/dist/katex.min.css",
   "katex.min.js": "katex@0.18.4/dist/katex.min.js",
   "auto-render.min.js": "katex@0.18.4/dist/contrib/auto-render.min.js",

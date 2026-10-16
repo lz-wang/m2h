@@ -85,7 +85,7 @@ describe("runtime loader", () => {
       const second = loader.loadMermaid();
       expect(document.head.querySelectorAll("script")).toHaveLength(1);
       const script = headElement<HTMLScriptElement>("script");
-      expect(script.src).toBe(`${base}mermaid@11.16.1/dist/mermaid.min.js`);
+      expect(script.src).toBe(`${base}mermaid@12.2.0/dist/mermaid.min.js`);
       window.mermaid = mermaidRuntime;
       fire(script, "load");
       await expect(first).resolves.toBe(mermaidRuntime);
@@ -98,11 +98,11 @@ describe("runtime loader", () => {
       const first = loader.loadMermaid();
       fire(headElement("script"), "error");
       await expect(first).rejects.toThrow(
-        `load runtime script ${base}mermaid@11.16.1/dist/mermaid.min.js`,
+        `load runtime script ${base}mermaid@12.2.0/dist/mermaid.min.js`,
       );
       const retry = loader.loadMermaid();
       const script = headElement<HTMLScriptElement>("script");
-      expect(script.src).toBe(`${base}mermaid@11.16.1/dist/mermaid.min.js`);
+      expect(script.src).toBe(`${base}mermaid@12.2.0/dist/mermaid.min.js`);
       window.mermaid = mermaidRuntime;
       fire(script, "load");
       await expect(retry).resolves.toBe(mermaidRuntime);
