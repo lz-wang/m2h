@@ -14,8 +14,8 @@ async function openDocument(page: Page) {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(documentPath);
   // Every visual must have settled: the image through its lazy machine (the
-  // placeholder swaps for the real pixels), the diagram and the chart through
-  // their async renders.
+  // placeholder swaps for the real pixels), the diagram through its async
+  // render. Scope to the diagram container to exclude the magnifier's SVG.
   await page.waitForFunction(() => {
     const body = document.querySelector(".markdown-body");
     if (body === null) {
@@ -25,7 +25,8 @@ async function openDocument(page: Page) {
       ".m2h-image-block img[data-m2h-lazy-state='loaded']",
     );
     return (
-      image !== null && body.querySelector(".m2h-mermaid-frame svg") !== null
+      image !== null &&
+      body.querySelector(".m2h-mermaid-frame > .mermaid > svg") !== null
     );
   });
 }
@@ -74,7 +75,7 @@ function readGaps(page: Page): Promise<Record<string, VisualGaps>> {
       image: read(imageBlock, imageBlock?.querySelector("img"), "image"),
       mermaid: read(
         mermaidFrame,
-        mermaidFrame?.querySelector("svg"),
+        mermaidFrame?.querySelector(":scope > .mermaid > svg"),
         "mermaid",
       ),
     };

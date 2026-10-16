@@ -513,11 +513,11 @@ const mermaidDocumentPath = "/doc/mermaid-lightbox.md";
 async function openMermaidDocument(page: Page) {
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto(mermaidDocumentPath);
-  // The diagram must finish rendering — its SVG lands inside the frame —
-  // before the trigger has anything to open.
+  // Wait for the diagram container's SVG; the frame's magnifier icon is also
+  // an SVG and exists before the asynchronous Mermaid render completes.
   await page.waitForFunction(
     () =>
-      document.querySelector(".m2h-mermaid-frame svg") !== null &&
+      document.querySelector(".m2h-mermaid-frame > .mermaid > svg") !== null &&
       document.querySelectorAll(".m2h-lightbox-trigger").length >= 3,
   );
 }
@@ -652,7 +652,7 @@ test("namespaces Mermaid SVG identifiers in its Lightbox snapshot", async ({
 }) => {
   await openMermaidDocument(page);
   const sourceIDs = await page
-    .locator(".m2h-mermaid-frame svg [id]")
+    .locator(".m2h-mermaid-frame > .mermaid > svg [id]")
     .evaluateAll((elements) => elements.map((element) => element.id));
   expect(sourceIDs.length).toBeGreaterThan(0);
 
@@ -694,7 +694,7 @@ test("keeps the snapshot's scoped styles equivalent to the body diagram", async 
       };
     };
     return {
-      body: read(document.querySelector(".m2h-mermaid-frame svg")),
+      body: read(document.querySelector(".m2h-mermaid-frame > .mermaid > svg")),
       lightbox: read(document.querySelector(".image-lightbox-vector > svg")),
     };
   });
@@ -972,7 +972,7 @@ test("renders the mermaid lightbox as a vector snapshot on a theme-aware canvas"
   await page.waitForFunction(
     () =>
       document.documentElement.classList.contains("dark") &&
-      document.querySelector(".m2h-mermaid-frame svg") !== null,
+      document.querySelector(".m2h-mermaid-frame > .mermaid > svg") !== null,
   );
   await page.locator(".m2h-mermaid-frame").hover();
   await page.locator(".m2h-mermaid-frame .m2h-lightbox-trigger").click();
