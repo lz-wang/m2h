@@ -82,15 +82,15 @@ func serverFlags() []urfavecli.Flag {
 				return nil
 			},
 		},
-		&urfavecli.BoolWithInverseFlag{Name: "open", Value: true, Usage: "open the default browser after listening", Local: true},
-		&urfavecli.BoolWithInverseFlag{Name: "cdn", Value: false, Usage: "load WebUI rich-content dependencies from jsDelivr CDN", Local: true},
 		modeFlag(),
 		widthFlag(),
+		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
+		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
+		&urfavecli.BoolWithInverseFlag{Name: "open", Value: true, Usage: "open the default browser after listening", Local: true},
+		&urfavecli.BoolWithInverseFlag{Name: "cdn", Value: false, Usage: "load WebUI rich-content dependencies from jsDelivr CDN", Local: true},
 		&urfavecli.BoolWithInverseFlag{Name: "toc", Value: defaultTOC, Usage: "show the document table of contents", Local: true},
 		&urfavecli.BoolWithInverseFlag{Name: "gitignore", Value: true, Usage: "respect .gitignore files within directory roots", Local: true},
 		&urfavecli.BoolWithInverseFlag{Name: "hidden", Value: false, Usage: "include hidden files and directories", Local: true},
-		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
-		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
 	}
 }
 

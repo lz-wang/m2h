@@ -10,6 +10,7 @@
 
 ### 变更
 
+- 命令帮助中的 `--[no-]xxx` 开关统一排列在普通选项之后、`--version` 与 `--help` 之前。
 - Mermaid 升级至 12.2.0，WebUI 与 HTML 导出默认采用 ELK 布局；旧布局可设置 `layout: dagre`。
 - Mermaid 图表要求支持 ES2024 的浏览器（Safari 17.4+）；旧版浏览器请升级后使用。
 

@@ -29,8 +29,6 @@ func checkCommand() *urfavecli.Command {
 func checkFlags() []urfavecli.Flag {
 	return []urfavecli.Flag{
 		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
-		&urfavecli.BoolWithInverseFlag{Name: "gitignore", Value: true, Usage: "respect .gitignore files within directory roots", Local: true},
-		&urfavecli.BoolWithInverseFlag{Name: "hidden", Value: false, Usage: "include hidden files and directories", Local: true},
 		&urfavecli.IntFlag{
 			Name:    "depth",
 			Aliases: []string{"d"},
@@ -70,6 +68,8 @@ func checkFlags() []urfavecli.Flag {
 			Usage: `disable check rules, overriding --enable (comma-separated; "all" addresses every rule)`,
 			Local: true,
 		},
+		&urfavecli.BoolWithInverseFlag{Name: "gitignore", Value: true, Usage: "respect .gitignore files within directory roots", Local: true},
+		&urfavecli.BoolWithInverseFlag{Name: "hidden", Value: false, Usage: "include hidden files and directories", Local: true},
 	}
 }
 

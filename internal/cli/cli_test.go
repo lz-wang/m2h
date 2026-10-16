@@ -75,11 +75,17 @@ func TestHelpDocumentsContract(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name string
-		args []string
-		want []string
+		name  string
+		args  []string
+		want  []string
+		order []string
 	}{
 		{
+			order: []string{
+				"--host", "--port", "--mode", "--width", "--glob", "--depth",
+				"--[no-]open", "--[no-]cdn", "--[no-]toc", "--[no-]gitignore", "--[no-]hidden",
+				"--version", "--help",
+			},
 			name: "root",
 			args: []string{"--help"},
 			want: []string{
@@ -100,6 +106,10 @@ func TestHelpDocumentsContract(t *testing.T) {
 			},
 		},
 		{
+			order: []string{
+				"--glob", "--depth", "--format", "--strict", "--enable", "--disable",
+				"--[no-]gitignore", "--[no-]hidden", "--help",
+			},
 			name: "check",
 			args: []string{"check", "--help"},
 			want: []string{
@@ -126,6 +136,14 @@ func TestHelpDocumentsContract(t *testing.T) {
 				if !strings.Contains(stdout, want) {
 					t.Errorf("help output does not contain %q:\n%s", want, stdout)
 				}
+			}
+			previous := -1
+			for _, option := range test.order {
+				position := strings.Index(stdout, option)
+				if position <= previous {
+					t.Fatalf("help option %q is missing or out of order:\n%s", option, stdout)
+				}
+				previous = position
 			}
 		})
 	}

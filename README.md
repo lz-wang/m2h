@@ -101,13 +101,13 @@ m2h /srv/docs --host 127.0.0.1 --port 8793 --no-open
 | --- | --- |
 | `--host` | 监听地址 |
 | `--port`, `-p` | 监听端口，默认 `8793` |
-| `--open` / `--no-open` | 是否自动打开浏览器 |
-| `--cdn` / `--no-cdn` | 是否从 jsDelivr CDN 按需加载 WebUI 富内容依赖，默认关闭 |
 | `--mode` | `light`、`dark` 或 `auto` |
 | `--width` | `standard`、`wide` 或 `full` |
-| `--toc` / `--no-toc` | 是否显示文档目录，默认开启（`true`）；只接受开关形式，不接受 `=值` |
 | `--glob` | Markdown 文件过滤规则 |
 | `--depth`, `-d` | 目录最大递归深度，默认 `4` |
+| `--open` / `--no-open` | 是否自动打开浏览器 |
+| `--cdn` / `--no-cdn` | 是否从 jsDelivr CDN 按需加载 WebUI 富内容依赖，默认关闭 |
+| `--toc` / `--no-toc` | 是否显示文档目录，默认开启（`true`）；只接受开关形式，不接受 `=值` |
 | `--gitignore` / `--no-gitignore` | 是否遵循目录内的 `.gitignore` 规则，默认开启（`true`） |
 | `--hidden` / `--no-hidden` | 是否包含隐藏文件和目录，默认关闭（`false`）；`.git`、`.ssh`、`.env` 等保护路径始终排除 |
 
