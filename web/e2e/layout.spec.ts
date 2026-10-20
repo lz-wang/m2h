@@ -1054,7 +1054,7 @@ test("centers the project attribution below the rendered document", async ({
     bottomGap: number;
     overflow: number;
   }) => {
-    expect(geometry.text).toMatch(/^Powered by m2h \S+$/);
+    expect(geometry.text).toMatch(/^Served by m2h \S+$/);
     expect(geometry.below).toBe(true);
     expect(geometry.centerDelta).toBeLessThanOrEqual(1);
     expect(geometry.overflow).toBeLessThanOrEqual(0);
