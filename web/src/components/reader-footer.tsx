@@ -1,4 +1,4 @@
-// Reader footer attribution: "Powered by m2h <version>" closes every
+// Reader footer attribution: "Served by m2h <version>" closes every
 // successfully opened document. The repository link opens the project; the
 // version link opens the matching release for x.y.z versions, or the release
 // list for development builds (dev-<date>-<sha>). This replaces the sidebar
@@ -23,7 +23,7 @@ export function ReaderFooter({ version }: { version: string }) {
     // application's global footer, so generic is exactly the right semantics
     // — contentinfo is reserved for a top-level landmark.
     <footer className="reader-footer">
-      Powered by{" "}
+      Served by{" "}
       <a href={repositoryURL} target="_blank" rel="noreferrer">
         m2h
       </a>

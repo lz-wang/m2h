@@ -342,7 +342,7 @@ describe("App directory preview", () => {
     if (!(footer instanceof HTMLElement)) {
       throw new Error("reader footer was not rendered");
     }
-    expect(footer.textContent).toBe("Powered by m2h 0.9.1");
+    expect(footer.textContent).toBe("Served by m2h 0.9.1");
     // The sidebar carries no footer chrome anymore: the attribution moved
     // into the reader canvas, and the navigation shell ends at the file tree.
     expect(document.querySelector('[data-slot="sidebar-footer"]')).toBeNull();
