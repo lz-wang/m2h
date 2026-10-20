@@ -8,6 +8,8 @@
 
 ## [Unreleased]
 
+## [0.24.2] - 2026-10-20
+
 ### 变更
 
 - 文档页脚署名由 `Powered by m2h` 调整为 `Served by m2h`。
