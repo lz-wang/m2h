@@ -160,3 +160,44 @@ func TestBasePathRoutesAndWorkspaceBoundaries(t *testing.T) {
 		}
 	}
 }
+
+func TestBasePathHTTPBoundaryDetails(t *testing.T) {
+	root := canonicalDirectory(t, t.TempDir())
+	writeTestFile(t, filepath.Join(root, "README.md"), "# Home")
+	writeTestFile(t, filepath.Join(root, "中 %.png"), "encoded attachment")
+	writeTestFile(t, filepath.Join(root, "bad.html"), "<script>bad</script>")
+	workspace := singleRootWorkspace(rootScope{root: root, discovery: files.DiscoverOptions{Depth: 2, SkipHidden: true}})
+	for _, base := range []string{"", "/docs", "/apps/docs"} {
+		handler := newDocumentHandlerWithConfig(workspace, nil, directoryTestUI(), "1.2.3", false, base)
+		for _, route := range []string{"/doc/README.md", "/doc/missing.md"} {
+			get := performRequest(handler, "GET", base+route)
+			head := performRequest(handler, "HEAD", base+route)
+			if get.Code != head.Code || head.Body.Len() != 0 {
+				t.Errorf("HEAD %s%s = %d %q; GET %d", base, route, head.Code, head.Body.String(), get.Code)
+			}
+			for _, header := range []string{"Content-Type", "Cache-Control", "Content-Security-Policy", "X-Content-Type-Options"} {
+				if get.Header().Get(header) != head.Header().Get(header) {
+					t.Errorf("HEAD header %s differs", header)
+				}
+			}
+		}
+		for _, test := range []struct{ route, target string }{
+			{"/ui?q=x", "/ui/?q=x"}, {"/runtime", "/runtime/"},
+			{"/doc/../assets/bad.html", "/assets/bad.html"},
+		} {
+			response := performRequest(handler, "GET", base+test.route)
+			if response.Code < 300 || response.Code >= 400 || response.Header().Get("Location") != base+test.target {
+				t.Errorf("GET %s%s = %d location %q", base, test.route, response.Code, response.Header().Get("Location"))
+			}
+			assertSecurityHeaders(t, response)
+		}
+		response := performRequest(handler, "GET", base+"/assets/%E4%B8%AD%20%25.png")
+		if response.Code != 200 || response.Body.String() != "encoded attachment" {
+			t.Errorf("encoded asset %q: %d %q", base, response.Code, response.Body.String())
+		}
+		response = performRequest(handler, "GET", base+"/assets/bad.html")
+		if response.Code != 404 {
+			t.Errorf("cleaned route bypassed asset policy: %d", response.Code)
+		}
+	}
+}

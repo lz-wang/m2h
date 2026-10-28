@@ -244,6 +244,12 @@ jobs:
         working-directory: web
         run: npm run test:e2e
 
+      - name: Run Nginx subpath proxy smoke
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install --no-install-recommends -y nginx
+          python3 scripts/nginx-smoke.py ./build/e2e/m2h
+
       - name: Upload regression artifacts
         if: failure()
         uses: actions/upload-artifact@v6

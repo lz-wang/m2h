@@ -299,6 +299,20 @@ curl -I https://example.com/docs/doc/README.md
 深链接刷新、搜索跳转、浏览器前进后退、图表、图片及复制链接均保留 `/docs` 前缀。
 `--cdn` 与子路径部署可同时使用；外部 CDN URL 不添加前缀。
 
+### 独立代理 Smoke
+
+仓库维护者可在安装 Nginx 与 Python 3 后验证实际代理行为：
+
+```console
+make build
+python3 scripts/nginx-smoke.py ./m2h
+```
+
+脚本使用临时文档、临时 Nginx 配置和本机动态端口，验证 `/docs`、`/apps/docs`
+下的 API、HEAD、重定向及含中文、空格和百分号的附件，结束后清理子进程和临时文件。
+它不修改已有 Nginx 服务配置；CI 在浏览器回归后单独执行该 Smoke。
+测试不包含公网 TLS 或 Tinyauth 登录验收。
+
 ## Tinyauth 认证（可选）
 
 m2h 不需要知道 Tinyauth 的存在。Tinyauth 为 Nginx 提供专用 `/api/auth/nginx` endpoint，配合 `auth_request` 使用：
