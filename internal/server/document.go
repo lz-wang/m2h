@@ -227,6 +227,7 @@ func (handler *documentHandler) serveDocument(response http.ResponseWriter, requ
 	}
 	rendered, err := markdown.Render(body, markdown.RenderOptions{
 		URLMode:           markdown.URLWeb,
+		WebBasePath:       handler.basePath,
 		DirectoryDocument: handler.directoryDocumentResolver(request.Context(), root),
 		RootPath:          handler.workspace.publicRoot(root.id),
 		// Rendering resolves relative Markdown links and attachments against

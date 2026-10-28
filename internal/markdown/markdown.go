@@ -80,6 +80,8 @@ type RenderOptions struct {
 	SourcePath        string
 	RootPath          string
 	URLMode           URLMode
+	// WebBasePath is the normalized HTTP deployment prefix, independent of RootPath.
+	WebBasePath string
 }
 
 // Heading is one entry of the document's table of contents, extracted from the
@@ -254,25 +256,25 @@ func rewriteDestination(destination []byte, options RenderOptions, image bool) [
 	}
 	resolved, ok := ResolveLocalDestination(options.SourcePath, options.RootPath, local)
 	if !ok {
-		return invalidLocalDestination(original)
+		return invalidLocalDestination(original, options.WebBasePath)
 	}
 	_, suffix := splitDestination(original)
 	if !image && options.DirectoryDocument != nil {
 		if document, directory := options.DirectoryDocument(resolved); directory {
 			if document == "" {
-				return invalidLocalDestination(original)
+				return invalidLocalDestination(original, options.WebBasePath)
 			}
-			return []byte("/doc/" + document + suffix)
+			return []byte(options.WebBasePath + "/doc/" + document + suffix)
 		}
 	}
 	if image || !RoutesToDocument(local.Path) {
-		return []byte("/assets/" + resolved + suffix)
+		return []byte(options.WebBasePath + "/assets/" + resolved + suffix)
 	}
-	return []byte("/doc/" + resolved + suffix)
+	return []byte(options.WebBasePath + "/doc/" + resolved + suffix)
 }
 
-func invalidLocalDestination(original string) []byte {
-	return []byte(InvalidLocalReferencePath + "?target=" + url.QueryEscape(original))
+func invalidLocalDestination(original, basePath string) []byte {
+	return []byte(basePath + InvalidLocalReferencePath + "?target=" + url.QueryEscape(original))
 }
 
 // RoutesToDocument reports whether a local destination — identified by its
