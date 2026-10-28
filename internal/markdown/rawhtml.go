@@ -89,6 +89,9 @@ func rewriteRawHTMLURLs(raw []byte, options RenderOptions) []byte {
 					continue
 				}
 				destination := string(rewriteDestination([]byte(attribute.Val), options, asset))
+				if attribute.Key == "srcset" {
+					destination = rewriteSrcset(attribute.Val, options)
+				}
 				if destination == attribute.Val {
 					continue
 				}
@@ -109,7 +112,7 @@ func rewriteRawHTMLURLs(raw []byte, options RenderOptions) []byte {
 // rawHTMLURLAttributes lists the HTML attributes whose values m2h treats as
 // URLs when rendering raw HTML. Rendering rewrites their values onto the web
 // routes; Inspect extracts them as document references. The boolean reports
-// whether the URL is an asset reference (src/poster/data, routed to /assets)
+// whether the URL is an asset reference (src/srcset/poster/data, routed to /assets)
 // rather than a link (href, Markdown targets route to /doc). Both features
 // share this one list so they can never drift apart.
 var rawHTMLURLAttributes = map[string]bool{
@@ -117,6 +120,7 @@ var rawHTMLURLAttributes = map[string]bool{
 	"src":    true,
 	"poster": true,
 	"data":   true,
+	"srcset": true,
 }
 
 // isRawHTMLURLAttribute reports whether an attribute name (case-insensitive)

@@ -21,7 +21,7 @@ const (
 	ReferenceLink ReferenceKind = iota + 1
 	// ReferenceImage is a Markdown image destination.
 	ReferenceImage
-	// ReferenceRawHTML is a URL inside raw HTML (href, src, poster, data).
+	// ReferenceRawHTML is a URL inside raw HTML (href, src, srcset, poster, data).
 	ReferenceRawHTML
 )
 
@@ -36,7 +36,7 @@ const (
 	// Markdown documents route to /doc, everything else to /assets.
 	ReferenceRouteLink ReferenceRoute = iota + 1
 	// ReferenceRouteAsset is a destination always routed to /assets:
-	// Markdown images and the src/poster/data attributes of raw HTML.
+	// Markdown images and the src/srcset/poster/data attributes of raw HTML.
 	// The assets route never serves Markdown files.
 	ReferenceRouteAsset
 )
@@ -691,6 +691,18 @@ func extractRawHTMLReferences(raw []byte) []rawHTMLReference {
 			for _, attribute := range token.Attr {
 				asset, relevant := isRawHTMLURLAttribute(attribute.Key)
 				if !relevant {
+					continue
+				}
+				if attribute.Key == "srcset" {
+					// Each candidate is an independent asset reference. Point
+					// diagnostics at the containing attribute value, including
+					// values whose HTML entities change decoded byte offsets.
+					for _, span := range srcsetURLRanges(attribute.Val) {
+						references = append(references, rawHTMLReference{
+							destination: attribute.Val[span.start:span.end], asset: true,
+							offset: tagStart + attributeValueOffset(tag, attribute.Key),
+						})
+					}
 					continue
 				}
 				references = append(references, rawHTMLReference{

@@ -1,6 +1,13 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -11,6 +18,7 @@ import { expect, test } from "@playwright/test";
 for (const base of ["", "/docs", "/apps/docs"]) {
   for (const cdn of [false, true]) {
     test.describe(`${base || "/"} ${cdn ? "CDN" : "embedded"}`, () => {
+      test.use({ deviceScaleFactor: 2 });
       let server: ChildProcess;
       let directory: string;
       let origin: string;
@@ -58,6 +66,12 @@ uniquebasequery
 
 ![Missing](missing.png)
 
+<img alt="Responsive density" src="density-1.png" srcset="data:image/png;base64,${readFileSync("e2e/docs/images/square.png").toString("base64")} 1x, /density-2.png 2x">
+
+<img alt="Responsive width" src="density-1.png" sizes="100px" srcset="density-1.png 100w, width-2.png 200w">
+
+<picture><source media="(min-width: 1px)" srcset="picture-2.png 2x"><img alt="Responsive picture" src="density-1.png"></picture>
+
 $E=mc^2$
 
 ~~~mermaid
@@ -75,6 +89,14 @@ flowchart LR
           join(docs, "logo.svg"),
           '<svg xmlns="http://www.w3.org/2000/svg" width="120" height="60"><text x="5" y="30">Base Logo</text></svg>',
         );
+        for (const name of [
+          "density-1.png",
+          "density-2.png",
+          "width-2.png",
+          "picture-2.png",
+        ]) {
+          copyFileSync("e2e/docs/images/square.png", join(docs, name));
+        }
         writeFileSync(join(docs, ".private.md"), "# Hidden\n");
         writeFileSync(join(docs, "bad.html"), "<script>bad</script>");
         server = spawn(resolve("../build/e2e/m2h"), [
@@ -181,6 +203,29 @@ flowchart LR
           "src",
           `${base}/ui/image-load-failed.svg`,
         );
+        for (const [alt, filename] of [
+          ["Responsive density", "density-2.png"],
+          ["Responsive width", "width-2.png"],
+          ["Responsive picture", "picture-2.png"],
+        ]) {
+          const responsive = page.getByAltText(alt, { exact: true });
+          await responsive.scrollIntoViewIfNeeded();
+          await expect
+            .poll(() =>
+              responsive.evaluate(
+                (image: HTMLImageElement) => image.currentSrc,
+              ),
+            )
+            .toBe(`${origin}${base}/assets/r0/${filename}`);
+          await expect
+            .poll(() =>
+              responsive.evaluate(
+                (image: HTMLImageElement) => image.naturalWidth,
+              ),
+            )
+            .toBeGreaterThan(0);
+          expect(localRequests).toContain(`${base}/assets/r0/${filename}`);
+        }
         await page.reload();
         await expect(page.locator(".markdown-body h1")).toHaveText(
           "Base Guide",

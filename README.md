@@ -276,7 +276,7 @@ WebUI 富内容运行时默认从本地加载，也可通过 `--cdn` 切换到�
 | 行内扩展 | `==高亮==`、`^^插入^^` 与 [`++ctrl+alt+del++` 键盘按键](docs/demos/pymarkdown/keyboards.md) |
 | 标签内容 | [PyMdown Tabbed 基础语法](docs/demos/pymarkdown/tabbed.md)，支持独立分组、默认标签、TOC/锚点与搜索自动定位，HTML 打印展开全部内容 |
 | 协作标记 | [Critic Markup 行内与块级语法](docs/demos/pymarkdown/critic.md) |
-| 图片排版 | 普通图片、链接图片、picture、SVG 与图表在正文中居中显示（WebUI 与 HTML 导出）；[普通 SVG](docs/demos/svg-images.md) 在 WebUI 正文与 Lightbox 中保持矢量清晰度并支持文字选择 |
+| 图片排版 | HTML `img` / `picture` 的 `srcset` 候选资源沿用本地引用路径规则并支持子路径部署；普通图片、链接图片、picture、SVG 与图表在正文中居中显示（WebUI 与 HTML 导出）；[普通 SVG](docs/demos/svg-images.md) 在 WebUI 正文与 Lightbox 中保持矢量清晰度并支持文字选择 |
 | WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开、正文图片临近视口延迟加载，以及图片、Mermaid 图表 Lightbox（使用整个视口缩放与拖动，工具栏浮于图像上方，支持滚轮平滑缩放；普通 SVG 与图表以原生 SVG 放大，文字可选中，SVG 不显示图片信息） |
 
 ## 许可证

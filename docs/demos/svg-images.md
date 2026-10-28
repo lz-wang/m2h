@@ -5,7 +5,7 @@ tags:
   - svg
   - 图片
 create_date: 2026-10-14
-update_date: 2026-10-14
+update_date: 2026-10-28
 ---
 
 # SVG 图片
@@ -19,6 +19,25 @@ update_date: 2026-10-14
 SVG 图片沿用正文图片的延迟加载。使用 HTML `picture` 或 `srcset` 时，以浏览器实际
 选中的 SVG 资源为准。Lightbox 中可以缩放、旋转与拖动；鼠标从文字开始拖动时
 选择文字，从图形或空白区域开始拖动时平移图片。
+
+## 响应式图片
+
+WebUI 会逐个改写 `img srcset` 与 `picture` 中 `source srcset` 的本地候选 URL，
+沿用普通图片的路径规则：相对当前文档，或以 `/` 表示当前输入 root。
+`--base-path` 的部署前缀会自动加入生成的资源地址，多 root 模式保持各自边界。
+`1x`、`2x`、`640w` 等描述符与 `sizes` 保留给浏览器选择资源；外链和含逗号的
+`data:` URL 保持原值。`m2h check` 也逐个检查本地候选目标；HTML 导出保留原始引用。
+
+```html
+<picture>
+  <source srcset="assets/svg-text.svg 640w, assets/svg-text.svg 1280w" sizes="100vw">
+  <img src="assets/svg-text.svg" alt="响应式 SVG" width="640">
+</picture>
+```
+
+含空格、`%` 等字符的本地文件名应使用 URL 编码（如 `%20`、`%25`），不要用逗号
+直接分割或手动添加 m2h 的 `/assets/` 路由。浏览器实际选择的候选资源同样参与
+延迟加载和 Lightbox 预览。
 
 ## 兼容边界
 

@@ -75,3 +75,16 @@ func TestTabbedReferencesAndDuplicateAnchors(t *testing.T) {
 		t.Fatalf("diagnostics: %+v", result.Diagnostics)
 	}
 }
+
+func TestResponsiveImageCandidatesShareAssetChecks(t *testing.T) {
+	result, err := runCheck(t, map[string]string{
+		"index.md": "# Images\n\n<picture><source srcset=\"ok.png 1x, missing.png 2x\"><img alt=\"Image\" srcset=\"data:image/png;base64,AAAA,BBBB 1x, ../outside.png 2x\"></picture>\n",
+		"ok.png":   "image",
+	}, Options{Depth: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Diagnostics) != 2 || result.Diagnostics[0].Rule != RuleLocalTargetMissing || result.Diagnostics[1].Rule != RuleLocalTargetOutsideRoot {
+		t.Fatalf("candidate checks: %+v", result.Diagnostics)
+	}
+}

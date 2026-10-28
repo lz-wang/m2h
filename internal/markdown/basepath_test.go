@@ -45,7 +45,7 @@ func TestWebBasePathDestinations(t *testing.T) {
 				`href="` + base + InvalidLocalReferencePath + `?target=empty%2F"`,
 				`href="` + base + InvalidLocalReferencePath + `?target=..%2Fsecret.md"`,
 				`src="` + base + `/assets/` + prefix + `raw.png"`,
-				`srcset="one.png 1x, two.png 2x"`,
+				`srcset="` + base + `/assets/` + prefix + `one.png 1x, ` + base + `/assets/` + prefix + `two.png 2x"`,
 			} {
 				if !strings.Contains(rendered.Body, want) {
 					t.Errorf("base=%q root=%q missing %s in %s", base, root, want, rendered.Body)
