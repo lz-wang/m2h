@@ -94,12 +94,13 @@ type documentHandler struct {
 	ui        fs.FS
 	version   string
 	cdn       bool
+	basePath  string
 
 	discover func(context.Context, rootScope) (files.Discovery, error)
 }
 
 func newDocumentHandler(workspace workspace, logger io.Writer, ui fs.FS) http.Handler {
-	return newDocumentHandlerWithConfig(workspace, logger, ui, appversion.Development, false)
+	return newDocumentHandlerWithConfig(workspace, logger, ui, appversion.Development, false, "")
 }
 
 func newDocumentHandlerWithConfig(
@@ -108,12 +109,14 @@ func newDocumentHandlerWithConfig(
 	ui fs.FS,
 	buildVersion string,
 	cdn bool,
+	basePath string,
 ) http.Handler {
 	handler := &documentHandler{
 		workspace: workspace,
 		ui:        ui,
 		version:   buildVersion,
 		cdn:       cdn,
+		basePath:  basePath,
 		discover: func(ctx context.Context, scope rootScope) (files.Discovery, error) {
 			return scope.discover(ctx)
 		},
@@ -141,7 +144,7 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 	// and securityHeaders sits directly above the mux so every response —
 	// pages, APIs, assets, runtime, 404s — gets the same hardening baseline
 	// while handlers keep the ability to override individual headers.
-	return requestLogger(securityHeaders(mux, handler.cdn), logger)
+	return requestLogger(securityHeaders(mountBasePath(handler.basePath, mux), handler.cdn), logger)
 }
 
 func (handler *documentHandler) serveFiles(response http.ResponseWriter, request *http.Request) {
@@ -438,11 +441,7 @@ func (handler *documentHandler) serveDirectoryIndex(response http.ResponseWriter
 	response.Header().Set("Cache-Control", "no-cache")
 	response.WriteHeader(status)
 	if request.Method == http.MethodGet {
-		if handler.cdn {
-			// Keep configuration in the shell so direct /doc/ visits share the
-			// server's choice before any rich-content loader runs. No inline JS.
-			index = []byte(strings.Replace(string(index), "<head>", `<head><meta name="m2h-cdn" content="true">`, 1))
-		}
+		index = renderIndexHTML(index, handler.basePath, handler.cdn)
 		_, _ = response.Write(index)
 	}
 }

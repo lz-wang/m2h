@@ -31,7 +31,7 @@ func TestCDNConfigurationInShellAndSecurityHeaders(t *testing.T) {
 			name = "cdn"
 		}
 		t.Run(name, func(t *testing.T) {
-			handler := newDocumentHandlerWithConfig(workspace, nil, ui, "1.2.3", cdn)
+			handler := newDocumentHandlerWithConfig(workspace, nil, ui, "1.2.3", cdn, "")
 			for _, target := range []string{"/", "/?cdn=true", "/doc/guide.md", "/doc/guide.md?cdn=false", "/doc/missing.md"} {
 				response := performRequest(handler, http.MethodGet, target)
 				wantStatus := http.StatusOK

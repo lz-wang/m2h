@@ -140,7 +140,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	handler := newDocumentHandlerWithConfig(workspace, logger, options.UI, normalized.Version, normalized.CDN)
+	handler := newDocumentHandlerWithConfig(workspace, logger, options.UI, normalized.Version, normalized.CDN, normalized.BasePath)
 	httpServer := newHTTPServer(handler, runContext, logger)
 	requestedAddress := net.JoinHostPort(normalized.Host, strconv.Itoa(normalized.Port))
 	listener, err := deps.listen("tcp", requestedAddress)
@@ -153,7 +153,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		serveDone <- httpServer.Serve(listener)
 	}()
 
-	address := serverOptionsURL(serverURL(normalized.Host, listener.Addr()), normalized.Mode, normalized.Width, normalized.TOC)
+	address := serverOptionsURL(strings.TrimSuffix(serverURL(normalized.Host, listener.Addr()), "/")+normalized.BasePath+"/", normalized.Mode, normalized.Width, normalized.TOC)
 	_, _ = fmt.Fprintf(logger, "m2h: serving %s at %s\n", strings.Join(workspace.inputPaths(), ", "), address)
 	if normalized.OnListening != nil {
 		normalized.OnListening(address)
