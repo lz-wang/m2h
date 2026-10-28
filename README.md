@@ -100,6 +100,7 @@ m2h /srv/docs --host 127.0.0.1 --port 8793 --no-open
 | 选项 | 说明 |
 | --- | --- |
 | `--host` | 监听地址 |
+| `--base-path` | HTTP 部署路径，默认 `/`；支持 `/docs`、`/apps/docs`，详见 [子路径部署](docs/deployment.md#子路径部署) |
 | `--port`, `-p` | 监听端口，默认 `8793` |
 | `--mode` | `light`、`dark` 或 `auto` |
 | `--width` | `standard`、`wide` 或 `full` |

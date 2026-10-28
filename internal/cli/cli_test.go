@@ -82,7 +82,7 @@ func TestHelpDocumentsContract(t *testing.T) {
 	}{
 		{
 			order: []string{
-				"--host", "--port", "--mode", "--width", "--glob", "--depth",
+				"--host", "--port", "--base-path", "--mode", "--width", "--glob", "--depth",
 				"--[no-]open", "--[no-]cdn", "--[no-]toc", "--[no-]gitignore", "--[no-]hidden",
 				"--version", "--help",
 			},
@@ -295,13 +295,14 @@ func TestServeForwardsOptions(t *testing.T) {
 		"guide.md",
 		"--host", "0.0.0.0",
 		"--port", "9142",
+		"--base-path", "/apps/docs/",
 		"--mode", "dark",
 	)
 	if err != nil || stdout != "" || stderr != "" {
 		t.Fatalf("serve result stdout=%q stderr=%q err=%v", stdout, stderr, err)
 	}
 	if len(captured.Inputs) != 1 || captured.Inputs[0] != "guide.md" ||
-		captured.Host != "0.0.0.0" || captured.Port != 9142 ||
+		captured.Host != "0.0.0.0" || captured.Port != 9142 || captured.BasePath != "/apps/docs/" ||
 		captured.Mode != markdown.ModeDark || captured.Depth != defaultDepth || captured.DepthSet ||
 		!captured.Browser || captured.Log == nil || captured.Version != "dev-20260809-fe65804" ||
 		captured.UI == nil {
@@ -984,5 +985,21 @@ func TestCheckNewQualityWarningsRespectStrictAndDisable(t *testing.T) {
 	stdout, _, err := runCommand(t, "check", path, "--strict", "--disable", "frontmatter.title-mismatch,frontmatter.tags-count,document.trailing-blank-lines")
 	if err != nil || !strings.Contains(stdout, "no issues found") {
 		t.Fatalf("disabled: %v %s", err, stdout)
+	}
+}
+
+func TestBasePathRejectsInvalidValuesBeforeServer(t *testing.T) {
+	previous := runServer
+	t.Cleanup(func() { runServer = previous })
+	runServer = func(context.Context, server.Options) error { t.Fatal("server called for invalid option"); return nil }
+	for _, value := range []string{"docs", "//docs", "/docs/../api", "/docs//api", "/docs?x=1", "/docs%2Fapi", "/文档"} {
+		if _, _, err := runCommand(t, "missing.md", "--base-path", value); err == nil || !strings.Contains(err.Error(), "--base-path") {
+			t.Errorf("%q: %v", value, err)
+		}
+	}
+	for _, subcommand := range []string{"check", "export"} {
+		if _, _, err := runCommand(t, subcommand, "missing.md", "--base-path", "/docs"); err == nil {
+			t.Errorf("%s accepted --base-path", subcommand)
+		}
 	}
 }

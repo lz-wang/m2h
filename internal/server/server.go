@@ -38,6 +38,7 @@ type Options struct {
 	// Inputs lists one or more files or directories to serve. Each entry
 	// keeps its own access boundary; they are never merged into one root.
 	Inputs     []string
+	BasePath   string
 	Host       string
 	Port       int
 	Mode       markdown.Mode
@@ -202,6 +203,11 @@ func newHTTPServer(handler http.Handler, runContext context.Context, logger io.W
 }
 
 func normalizeOptions(options Options) (Options, error) {
+	basePath, err := NormalizeBasePath(options.BasePath)
+	if err != nil {
+		return Options{}, err
+	}
+	options.BasePath = basePath
 	if len(options.Inputs) == 0 {
 		return Options{}, fmt.Errorf("input path is required")
 	}

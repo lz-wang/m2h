@@ -82,6 +82,13 @@ func serverFlags() []urfavecli.Flag {
 				return nil
 			},
 		},
+		&urfavecli.StringFlag{
+			Name: "base-path", Value: "/", Usage: "HTTP base path for reverse proxy deployment", Local: true,
+			Validator: func(value string) error {
+				_, err := server.NormalizeBasePath(value)
+				return err
+			},
+		},
 		modeFlag(),
 		widthFlag(),
 		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
@@ -131,6 +138,7 @@ func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buil
 	}
 	err = runServer(ctx, server.Options{
 		Inputs:     inputs,
+		BasePath:   command.String("base-path"),
 		Host:       command.String("host"),
 		Port:       command.Int("port"),
 		Mode:       markdown.Mode(command.String("mode")),
