@@ -12,6 +12,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, test } from "@playwright/test";
+import { stopServerProcess } from "./server-process";
 
 // The standard webServer builds one binary. Every case below reuses that same
 // binary, exercising deployment prefixes as runtime configuration only.
@@ -19,10 +20,11 @@ for (const base of ["", "/docs", "/apps/docs"]) {
   for (const cdn of [false, true]) {
     test.describe(`${base || "/"} ${cdn ? "CDN" : "embedded"}`, () => {
       test.use({ deviceScaleFactor: 2 });
-      let server: ChildProcess;
-      let directory: string;
+      let server: ChildProcess | undefined;
+      let directory: string | undefined;
       let origin: string;
       let output = "";
+      let spawnError: Error | undefined;
 
       test.beforeAll(async () => {
         const socket = createServer();
@@ -116,10 +118,18 @@ flowchart LR
           output += String(data);
         });
         server.on("error", (error) => {
+          spawnError = error;
           output += error.message;
         });
         await expect
           .poll(async () => {
+            if (spawnError) throw spawnError;
+            if (
+              server &&
+              (server.exitCode !== null || server.signalCode !== null)
+            ) {
+              throw new Error(`server exited during startup: ${output}`);
+            }
             try {
               return (await fetch(`${origin}${base}/healthz`)).status;
             } catch {
@@ -130,12 +140,11 @@ flowchart LR
       });
 
       test.afterAll(async () => {
-        if (server?.exitCode === null) {
-          const exited = once(server, "exit");
-          server.kill("SIGTERM");
-          await exited;
+        try {
+          await stopServerProcess(server);
+        } finally {
+          if (directory) rmSync(directory, { recursive: true, force: true });
         }
-        if (directory) rmSync(directory, { recursive: true, force: true });
       });
 
       test("deep links, navigation, search, rich resources and boundaries preserve the prefix", async ({
