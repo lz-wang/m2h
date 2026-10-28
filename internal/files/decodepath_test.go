@@ -24,6 +24,9 @@ func TestDecodeRelativePath(t *testing.T) {
 		{name: "repeated separators are cleaned", value: "images%2F%2Flogo.png", want: "images/logo.png"},
 		{name: "multi-layer encoding decodes repeatedly", value: "%2567uide.md", want: "guide.md"},
 		{name: "encoded space", value: "my%20logo.png", want: "my logo.png"},
+		{name: "encoded literal percent", value: "100%25.png", want: "100%.png"},
+		{name: "mixed unicode space and percent", value: "%E4%B8%AD%20%25.png", want: "中 %.png"},
+		{name: "encoded percent before malformed escape", value: "x%25ZZ.png", want: "x%ZZ.png"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
@@ -59,6 +62,9 @@ func TestDecodeRelativePathRejects(t *testing.T) {
 		{name: "NUL byte", value: "name\x00.md"},
 		{name: "encoded NUL byte", value: "name%00.md"},
 		{name: "malformed percent", value: "%"},
+		{name: "malformed initial escape", value: "x%ZZ.png"},
+		{name: "percent does not hide traversal", value: "%2e%2e%2f%25.png"},
+		{name: "multi-encoded traversal", value: "%252e%252e%252fsecret.png"},
 		{name: "decoding never stabilizes", value: "%2525252525252525252e"},
 	}
 	for _, test := range tests {

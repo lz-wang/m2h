@@ -30,6 +30,13 @@ func DecodeRelativePath(value string) (string, error) {
 	for iteration := range 8 {
 		decoded, err := url.PathUnescape(value)
 		if err != nil {
+			// A valid encoded path can decode to a literal percent (e.g.
+			// 100%25.png). It is already a filesystem name, not another
+			// malformed URL. Initial malformed encoding still fails; boundary
+			// checks below also apply when repeated decoding stops here.
+			if iteration > 0 {
+				break
+			}
 			return "", fmt.Errorf("decode path: %w", err)
 		}
 		if decoded == value {
