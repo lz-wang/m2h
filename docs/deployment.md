@@ -5,7 +5,7 @@ tags:
   - 部署
   - 安全
 create_date: 2026-08-30
-update_date: 2026-10-14
+update_date: 2026-10-28
 ---
 
 # VPS 部署指南
@@ -225,9 +225,79 @@ server {
 }
 ```
 
-- **必须部署在 origin root**（`https://docs.example.com/`），不要做 `example.com/m2h/` 子路径 rewrite：WebUI、API、runtime、document、asset 地址全部按 origin root 构建。
+- 默认部署在 origin root（`https://docs.example.com/`）；部署到 URL 子路径时使用 `--base-path`，见下节。
 - 不需要 WebSocket / `Upgrade` / `Connection: upgrade` 配置，m2h 没有 WebSocket。
 - HSTS 属于 TLS 终结层，由 Nginx 设置；m2h 看不到 TLS 连接，因此自身不发送该头。
+
+## 子路径部署
+
+同一个二进制可通过 `--base-path` 部署到 `https://example.com/docs/`，无需重新构建 WebUI：
+
+```console
+m2h /srv/m2h/docs --host 127.0.0.1 --port 8793 --base-path /docs --no-open
+```
+
+若使用前面的 systemd unit，在 `ExecStart` 中加入 `--base-path /docs`，重新加载 unit
+并重启服务。启动日志、自动打开浏览器及文档链接都会包含该前缀；UI、API、附件、
+原始 Markdown、富内容运行时与健康检查也统一挂载到 `/docs/` 下。
+
+`--base-path` 默认 `/`，支持 `/docs`、`/docs/` 和 `/apps/docs`，末尾 `/` 会被规范化。
+路径段只接受 ASCII 字母、数字及 `-`、`_`、`.`、`~`，不接受空路径段、独立的 `.` 或
+`..`、百分号编码、空格、查询串与片段。该选项只适用于浏览服务，`export` 与 `check`
+不接受。前缀不参与文件系统或多 root 的路径解析。
+
+Nginx 保留请求前缀，由 m2h 自行处理：
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name example.com;
+
+    # TLS configuration ...
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    location = /docs {
+        return 308 /docs/$is_args$args;
+    }
+
+    location ^~ /docs/ {
+        proxy_pass http://127.0.0.1:8793;
+
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+
+        proxy_read_timeout 60s;
+        proxy_buffering on;
+    }
+}
+```
+
+`proxy_pass` **不要添加末尾 `/`**：不带 URI 的配置会保留原始请求路径，
+`/docs/api/files` 仍以相同路径交给 m2h，参见 [Nginx proxy_pass 文档](https://nginx.org/en/docs/http/ngx_http_proxy_module.html#proxy_pass)。
+无需 `rewrite`、`sub_filter` 或 HTML `<base>`；m2h 不从 `X-Forwarded-Prefix` 等代理头
+推断路径。一个实例只使用一个显式前缀；前缀外的路由返回 404，`/docs` 自动以 308
+重定向到 `/docs/` 并保留查询参数。
+
+启用 Tinyauth 时，将下节的 `auth_request` 及对应错误跳转配置放在
+`location ^~ /docs/` 内，统一保护 UI、API、原始 Markdown、附件与运行时资源。
+不要为 `/docs/raw/`、`/docs/assets/` 或 `/docs/healthz` 添加绕过认证的公网入口。
+
+启动后验证本机 upstream 和代理入口（文档路径替换成实际可见文档）：
+
+```console
+curl -I http://127.0.0.1:8793/docs/
+curl -fsS http://127.0.0.1:8793/docs/healthz
+curl -fsS http://127.0.0.1:8793/docs/api/files
+curl -I https://example.com/docs/
+curl -I https://example.com/docs/doc/README.md
+```
+
+本机健康监控须改用 `/docs/healthz`；公网检查仍遵循认证策略。浏览器验收应同时检查
+深链接刷新、搜索跳转、浏览器前进后退、图表、图片及复制链接均保留 `/docs` 前缀。
+`--cdn` 与子路径部署可同时使用；外部 CDN URL 不添加前缀。
 
 ## Tinyauth 认证（可选）
 
@@ -266,7 +336,7 @@ location /tinyauth {
 }
 ```
 
-`auth_request` 必须位于 `location /`，这样自动保护全部路由（`/`、`/doc/`、`/raw/`、`/api/`、`/assets/`、`/runtime/`、`/ui/`）。只保护 `/doc/` 会让 `/raw/private.md`、`/api/document`、`/assets/private.pdf` 绕过认证。
+`auth_request` 必须位于覆盖整个服务的 `location /`（子路径部署为 `location ^~ /docs/`），这样自动保护全部路由（`/`、`/doc/`、`/raw/`、`/api/`、`/assets/`、`/runtime/`、`/ui/`）。只保护 `/doc/` 会让 `/raw/private.md`、`/api/document`、`/assets/private.pdf` 绕过认证。
 
 如果 Tinyauth 需要正确识别客户端 IP（尤其使用 IP ACL 时，这是必需的），需将 Nginx 的实际来源地址/CIDR 加入 `TINYAUTH_AUTH_TRUSTEDPROXIES`，否则 Tinyauth 不应信任代理传来的真实客户端 IP。注意这是 `Nginx → Tinyauth` 的信任关系，与后文 m2h 自己不解析 `X-Forwarded-For` 的原则互不冲突。
 

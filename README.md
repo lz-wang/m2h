@@ -93,6 +93,15 @@ m2h /srv/docs --host 127.0.0.1 --port 8793 --no-open
 
 ### VPS 部署
 
+部署到 URL 子路径时显式设置前缀（默认 `/`，支持多级路径）：
+
+```console
+m2h docs --base-path /apps/docs --no-open
+```
+
+同一二进制无需重建即可用于不同路径；代理须保留请求前缀，健康检查使用
+`/apps/docs/healthz`。参数格式与 Nginx 示例见 [子路径部署](docs/deployment.md#子路径部署)。
+
 通过 Nginx 等反向代理长期运行（systemd、TLS、Tinyauth 认证与健康检查）时，参见 [VPS 部署指南](docs/deployment.md)。
 
 常用选项：

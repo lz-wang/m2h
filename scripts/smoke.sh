@@ -78,23 +78,46 @@ grep -F 'warning [section.empty]' opt-in.log >/dev/null
 echo "[smoke] check"
 
 port=${M2H_SMOKE_PORT:-18793}
-"${binary}" smoke.md --host 127.0.0.1 --port "${port}" --no-open > preview.log 2>&1 &
-server_pid=$!
-preview_ready=false
-for _ in {1..30}; do
-	if curl --fail --silent "http://127.0.0.1:${port}/" > preview.html; then
-		preview_ready=true
-		break
+for base_path in "" "/docs" "/apps/docs"; do
+	MSYS_NO_PATHCONV=1 "${binary}" smoke.md --host 127.0.0.1 --port "${port}" --base-path "${base_path:-/}" --no-open > preview.log 2>&1 &
+	server_pid=$!
+	preview_ready=false
+	address="http://127.0.0.1:${port}${base_path}"
+	for _ in {1..30}; do
+		if curl --fail --silent "${address}/healthz" > /dev/null; then
+			preview_ready=true
+			break
+		fi
+		sleep 1
+	done
+	if [[ "${preview_ready}" != "true" ]]; then
+		echo "Error: web server did not become ready for ${base_path:-/}" >&2
+		cat preview.log >&2
+		exit 1
 	fi
-	sleep 1
+	curl --fail --silent "${address}/" > preview.html
+	grep -F '<title>m2h</title>' preview.html >/dev/null
+	grep -F "name=\"m2h-base-path\" content=\"${base_path}\"" preview.html >/dev/null
+	grep -F "src=\"${base_path}/ui/assets/" preview.html >/dev/null
+	curl --fail --silent "${address}/doc/smoke.md" > deep-link.html
+	grep -F "src=\"${base_path}/ui/assets/" deep-link.html >/dev/null
+	curl --fail --silent "${address}/ui/favicon.svg" > /dev/null
+	curl --fail --silent "${address}/ui/markdown.css" > /dev/null
+	curl --fail --silent "${address}/runtime/katex.min.js" > /dev/null
+	curl --fail --silent "${address}/raw/smoke.md" | grep -F '# Smoke' >/dev/null
+	curl --fail --silent "${address}/api/document?path=smoke.md" > document.json
+	grep -F '"title":"Smoke"' document.json >/dev/null
+	grep -F '"text":"Smoke"' document.json >/dev/null
+	if [[ -n "${base_path}" ]]; then
+		status=$(curl --silent --output /dev/null --write-out '%{http_code}' "http://127.0.0.1:${port}/api/files")
+		[[ "${status}" == "404" ]]
+	fi
+	if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
+		taskkill.exe //IM "$(basename "${binary}")" //T //F >/dev/null 2>&1 || true
+	else
+		kill -TERM "${server_pid}"
+	fi
+	wait "${server_pid}" || true
+	server_pid=""
+	echo "[smoke] web ${base_path:-/}"
 done
-if [[ "${preview_ready}" != "true" ]]; then
-	echo "Error: web server did not become ready" >&2
-	cat preview.log >&2
-	exit 1
-fi
-grep -F '<title>m2h</title>' preview.html >/dev/null
-curl --fail --silent "http://127.0.0.1:${port}/api/document?path=smoke.md" > document.json
-grep -F '"title":"Smoke"' document.json >/dev/null
-grep -F '"text":"Smoke"' document.json >/dev/null
-echo "[smoke] web"
