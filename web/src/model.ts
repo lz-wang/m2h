@@ -1,4 +1,5 @@
 import type { FileSummary, PreviewKind, RootSummary } from "./api";
+import { appPath, stripBasePath } from "./lib/base-path";
 
 export type Mode = "light" | "dark" | "auto";
 // ResolvedMode is the concrete light/dark the UI settles on after resolving
@@ -55,10 +56,11 @@ export function readRoute(
   // TOC defaults to true; only the explicit "false" value disables it. Any
   // other value (including a missing parameter) keeps it on.
   const toc = parameters.get("toc") !== "false";
-  if (!pathname.startsWith("/doc/")) {
+  const internalPath = stripBasePath(pathname);
+  if (internalPath === null || !internalPath.startsWith("/doc/")) {
     return { path: null, mode, width, toc, hash: normalizeHash(hash) };
   }
-  const encoded = pathname.slice("/doc/".length);
+  const encoded = internalPath.slice("/doc/".length);
   if (encoded === "") {
     return { path: null, mode, width, toc, hash: normalizeHash(hash) };
   }
@@ -94,9 +96,9 @@ export function routeURL(
   const search = query === "" ? "" : `?${query}`;
   const suffix = normalizeHash(hash);
   if (path === null) {
-    return `/${search}${suffix}`;
+    return appPath(`/${search}${suffix}`);
   }
-  return `/doc/${encodeVirtualPath(path)}${search}${suffix}`;
+  return appPath(`/doc/${encodeVirtualPath(path)}${search}${suffix}`);
 }
 
 // encodeVirtualPath percent-encodes each slash-separated segment of a virtual
@@ -115,12 +117,12 @@ export function encodeVirtualPath(path: string): string {
 // but they do keep the heading hash so a shared link can land on the exact
 // section the sender was reading.
 export function documentURL(path: string, hash = ""): string {
-  return `/doc/${encodeVirtualPath(path)}${normalizeHash(hash)}`;
+  return appPath(`/doc/${encodeVirtualPath(path)}${normalizeHash(hash)}`);
 }
 
 // The browser-addressable source URL of one document's original Markdown.
 export function markdownURL(path: string): string {
-  return `/raw/${encodeVirtualPath(path)}`;
+  return appPath(`/raw/${encodeVirtualPath(path)}`);
 }
 
 // Resolves a share URL against the current origin. Built from the URL API so

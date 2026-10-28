@@ -5,7 +5,7 @@ import react from "@vitejs/plugin-react";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  base: "/ui/",
+  base: "./",
   plugins: [react(), tailwindcss()],
   resolve: {
     alias: {
@@ -36,6 +36,7 @@ export default defineConfig({
         "src/lib/render-rich-content.ts",
         "src/lib/runtime-loader.ts",
         "src/model.ts",
+        "src/lib/base-path.ts",
         "src/use-preview.ts",
         "src/use-preview-events.ts",
         "src/use-toc-spy.ts",

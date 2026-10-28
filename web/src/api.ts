@@ -1,3 +1,4 @@
+import { appPath } from "./lib/base-path";
 // model.ts imports only types from this module, so pulling its URL builder in
 // here creates no runtime cycle — and keeps every /raw/ address shaped by one
 // encoder shared with the sidebar and toolbar links.
@@ -375,18 +376,21 @@ function parseSearchResponse(payload: unknown): SearchResponse {
 
 export const browserAPI: PreviewAPI = {
   async listFiles(signal) {
-    return parseFileList(await requestJSON("/api/files", signal));
+    return parseFileList(await requestJSON(appPath("/api/files"), signal));
   },
   async getDocument(path, signal) {
     const query = new URLSearchParams({ path });
     return parseDocument(
-      await requestJSON(`/api/document?${query.toString()}`, signal),
+      await requestJSON(appPath(`/api/document?${query.toString()}`), signal),
     );
   },
   async getFileMetadata(path, signal) {
     const query = new URLSearchParams({ path });
     return parseFileMetadata(
-      await requestJSON(`/api/file-metadata?${query.toString()}`, signal),
+      await requestJSON(
+        appPath(`/api/file-metadata?${query.toString()}`),
+        signal,
+      ),
     );
   },
   async getMarkdown(path, signal) {
@@ -395,7 +399,7 @@ export const browserAPI: PreviewAPI = {
   async search(query, signal) {
     const params = new URLSearchParams({ q: query });
     return parseSearchResponse(
-      await requestJSON(`/api/search?${params.toString()}`, signal),
+      await requestJSON(appPath(`/api/search?${params.toString()}`), signal),
     );
   },
 };

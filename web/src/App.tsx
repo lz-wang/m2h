@@ -502,7 +502,6 @@ export function App({ api }: AppProps) {
     }
     // Otherwise only intercept genuine cross-document links under /doc/.
     if (
-      !target.pathname.startsWith("/doc/") ||
       route.path === null ||
       !preview.files.some((file) => file.path === route.path)
     ) {

@@ -7,6 +7,7 @@
 // or Tablesort individually.
 //
 import type { ResolvedMode } from "../model";
+import { appPath } from "./base-path";
 import { copyText } from "./clipboard";
 import { imageFormat } from "./image-metadata";
 import {
@@ -723,7 +724,7 @@ function addImageLightbox(image: HTMLImageElement, frame: HTMLElement): void {
 // public assets under the /ui/ mount the document server exposes them at, so
 // the fallback itself failing can only mean the app is broken — the
 // m2hFallback marker below makes sure that can never loop.
-const IMAGE_FALLBACK_SRC = "/ui/image-load-failed.svg";
+const IMAGE_FALLBACK_SRC = appPath("/ui/image-load-failed.svg");
 
 // Watch a framed image for a load failure and collapse it into the shared
 // placeholder. The replacement lives here, not in React's error reporting:

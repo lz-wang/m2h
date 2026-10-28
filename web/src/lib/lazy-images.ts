@@ -1,3 +1,4 @@
+import { appPath } from "./base-path";
 // Lazy document images.
 //
 // The Markdown body is mounted by handing server HTML to the DOM, and the
@@ -13,7 +14,7 @@
 
 // Served from the app's public assets under the /ui/ mount the document
 // server exposes them at, like the failure placeholder.
-export const IMAGE_LOADING_SRC = "/ui/image-loading.svg";
+export const IMAGE_LOADING_SRC = appPath("/ui/image-loading.svg");
 
 // One lazy image's lifecycle, kept in a single attribute so every consumer
 // (observer, enhancement layer, tests) reads the same source of truth:

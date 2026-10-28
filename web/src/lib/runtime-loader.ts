@@ -1,3 +1,4 @@
+import { appPath } from "./base-path";
 // Loader for the rich-content runtime the Go binary embeds and the document
 // server exposes under /runtime/*. The WebUI loads them on demand instead of
 // bundling a second copy through Vite. With --cdn the server's shell opts into
@@ -58,7 +59,7 @@ declare global {
   }
 }
 
-const RUNTIME_BASE = "/runtime/";
+const RUNTIME_BASE = appPath("/runtime/");
 
 // Keep versions in sync with internal/assets/rich/NOTICE.md and export/page.go.
 // Capture only the server-owned head metadata, before document HTML is mounted.
