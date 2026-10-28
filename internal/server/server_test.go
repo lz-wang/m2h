@@ -36,12 +36,13 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- run(ctx, Options{
-			Inputs:  []string{source},
-			Mode:    markdown.ModeAuto,
-			CDN:     true,
-			Log:     &logOutput,
-			UI:      fstest.MapFS{"index.html": {Data: []byte(`<html><head></head><body><div id="root"></div></body></html>`)}},
-			Version: "1.2.3",
+			Inputs:   []string{source},
+			Mode:     markdown.ModeAuto,
+			CDN:      true,
+			BasePath: "/apps/docs/",
+			Log:      &logOutput,
+			UI:       fstest.MapFS{"index.html": {Data: []byte(`<html><head></head><body><div id="root"></div></body></html>`)}},
+			Version:  "1.2.3",
 			OnListening: func(address string) {
 				listening <- address
 			},
@@ -52,6 +53,9 @@ func TestRunBindsServesAndGracefullyStops(t *testing.T) {
 		t.Fatalf("listen request = %q", got)
 	}
 	address := <-listening
+	if !strings.HasSuffix(address, "/apps/docs/") {
+		t.Fatalf("listening address lost base path: %q", address)
+	}
 
 	// A single-file workspace now serves the unified React WebUI: the shell is
 	// the embedded SPA and the document arrives through the JSON API.
@@ -140,19 +144,20 @@ func TestRunUsesCustomBindAndLogsBrowserFailure(t *testing.T) {
 	done := make(chan error, 1)
 	go func() {
 		done <- run(ctx, Options{
-			Inputs:  []string{source},
-			Host:    "0.0.0.0",
-			Port:    9142,
-			Mode:    markdown.ModeLight,
-			Browser: true,
-			Log:     &logOutput,
+			Inputs:   []string{source},
+			Host:     "0.0.0.0",
+			BasePath: "/apps/docs",
+			Port:     9142,
+			Mode:     markdown.ModeLight,
+			Browser:  true,
+			Log:      &logOutput,
 		}, deps)
 	}()
 
 	if got := <-requested; got != "0.0.0.0:9142" {
 		t.Fatalf("custom listen request = %q", got)
 	}
-	if address := <-opened; !strings.HasPrefix(address, "http://127.0.0.1:") {
+	if address := <-opened; !strings.HasPrefix(address, "http://127.0.0.1:") || !strings.HasSuffix(address, "/apps/docs/?mode=light") {
 		t.Fatalf("browser address = %q", address)
 	}
 	if err := <-done; err != nil {

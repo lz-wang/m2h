@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"strings"
 
 	"golang.org/x/net/html"
-	"strings"
 )
 
 // NormalizeBasePath validates an HTTP deployment prefix. The empty result means
