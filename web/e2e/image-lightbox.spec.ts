@@ -394,6 +394,11 @@ test("shows the full alt text and intrinsic metadata in the footer", async ({
     "1200 × 600 · PNG",
   );
   await expectCenteredInViewport(page);
+  const infoButton = page.getByRole("button", { name: "图片信息" });
+  await expect(infoButton).toHaveAttribute("aria-pressed", "true");
+  await infoButton.click();
+  await expect(info).toHaveCount(0);
+  await infoButton.click();
 
   await page.getByRole("button", { name: "下一项" }).click();
   await expect(info).toHaveCount(0);
@@ -403,6 +408,14 @@ test("shows the full alt text and intrinsic metadata in the footer", async ({
     "480 × 1200 · PNG",
   );
   await expectCenteredInViewport(page);
+  await page.getByRole("button", { name: "关闭视觉内容预览" }).click();
+  await expect(page.locator(".image-lightbox")).toBeHidden();
+  await openLightbox(page, 0);
+  await expect(page.getByRole("button", { name: "图片信息" })).toHaveAttribute(
+    "aria-pressed",
+    "false",
+  );
+  await expect(info).toHaveCount(0);
 });
 
 test("hides information when srcset selects an SVG resource", async ({
@@ -435,6 +448,22 @@ test("hides information when srcset selects an SVG resource", async ({
   );
 
   await openLightbox(page, 0);
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const image = document.querySelector<HTMLImageElement>(
+          ".image-lightbox-image",
+        );
+        return (
+          document.querySelector(".image-lightbox-vector") !== null ||
+          (image?.complete === true &&
+            image.naturalWidth > 0 &&
+            image.currentSrc.includes("image-loading.svg"))
+        );
+      }),
+    )
+    .toBe(true);
+  await expect(page.getByRole("button", { name: "图片信息" })).toHaveCount(0);
   await expect(page.locator(".image-lightbox-info")).toHaveCount(0);
 });
 
@@ -648,6 +677,7 @@ test("opens a mermaid diagram inside the shared image sequence", async ({
 test("hides information for a Mermaid diagram", async ({ page }) => {
   await openMermaidDocument(page);
   await openMermaidLightbox(page);
+  await expect(page.getByRole("button", { name: "图片信息" })).toHaveCount(0);
   await expect(page.locator(".image-lightbox-info")).toHaveCount(0);
   await expect(page.getByRole("img", { name: "Mermaid 图表" })).toBeVisible();
 });

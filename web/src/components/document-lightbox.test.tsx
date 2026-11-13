@@ -806,6 +806,7 @@ describe("DocumentLightbox", () => {
       onClosed: vi.fn(),
     };
     const view = render(<DocumentLightbox {...props} open />);
+    fireEvent.load(currentItem());
     const button = screen.getByRole("button", { name: "图片信息" });
     expect(button.getAttribute("aria-pressed")).toBe("false");
     expect(document.querySelector(".image-lightbox-info")).toBeNull();
@@ -830,20 +831,18 @@ describe("DocumentLightbox", () => {
 
   it("shows the full alt text and the intrinsic metadata after the image loads", () => {
     renderLightbox(makeItems(1), 0);
-    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
-
-    // Before the dialog's own <img> has loaded, nothing about the picture is
-    // known — no stale or placeholder size, and no format guessed from the
-    // snapshot's src while a srcset might still pick another candidate.
-    expect(infoOf().querySelector(".image-lightbox-alt")?.textContent).toBe(
-      "Image 0",
-    );
-    expect(infoOf().querySelector(".image-lightbox-meta")).toBeNull();
+    // The selected resource is unknown until the dialog image loads.
+    expect(screen.queryByRole("button", { name: "图片信息" })).toBeNull();
+    expect(document.querySelector(".image-lightbox-info")).toBeNull();
 
     const image = currentItem();
     Object.defineProperty(image, "naturalWidth", { value: 1024 });
     Object.defineProperty(image, "naturalHeight", { value: 768 });
     fireEvent.load(image);
+    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
+    expect(infoOf().querySelector(".image-lightbox-alt")?.textContent).toBe(
+      "Image 0",
+    );
 
     expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
       "1024 × 768 · PNG",
@@ -853,7 +852,6 @@ describe("DocumentLightbox", () => {
   it("derives the image format from the resource the dialog actually loaded", () => {
     renderLightbox(makeItems(1), 0);
 
-    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
     // A srcset re-selects its candidate in the dialog: whatever the body
     // loaded, the metadata must describe the resource on screen now — the
     // element's currentSrc, not its src attribute.
@@ -866,6 +864,7 @@ describe("DocumentLightbox", () => {
     Object.defineProperty(image, "naturalWidth", { value: 3840 });
     Object.defineProperty(image, "naturalHeight", { value: 2160 });
     fireEvent.load(image);
+    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
 
     expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
       "3840 × 2160 · WEBP",
@@ -887,21 +886,22 @@ describe("DocumentLightbox", () => {
     "hides SVG image information before and after loading %s",
     (src) => {
       renderLightbox([{ ...makeItems(1)[0], src }], 0);
-      expect(document.querySelector(".image-lightbox-info")).toBeNull();
+      expect(screen.queryByRole("button", { name: "图片信息" })).toBeNull();
       fireEvent.load(currentItem());
-      expect(document.querySelector(".image-lightbox-info")).toBeNull();
+      expect(screen.queryByRole("button", { name: "图片信息" })).toBeNull();
     },
   );
 
   it("follows the loaded srcset format when deciding whether to show information", () => {
     renderLightbox(makeItems(1), 0);
     const image = currentItem();
+    expect(screen.queryByRole("button", { name: "图片信息" })).toBeNull();
     Object.defineProperty(image, "currentSrc", {
       configurable: true,
       value: "/diagram.svg",
     });
     fireEvent.load(image);
-    expect(document.querySelector(".image-lightbox-info")).toBeNull();
+    expect(screen.queryByRole("button", { name: "图片信息" })).toBeNull();
 
     Object.defineProperty(image, "currentSrc", { value: "/picture.webp" });
     fireEvent.load(image);
@@ -924,7 +924,6 @@ describe("DocumentLightbox", () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
     const first = currentItem();
     Object.defineProperty(first, "naturalWidth", {
       configurable: true,
@@ -935,6 +934,7 @@ describe("DocumentLightbox", () => {
       value: 200,
     });
     fireEvent.load(first);
+    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
     expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
       "100 × 200 · PNG",
     );
@@ -954,8 +954,7 @@ describe("DocumentLightbox", () => {
     );
 
     expect(document.querySelector(".image-lightbox-info")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
-    expect(infoOf().querySelector(".image-lightbox-meta")).toBeNull();
+    expect(screen.queryByRole("button", { name: "图片信息" })).toBeNull();
 
     // React reuses the <img> node across items, so this is the same element
     // with a fresh src — re-define its size stub for the second load.
@@ -969,6 +968,7 @@ describe("DocumentLightbox", () => {
       value: 400,
     });
     fireEvent.load(second);
+    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
     expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(
       "300 × 400 · PNG",
     );

@@ -47,7 +47,7 @@ import {
   type SVGLightboxItem,
   snapshotSVGImage,
 } from "../lib/document-lightbox";
-import { imageFormat, imageFormatFromSource } from "../lib/image-metadata";
+import { imageFormat } from "../lib/image-metadata";
 import { loadSVGImage, mountSVGImage } from "../lib/svg-images";
 
 // zoom 1 is the fitted size; each step scales by 1.25 up to 5x. Dividing and
@@ -534,13 +534,10 @@ export function DocumentLightbox({
     return null;
   }
 
-  // SVGs keep their accessible name but have no visible info plate. For an
-  // <img>, the loaded resource wins over the fallback URL (srcset can choose
-  // a different format). Before loading, suppress known SVGs immediately.
+  // Wait for the selected resource: srcset can choose SVG even when the
+  // fallback URL is a bitmap. SVGs do not have an info plate.
   const showInfo =
-    item.kind === "image" &&
-    (naturalSize === null ? imageFormatFromSource(item.src) : naturalFormat) !==
-      "SVG";
+    item.kind === "image" && naturalSize !== null && naturalFormat !== "SVG";
   const altText = item.alt.trim();
   const metadataSize =
     naturalSize === null

@@ -85,6 +85,9 @@ for (const width of [320, 390]) {
     await page.setViewportSize({ width, height: 700 });
     await page.goto("/doc/image-lightbox.md");
     const frame = page.locator(".m2h-image-frame").first();
+    await frame.locator("img").evaluate((image: HTMLImageElement) => {
+      image.alt = "Long image description ".repeat(400);
+    });
     await frame.hover();
     await frame.locator(".m2h-lightbox-trigger").click();
     const toolbar = page.locator(".image-lightbox-toolbar");
@@ -92,5 +95,17 @@ for (const width of [320, 390]) {
     expect(bounds).not.toBeNull();
     expect(bounds?.x).toBeGreaterThanOrEqual(0);
     expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(width);
+    const infoButton = page.getByRole("button", { name: "图片信息" });
+    await expect(infoButton).toBeInViewport();
+    await infoButton.click();
+    await expect(page.locator(".image-lightbox-info")).toBeVisible();
+    for (const button of await toolbar.getByRole("button").all()) {
+      await expect(button).toBeInViewport({ ratio: 1 });
+    }
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth),
+    ).toBeLessThanOrEqual(width);
+    await infoButton.click();
+    await expect(page.locator(".image-lightbox-info")).toHaveCount(0);
   });
 }

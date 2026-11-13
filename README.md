@@ -14,7 +14,7 @@
 - 文件树与文件名/路径筛选、全文搜索（Ctrl/Cmd+K，支持从结果直接跳转到匹配章节）、文档目录、主题和正文宽度切换
 - 支持 GFM、语法高亮、数学公式、Mermaid、脚注、Emoji 和 GitHub Alerts
 - 支持 [Frontmatter 标题与日期元数据](docs/demos/frontmatter/00-index.md)、可排序表格、代码行号与长代码块折叠
-- 图片与 Mermaid 图表支持全屏 Lightbox 查看，可切换、平滑缩放、拖动和旋转；位图信息默认隐藏，可通过工具栏按钮显示；普通 SVG 与图表保持矢量清晰度，正文及 Lightbox 中可选中文字（远程 SVG 需允许 CORS）；[SVG 演示与兼容说明](docs/demos/svg-images.md)
+- 图片与 Mermaid 图表支持全屏 Lightbox 查看，可切换、平滑缩放、拖动和旋转；位图加载后可通过工具栏按钮显示默认隐藏的图片信息；普通 SVG 与图表保持矢量清晰度，正文及 Lightbox 中可选中文字（远程 SVG 需允许 CORS）；[SVG 演示与兼容说明](docs/demos/svg-images.md)
 - 正文图片（含链接、picture、SVG）与 Mermaid 图表统一居中，WebUI 与 HTML 导出保持一致
 - 正文图片延迟加载：接近视口时才请求实际资源，加载中显示内置占位图，失败折叠为统一占位并提示原始路径
 - 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
