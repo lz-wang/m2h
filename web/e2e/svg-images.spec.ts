@@ -42,6 +42,7 @@ test("ordinary and picture SVGs retain native text in the article and zoomed Lig
       .toBeCloseTo(original.width * 1.25, 0);
     await expect(page.locator(".image-lightbox-image")).toHaveCount(0);
     await expect(page.locator(".image-lightbox-info")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "图片信息" })).toHaveCount(0);
     await selectText(page, vector.locator("svg text").first());
     const transform = await page
       .locator(".image-lightbox-vector-transform")

@@ -1389,7 +1389,10 @@ body,
   flex: none;
   pointer-events: auto;
   width: fit-content;
+  max-width: 100%;
+  flex-wrap: wrap;
   align-items: center;
+  justify-content: center;
   gap: 0.25rem;
 
   margin-inline: auto;
@@ -1422,6 +1425,11 @@ body,
 
 .image-lightbox-toolbar button:hover:not(:disabled) {
   background: rgb(255 255 255 / 18%);
+}
+
+.image-lightbox-toolbar button[aria-pressed="true"] {
+  color: #fff;
+  background: rgb(255 255 255 / 25%);
 }
 
 .image-lightbox-toolbar button:focus-visible {

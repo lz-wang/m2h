@@ -24,6 +24,7 @@ import { Dialog } from "@base-ui/react/dialog";
 import {
   ChevronLeft,
   ChevronRight,
+  Info,
   RotateCcw,
   RotateCw,
   X,
@@ -189,6 +190,7 @@ export function DocumentLightbox({
     setPrimed(true);
   }, []);
 
+  const [infoOpen, setInfoOpen] = useState(false);
   const [zoom, setZoom] = useState(MIN_ZOOM);
   const [rotation, setRotation] = useState<Rotation>(0);
   const [pan, setPan] = useState({ x: 0, y: 0 });
@@ -332,7 +334,12 @@ export function DocumentLightbox({
     setImageLayout({ width: 0, height: 0 });
     setNaturalSize(null);
     setNaturalFormat(null);
+    setInfoOpen(false);
   }, [index]);
+
+  useLayoutEffect(() => {
+    if (!open) setInfoOpen(false);
+  }, [open]);
 
   const rotated = rotation === 90 || rotation === 270;
   const visualLayout =
@@ -547,6 +554,8 @@ export function DocumentLightbox({
         ? metadataFormat
         : `${metadataSize} · ${metadataFormat}`;
 
+  const hasImageInfo = showInfo && (altText !== "" || metadataText !== null);
+
   return (
     // Every closing entrance — Dialog.Close, Escape, a blank-area press —
     // funnels through onOpenChange(false); the popup then stays mounted for
@@ -676,19 +685,17 @@ export function DocumentLightbox({
             ) : null}
           </div>
           {/* Floating control layer: bitmap info wraps above the toolbar
-           * without shrinking the viewport available for zooming/panning.
-           * aria-hidden: the alt and the visual's accessible name already
-           * carry the text for assistive technology. */}
+           * without shrinking the viewport available for zooming/panning. */}
           <div className="image-lightbox-footer">
-            {showInfo && (altText !== "" || metadataText !== null) ? (
-              <div className="image-lightbox-info" aria-hidden="true">
+            {hasImageInfo && infoOpen ? (
+              <section className="image-lightbox-info" aria-label="图片信息">
                 {altText !== "" ? (
                   <div className="image-lightbox-alt">{altText}</div>
                 ) : null}
                 {metadataText !== null ? (
                   <div className="image-lightbox-meta">{metadataText}</div>
                 ) : null}
-              </div>
+              </section>
             ) : null}
             <div className="image-lightbox-toolbar">
               <button
@@ -718,6 +725,17 @@ export function DocumentLightbox({
               >
                 <ZoomIn aria-hidden="true" />
               </button>
+              {hasImageInfo ? (
+                <button
+                  type="button"
+                  className="image-lightbox-control"
+                  aria-label="图片信息"
+                  aria-pressed={infoOpen}
+                  onClick={() => setInfoOpen((value) => !value)}
+                >
+                  <Info aria-hidden="true" />
+                </button>
+              ) : null}
               <button
                 type="button"
                 className="image-lightbox-control"

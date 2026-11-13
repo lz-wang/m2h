@@ -796,8 +796,41 @@ describe("DocumentLightbox", () => {
     return info;
   }
 
+  it("toggles information and resets it when closed", () => {
+    const items = makeItems(1);
+    const props = {
+      items,
+      index: 0,
+      onIndexChange: vi.fn(),
+      onClose: vi.fn(),
+      onClosed: vi.fn(),
+    };
+    const view = render(<DocumentLightbox {...props} open />);
+    const button = screen.getByRole("button", { name: "图片信息" });
+    expect(button.getAttribute("aria-pressed")).toBe("false");
+    expect(document.querySelector(".image-lightbox-info")).toBeNull();
+    fireEvent.click(button);
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByRole("region", { name: "图片信息" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "放大图片" }));
+    fireEvent.click(screen.getByRole("button", { name: "顺时针旋转" }));
+    expect(button.getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(button);
+    expect(document.querySelector(".image-lightbox-info")).toBeNull();
+    fireEvent.click(button);
+    view.rerender(<DocumentLightbox {...props} open={false} />);
+    view.rerender(<DocumentLightbox {...props} open />);
+    expect(
+      screen
+        .getByRole("button", { name: "图片信息" })
+        .getAttribute("aria-pressed"),
+    ).toBe("false");
+    expect(document.querySelector(".image-lightbox-info")).toBeNull();
+  });
+
   it("shows the full alt text and the intrinsic metadata after the image loads", () => {
     renderLightbox(makeItems(1), 0);
+    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
 
     // Before the dialog's own <img> has loaded, nothing about the picture is
     // known — no stale or placeholder size, and no format guessed from the
@@ -820,6 +853,7 @@ describe("DocumentLightbox", () => {
   it("derives the image format from the resource the dialog actually loaded", () => {
     renderLightbox(makeItems(1), 0);
 
+    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
     // A srcset re-selects its candidate in the dialog: whatever the body
     // loaded, the metadata must describe the resource on screen now — the
     // element's currentSrc, not its src attribute.
@@ -843,6 +877,7 @@ describe("DocumentLightbox", () => {
     (kind) => {
       renderLightbox([{ ...vectorItem, kind }], 0);
       expect(document.querySelector(".image-lightbox-info")).toBeNull();
+      expect(screen.queryByRole("button", { name: "图片信息" })).toBeNull();
       expect(screen.getByRole("img", { name: vectorItem.alt })).toBeTruthy();
       expect(screen.getByRole("button", { name: "放大图片" })).toBeTruthy();
     },
@@ -870,6 +905,7 @@ describe("DocumentLightbox", () => {
 
     Object.defineProperty(image, "currentSrc", { value: "/picture.webp" });
     fireEvent.load(image);
+    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
     expect(
       infoOf().querySelector(".image-lightbox-meta")?.textContent,
     ).toContain("WEBP");
@@ -888,6 +924,7 @@ describe("DocumentLightbox", () => {
       />,
     );
 
+    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
     const first = currentItem();
     Object.defineProperty(first, "naturalWidth", {
       configurable: true,
@@ -916,6 +953,8 @@ describe("DocumentLightbox", () => {
       />,
     );
 
+    expect(document.querySelector(".image-lightbox-info")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
     expect(infoOf().querySelector(".image-lightbox-meta")).toBeNull();
 
     // React reuses the <img> node across items, so this is the same element
@@ -950,6 +989,7 @@ describe("DocumentLightbox", () => {
     Object.defineProperty(image, "naturalWidth", { value: 16 });
     Object.defineProperty(image, "naturalHeight", { value: 16 });
     fireEvent.load(image);
+    fireEvent.click(screen.getByRole("button", { name: "图片信息" }));
 
     expect(infoOf().querySelector(".image-lightbox-alt")).toBeNull();
     expect(infoOf().querySelector(".image-lightbox-meta")?.textContent).toBe(

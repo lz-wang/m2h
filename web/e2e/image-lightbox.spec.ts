@@ -385,6 +385,8 @@ test("shows the full alt text and intrinsic metadata in the footer", async ({
 
   await openLightbox(page, 0);
   const info = page.locator(".image-lightbox-info");
+  await expect(info).toHaveCount(0);
+  await page.getByRole("button", { name: "图片信息" }).click();
   await expect(info.locator(".image-lightbox-alt")).toHaveText("第一张图片");
   // The first fixture image is the 1200×600 landscape; the metadata follows
   // the item on every next/previous switch.
@@ -394,6 +396,8 @@ test("shows the full alt text and intrinsic metadata in the footer", async ({
   await expectCenteredInViewport(page);
 
   await page.getByRole("button", { name: "下一项" }).click();
+  await expect(info).toHaveCount(0);
+  await page.getByRole("button", { name: "图片信息" }).click();
   await expect(info.locator(".image-lightbox-alt")).toHaveText("链接图片");
   await expect(info.locator(".image-lightbox-meta")).toHaveText(
     "480 × 1200 · PNG",
@@ -454,6 +458,7 @@ test("wraps a long alt text instead of truncating it", async ({ page }) => {
   }, longAlt);
 
   await openLightbox(page, 0);
+  await page.getByRole("button", { name: "图片信息" }).click();
   const alt = page.locator(".image-lightbox-info .image-lightbox-alt");
   // The full text, verbatim — no ellipsis, no clamping.
   await expect(alt).toHaveText(longAlt);

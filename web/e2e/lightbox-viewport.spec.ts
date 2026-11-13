@@ -33,6 +33,7 @@ for (const visual of cases) {
       });
 
     if (visual.name === "PNG") {
+      await page.getByRole("button", { name: "图片信息" }).click();
       // Long descriptions must not resize the stage or crowd out controls.
       await page.locator(".image-lightbox-alt").evaluate((alt) => {
         alt.textContent = "Long image description ".repeat(400);
@@ -76,5 +77,20 @@ for (const visual of cases) {
       });
     await page.getByRole("button", { name: "关闭视觉内容预览" }).click();
     await expect(page.getByRole("dialog")).toBeHidden();
+  });
+}
+
+for (const width of [320, 390]) {
+  test(`bitmap toolbar fits a ${width}px viewport`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 700 });
+    await page.goto("/doc/image-lightbox.md");
+    const frame = page.locator(".m2h-image-frame").first();
+    await frame.hover();
+    await frame.locator(".m2h-lightbox-trigger").click();
+    const toolbar = page.locator(".image-lightbox-toolbar");
+    const bounds = await toolbar.boundingBox();
+    expect(bounds).not.toBeNull();
+    expect(bounds?.x).toBeGreaterThanOrEqual(0);
+    expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(width);
   });
 }
