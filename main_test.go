@@ -229,9 +229,9 @@ func TestRunCheckJSONDecodesNewRules(t *testing.T) {
 		t.Fatalf("run() exit code = %d, want 1", got)
 	}
 	var report struct {
-		Files    int `json:"files"`
-		Errors   int `json:"errors"`
-		Warnings int `json:"warnings"`
+		Files       int `json:"files"`
+		Errors      int `json:"errors"`
+		Warnings    int `json:"warnings"`
 		Diagnostics []struct {
 			Path     string `json:"path"`
 			Line     int    `json:"line"`

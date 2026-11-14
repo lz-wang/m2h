@@ -185,16 +185,16 @@ type InvisibleCharacter struct {
 // the Markdown contains, never what a rule should conclude — rule ids and
 // severities live in the check package.
 type Inspection struct {
-	Headings             []Heading
-	References           []Reference
-	ReferenceDefinitions []ReferenceDefinition
-	UndefinedReferences  []ReferenceUse
-	UndefinedFootnotes   []FootnoteReference
-	Footnotes            []Footnote
-	CodeFences           []CodeFence
-	TableMismatches      []TableColumnMismatch
-	UnclosedComments     []UnclosedComment
-	ReversedLinks        []ReversedLink
+	Headings               []Heading
+	References             []Reference
+	ReferenceDefinitions   []ReferenceDefinition
+	UndefinedReferences    []ReferenceUse
+	UndefinedFootnotes     []FootnoteReference
+	Footnotes              []Footnote
+	CodeFences             []CodeFence
+	TableMismatches        []TableColumnMismatch
+	UnclosedComments       []UnclosedComment
+	ReversedLinks          []ReversedLink
 	EmptySections          []EmptySection
 	Mojibake               []Mojibake
 	InvisibleCharacters    []InvisibleCharacter
