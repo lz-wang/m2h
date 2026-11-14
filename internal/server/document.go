@@ -98,6 +98,11 @@ type documentHandler struct {
 
 	discover func(context.Context, rootScope) (files.Discovery, error)
 	search   *searchIndex
+
+	// runContext scopes background work that must outlive any single HTTP
+	// request — the search index's refreshes. Nil means context.Background();
+	// routes fills that in before the handler starts serving.
+	runContext context.Context
 }
 
 func newDocumentHandler(workspace workspace, logger io.Writer, ui fs.FS) http.Handler {
@@ -112,12 +117,29 @@ func newDocumentHandlerWithConfig(
 	cdn bool,
 	basePath string,
 ) http.Handler {
+	return newDocumentHandlerWithContext(context.Background(), workspace, logger, ui, buildVersion, cdn, basePath)
+}
+
+// newDocumentHandlerWithContext is the full constructor: runContext is the
+// server's lifecycle context, so the search index can refresh in the
+// background without being cancelled by the HTTP request that triggered the
+// refresh, while still stopping when the server shuts down.
+func newDocumentHandlerWithContext(
+	runContext context.Context,
+	workspace workspace,
+	logger io.Writer,
+	ui fs.FS,
+	buildVersion string,
+	cdn bool,
+	basePath string,
+) http.Handler {
 	handler := &documentHandler{
-		workspace: workspace,
-		ui:        ui,
-		version:   buildVersion,
-		cdn:       cdn,
-		basePath:  basePath,
+		workspace:  workspace,
+		ui:         ui,
+		version:    buildVersion,
+		cdn:        cdn,
+		basePath:   basePath,
+		runContext: runContext,
 	}
 	return handler.routes(logger)
 }
@@ -131,6 +153,9 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 		handler.discover = func(ctx context.Context, scope rootScope) (files.Discovery, error) {
 			return scope.discover(ctx)
 		}
+	}
+	if handler.runContext == nil {
+		handler.runContext = context.Background()
 	}
 	if handler.search == nil {
 		handler.search = newSearchIndex(handler)

@@ -79,8 +79,12 @@ func TestSearchQueryContract(t *testing.T) {
 
 	t.Run("single-rune CJK query is legal", func(t *testing.T) {
 		t.Parallel()
-		writeTestFile(t, filepath.Join(root, "图.md"), "# 图\n\n图库说明")
-		payload := searchResultsFor(t, handler, "%E5%9B%BE")
+		// A private workspace: the search index is eventually consistent, so
+		// a subtest that adds a file after another subtest already built the
+		// shared index would race the TTL.
+		cjkRoot := t.TempDir()
+		writeTestFile(t, filepath.Join(cjkRoot, "图.md"), "# 图\n\n图库说明")
+		payload := searchResultsFor(t, searchHandler(t, cjkRoot, files.DiscoverOptions{Depth: 2}), "%E5%9B%BE")
 		if len(payload.Results) != 1 || payload.Results[0].Path != "图.md" {
 			t.Fatalf("results = %+v, want exactly 图.md", payload.Results)
 		}
@@ -88,9 +92,11 @@ func TestSearchQueryContract(t *testing.T) {
 
 	t.Run("query of exactly 128 runes is legal", func(t *testing.T) {
 		t.Parallel()
-		// A long query still matches: the AND token is one long substring.
-		writeTestFile(t, filepath.Join(root, "long.md"), "prefix "+strings.Repeat("长", 128)+" suffix")
-		payload := searchResultsFor(t, handler, strings.Repeat("%E9%95%BF", 128))
+		// A private workspace for the same reason; the long query still
+		// matches because the AND token is one long substring.
+		longRoot := t.TempDir()
+		writeTestFile(t, filepath.Join(longRoot, "long.md"), "prefix "+strings.Repeat("长", 128)+" suffix")
+		payload := searchResultsFor(t, searchHandler(t, longRoot, files.DiscoverOptions{Depth: 2}), strings.Repeat("%E9%95%BF", 128))
 		if len(payload.Results) != 1 || payload.Results[0].Path != "long.md" {
 			t.Fatalf("results = %+v, want exactly long.md", payload.Results)
 		}
@@ -144,32 +150,44 @@ func TestSearchBasicResponseShape(t *testing.T) {
 	})
 }
 
-// The search walks the disk at request time: edits and deletes made after
-// the server started are visible to the very next query.
+// Search is eventually consistent with the filesystem. The first query
+// builds a fresh index; edits inside the TTL may keep answering from the old
+// snapshot, but a deleted document disappears from the answers immediately
+// (every result is revalidated), and once the TTL lapses a background
+// refresh publishes the new content.
 func TestSearchReflectsFilesystemChanges(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
 	file := filepath.Join(root, "topic.md")
 	writeTestFile(t, file, "# Topic\n\nold-token\n")
-	handler := searchHandler(t, root, files.DiscoverOptions{Depth: 2})
+	handler := &documentHandler{
+		workspace: singleRootWorkspace(rootScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
+		ui:        directoryTestUI(),
+	}
+	routed := handler.routes(nil)
+	clock := newFakeSearchClock()
+	handler.search.clock = clock
 
-	if results := searchResultsFor(t, handler, "old-token"); len(results.Results) != 1 {
+	if results := indexedSearchQuery(t, routed, "old-token"); len(results.Results) != 1 {
 		t.Fatalf("initial results = %+v, want exactly one", results.Results)
 	}
 
-	writeTestFile(t, file, "# Topic\n\nnew-token\n")
-	if results := searchResultsFor(t, handler, "new-token"); len(results.Results) != 1 {
-		t.Fatalf("after edit, results = %+v, want exactly one", results.Results)
+	touchForRefresh(t, file, "# Topic\n\nnew-token\n")
+	// Inside the TTL the old snapshot may keep answering either way — but
+	// whatever it answers, a fresh refresh must flip to the new content.
+	if payload := forceRefresh(t, handler.search, clock, routed, "new-token"); len(payload.Results) != 1 {
+		t.Fatalf("after refresh, new-token results = %+v, want exactly one", payload.Results)
 	}
-	if results := searchResultsFor(t, handler, "old-token"); len(results.Results) != 0 {
-		t.Fatalf("stale token results = %+v, want none", results.Results)
+	if results := indexedSearchQuery(t, routed, "old-token"); len(results.Results) != 0 {
+		t.Fatalf("stale token survived the refresh: %+v", results.Results)
 	}
 
+	// A deleted file never answers again, even from the still-warm snapshot.
 	if err := os.Remove(file); err != nil {
 		t.Fatal(err)
 	}
-	response := performRequest(handler, http.MethodGet, "/api/search?q=new-token")
+	response := performRequest(routed, http.MethodGet, "/api/search?q=new-token")
 	if response.Code != http.StatusOK {
 		t.Fatalf("search after delete status = %d, want 200", response.Code)
 	}

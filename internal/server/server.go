@@ -140,7 +140,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	if err != nil {
 		return err
 	}
-	handler := newDocumentHandlerWithConfig(workspace, logger, options.UI, normalized.Version, normalized.CDN, normalized.BasePath)
+	handler := newDocumentHandlerWithContext(runContext, workspace, logger, options.UI, normalized.Version, normalized.CDN, normalized.BasePath)
 	httpServer := newHTTPServer(handler, runContext, logger)
 	requestedAddress := net.JoinHostPort(normalized.Host, strconv.Itoa(normalized.Port))
 	listener, err := deps.listen("tcp", requestedAddress)
