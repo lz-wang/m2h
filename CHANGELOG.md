@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+## [0.25.2] - 2026-11-15
+
+### 新增
+
+- `m2h check` 新增 4 条默认规则：`document.invalid-utf8`、`document.merge-conflict`、`code-fence.unclosed`、`html.block-blank-after`，可用 `--disable` 单独关闭。
+
+### 变更
+
+- 优化 `m2h check` 源码扫描，代码围栏密集的大文档检查耗时明显下降。
+
+### 修复
+
+- 修复 Frontmatter 无效时，正文代码示例中的 Git 冲突标记被误报为 `document.merge-conflict` 的问题。
+- 修复 `html.block-blank-after` 对同一行文本重复告警、标签错配时仍输出警告的问题。
+
 ## [0.25.1] - 2026-11-13
 
 ### 变更
