@@ -31,5 +31,14 @@ func checkSyntaxRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 			}
 		}
 	}
+	if rules.Enabled(RuleCodeFenceUnclosed) {
+		for _, fence := range inspection.CodeFences {
+			if fence.Closed {
+				continue
+			}
+			diagnostics = append(diagnostics, current.diagnosticForRule(RuleCodeFenceUnclosed,
+				"fenced code block is not closed", fence.Position))
+		}
+	}
 	return diagnostics
 }

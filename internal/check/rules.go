@@ -119,6 +119,12 @@ const (
 	// markers, so the document publishes both sides of an unresolved merge
 	// as if they were content.
 	RuleDocumentMergeConflict = "document.merge-conflict"
+
+	// RuleCodeFenceUnclosed: a fenced code block CommonMark only ended
+	// implicitly — at the end of the file or of its container — because the
+	// explicit closing fence line is missing. The renderer still accepts it;
+	// this is a document-completeness error, not a syntax rejection.
+	RuleCodeFenceUnclosed = "code-fence.unclosed"
 )
 
 // frontMatterDateKeys are the frontmatter fields m2h normalizes into date

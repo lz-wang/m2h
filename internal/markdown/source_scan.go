@@ -256,10 +256,20 @@ type pendingFence struct {
 // raw HTML blocks. Only the position is recovered here — the AST keeps a
 // fence's content but strips the fence lines themselves. The opener lines
 // come back as protected ranges: their info strings are literal text.
+//
+// Closure is decided the same way — by the parser, not by prefix guessing:
+// the closing fence, when present, is exactly the line after the block's
+// last content line (CommonMark puts nothing between content and closer;
+// blank lines are content). That line closed the fence only when the parser
+// handed it to nothing else: a dedented or re-marked line has already left
+// the fence's container and becomes the first line of a new node, so it can
+// no longer close anything.
 func extractFences(document ast.Node, source []byte) ([]CodeFence, []byteRange) {
 	locator := newSourceLocator(source)
 	fences := make([]CodeFence, 0)
 	openers := make([]byteRange, 0)
+	contentStops := make([]int, 0)
+	occupied := make([]int, 0)
 	cursor := 0
 	pending := make([]pendingFence, 0)
 
@@ -277,6 +287,7 @@ func extractFences(document ast.Node, source []byte) ([]CodeFence, []byteRange) 
 			line, column := locator.locate(opener)
 			fences[fence.index].Position = Position{Line: line, Column: column}
 			openers[fence.index] = lineSpan(source, opener)
+			occupied = append(occupied, opener)
 			after = past
 		}
 		pending = pending[:0]
@@ -289,6 +300,7 @@ func extractFences(document ast.Node, source []byte) ([]CodeFence, []byteRange) 
 		if start, ok := nodeOffset(node); ok {
 			// A node with a source position bounds every still-pending fence.
 			resolve(start)
+			occupied = append(occupied, start)
 		}
 		if end, ok := nodeSourceEnd(node); ok && end > cursor {
 			cursor = end
@@ -300,6 +312,11 @@ func extractFences(document ast.Node, source []byte) ([]CodeFence, []byteRange) 
 		index := len(fences)
 		fences = append(fences, CodeFence{Language: string(block.Language(source))})
 		openers = append(openers, byteRange{})
+		contentStop := -1
+		if lines := block.Lines(); lines.Len() > 0 {
+			contentStop = lines.At(lines.Len() - 1).Stop
+		}
+		contentStops = append(contentStops, contentStop)
 		if anchor, hasContent := fenceAnchor(block); anchor >= 0 {
 			var opener int
 			if hasContent {
@@ -313,13 +330,59 @@ func extractFences(document ast.Node, source []byte) ([]CodeFence, []byteRange) 
 			line, column := locator.locate(opener)
 			fences[index].Position = Position{Line: line, Column: column}
 			openers[index] = lineSpan(source, opener)
+			occupied = append(occupied, opener)
 		} else {
 			pending = append(pending, pendingFence{index: index, lower: cursor})
 		}
 		return ast.WalkContinue, nil
 	})
 	resolve(len(source))
+
+	for index := range fences {
+		if openers[index].start == 0 && openers[index].stop == 0 {
+			// An opener the locator could not recover carries no closer
+			// either; leave it unreported rather than guess.
+			continue
+		}
+		opener := openers[index].start
+		candidate := contentStops[index]
+		if candidate < 0 {
+			// A content-less fence: the closer, if any, is the next line.
+			candidate = min(lineStartStop(source, opener)+1, len(source))
+		}
+		fences[index].Closed = fenceCloseValid(source, opener, candidate, occupied)
+	}
 	return fences, openers
+}
+
+// fenceCloseValid reports whether the candidate line — the one right after a
+// fence's last content, or right after its opener when it has none — is that
+// fence's explicit closing line. The line must belong to no other node
+// (offsets records every node start and located fence opener), must open
+// with a run of the opener's own fence character at least as long, and may
+// carry nothing but blanks after the run — the exact shape CommonMark
+// closes fences by.
+func fenceCloseValid(source []byte, opener int, candidate int, offsets []int) bool {
+	if candidate >= len(source) {
+		// No line left: the fence ran to the end of the file.
+		return false
+	}
+	stop := lineStartStop(source, candidate)
+	for _, offset := range offsets {
+		if offset >= candidate && offset < stop {
+			return false
+		}
+	}
+	char, openRun, prefixed := fenceRun(source[opener:lineStartStop(source, opener)])
+	if !prefixed {
+		return false
+	}
+	content := source[candidate:stop][containerPrefixLength(source[candidate:stop]):]
+	run := 0
+	for run < len(content) && content[run] == char {
+		run++
+	}
+	return run >= openRun && util.IsBlank(content[run:])
 }
 
 // fenceAnchor returns a source offset that locates a fence's opener line:
@@ -471,9 +534,14 @@ type sourceScanner struct {
 // CodeFence is one fenced code block the parser accepted. The AST keeps the
 // content lines but strips the fence lines, so only the opener position is
 // recovered from the source. Position is the opening fence line, column 1.
+// Closed reports whether the source carries an explicit closing fence line:
+// CommonMark lets a fence end implicitly at the end of the file or its
+// container, which still parses but usually means the author lost the
+// closer.
 type CodeFence struct {
 	Language string
 	Position Position
+	Closed   bool
 }
 
 // newSourceScanner prepares a scan over source, skipping the protected code,

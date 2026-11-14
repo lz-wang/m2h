@@ -425,7 +425,10 @@ func TestCheckCodeFenceLanguageMissing(t *testing.T) {
 		{
 			name:   "unclosed fence reports at its opener",
 			source: "# Guide\n\n```\necho hi\n",
-			want:   []string{fmt.Sprintf("guide.md:3:1 warning %s", RuleCodeFenceLanguageMissing)},
+			want: []string{
+				fmt.Sprintf("guide.md:3:1 warning %s", RuleCodeFenceLanguageMissing),
+				fmt.Sprintf("guide.md:3:1 error %s", RuleCodeFenceUnclosed),
+			},
 		},
 		{
 			name:   "fence inside a blockquote reports",
@@ -591,6 +594,132 @@ func TestCheckUnicodeRulesOptIn(t *testing.T) {
 	expectDiagnostics(t, "code regions stay silent",
 		"# Guide\n\nUse `CafÃ©` and `​`.\n",
 		enabled, nil)
+}
+
+func TestCheckCodeFenceUnclosed(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{
+			name:   "backtick pair stays closed",
+			source: "# Guide\n\n```go\nfmt.Println(1)\n```\n",
+			want:   nil,
+		},
+		{
+			name:   "tilde pair stays closed",
+			source: "# Guide\n\n~~~python\nx\n~~~\n",
+			want:   nil,
+		},
+		{
+			name:   "shorter closing run is content",
+			source: "# Guide\n\n````js\ninner\n```\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleCodeFenceUnclosed)},
+		},
+		{
+			name:   "longer closing run closes",
+			source: "# Guide\n\n```js\ninner\n````\n",
+			want:   nil,
+		},
+		{
+			name:   "tilde cannot close backticks",
+			source: "# Guide\n\n```js\ninner\n~~~\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleCodeFenceUnclosed)},
+		},
+		{
+			name:   "content after the closing run keeps it open",
+			source: "# Guide\n\n```go\nx\n``` trailing\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleCodeFenceUnclosed)},
+		},
+		{
+			name:   "opener without content reports",
+			source: "# Guide\n\n```go\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleCodeFenceUnclosed)},
+		},
+		{
+			name:   "missing close at end of file reports",
+			source: "# Guide\n\n```go\nx\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleCodeFenceUnclosed)},
+		},
+		{
+			name:   "closed fence inside a list stays silent",
+			source: "# Guide\n\n- ```js\n  code\n  ```\n",
+			want:   nil,
+		},
+		{
+			name:   "closed fence inside a blockquote stays silent",
+			source: "# Guide\n\n> ```text\n> code\n> ```\n",
+			want:   nil,
+		},
+		{
+			name:   "dedented close leaves a list fence open",
+			source: "# Guide\n\n- ```js\n  code\n```\n",
+			// The dedented ``` leaves the list fence open and opens a bare
+			// top-level fence of its own, which reports both its missing
+			// language and its missing closer at 5:1.
+			want: []string{
+				fmt.Sprintf("guide.md:3:1 error %s", RuleCodeFenceUnclosed),
+				fmt.Sprintf("guide.md:5:1 warning %s", RuleCodeFenceLanguageMissing),
+				fmt.Sprintf("guide.md:5:1 error %s", RuleCodeFenceUnclosed),
+			},
+		},
+		{
+			name:   "inner three backticks under a longer outer fence",
+			source: "# Guide\n\n````text\n```\n````\n",
+			want:   nil,
+		},
+		{
+			name:   "fence-looking lines inside an html block stay silent",
+			source: "# Guide\n\n<div>\n```\nnot fence\n```\n</div>\n",
+			want:   nil,
+		},
+		{
+			name:   "backticks in frontmatter values stay silent",
+			source: "---\ndescription: use ``` to fence\n---\n\n# Guide\n",
+			want:   nil,
+		},
+		{
+			name:   "frontmatter shifts the fence",
+			source: "---\ntitle: Guide\n---\n\n```go\nx\n",
+			want:   []string{fmt.Sprintf("guide.md:5:1 error %s", RuleCodeFenceUnclosed)},
+		},
+		{
+			name:   "empty fence pair counts as closed",
+			source: "# Guide\n\n```text\n```\n",
+			want:   nil,
+		},
+		{
+			name:   "blank line before the close still closes",
+			source: "# Guide\n\n```go\nx\n\n```\n",
+			want:   nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			expectDiagnostics(t, test.name, test.source, Options{}, test.want)
+		})
+	}
+}
+
+// TestCheckCodeFenceUnclosedAlongsideLanguageMissing pins that a fence
+// missing both its language and its closer reports both findings — the two
+// problems are independent, and fixing one must not hide the other.
+func TestCheckCodeFenceUnclosedAlongsideLanguageMissing(t *testing.T) {
+	t.Parallel()
+
+	expectDiagnostics(t, "language and closer both missing", "# Guide\n\n```\necho hi\n", Options{}, []string{
+		fmt.Sprintf("guide.md:3:1 warning %s", RuleCodeFenceLanguageMissing),
+		fmt.Sprintf("guide.md:3:1 error %s", RuleCodeFenceUnclosed),
+	})
+
+	expectDiagnostics(t, "disable silences the closer rule", "# Guide\n\n```\necho hi\n",
+		Options{DisableRules: []string{RuleCodeFenceUnclosed}},
+		[]string{fmt.Sprintf("guide.md:3:1 warning %s", RuleCodeFenceLanguageMissing)})
 }
 
 func TestCheckMergeConflict(t *testing.T) {

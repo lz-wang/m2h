@@ -398,27 +398,27 @@ func TestInspectCollectsCodeFences(t *testing.T) {
 		{
 			name:   "language and position",
 			source: "Text.\n\n```go\nfmt.Println(1)\n```\n",
-			want:   []CodeFence{{Language: "go", Position: Position{Line: 3, Column: 1}}},
+			want:   []CodeFence{{Language: "go", Position: Position{Line: 3, Column: 1}, Closed: true}},
 		},
 		{
 			name:   "info string keeps only the language",
 			source: "```go title=main.go\nx\n```\n",
-			want:   []CodeFence{{Language: "go", Position: Position{Line: 1, Column: 1}}},
+			want:   []CodeFence{{Language: "go", Position: Position{Line: 1, Column: 1}, Closed: true}},
 		},
 		{
 			name:   "tilde fences with language",
 			source: "~~~python\nx\n~~~\n",
-			want:   []CodeFence{{Language: "python", Position: Position{Line: 1, Column: 1}}},
+			want:   []CodeFence{{Language: "python", Position: Position{Line: 1, Column: 1}, Closed: true}},
 		},
 		{
 			name:   "no language",
 			source: "```\nx\n```\n",
-			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
+			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}, Closed: true}},
 		},
 		{
 			name:   "indented fence with language",
 			source: "  ```js\nx\n  ```\n",
-			want:   []CodeFence{{Language: "js", Position: Position{Line: 1, Column: 1}}},
+			want:   []CodeFence{{Language: "js", Position: Position{Line: 1, Column: 1}, Closed: true}},
 		},
 		{
 			name:   "unclosed fence runs to the end",
@@ -438,39 +438,39 @@ func TestInspectCollectsCodeFences(t *testing.T) {
 		{
 			name:   "empty fence without language",
 			source: "```\n```\n",
-			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
+			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}, Closed: true}},
 		},
 		{
 			name:   "fence inside a blockquote",
 			source: "> ```\n> code\n> ```\n",
-			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
+			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}, Closed: true}},
 		},
 		{
 			name:   "named fence inside a list item",
 			source: "- ```js\n  code\n  ```\n",
-			want:   []CodeFence{{Language: "js", Position: Position{Line: 1, Column: 1}}},
+			want:   []CodeFence{{Language: "js", Position: Position{Line: 1, Column: 1}, Closed: true}},
 		},
 		{
 			name:   "empty fence inside a blockquote",
 			source: "> ```\n> ```\n",
-			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
+			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}, Closed: true}},
 		},
 		{
 			name:   "empty fence inside an asterisk list item",
 			source: "* ```\n  ```\n",
-			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
+			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}, Closed: true}},
 		},
 		{
 			name:   "empty fence inside a plus list item",
 			source: "+ ```\n  ```\n",
-			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}}},
+			want:   []CodeFence{{Language: "", Position: Position{Line: 1, Column: 1}, Closed: true}},
 		},
 		{
 			name:   "two consecutive empty fences",
 			source: "```\n```\n\n```\n```\n",
 			want: []CodeFence{
-				{Language: "", Position: Position{Line: 1, Column: 1}},
-				{Language: "", Position: Position{Line: 4, Column: 1}},
+				{Language: "", Position: Position{Line: 1, Column: 1}, Closed: true},
+				{Language: "", Position: Position{Line: 4, Column: 1}, Closed: true},
 			},
 		},
 		{
