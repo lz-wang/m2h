@@ -20,7 +20,7 @@
 - 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
 - 输入 root 即发布边界：目录默认隐藏点开头路径（`--hidden` 可包含），附件路由拒绝 HTML/JS/CSS 等主动 Web 内容，响应携带统一浏览器安全头
 - 可将单个 Markdown 文件导出为 HTML
-- 可检查 Markdown 文档的 Frontmatter、本地引用、锚点与结构问题（[28 条规则与演示](docs/demos/checkers/00-index.md)）
+- 可检查 Markdown 文档的 Frontmatter、本地引用、锚点与结构问题（[32 条规则与演示](docs/demos/checkers/00-index.md)）
 
 ## 安装
 
@@ -203,7 +203,7 @@ m2h check docs --strict
 m2h check docs --enable all --disable image.alt-empty
 ```
 
-完整的 28 条规则、默认开关、触发样例、行为边界与逐字输出见
+完整的 32 条规则、默认开关、触发样例、行为边界与逐字输出见
 [检查规则演示索引](docs/demos/checkers/00-index.md)；全部命令选项见
 `m2h check --help`。末尾检查要求恰好一个结束换行（`正文\n`，兼容 CRLF），
 编辑器显示最后一行为空即可，无需再添加空白行。

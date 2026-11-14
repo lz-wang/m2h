@@ -1,20 +1,20 @@
 ---
 title: 检查规则演示索引
-description: m2h check 的 28 条检查规则、触发示例与预期诊断。
+description: m2h check 的 32 条检查规则、触发示例与预期诊断。
 tags:
   - 文档检查
   - 演示索引
 create_date: 2026-08-30
-update_date: 2026-10-28
+update_date: 2026-11-14
 ---
 
 # 检查规则演示索引
 
-本目录为 `m2h check` 的全部 28 条检查规则各提供一个最小触发示例。每个演示
+本目录为 `m2h check` 的全部 32 条检查规则各提供一个最小触发示例。每个演示
 文件只触发自己的规则（个别文件会顺带演示规则间的独立性），文件内的
 "预期表现"一节写明命令与逐字输出。
 
-一次性看全部默认开启的规则（12 error + 12 warning）：
+一次性看全部默认开启的规则（15 error + 13 warning）：
 
 ```bash
 m2h check docs/demos/checkers
@@ -114,6 +114,18 @@ m2h check docs --enable all --disable image.alt-empty
 | [23-link-text-nondescriptive](23-link-text-nondescriptive.md) | `link.text-nondescriptive` | 链接文本为 `click here` / `点击这里` 等无信息短语 |
 | [24-unicode-mojibake](24-unicode-mojibake.md) | `unicode.mojibake` | `CafÃ©`、`Itâ€™s` 等多字符错误编码签名 |
 | [25-unicode-invisible-character](25-unicode-invisible-character.md) | `unicode.invisible-character` | 行首零宽空格（U+200B）等可疑不可见字符 |
+
+## 文档完整性规则（默认开启）
+
+四条源码级规则在解析文档之前或之外检查文件本身的完整性：字节编码、
+合并残留、围栏闭合与 HTML 块排版边界。
+
+| 演示 | 规则 | 级别 | 触发场景 |
+| --- | --- | --- | --- |
+| [29-html-block-blank-after](29-html-block-blank-after.md) | `html.block-blank-after` | warning | Type 6/7 HTML 块的顶层元素闭合后，非空正文未用空行分隔，仍留在原始 HTML 块内 |
+| [30-code-fence-unclosed](30-code-fence-unclosed.md) | `code-fence.unclosed` | error | 代码围栏缺少显式关闭行，被解析器隐式终止到文档末尾或容器边界 |
+| [31-document-merge-conflict](31-document-merge-conflict.md) | `document.merge-conflict` | error | 文件残留未解决的 Git 冲突标记（`<<<<<<<` … `>>>>>>>`） |
+| [32-document-invalid-utf8](32-document-invalid-utf8.md) | `document.invalid-utf8` | error | 文件包含非法 UTF-8 字节序列（演示文件仅说明规则与复现步骤） |
 
 ## 与规则清单的对应
 
