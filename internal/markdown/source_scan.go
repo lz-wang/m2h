@@ -1011,13 +1011,24 @@ const (
 	conflictTheirs
 )
 
-// ScanMergeConflicts reports unresolved Git merge-conflict markers in raw
-// source bytes with no Markdown context. It exists for documents whose
-// frontmatter failed to parse — no AST can be built there, so code examples
-// cannot be excluded — and reuses the exact detector the AST-based scan
-// runs. The verdict never depends on Git state or external commands.
-func ScanMergeConflicts(source []byte) []MergeConflict {
-	return scanMergeConflicts(source, nil)
+// ScanFrontMatterMergeConflicts reports unresolved Git merge-conflict
+// markers inside a document's leading frontmatter block only. It exists for
+// the frontmatter-parse-failure path: no AST can be built for such a
+// document, so a full-source scan would misread conflict examples in the
+// body — fenced or not — as real conflicts, while a genuine conflict inside
+// the frontmatter is often what broke the YAML. The scan therefore covers
+// the frontmatter's own bytes, delimiters included, and nothing after them;
+// it reuses the exact detector the AST-based scan runs, and the verdict
+// never depends on Git state or external commands. Positions are file-level:
+// the frontmatter is a prefix of the source.
+func ScanFrontMatterMergeConflicts(source []byte) []MergeConflict {
+	_, body, ok := splitFrontMatter(source)
+	if !ok {
+		// ParseFrontMatter only fails once a closing delimiter confirmed the
+		// block, so this is defensive: without a block there is nothing to scan.
+		return nil
+	}
+	return scanMergeConflicts(source[:len(source)-len(body)], nil)
 }
 
 // mergeConflicts finds unresolved Git merge-conflict markers in unprotected

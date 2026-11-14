@@ -880,16 +880,45 @@ func TestCheckMergeConflict(t *testing.T) {
 }
 
 // TestCheckMergeConflictInBrokenFrontmatter pins the frontmatter-failure
-// path: a real conflict inside the frontmatter breaks YAML first, and the
-// restricted raw scan still names the conflict alongside frontmatter.invalid.
+// path: the raw scan is restricted to the frontmatter block itself. A real
+// conflict inside the frontmatter breaks YAML first and is still named
+// alongside frontmatter.invalid, while conflict markers in the body — fenced
+// examples or a bare conflict — stay unreported: no AST can be built to
+// vouch for them, and the broken frontmatter already fails the document.
 func TestCheckMergeConflictInBrokenFrontmatter(t *testing.T) {
 	t.Parallel()
 
-	source := "---\n<<<<<<< HEAD\ntitle: a\n=======\ntitle: b\n>>>>>>> other\n---\n\n# Guide\n"
-	expectDiagnostics(t, "conflict breaks frontmatter", source, Options{}, []string{
-		fmt.Sprintf("guide.md:1:1 error %s", RuleFrontMatterInvalid),
-		fmt.Sprintf("guide.md:2:1 error %s", RuleDocumentMergeConflict),
-	})
+	tests := []struct {
+		name   string
+		source string
+		want   []string
+	}{
+		{
+			name:   "conflict inside the frontmatter reports both",
+			source: "---\n<<<<<<< HEAD\ntitle: a\n=======\ntitle: b\n>>>>>>> other\n---\n\n# Guide\n",
+			want: []string{
+				fmt.Sprintf("guide.md:1:1 error %s", RuleFrontMatterInvalid),
+				fmt.Sprintf("guide.md:2:1 error %s", RuleDocumentMergeConflict),
+			},
+		},
+		{
+			name:   "conflict example in a body fence stays silent",
+			source: "---\ntitle: [broken\n---\n\n# Git 冲突处理示例\n\n```text\n<<<<<<< HEAD\nold\n=======\nnew\n>>>>>>> branch\n```\n",
+			want:   []string{fmt.Sprintf("guide.md:1:1 error %s", RuleFrontMatterInvalid)},
+		},
+		{
+			name:   "bare body conflict stays silent while frontmatter is broken",
+			source: "---\ntitle: [broken\n---\n\n<<<<<<< HEAD\nA\n=======\nB\n>>>>>>> feature\n",
+			want:   []string{fmt.Sprintf("guide.md:1:1 error %s", RuleFrontMatterInvalid)},
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			expectDiagnostics(t, test.name, test.source, Options{}, test.want)
+		})
+	}
 }
 
 func TestCheckReferenceRulesWorkAlongsideFilesystemChecks(t *testing.T) {
