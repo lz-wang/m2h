@@ -29,7 +29,10 @@ func benchmarkDocument(index int) string {
 // benchmarkWorkspace writes count synthetic documents under per-group
 // directories (group-NNN/doc-NNNN.md, 25 documents per group) so the layout
 // mirrors a real library with directories instead of one flat directory.
-func benchmarkWorkspace(b *testing.B, count int) (http.Handler, string) {
+// Besides the ready-made handler it returns the canonical root, so other
+// benchmarks can mount fresh handlers over the same files (a cold-start
+// measurement must not pay for file creation inside its loop).
+func benchmarkWorkspace(b *testing.B, count int) (http.Handler, string, string) {
 	b.Helper()
 	root := b.TempDir()
 	const perGroup = 25
@@ -54,12 +57,12 @@ func benchmarkWorkspace(b *testing.B, count int) (http.Handler, string) {
 		nil,
 		directoryTestUI(),
 	)
-	return handler, fmt.Sprintf("group-%03d/doc-%04d.md", 0, 0)
+	return handler, canonical.Path, fmt.Sprintf("group-%03d/doc-%04d.md", 0, 0)
 }
 
 func benchmarkServeFiles(b *testing.B, count int) {
 	b.Helper()
-	handler, _ := benchmarkWorkspace(b, count)
+	handler, _, _ := benchmarkWorkspace(b, count)
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -80,7 +83,7 @@ func BenchmarkServeFiles10K(b *testing.B) {
 
 func benchmarkServePath(b *testing.B, target string) {
 	b.Helper()
-	handler, documentPath := benchmarkWorkspace(b, 2000)
+	handler, _, documentPath := benchmarkWorkspace(b, 2000)
 	request := strings.ReplaceAll(target, "{path}", documentPath)
 	b.ReportAllocs()
 	b.ResetTimer()
