@@ -42,18 +42,19 @@ type systemClock struct{}
 func (systemClock) Now() time.Time { return time.Now() }
 
 // indexedDocument is one published document's cache entry: the canonical file
-// identity its projection was built from, plus the projection itself. Target,
-// Size and ModTime together decide whether a later refresh can reuse the
-// projection or must re-read and re-parse the file. An entry whose file was
-// swapped underneath it (same target path, different size or mtime) is simply
-// replaced; content equality is never hashed, so an equal-length overwrite
-// that preserves mtime stays undetected until the next metadata change — the
-// documented weak-consistency trade for not re-reading every file.
+// identity its projection was built from, plus the projection in its
+// precompiled search form. Target, Size and ModTime together decide whether
+// a later refresh can reuse the projection or must re-read and re-parse the
+// file. An entry whose file was swapped underneath it (same target path,
+// different size or mtime) is simply replaced; content equality is never
+// hashed, so an equal-length overwrite that preserves mtime stays undetected
+// until the next metadata change — the documented weak-consistency trade for
+// not re-reading every file.
 type indexedDocument struct {
 	Target   string
 	Size     int64
 	ModTime  time.Time
-	Document search.Document
+	Prepared search.PreparedDocument
 }
 
 // searchSnapshot is the immutable result of one successful refresh. Files is
@@ -285,7 +286,7 @@ func (index *searchIndex) refresh(ctx context.Context, previous *searchSnapshot)
 				Target:   target,
 				Size:     info.Size(),
 				ModTime:  info.ModTime(),
-				Document: document,
+				Prepared: search.PrepareDocument(document),
 			}
 		}
 	}

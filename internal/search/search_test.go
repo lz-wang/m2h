@@ -427,6 +427,46 @@ func TestMatchSingleResultPerDocument(t *testing.T) {
 	}
 }
 
+// The prepared path and the compatibility entry must stay byte-identical
+// in every result field; this pins the contract while the index uses only
+// the prepared form.
+func TestPreparedPathMatchesCompatibilityEntry(t *testing.T) {
+	t.Parallel()
+
+	documents := []Document{
+		{Path: "docs/guide.md", Title: "Guide", Description: "a summary", Tags: []string{"alpha"}},
+		{Path: "图.md", Title: "图库", Chunks: []markdown.SearchChunk{
+			headingChunk("图", "图库"),
+			textChunk("中英文混合文本 with Mixed CASE and 长长长"+strings.Repeat("正文", 200), "图", "图库"),
+			codeChunk("fmt.Println(42)", "图", "图库"),
+		}},
+		{Path: "tabs.md", Title: "Tabs Guide", Chunks: []markdown.SearchChunk{
+			{Text: "panel text token", HeadingID: "install", HeadingText: "Install", TabID: "m2h-tab-1-2", Kind: markdown.SearchChunkText},
+		}},
+		{Path: "long.md", Title: "长文档", Description: strings.Repeat("描述", 300), Chunks: []markdown.SearchChunk{
+			textChunk(strings.Repeat("正文段落", 300)+" needle "+strings.Repeat("尾部", 100), "章节", "章节"),
+		}},
+	}
+	queries := []string{
+		"guide", "图", "token", "install", "needle", "描述", "mixed case",
+		"no-such-token", "guide token", "42", "长文档",
+	}
+
+	for _, document := range documents {
+		prepared := PrepareDocument(document)
+		for _, query := range queries {
+			compatResult, compatMatched := Match(document, query)
+			preparedResult, preparedMatched := PrepareQuery(query).Match(&prepared)
+			if compatMatched != preparedMatched {
+				t.Fatalf("%s / %q: matched %t vs %t", document.Path, query, compatMatched, preparedMatched)
+			}
+			if compatResult != preparedResult {
+				t.Fatalf("%s / %q: results diverged\ncompat:   %+v\nprepared: %+v", document.Path, query, compatResult, preparedResult)
+			}
+		}
+	}
+}
+
 func TestTabbedBestMatchIsolatesPanels(t *testing.T) {
 	projection, err := markdown.ProjectForSearch([]byte("## Install\n\n=== \"Linux\"\n\n    common weak\n\n=== \"macOS\"\n\n    common brew unique\n"), "tabs.md")
 	if err != nil {
@@ -448,7 +488,8 @@ func TestTabbedBestMatchIsolatesPanels(t *testing.T) {
 		{Text: "common", HeadingID: "outer", TabID: "a", Kind: markdown.SearchChunkText},
 		{Text: "common", HeadingID: "outer", TabID: "b", Kind: markdown.SearchChunkHeading},
 	}
-	section, _, _ := bestSection(chunks, []bool{true, true, true}, []string{"common"})
+	prepared := PrepareDocument(Document{Path: "tabs.md", Chunks: chunks})
+	section, _, _, _ := bestSection(&prepared, []bool{true, true, true}, []string{"common"})
 	if section.TabID != "a" {
 		t.Fatalf("panels were merged: %+v", section)
 	}

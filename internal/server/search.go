@@ -73,6 +73,10 @@ func (handler *documentHandler) serveSearch(response http.ResponseWriter, reques
 		return
 	}
 
+	// One query, prepared once: tokenization and normalization never belong
+	// inside the per-document loop.
+	preparedQuery := search.PrepareQuery(query)
+
 	// The client aborts superseded queries; matching the rest of the cached
 	// library to build a response nobody reads is wasted work.
 	matches := make([]search.Result, 0)
@@ -80,7 +84,7 @@ func (handler *documentHandler) serveSearch(response http.ResponseWriter, reques
 		if request.Context().Err() != nil {
 			return
 		}
-		if result, matched := search.Match(indexed.Document, query); matched {
+		if result, matched := preparedQuery.Match(&indexed.Prepared); matched {
 			result.Path = publicPath
 			matches = append(matches, result)
 		}
