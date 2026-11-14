@@ -22,6 +22,24 @@ func checkDocumentRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 	diagnostics = append(diagnostics, checkTableRules(current, rules)...)
 	diagnostics = append(diagnostics, checkSyntaxRules(current, rules)...)
 	diagnostics = append(diagnostics, checkUnicodeRules(current, rules)...)
+	diagnostics = append(diagnostics, checkMergeConflictRules(current, rules)...)
+	return diagnostics
+}
+
+// checkMergeConflictRules reports unresolved Git merge-conflict markers the
+// source scan found outside code, math and raw HTML. The facts come from the
+// shared inspection; documents whose frontmatter failed to parse get the
+// restricted raw scan in indexDocument instead, since no AST exists there.
+func checkMergeConflictRules(current *indexedDocument, rules RuleSet) []Diagnostic {
+	if !rules.Enabled(RuleDocumentMergeConflict) {
+		return nil
+	}
+	inspection := &current.inspection
+	diagnostics := make([]Diagnostic, 0)
+	for _, conflict := range inspection.MergeConflicts {
+		diagnostics = append(diagnostics, current.diagnosticForRule(RuleDocumentMergeConflict,
+			"unresolved Git merge conflict marker", conflict.Position))
+	}
 	return diagnostics
 }
 

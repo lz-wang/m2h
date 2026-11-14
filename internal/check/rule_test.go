@@ -593,6 +593,135 @@ func TestCheckUnicodeRulesOptIn(t *testing.T) {
 		enabled, nil)
 }
 
+func TestCheckMergeConflict(t *testing.T) {
+	t.Parallel()
+
+	// A real conflict block's ours-side text directly precedes its `=======`
+	// separator, which Markdown reads as a Setext underline — a legitimate
+	// second H1 the multiple-h1 rule reports. That finding is real but not
+	// this rule's subject, so the family isolates the conflict rule.
+	isolated := Options{DisableRules: []string{RuleDocumentMultipleH1}}
+
+	tests := []struct {
+		name    string
+		source  string
+		options Options
+		want    []string
+	}{
+		{
+			name:    "standard head conflict block",
+			source:  "# Guide\n\n<<<<<<< HEAD\noriginal\n=======\nmerged\n>>>>>>> feature\n",
+			options: isolated,
+			want:    []string{fmt.Sprintf("guide.md:3:1 error %s", RuleDocumentMergeConflict)},
+		},
+		{
+			name:    "diff3 conflict block",
+			source:  "# Guide\n\n<<<<<<< HEAD\nours\n||||||| base\noriginal\n=======\ntheirs\n>>>>>>> feature\n",
+			options: isolated,
+			want:    []string{fmt.Sprintf("guide.md:3:1 error %s", RuleDocumentMergeConflict)},
+		},
+		{
+			name:    "two conflict blocks report twice",
+			source:  "# Guide\n\n<<<<<<< HEAD\nA\n=======\nB\n>>>>>>> one\n\n<<<<<<< HEAD\nC\n=======\nD\n>>>>>>> two\n",
+			options: isolated,
+			want: []string{
+				fmt.Sprintf("guide.md:3:1 error %s", RuleDocumentMergeConflict),
+				fmt.Sprintf("guide.md:9:1 error %s", RuleDocumentMergeConflict),
+			},
+		},
+		{
+			name:    "unclosed opener reports",
+			source:  "# Guide\n\n<<<<<<< HEAD\nstaged text\n",
+			options: isolated,
+			want:    []string{fmt.Sprintf("guide.md:3:1 error %s", RuleDocumentMergeConflict)},
+		},
+		{
+			name:    "standalone separator stays prose",
+			source:  "# Guide\n\n=======\n",
+			options: isolated,
+			want:    nil,
+		},
+		{
+			name:    "plain closer stays prose",
+			source:  "# Guide\n\n>>>>>>> feature\n",
+			options: isolated,
+			want:    nil,
+		},
+		{
+			name:    "setext underline is not a conflict",
+			source:  "# Guide\n\nTitle\n=======\n",
+			options: isolated,
+			want:    nil,
+		},
+		{
+			name:    "conflict example inside fenced code stays silent",
+			source:  "# Guide\n\n```text\n<<<<<<< HEAD\nA\n=======\nB\n>>>>>>> branch\n```\n",
+			options: isolated,
+			want:    nil,
+		},
+		{
+			name:    "conflict example inside indented code stays silent",
+			source:  "# Guide\n\n    <<<<<<< HEAD\n    A\n    =======\n    B\n    >>>>>>> branch\n",
+			options: isolated,
+			want:    nil,
+		},
+		{
+			name:    "conflict example inside html comment stays silent",
+			source:  "# Guide\n\n<!--\n<<<<<<< HEAD\nA\n=======\nB\n>>>>>>> branch\n-->\n",
+			options: isolated,
+			want:    nil,
+		},
+		{
+			name:    "inline code marker stays silent",
+			source:  "# Guide\n\nUse `<<<<<<< HEAD` in prose.\n",
+			options: isolated,
+			want:    nil,
+		},
+		{
+			name:    "longer custom markers still match",
+			source:  "# Guide\n\n<<<<<<<<<< ours\nA\n==========\nB\n>>>>>>>>>> theirs\n",
+			options: isolated,
+			want:    []string{fmt.Sprintf("guide.md:3:1 error %s", RuleDocumentMergeConflict)},
+		},
+		{
+			name:   "frontmatter shifts the conflict",
+			source: "---\ntitle: Guide\n---\n\n<<<<<<< HEAD\nA\n=======\nB\n>>>>>>> feature\n",
+			options: Options{DisableRules: []string{
+				RuleDocumentMultipleH1, RuleFrontMatterTitleMismatch,
+			}},
+			want: []string{fmt.Sprintf("guide.md:5:1 error %s", RuleDocumentMergeConflict)},
+		},
+		{
+			name:   "disable silences the rule",
+			source: "# Guide\n\n<<<<<<< HEAD\nA\n=======\nB\n>>>>>>> feature\n",
+			options: Options{DisableRules: []string{
+				RuleDocumentMergeConflict, RuleDocumentMultipleH1,
+			}},
+			want: nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			expectDiagnostics(t, test.name, test.source, test.options, test.want)
+		})
+	}
+}
+
+// TestCheckMergeConflictInBrokenFrontmatter pins the frontmatter-failure
+// path: a real conflict inside the frontmatter breaks YAML first, and the
+// restricted raw scan still names the conflict alongside frontmatter.invalid.
+func TestCheckMergeConflictInBrokenFrontmatter(t *testing.T) {
+	t.Parallel()
+
+	source := "---\n<<<<<<< HEAD\ntitle: a\n=======\ntitle: b\n>>>>>>> other\n---\n\n# Guide\n"
+	expectDiagnostics(t, "conflict breaks frontmatter", source, Options{}, []string{
+		fmt.Sprintf("guide.md:1:1 error %s", RuleFrontMatterInvalid),
+		fmt.Sprintf("guide.md:2:1 error %s", RuleDocumentMergeConflict),
+	})
+}
+
 func TestCheckReferenceRulesWorkAlongsideFilesystemChecks(t *testing.T) {
 	t.Parallel()
 

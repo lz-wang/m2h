@@ -114,6 +114,11 @@ const (
 	// not valid UTF-8, so every later stage — frontmatter, Markdown, the
 	// WebUI — decodes replacement characters instead of the author's text.
 	RuleDocumentInvalidUTF8 = "document.invalid-utf8"
+
+	// RuleDocumentMergeConflict: the source still carries Git conflict
+	// markers, so the document publishes both sides of an unresolved merge
+	// as if they were content.
+	RuleDocumentMergeConflict = "document.merge-conflict"
 )
 
 // frontMatterDateKeys are the frontmatter fields m2h normalizes into date

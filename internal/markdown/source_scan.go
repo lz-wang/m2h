@@ -933,6 +933,119 @@ func matchBracket(source []byte, open int, nesting bool) (int, bool) {
 	return 0, false
 }
 
+// conflictState tracks how much of a conflict block the scanner has seen.
+type conflictState uint8
+
+const (
+	conflictNone conflictState = iota
+	conflictOurs
+	conflictBase
+	conflictTheirs
+)
+
+// ScanMergeConflicts reports unresolved Git merge-conflict markers in raw
+// source bytes with no Markdown context. It exists for documents whose
+// frontmatter failed to parse — no AST can be built there, so code examples
+// cannot be excluded — and reuses the exact detector the AST-based scan
+// runs. The verdict never depends on Git state or external commands.
+func ScanMergeConflicts(source []byte) []MergeConflict {
+	return scanMergeConflicts(source, nil)
+}
+
+// mergeConflicts finds unresolved Git merge-conflict markers in unprotected
+// source. Markers inside code, math, fence lines or raw HTML are examples,
+// not conflicts, and a skipped marker never arms or closes the machine.
+func (scanner *sourceScanner) mergeConflicts() []MergeConflict {
+	return scanMergeConflicts(scanner.source, scanner.protected)
+}
+
+// scanMergeConflicts walks the source line by line through a small state
+// machine: `<<<<<<<` arms a candidate, `|||||||` optionally enters the diff3
+// base section, `=======` separates the two sides and `>>>>>>>` closes and
+// reports the block once, at its opener. A lone `=======` is also a Setext
+// underline and a lone `>>>>>>>` ordinary prose, so neither reports outside
+// an armed block; an opener still armed at end of file is residue and
+// reports. A second opener while a block is open keeps the first position —
+// Git never nests conflict markers.
+func scanMergeConflicts(source []byte, skip func(int) bool) []MergeConflict {
+	conflicts := make([]MergeConflict, 0)
+	locator := newSourceLocator(source)
+	state := conflictNone
+	opener := 0
+	report := func(offset int) {
+		line, column := locator.locate(offset)
+		conflicts = append(conflicts, MergeConflict{Position: Position{Line: line, Column: column}})
+	}
+	for index := 0; index < len(locator.lineStarts); index++ {
+		offset := locator.lineStarts[index]
+		if skip != nil && skip(offset) {
+			continue
+		}
+		char := conflictMarker(source[offset:lineStartStop(source, offset)])
+		switch char {
+		case '<':
+			if state == conflictNone {
+				state = conflictOurs
+				opener = offset
+			}
+		case '|':
+			if state == conflictOurs {
+				state = conflictBase
+			}
+		case '=':
+			if state == conflictOurs || state == conflictBase {
+				state = conflictTheirs
+			}
+		case '>':
+			if state != conflictNone {
+				report(opener)
+				state = conflictNone
+			}
+		}
+	}
+	if state != conflictNone {
+		report(opener)
+	}
+	return conflicts
+}
+
+// conflictMarker classifies one line as a Git conflict marker and returns
+// its character, or 0 for any other line. A marker is a run of at least 7
+// identical `<`, `|`, `=` or `>` characters at the very start of the line;
+// the opener, diff3 base and closer may carry a branch label after a single
+// separator space (`<<<<<<< HEAD`), while the `=======` separator is bare —
+// a labeled equals run is ordinary text, and so is a run butted against its
+// label (`<<<<<<<HEAD`).
+func conflictMarker(line []byte) byte {
+	if len(line) == 0 {
+		return 0
+	}
+	char := line[0]
+	switch char {
+	case '<', '|', '=', '>':
+	default:
+		return 0
+	}
+	run := 0
+	for run < len(line) && line[run] == char {
+		run++
+	}
+	if run < 7 {
+		return 0
+	}
+	rest := bytes.TrimSuffix(line[run:], []byte{'\r'})
+	if char == '=' {
+		if len(bytes.TrimSpace(rest)) == 0 {
+			return char
+		}
+		return 0
+	}
+	if len(rest) == 0 || rest[0] == ' ' || rest[0] == '\t' {
+		return char
+	}
+	return 0
+}
+
 // lineStart returns the offset where the line containing offset begins.
 func (locator sourceLocator) lineStart(offset int) int {
 	line, _ := locator.locate(offset)

@@ -229,6 +229,17 @@ func indexDocument(current document, rules RuleSet) (*indexedDocument, error) {
 	if err != nil {
 		indexed := &indexedDocument{document: current, inspectable: false}
 		indexed.diagnostics = append(indexed.diagnostics, checkTrailingBlankLines(indexed, source, rules)...)
+		// A conflict inside the frontmatter is often what broke the YAML, so
+		// the same detector runs once over the raw bytes here — no AST can
+		// be built for a document whose frontmatter failed, so code examples
+		// cannot be excluded, but both findings stand side by side.
+		if rules.Enabled(RuleDocumentMergeConflict) {
+			for _, conflict := range markdown.ScanMergeConflicts(source) {
+				indexed.diagnostics = append(indexed.diagnostics,
+					indexed.diagnosticForRule(RuleDocumentMergeConflict,
+						"unresolved Git merge conflict marker", conflict.Position))
+			}
+		}
 		if rules.Enabled(RuleFrontMatterInvalid) {
 			indexed.diagnostics = append(indexed.diagnostics,
 				indexed.diagnosticForRule(RuleFrontMatterInvalid, err.Error(), markdown.Position{Line: 1, Column: 1}))

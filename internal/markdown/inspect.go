@@ -163,6 +163,13 @@ type Mojibake struct {
 	Position Position
 }
 
+// MergeConflict is one unresolved Git merge-conflict marker block in
+// unprotected source; markers inside code, math or raw HTML are examples a
+// document legitimately shows, never conflicts.
+type MergeConflict struct {
+	Position Position
+}
+
 // InvisibleCharacter is one suspicious invisible Unicode character with its
 // code point name for the diagnostic message.
 type InvisibleCharacter struct {
@@ -191,6 +198,7 @@ type Inspection struct {
 	EmptySections        []EmptySection
 	Mojibake             []Mojibake
 	InvisibleCharacters  []InvisibleCharacter
+	MergeConflicts       []MergeConflict
 	H1Count              int
 }
 
@@ -238,6 +246,9 @@ func (inspection *Inspection) ShiftLines(delta int) {
 	}
 	for index := range inspection.InvisibleCharacters {
 		inspection.InvisibleCharacters[index].Position.Line += delta
+	}
+	for index := range inspection.MergeConflicts {
+		inspection.MergeConflicts[index].Position.Line += delta
 	}
 }
 
@@ -313,6 +324,7 @@ func Inspect(source []byte) Inspection {
 	inspection.ReversedLinks = scanner.reversedLinks()
 	inspection.EmptySections = extractEmptySections(document, source)
 	inspection.Mojibake, inspection.InvisibleCharacters = scanner.unicodeFindings()
+	inspection.MergeConflicts = scanner.mergeConflicts()
 	return inspection
 }
 
