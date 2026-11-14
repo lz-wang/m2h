@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
@@ -210,6 +211,18 @@ func indexDocument(current document, rules RuleSet) (*indexedDocument, error) {
 			return nil, nil
 		}
 		return nil, fmt.Errorf("read Markdown %q: %w", current.absolute, err)
+	}
+
+	// Invalid UTF-8 poisons every later stage — YAML, Goldmark and the
+	// WebUI would decode replacement characters instead of the author's
+	// text — so the byte check runs before the frontmatter split and a
+	// failure stops the pipeline at the source-level facts. Only the first
+	// invalid sequence is reported; see checkInvalidUTF8.
+	if rules.Enabled(RuleDocumentInvalidUTF8) && !utf8.Valid(source) {
+		indexed := &indexedDocument{document: current, inspectable: false}
+		indexed.diagnostics = append(indexed.diagnostics, checkInvalidUTF8(indexed, source, rules)...)
+		indexed.diagnostics = append(indexed.diagnostics, checkTrailingBlankLines(indexed, source, rules)...)
+		return indexed, nil
 	}
 
 	body, frontMatter, err := markdown.ParseFrontMatter(source)

@@ -109,6 +109,11 @@ const (
 	// suspicious position — line edges, next to whitespace, consecutive
 	// runs, or a bidi override anywhere. Opt-in and disabled by default.
 	RuleUnicodeInvisibleCharacter = "unicode.invisible-character"
+
+	// RuleDocumentInvalidUTF8: the source contains a byte sequence that is
+	// not valid UTF-8, so every later stage — frontmatter, Markdown, the
+	// WebUI — decodes replacement characters instead of the author's text.
+	RuleDocumentInvalidUTF8 = "document.invalid-utf8"
 )
 
 // frontMatterDateKeys are the frontmatter fields m2h normalizes into date
