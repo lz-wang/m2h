@@ -737,6 +737,36 @@ func TestCheckCodeFenceUnclosed(t *testing.T) {
 			source: "# Guide\n\n```go\nx\n\n```\n",
 			want:   nil,
 		},
+		{
+			name:   "crlf fence pair stays closed",
+			source: "# Guide\r\n\r\n```go\r\nx\r\n```\r\n",
+			want:   nil,
+		},
+		{
+			name:   "crlf unclosed fence reports",
+			source: "# Guide\r\n\r\n```go\r\nx\r\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleCodeFenceUnclosed)},
+		},
+		{
+			name:   "missing close at end of file without a final newline",
+			source: "# Guide\n\n```go\nx",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleCodeFenceUnclosed)},
+		},
+		{
+			name:   "tab-indented closer line stays content",
+			source: "# Guide\n\n```go\nx\n\t```\n",
+			want:   []string{fmt.Sprintf("guide.md:3:1 error %s", RuleCodeFenceUnclosed)},
+		},
+		{
+			name:   "consecutive empty fence pairs stay closed",
+			source: "# Guide\n\n```text\n```\n\n```js\n```\n",
+			want:   nil,
+		},
+		{
+			name:   "unclosed empty fence after a closed one reports",
+			source: "# Guide\n\n```text\n```\n\n```js\n",
+			want:   []string{fmt.Sprintf("guide.md:6:1 error %s", RuleCodeFenceUnclosed)},
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

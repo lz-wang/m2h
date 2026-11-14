@@ -3,6 +3,7 @@ package markdown
 import (
 	"bytes"
 	"maps"
+	"slices"
 	"sort"
 	"strings"
 	"unicode/utf8"
@@ -338,6 +339,12 @@ func extractFences(document ast.Node, source []byte) ([]CodeFence, []byteRange) 
 	})
 	resolve(len(source))
 
+	// The closer check below consults the occupied offsets once per fence;
+	// sorted and deduplicated they answer in logarithmic time instead of a
+	// rescan that would multiply fence count by node count.
+	sort.Ints(occupied)
+	occupied = slices.Compact(occupied)
+
 	for index := range fences {
 		if openers[index].start == 0 && openers[index].stop == 0 {
 			// An opener the locator could not recover carries no closer
@@ -358,20 +365,18 @@ func extractFences(document ast.Node, source []byte) ([]CodeFence, []byteRange) 
 // fenceCloseValid reports whether the candidate line — the one right after a
 // fence's last content, or right after its opener when it has none — is that
 // fence's explicit closing line. The line must belong to no other node
-// (offsets records every node start and located fence opener), must open
-// with a run of the opener's own fence character at least as long, and may
-// carry nothing but blanks after the run — the exact shape CommonMark
-// closes fences by.
+// (offsets records every node start and located fence opener, sorted and
+// deduplicated, consulted by binary search), must open with a run of the
+// opener's own fence character at least as long, and may carry nothing but
+// blanks after the run — the exact shape CommonMark closes fences by.
 func fenceCloseValid(source []byte, opener int, candidate int, offsets []int) bool {
 	if candidate >= len(source) {
 		// No line left: the fence ran to the end of the file.
 		return false
 	}
 	stop := lineStartStop(source, candidate)
-	for _, offset := range offsets {
-		if offset >= candidate && offset < stop {
-			return false
-		}
+	if next := sort.SearchInts(offsets, candidate); next < len(offsets) && offsets[next] < stop {
+		return false
 	}
 	char, openRun, prefixed := fenceRun(source[opener:lineStartStop(source, opener)])
 	if !prefixed {
@@ -1057,10 +1062,17 @@ func scanMergeConflicts(source []byte, skip func(int) bool) []MergeConflict {
 	}
 	for index := 0; index < len(locator.lineStarts); index++ {
 		offset := locator.lineStarts[index]
+		// Classify the line before consulting protection: the marker test is
+		// a bounded byte scan, while skip() cascades into protected-range
+		// lookups, so marker-free lines — almost every line of a healthy
+		// document — must never pay for them.
+		char := conflictMarker(source[offset:lineStartStop(source, offset)])
+		if char == 0 {
+			continue
+		}
 		if skip != nil && skip(offset) {
 			continue
 		}
-		char := conflictMarker(source[offset:lineStartStop(source, offset)])
 		switch char {
 		case '<':
 			if state == conflictNone {

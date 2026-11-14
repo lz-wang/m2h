@@ -47,3 +47,37 @@ func BenchmarkCheckHeavyDocument(b *testing.B) {
 		}
 	}
 }
+
+// BenchmarkCheckFenceScaling measures full check runs as the fence count
+// grows 100 → 500 → 1000, guarding the near-linear expectation of the
+// closer analysis: the candidate close of every fence is checked against the
+// occupied offsets, so a rescan-per-fence would show superlinear growth
+// across the sub-benchmarks. Ratios between sizes, not absolute times,
+// carry the signal.
+func BenchmarkCheckFenceScaling(b *testing.B) {
+	for _, count := range []int{100, 500, 1000} {
+		b.Run(fmt.Sprintf("fences-%d", count), func(b *testing.B) {
+			blocks := make([]string, 0, count)
+			for index := range count {
+				blocks = append(blocks, fmt.Sprintf("```go\n// block %d\nx(%d)\n```", index, index))
+			}
+			// Joined with single blank separators and one final newline so
+			// the fixture itself stays free of trailing-blank findings.
+			document := "# Scaling\n\n" + strings.Join(blocks, "\n\n") + "\n"
+			root := b.TempDir()
+			if err := os.WriteFile(filepath.Join(root, "scaling.md"), []byte(document), 0o644); err != nil {
+				b.Fatal(err)
+			}
+			b.ResetTimer()
+			for b.Loop() {
+				result, err := Run(context.Background(), Options{Input: root})
+				if err != nil {
+					b.Fatal(err)
+				}
+				if result.Errors != 0 || result.Warnings != 0 {
+					b.Fatalf("counts = %d errors, %d warnings, want 0/0", result.Errors, result.Warnings)
+				}
+			}
+		})
+	}
+}
