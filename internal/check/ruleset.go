@@ -46,6 +46,7 @@ var ruleDefinitions = []RuleDefinition{
 
 	// Document integrity: source-level defects that make the whole file
 	// unreliable, reported before or alongside the parsed-document rules.
+	{ID: RuleHTMLBlockBlankAfter, Severity: SeverityWarning, DefaultEnabled: true},
 	{ID: RuleCodeFenceUnclosed, Severity: SeverityError, DefaultEnabled: true},
 	{ID: RuleDocumentMergeConflict, Severity: SeverityError, DefaultEnabled: true},
 	{ID: RuleDocumentInvalidUTF8, Severity: SeverityError, DefaultEnabled: true},

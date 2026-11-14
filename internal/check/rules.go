@@ -125,6 +125,13 @@ const (
 	// explicit closing fence line is missing. The renderer still accepts it;
 	// this is a document-completeness error, not a syntax rejection.
 	RuleCodeFenceUnclosed = "code-fence.unclosed"
+
+	// RuleHTMLBlockBlankAfter: a Type 6/7 HTML block whose completed
+	// top-level element is followed by non-blank text without a separating
+	// blank line, so that text renders as raw HTML content instead of
+	// Markdown. A warning, and deliberately conservative: only high-confidence
+	// shapes report, preferring silence over false positives.
+	RuleHTMLBlockBlankAfter = "html.block-blank-after"
 )
 
 // frontMatterDateKeys are the frontmatter fields m2h normalizes into date

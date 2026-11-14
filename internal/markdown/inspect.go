@@ -195,11 +195,12 @@ type Inspection struct {
 	TableMismatches      []TableColumnMismatch
 	UnclosedComments     []UnclosedComment
 	ReversedLinks        []ReversedLink
-	EmptySections        []EmptySection
-	Mojibake             []Mojibake
-	InvisibleCharacters  []InvisibleCharacter
-	MergeConflicts       []MergeConflict
-	H1Count              int
+	EmptySections          []EmptySection
+	Mojibake               []Mojibake
+	InvisibleCharacters    []InvisibleCharacter
+	MergeConflicts         []MergeConflict
+	HTMLBlockMissingBlanks []HTMLBlockMissingBlank
+	H1Count                int
 }
 
 // ShiftLines moves every fact position by delta lines. Callers that inspect
@@ -249,6 +250,9 @@ func (inspection *Inspection) ShiftLines(delta int) {
 	}
 	for index := range inspection.MergeConflicts {
 		inspection.MergeConflicts[index].Position.Line += delta
+	}
+	for index := range inspection.HTMLBlockMissingBlanks {
+		inspection.HTMLBlockMissingBlanks[index].Position.Line += delta
 	}
 }
 
@@ -325,6 +329,7 @@ func Inspect(source []byte) Inspection {
 	inspection.EmptySections = extractEmptySections(document, source)
 	inspection.Mojibake, inspection.InvisibleCharacters = scanner.unicodeFindings()
 	inspection.MergeConflicts = scanner.mergeConflicts()
+	inspection.HTMLBlockMissingBlanks = extractHTMLBlockMissingBlanks(document, source)
 	return inspection
 }
 

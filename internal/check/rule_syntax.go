@@ -40,5 +40,11 @@ func checkSyntaxRules(current *indexedDocument, rules RuleSet) []Diagnostic {
 				"fenced code block is not closed", fence.Position))
 		}
 	}
+	if rules.Enabled(RuleHTMLBlockBlankAfter) {
+		for _, missing := range inspection.HTMLBlockMissingBlanks {
+			diagnostics = append(diagnostics, current.diagnosticForRule(RuleHTMLBlockBlankAfter,
+				"HTML block is followed by non-blank content without a separating blank line", missing.Position))
+		}
+	}
 	return diagnostics
 }

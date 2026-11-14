@@ -596,6 +596,47 @@ func TestCheckUnicodeRulesOptIn(t *testing.T) {
 		enabled, nil)
 }
 
+func TestCheckHTMLBlockBlankAfter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name    string
+		source  string
+		options Options
+		want    []string
+	}{
+		{
+			name:   "text after close tag warns",
+			source: "# Guide\n\n<div>\n  Notice\n</div>\n**Important**\n",
+			// line 6 = **Important**, column 1
+			want: []string{fmt.Sprintf("guide.md:6:1 warning %s", RuleHTMLBlockBlankAfter)},
+		},
+		{
+			name:   "blank line after close stays clean",
+			source: "# Guide\n\n<div>\n  Notice\n</div>\n\n**Important**\n",
+			want:   nil,
+		},
+		{
+			name:   "frontmatter shifts the warning line",
+			source: "---\ntitle: Guide\n---\n<div>\nx\n</div>\ntext\n",
+			want:   []string{fmt.Sprintf("guide.md:7:1 warning %s", RuleHTMLBlockBlankAfter)},
+		},
+		{
+			name:    "disable silences the rule",
+			source:  "# Guide\n\n<div>\nx\n</div>\ntext\n",
+			options: Options{DisableRules: []string{RuleHTMLBlockBlankAfter}},
+			want:    nil,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+
+			expectDiagnostics(t, test.name, test.source, test.options, test.want)
+		})
+	}
+}
+
 func TestCheckCodeFenceUnclosed(t *testing.T) {
 	t.Parallel()
 
