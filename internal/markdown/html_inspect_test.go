@@ -139,6 +139,29 @@ func TestInspectHTMLBlockMissingBlanks(t *testing.T) {
 			source: "<div>a</div> tail\n",
 			want:   nil,
 		},
+		{
+			// The tokenizer splits the line into text, comment and text
+			// tokens; the rule reports the line once, not once per token.
+			name:   "comment-split text on one line reports once",
+			source: "<div></div>\nSome <!-- comment --> more text\n",
+			want:   []HTMLBlockMissingBlank{{Position: Position{Line: 2, Column: 1}}},
+		},
+		{
+			name:   "multi-token lines across completions report per line",
+			source: "<div><span>x</span></div>\na <!-- c1 --> b\n<div></div>\ntail\n",
+			want: []HTMLBlockMissingBlank{
+				{Position: Position{Line: 2, Column: 1}},
+				{Position: Position{Line: 4, Column: 1}},
+			},
+		},
+		{
+			// A candidate warning gathered before the structure broke is
+			// discarded with the whole block: the skip-anything-ambiguous
+			// contract must hold even when the ambiguity comes last.
+			name:   "mismatched close after a candidate warning discards it",
+			source: "<div></div>\ntext\n</span>\n",
+			want:   nil,
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

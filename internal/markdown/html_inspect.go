@@ -69,12 +69,16 @@ func extractHTMLBlockMissingBlanks(document ast.Node, source []byte) []HTMLBlock
 // stack tracks the top-level element's completion — the end tag that empties
 // the stack, or a void/self-closing tag at the top level — and any non-blank
 // text token after a completion, starting on a later line, is Markdown the
-// author meant to render: that text needs a blank line before it.
+// author meant to render: that text needs a blank line before it. A physical
+// line reports at most once no matter how the tokenizer splits it, and any
+// structure the stack cannot reliably match — a mismatched close tag after
+// candidates were already gathered — discards the whole block's findings.
 func htmlBlockBlankFindings(source []byte, locator sourceLocator, start int, stop int) []HTMLBlockMissingBlank {
 	findings := make([]HTMLBlockMissingBlank, 0)
 	tokenizer := html.NewTokenizer(bytes.NewReader(source[start:stop]))
 	stack := make([]string, 0, 4)
 	lastEndedLine := 0
+	reportedLine := 0
 	cursor := 0
 	for {
 		token := tokenizer.Next()
@@ -105,8 +109,9 @@ func htmlBlockBlankFindings(source []byte, locator sourceLocator, start int, sto
 				continue // text inside an element is that element's content
 			}
 			line, _ := locator.locate(absolute + blank)
-			if line > lastEndedLine {
+			if line > lastEndedLine && line > reportedLine {
 				findings = append(findings, HTMLBlockMissingBlank{Position: Position{Line: line, Column: 1}})
+				reportedLine = line
 			}
 		case html.StartTagToken:
 			name := strings.ToLower(tokenizer.Token().Data)
@@ -126,8 +131,9 @@ func htmlBlockBlankFindings(source []byte, locator sourceLocator, start int, sto
 		case html.EndTagToken:
 			name := strings.ToLower(tokenizer.Token().Data)
 			if len(stack) == 0 || stack[len(stack)-1] != name {
-				// Structure we cannot reliably match: skip the block.
-				return findings
+				// Structure we cannot reliably match: skip the block —
+				// candidates gathered before the mismatch go with it.
+				return nil
 			}
 			stack = stack[:len(stack)-1]
 			if len(stack) == 0 {
