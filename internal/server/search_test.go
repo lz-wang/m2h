@@ -463,3 +463,121 @@ func TestTabbedSearchResponseMatchesRenderedPanel(t *testing.T) {
 		t.Fatalf("metadata carried tab: %s", plain.Body.String())
 	}
 }
+
+// The snapshot a query walks may be older than the filesystem. Every
+// candidate is revalidated against the publishing boundary and its indexed
+// file identity before it reaches a response, so an indexed document that
+// was deleted, re-hidden, re-pointed or rewritten drops out instead of
+// leaking its cached summary. These tests freeze a snapshot (one query),
+// mutate the filesystem, and ask the validator directly — the same check
+// serveSearch runs per candidate in rank order.
+func TestSearchValidatesSnapshotEntriesBeforeServing(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary on Windows")
+	}
+
+	newValidator := func(t *testing.T) (*documentHandler, *searchSnapshot) {
+		t.Helper()
+		root := canonicalDirectory(t, t.TempDir())
+		writeTestFile(t, filepath.Join(root, "public.md"), "# Public\n\nrevalidate-token\n")
+		handler := &documentHandler{
+			workspace: singleRootWorkspace(rootScope{root: root, discovery: files.DiscoverOptions{Depth: 4}, ignore: true}),
+			ui:        directoryTestUI(),
+		}
+		routed := handler.routes(nil)
+		if payload := indexedSearchQuery(t, routed, "revalidate-token"); len(payload.Results) != 1 {
+			t.Fatalf("initial results = %+v, want public.md", payload.Results)
+		}
+		return handler, handler.search.snapshot.Load()
+	}
+
+	assertInvalid := func(t *testing.T, handler *documentHandler, snapshot *searchSnapshot, path string) {
+		t.Helper()
+		valid, err := handler.searchResultValid(snapshot, path)
+		if err != nil {
+			t.Fatalf("revalidating %s: %v", path, err)
+		}
+		if valid {
+			t.Fatalf("%s stayed valid after the filesystem changed", path)
+		}
+	}
+
+	t.Run("gitignore edit hides an indexed document", func(t *testing.T) {
+		t.Parallel()
+		handler, snapshot := newValidator(t)
+		root := handler.workspace.roots[0].scope.root
+		writeTestFile(t, filepath.Join(root, ".gitignore"), "public.md\n")
+		assertInvalid(t, handler, snapshot, "public.md")
+	})
+
+	t.Run("deleted document", func(t *testing.T) {
+		t.Parallel()
+		handler, snapshot := newValidator(t)
+		root := handler.workspace.roots[0].scope.root
+		if err := os.Remove(filepath.Join(root, "public.md")); err != nil {
+			t.Fatal(err)
+		}
+		assertInvalid(t, handler, snapshot, "public.md")
+	})
+
+	t.Run("indexed path replaced by a symlink to a hidden target", func(t *testing.T) {
+		t.Parallel()
+		handler, snapshot := newValidator(t)
+		root := handler.workspace.roots[0].scope.root
+		writeTestFile(t, filepath.Join(root, ".secret.md"), "# Secret\n\nsecret-token\n")
+		if err := os.Remove(filepath.Join(root, "public.md")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(root, ".secret.md"), filepath.Join(root, "public.md")); err != nil {
+			t.Fatal(err)
+		}
+		assertInvalid(t, handler, snapshot, "public.md")
+	})
+
+	t.Run("alias indexed then re-pointed elsewhere", func(t *testing.T) {
+		t.Parallel()
+		root := canonicalDirectory(t, t.TempDir())
+		outside := canonicalDirectory(t, t.TempDir())
+		writeTestFile(t, filepath.Join(root, "target.md"), "# Target\n\nalias-token\n")
+		writeTestFile(t, filepath.Join(outside, "escape.md"), "# Escape\n\nescape-token\n")
+		if err := os.Symlink(filepath.Join(root, "target.md"), filepath.Join(root, "alias.md")); err != nil {
+			t.Fatal(err)
+		}
+		handler := &documentHandler{
+			workspace: singleRootWorkspace(rootScope{root: root, discovery: files.DiscoverOptions{Depth: 4}}),
+			ui:        directoryTestUI(),
+		}
+		routed := handler.routes(nil)
+		if payload := indexedSearchQuery(t, routed, "alias-token"); len(payload.Results) != 2 {
+			t.Fatalf("initial results = %+v, want alias and target", payload.Results)
+		}
+		snapshot := handler.search.snapshot.Load()
+		if err := os.Remove(filepath.Join(root, "alias.md")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(outside, "escape.md"), filepath.Join(root, "alias.md")); err != nil {
+			t.Fatal(err)
+		}
+		assertInvalid(t, handler, snapshot, "alias.md")
+	})
+
+	t.Run("file rewritten under the same path", func(t *testing.T) {
+		t.Parallel()
+		handler, snapshot := newValidator(t)
+		root := handler.workspace.roots[0].scope.root
+		touchForRefresh(t, filepath.Join(root, "public.md"), "# Public\n\nrewritten-token\n")
+		assertInvalid(t, handler, snapshot, "public.md")
+	})
+
+	t.Run("unchanged document stays valid", func(t *testing.T) {
+		t.Parallel()
+		handler, snapshot := newValidator(t)
+		valid, err := handler.searchResultValid(snapshot, "public.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !valid {
+			t.Fatal("an unchanged indexed document must stay valid")
+		}
+	})
+}

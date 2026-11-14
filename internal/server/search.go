@@ -3,6 +3,7 @@ package server
 import (
 	"errors"
 	"net/http"
+	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -88,12 +89,28 @@ func (handler *documentHandler) serveSearch(response http.ResponseWriter, reques
 		return
 	}
 	search.SortResults(matches)
-	if len(matches) > maxSearchResults {
-		matches = matches[:maxSearchResults]
-	}
 
-	results := make([]searchResultResponse, 0, len(matches))
+	// Candidates are validated in rank order until 50 of them survive —
+	// never truncated to 50 first. A cached entry whose file was deleted,
+	// re-hidden, re-pointed or rewritten must drop out of the response, and
+	// the documents ranked behind it still get their chance to fill the
+	// page.
+	results := make([]searchResultResponse, 0, min(len(matches), maxSearchResults))
 	for _, match := range matches {
+		if len(results) == maxSearchResults {
+			break
+		}
+		if request.Context().Err() != nil {
+			return
+		}
+		valid, err := handler.searchResultValid(snapshot, match.Path)
+		if err != nil {
+			writeJSONError(response, http.StatusInternalServerError, "evaluate ignore rules")
+			return
+		}
+		if !valid {
+			continue
+		}
 		result := searchResultResponse{
 			Path:    match.Path,
 			Title:   match.Title,
@@ -106,6 +123,37 @@ func (handler *documentHandler) serveSearch(response http.ResponseWriter, reques
 		results = append(results, result)
 	}
 	writeJSON(response, http.StatusOK, searchResponse{Query: query, Results: results})
+}
+
+// searchResultValid re-checks one candidate against the publishing boundary
+// before its cached projection reaches the response. The snapshot may be
+// older than the filesystem, so the entry must still resolve through the
+// same resolveVisibleDocument boundary /api/document answers from, to the
+// same canonical target with the same size and mtime the projection was
+// built from. A miss on any of those means the snippet in hand describes a
+// file state that no longer exists, and the result is dropped rather than
+// served stale. Only an ignore-rule failure is a server fault; everything
+// else is the document routes' 404 answer: simply absent.
+func (handler *documentHandler) searchResultValid(snapshot *searchSnapshot, publicPath string) (bool, error) {
+	indexed, exists := snapshot.Files[publicPath]
+	if !exists {
+		return false, nil
+	}
+	_, _, target, err := handler.resolveVisibleDocument(publicPath)
+	if err != nil {
+		if errors.Is(err, errIgnoreUnavailable) {
+			return false, err
+		}
+		return false, nil
+	}
+	if target != indexed.Target {
+		return false, nil
+	}
+	info, err := os.Stat(target)
+	if err != nil || info.Size() != indexed.Size || !info.ModTime().Equal(indexed.ModTime) {
+		return false, nil
+	}
+	return true, nil
 }
 
 // searchQuery applies the search endpoint's strict query contract, mirroring
