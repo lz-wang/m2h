@@ -2,13 +2,10 @@ package server
 
 import (
 	"errors"
-	"io/fs"
 	"net/http"
-	"os"
 	"strings"
 	"unicode/utf8"
 
-	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
 	"github.com/lz-wang/m2h/internal/search"
 )
@@ -43,78 +40,48 @@ type searchResponse struct {
 	Results []searchResultResponse `json:"results"`
 }
 
-// serveSearch answers GET /api/search?q=<query> with a workspace-wide
-// full-text scan. Like /api/files there is no index and no watcher: the
-// request discovers the currently publishable files, reads and projects
-// them, and ranks the matches — the answer always reflects the disk state
-// at request time. Scope rules are inherited unchanged from serveFiles, so
-// --glob, --depth, hidden paths, single-file scopes and multi-root
-// identities behave exactly as the document routes do.
+// serveSearch answers GET /api/search?q=<query> from the shared search
+// snapshot. The index refreshes the file set before answering (every file
+// re-discovered, only changed files re-read and re-parsed), so queries cost
+// a metadata scan plus in-memory matching instead of reading the whole
+// library. Scope rules are inherited unchanged from serveFiles — discovery
+// and every read go through the same resolveVisibleDocument boundary the
+// document routes use, so --glob, --depth, hidden paths, single-file scopes
+// and multi-root identities behave exactly as before.
 func (handler *documentHandler) serveSearch(response http.ResponseWriter, request *http.Request) {
 	query, ok := searchQuery(request, response)
 	if !ok {
 		return
 	}
 
-	matches := make([]search.Result, 0)
-	for _, root := range handler.workspace.roots {
+	snapshot, err := handler.search.acquire(request.Context())
+	if err != nil {
+		// A cancelled context surfaces as a refresh error first; the client
+		// is gone, so stop without answering.
 		if request.Context().Err() != nil {
 			return
 		}
-		discovered, err := handler.discover(request.Context(), root.scope)
-		if err != nil {
-			// A cancelled context surfaces as a discover error first; the
-			// client is gone, so stop without answering.
-			if request.Context().Err() != nil {
-				return
-			}
-			if errors.Is(err, fs.ErrNotExist) {
-				discovered = files.Discovery{}
-			} else {
-				writeJSONError(response, http.StatusInternalServerError, "discover Markdown files")
-				return
-			}
+		switch {
+		case errors.Is(err, errIgnoreUnavailable):
+			writeJSONError(response, http.StatusInternalServerError, "evaluate ignore rules")
+		case errors.Is(err, errSearchDiscover):
+			writeJSONError(response, http.StatusInternalServerError, "discover Markdown files")
+		default:
+			writeJSONError(response, http.StatusInternalServerError, "search Markdown documents")
 		}
-		for _, entry := range discovered.Markdown {
-			// The client aborts superseded queries; walking the rest of the
-			// workspace to build a response nobody reads is wasted work.
-			if request.Context().Err() != nil {
-				return
-			}
-			// Discovery only records candidates; the read re-enters the same
-			// resolveVisibleDocument boundary /api/document and /raw use, so
-			// an entry that vanished, was re-hidden or now escapes its root
-			// after discovery is simply absent from this scan — exactly the
-			// answer the document routes give for the same file.
-			virtual := handler.workspace.publicPath(root.id, entry.RelativePath)
-			_, relative, target, err := handler.resolveVisibleDocument(virtual)
-			if err != nil {
-				// An ignore-rule failure is a server fault even mid-scan;
-				// everything else mirrors the document routes' 404 answer:
-				// the entry is simply absent from this scan.
-				if errors.Is(err, errIgnoreUnavailable) {
-					writeJSONError(response, http.StatusInternalServerError, "evaluate ignore rules")
-					return
-				}
-				continue
-			}
-			contents, err := os.ReadFile(target)
-			if err != nil {
-				if errors.Is(err, fs.ErrNotExist) {
-					continue
-				}
-				writeJSONError(response, http.StatusInternalServerError, "search Markdown documents")
-				return
-			}
-			document, err := searchDocument(contents, relative)
-			if err != nil {
-				writeJSONError(response, http.StatusInternalServerError, "search Markdown documents")
-				return
-			}
-			if result, matched := search.Match(document, query); matched {
-				result.Path = handler.workspace.publicPath(root.id, document.Path)
-				matches = append(matches, result)
-			}
+		return
+	}
+
+	// The client aborts superseded queries; matching the rest of the cached
+	// library to build a response nobody reads is wasted work.
+	matches := make([]search.Result, 0)
+	for publicPath, indexed := range snapshot.Files {
+		if request.Context().Err() != nil {
+			return
+		}
+		if result, matched := search.Match(indexed.Document, query); matched {
+			result.Path = publicPath
+			matches = append(matches, result)
 		}
 	}
 	if request.Context().Err() != nil {

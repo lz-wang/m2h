@@ -97,6 +97,7 @@ type documentHandler struct {
 	basePath  string
 
 	discover func(context.Context, rootScope) (files.Discovery, error)
+	search   *searchIndex
 }
 
 func newDocumentHandler(workspace workspace, logger io.Writer, ui fs.FS) http.Handler {
@@ -117,14 +118,23 @@ func newDocumentHandlerWithConfig(
 		version:   buildVersion,
 		cdn:       cdn,
 		basePath:  basePath,
-		discover: func(ctx context.Context, scope rootScope) (files.Discovery, error) {
-			return scope.discover(ctx)
-		},
 	}
 	return handler.routes(logger)
 }
 
 func (handler *documentHandler) routes(logger io.Writer) http.Handler {
+	// Tests assemble documentHandler literals directly; routes is the one
+	// constructor every serving path shares, so it fills in the defaults a
+	// fresh handler needs — the workspace discovery function and the search
+	// index — without touching fields a caller deliberately overrode.
+	if handler.discover == nil {
+		handler.discover = func(ctx context.Context, scope rootScope) (files.Discovery, error) {
+			return scope.discover(ctx)
+		}
+	}
+	if handler.search == nil {
+		handler.search = newSearchIndex(handler)
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handler.serveHealth)
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
