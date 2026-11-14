@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -405,5 +406,121 @@ func TestSearchRefreshFailureKeepsSnapshot(t *testing.T) {
 	}
 	if payload := indexedSearchQuery(t, routed, "resilient-token"); len(payload.Results) != 1 {
 		t.Fatalf("pre-failure content lost after recovery: %+v", payload.Results)
+	}
+}
+
+// Shutting the server down cancels an in-flight background refresh through
+// the lifecycle context: it stops cleanly, keeps the last snapshot, and the
+// backoff keeps a cancelled server from thrashing the disk afterwards.
+func TestSearchIndexStopsRefreshingOnShutdown(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "a.md"), "# A\n\nshutdown-token\n")
+	runContext, cancel := context.WithCancel(context.Background())
+	handler := &documentHandler{
+		workspace:  singleRootWorkspace(rootScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
+		ui:         directoryTestUI(),
+		runContext: runContext,
+	}
+	hang := false
+	blocked := make(chan struct{}, 1)
+	handler.discover = func(ctx context.Context, scope rootScope) (files.Discovery, error) {
+		if !hang {
+			return scope.discover(ctx)
+		}
+		select {
+		case blocked <- struct{}{}:
+		default:
+		}
+		<-ctx.Done() // the refresh hangs until the server goes away
+		return files.Discovery{}, ctx.Err()
+	}
+	routed := handler.routes(nil)
+	clock := newFakeSearchClock()
+	handler.search.clock = clock
+
+	if payload := indexedSearchQuery(t, routed, "shutdown-token"); len(payload.Results) != 1 {
+		t.Fatalf("initial results = %+v", payload.Results)
+	}
+	before := handler.search.snapshot.Load()
+
+	// Cross the TTL with discovery hanging: the query answers from the old
+	// snapshot while the background refresh waits inside discovery.
+	hang = true
+	done := handler.search.expectRefresh()
+	clock.Advance(2 * searchRefreshInterval)
+	if payload := indexedSearchQuery(t, routed, "shutdown-token"); len(payload.Results) != 1 {
+		t.Fatalf("query during hanging refresh lost results: %+v", payload.Results)
+	}
+	<-blocked
+
+	cancel() // the server goes away
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("cancelled refresh reported success")
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("cancelled refresh did not finish in time")
+	}
+	if handler.search.snapshot.Load() != before {
+		t.Fatal("cancelled refresh touched the snapshot")
+	}
+
+	// Queries after shutdown keep answering from the intact snapshot for the
+	// remainder of the process lifetime; no further refresh is attempted
+	// inside the backoff window.
+	clock.Advance(searchRefreshInterval / 2)
+	if payload := indexedSearchQuery(t, routed, "shutdown-token"); len(payload.Results) != 1 {
+		t.Fatalf("post-shutdown query lost results: %+v", payload.Results)
+	}
+	if handler.search.snapshot.Load() != before {
+		t.Fatal("a refresh ran after shutdown")
+	}
+}
+
+// A symlink swap that happens while an old snapshot keeps answering must not
+// leak the alias's new target: the per-result revalidation refuses entries
+// whose canonical target moved, exactly as /api/document refuses them.
+func TestSearchStaleSnapshotSurvivesSymlinkSwap(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("symlink permissions vary on Windows")
+	}
+	t.Parallel()
+
+	root := canonicalDirectory(t, t.TempDir())
+	outside := canonicalDirectory(t, t.TempDir())
+	writeTestFile(t, filepath.Join(outside, "secret.md"), "# Secret\n\nswap-after-index-token\n")
+	writeTestFile(t, filepath.Join(root, "target.md"), "# Target\n\nkeep-token\n")
+	alias := filepath.Join(root, "alias.md")
+	if err := os.Symlink(filepath.Join(root, "target.md"), alias); err != nil {
+		t.Fatal(err)
+	}
+	handler, routed, clock := indexedSearchHandler(t, root, files.DiscoverOptions{Depth: 4})
+
+	if payload := indexedSearchQuery(t, routed, "keep-token"); len(payload.Results) != 2 {
+		t.Fatalf("initial results = %+v, want alias and target", payload.Results)
+	}
+
+	// Re-point the alias outside the root, then query before the TTL lapses:
+	// the stale snapshot still lists alias.md, but revalidation must drop it.
+	if err := os.Remove(alias); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret.md"), alias); err != nil {
+		t.Fatal(err)
+	}
+	if payload := indexedSearchQuery(t, routed, "swap-after-index-token"); len(payload.Results) != 0 {
+		t.Fatalf("stale snapshot leaked the swapped alias target: %+v", payload.Results)
+	}
+	payload := indexedSearchQuery(t, routed, "keep-token")
+	if len(payload.Results) != 1 || payload.Results[0].Path != "target.md" {
+		t.Fatalf("results from stale snapshot = %+v, want only target.md", payload.Results)
+	}
+
+	// After a refresh the swapped alias is gone from the index itself.
+	if payload := forceRefresh(t, handler.search, clock, routed, "keep-token"); len(payload.Results) != 1 || payload.Results[0].Path != "target.md" {
+		t.Fatalf("refreshed results = %+v, want only target.md", payload.Results)
 	}
 }
