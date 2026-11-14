@@ -43,6 +43,36 @@ func TestRuleDefinitionsAreWellFormed(t *testing.T) {
 	}
 }
 
+// TestDocumentIntegrityRulesRegistered pins the four document-integrity
+// rules' registration contract: severity from the registry and default-on
+// behavior, so the rule table documentation stays in sync with the code.
+func TestDocumentIntegrityRulesRegistered(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		rule     string
+		severity Severity
+	}{
+		{RuleHTMLBlockBlankAfter, SeverityWarning},
+		{RuleCodeFenceUnclosed, SeverityError},
+		{RuleDocumentMergeConflict, SeverityError},
+		{RuleDocumentInvalidUTF8, SeverityError},
+	}
+	for _, test := range tests {
+		definition, ok := ruleDefinition(test.rule)
+		if !ok {
+			t.Errorf("rule %q is not registered", test.rule)
+			continue
+		}
+		if definition.Severity != test.severity {
+			t.Errorf("rule %q severity = %q, want %q", test.rule, definition.Severity, test.severity)
+		}
+		if !definition.DefaultEnabled {
+			t.Errorf("rule %q must be enabled by default", test.rule)
+		}
+	}
+}
+
 func TestNewRuleSetSelection(t *testing.T) {
 	t.Parallel()
 
