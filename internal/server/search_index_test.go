@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -522,5 +523,90 @@ func TestSearchStaleSnapshotSurvivesSymlinkSwap(t *testing.T) {
 	// After a refresh the swapped alias is gone from the index itself.
 	if payload := forceRefresh(t, handler.search, clock, routed, "keep-token"); len(payload.Results) != 1 || payload.Results[0].Path != "target.md" {
 		t.Fatalf("refreshed results = %+v, want only target.md", payload.Results)
+	}
+}
+
+// A cached projection must not outlive the file's readability: revoking
+// read permission leaves size and mtime untouched, so metadata alone cannot
+// tell the cache the file became unreadable — the validator must open the
+// file, proving the process can still read what it is about to summarize.
+func TestSearchRejectsUnreadableCachedDocument(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("chmod semantics vary on Windows")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root reads through chmod 000")
+	}
+	t.Parallel()
+
+	root := t.TempDir()
+	secret := filepath.Join(root, "secret.md")
+	writeTestFile(t, secret, "# Secret\n\nunreadable-token\n")
+	writeTestFile(t, filepath.Join(root, "open.md"), "# Open\n\nstill-readable-token\n")
+	_, routed, _ := indexedSearchHandler(t, root, files.DiscoverOptions{Depth: 2})
+
+	if payload := indexedSearchQuery(t, routed, "unreadable-token"); len(payload.Results) != 1 || payload.Results[0].Path != "secret.md" {
+		t.Fatalf("initial results = %+v, want secret.md", payload.Results)
+	}
+
+	if err := os.Chmod(secret, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(secret, 0o644) })
+
+	if payload := indexedSearchQuery(t, routed, "unreadable-token"); len(payload.Results) != 0 {
+		t.Fatalf("cached snippet survived a read-permission revocation: %+v", payload.Results)
+	}
+	if payload := indexedSearchQuery(t, routed, "still-readable-token"); len(payload.Results) != 1 || payload.Results[0].Path != "open.md" {
+		t.Fatalf("readable neighbor lost its result: %+v", payload.Results)
+	}
+}
+
+// A stale snapshot's page is filled from the full ranked candidate list,
+// never truncated before validation: when the strongest candidates are
+// invalidated mid-TTL (here by a .gitignore edit), the documents ranked
+// behind them must backfill the page back to the cap. Locks the
+// validate-then-backfill contract against a future "truncate first,
+// validate later" regression.
+func TestSearchBackfillsAfterInvalidCandidates(t *testing.T) {
+	t.Parallel()
+
+	root := canonicalDirectory(t, t.TempDir())
+	// Ten exact-title matches outrank every body-only match (SortResults:
+	// exactTitle, then score, then path), so ignoring precisely these ten
+	// invalidates the entire first page of candidates.
+	for index := range 10 {
+		writeTestFile(t, filepath.Join(root, fmt.Sprintf("pinned-%02d.md", index)), fmt.Sprintf("---\ntitle: backfill-token\n---\n\n# Pinned %02d\n", index))
+	}
+	for index := range maxSearchResults {
+		writeTestFile(t, filepath.Join(root, fmt.Sprintf("filler-%02d.md", index)), fmt.Sprintf("# Filler %02d\n\nbackfill-token\n", index))
+	}
+	handler := &documentHandler{
+		workspace: singleRootWorkspace(rootScope{root: root, discovery: files.DiscoverOptions{Depth: 2}, ignore: true}),
+		ui:        directoryTestUI(),
+	}
+	routed := handler.routes(nil)
+	clock := newFakeSearchClock()
+	handler.search.clock = clock
+
+	payload := indexedSearchQuery(t, routed, "backfill-token")
+	if len(payload.Results) != maxSearchResults {
+		t.Fatalf("initial results = %d, want %d", len(payload.Results), maxSearchResults)
+	}
+	if payload.Results[0].Path != "pinned-00.md" {
+		t.Fatalf("strongest candidate = %s, want pinned-00.md (ordering premise)", payload.Results[0].Path)
+	}
+
+	// Mid-TTL, a .gitignore edit invalidates exactly the ten strongest
+	// candidates; the response must still deliver a full page of valid ones.
+	writeTestFile(t, filepath.Join(root, ".gitignore"), "pinned-*.md\n")
+	payload = indexedSearchQuery(t, routed, "backfill-token")
+	if len(payload.Results) != maxSearchResults {
+		t.Fatalf("backfilled results = %d, want %d", len(payload.Results), maxSearchResults)
+	}
+	for _, result := range payload.Results {
+		if strings.HasPrefix(result.Path, "pinned-") {
+			t.Fatalf("ignored candidate leaked into the response: %+v", result)
+		}
 	}
 }

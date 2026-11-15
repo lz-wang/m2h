@@ -134,10 +134,15 @@ func (handler *documentHandler) serveSearch(response http.ResponseWriter, reques
 // older than the filesystem, so the entry must still resolve through the
 // same resolveVisibleDocument boundary /api/document answers from, to the
 // same canonical target with the same size and mtime the projection was
-// built from. A miss on any of those means the snippet in hand describes a
-// file state that no longer exists, and the result is dropped rather than
-// served stale. Only an ignore-rule failure is a server fault; everything
-// else is the document routes' 404 answer: simply absent.
+// built from. The attributes are read from an actually opened descriptor:
+// a chmod 000 after indexing leaves size and mtime untouched while
+// /api/document would refuse the read, so metadata alone cannot prove the
+// snippet is still servable — the process must still be able to open the
+// file for reading. A miss on any of those means the snippet in hand
+// describes a file state that no longer exists (or is no longer readable),
+// and the result is dropped rather than served stale. Only an ignore-rule
+// failure is a server fault; everything else is the document routes' 404
+// answer: simply absent.
 func (handler *documentHandler) searchResultValid(snapshot *searchSnapshot, publicPath string) (bool, error) {
 	indexed, exists := snapshot.Files[publicPath]
 	if !exists {
@@ -153,8 +158,16 @@ func (handler *documentHandler) searchResultValid(snapshot *searchSnapshot, publ
 	if target != indexed.Target {
 		return false, nil
 	}
-	info, err := os.Stat(target)
-	if err != nil || info.Size() != indexed.Size || !info.ModTime().Equal(indexed.ModTime) {
+	file, err := os.Open(target)
+	if err != nil {
+		return false, nil
+	}
+	defer file.Close()
+	info, err := file.Stat()
+	if err != nil || !info.Mode().IsRegular() {
+		return false, nil
+	}
+	if info.Size() != indexed.Size || !info.ModTime().Equal(indexed.ModTime) {
 		return false, nil
 	}
 	return true, nil
