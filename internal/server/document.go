@@ -158,7 +158,7 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 		handler.runContext = context.Background()
 	}
 	if handler.search == nil {
-		handler.search = newSearchIndex(handler)
+		handler.search = newSearchIndex(handler, logger)
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handler.serveHealth)

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -18,6 +19,28 @@ import (
 
 	"github.com/lz-wang/m2h/internal/files"
 )
+
+// syncBuffer is a mutex-guarded bytes.Buffer. The tests below hand one
+// destination to both the request log (written on request goroutines) and
+// the refresh error log (written by the background refresh goroutine, which
+// outlives its triggering request) — a plain buffer would be a data race
+// between them.
+type syncBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (buffer *syncBuffer) Write(p []byte) (int, error) {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return buffer.buf.Write(p)
+}
+
+func (buffer *syncBuffer) String() string {
+	buffer.mu.Lock()
+	defer buffer.mu.Unlock()
+	return buffer.buf.String()
+}
 
 // fakeSearchClock is a controllable searchClock: tests advance it instead of
 // sleeping, so TTL expiry and retry backoff are deterministic. Its own lock
@@ -348,7 +371,9 @@ func TestSearchSuppressesConcurrentRefreshes(t *testing.T) {
 
 // A failed refresh keeps the previous snapshot answering (validated per
 // result), backs off for a TTL, and recovers on its own once the failure
-// clears — no wedged state, no rebuild from scratch.
+// clears — no wedged state, no rebuild from scratch. Clients never see the
+// failure, so the one error line in the server log is the operator's only
+// trace that the index went stale.
 func TestSearchRefreshFailureKeepsSnapshot(t *testing.T) {
 	t.Parallel()
 
@@ -365,7 +390,8 @@ func TestSearchRefreshFailureKeepsSnapshot(t *testing.T) {
 		}
 		return scope.discover(ctx)
 	}
-	routed := handler.routes(nil)
+	var logs syncBuffer
+	routed := handler.routes(&logs)
 	clock := newFakeSearchClock()
 	handler.search.clock = clock
 
@@ -391,6 +417,13 @@ func TestSearchRefreshFailureKeepsSnapshot(t *testing.T) {
 	if handler.search.snapshot.Load() != before {
 		t.Fatal("failed refresh replaced the snapshot")
 	}
+	failureLog := logs.String()
+	if count := strings.Count(failureLog, "m2h: search index refresh:"); count != 1 {
+		t.Fatalf("failed refresh logged %d error lines, want exactly 1: %q", count, failureLog)
+	}
+	if !strings.Contains(failureLog, "disk on fire") {
+		t.Fatalf("refresh error line lacks the failure cause: %q", failureLog)
+	}
 
 	// Inside the backoff window no new refresh is attempted.
 	clock.Advance(searchRefreshInterval / 2)
@@ -410,11 +443,18 @@ func TestSearchRefreshFailureKeepsSnapshot(t *testing.T) {
 	if payload := indexedSearchQuery(t, routed, "resilient-token"); len(payload.Results) != 1 {
 		t.Fatalf("pre-failure content lost after recovery: %+v", payload.Results)
 	}
+	// The successful initial build and the recovery refresh stay silent:
+	// one failure, one line, no noise.
+	if count := strings.Count(logs.String(), "m2h: search index refresh:"); count != 1 {
+		t.Fatalf("successful refreshes logged error lines, want still exactly 1: %q", logs.String())
+	}
 }
 
 // Shutting the server down cancels an in-flight background refresh through
 // the lifecycle context: it stops cleanly, keeps the last snapshot, and the
-// backoff keeps a cancelled server from thrashing the disk afterwards.
+// backoff keeps a cancelled server from thrashing the disk afterwards. A
+// refresh cancelled by shutdown is a normal exit, not a failure worth an
+// error line in the log.
 func TestSearchIndexStopsRefreshingOnShutdown(t *testing.T) {
 	t.Parallel()
 
@@ -439,7 +479,8 @@ func TestSearchIndexStopsRefreshingOnShutdown(t *testing.T) {
 		<-ctx.Done() // the refresh hangs until the server goes away
 		return files.Discovery{}, ctx.Err()
 	}
-	routed := handler.routes(nil)
+	var logs syncBuffer
+	routed := handler.routes(&logs)
 	clock := newFakeSearchClock()
 	handler.search.clock = clock
 
@@ -469,6 +510,9 @@ func TestSearchIndexStopsRefreshingOnShutdown(t *testing.T) {
 	}
 	if handler.search.snapshot.Load() != before {
 		t.Fatal("cancelled refresh touched the snapshot")
+	}
+	if strings.Contains(logs.String(), "search index refresh") {
+		t.Fatalf("shutdown-cancelled refresh was logged as an error: %q", logs.String())
 	}
 
 	// Queries after shutdown keep answering from the intact snapshot for the
@@ -690,5 +734,81 @@ func TestSearchInitialBuildSurvivesRequestCancellation(t *testing.T) {
 	}
 	if count := discoveries.Load(); count != 1 {
 		t.Fatalf("initial build ran discovery %d times, want exactly one shared build", count)
+	}
+}
+
+// Every waiter of a failed initial build receives that build's error. The
+// outcome belongs to the attempt itself, never to the index: a waiter woken
+// after a newer attempt has already started still sees the failure of the
+// build it joined, never the newer attempt's state.
+func TestSearchInitialBuildFailureSharedByWaiters(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "a.md"), "# A\n\nshared-failure-token\n")
+	handler := &documentHandler{
+		workspace: singleRootWorkspace(rootScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
+		ui:        directoryTestUI(),
+	}
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	var discoveries atomic.Int32
+	handler.discover = func(ctx context.Context, scope rootScope) (files.Discovery, error) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		discoveries.Add(1)
+		// The build parks here: every request that reaches the index before
+		// release joins this one build as a waiter instead of starting its
+		// own.
+		<-release
+		return files.Discovery{}, errors.New("disk on fire")
+	}
+	routed := handler.routes(nil)
+
+	// Single-processor scheduling plus an arrival barrier makes the waiter
+	// set deterministic. Goroutines do not run in launch order (new and
+	// readied goroutines take the runnext slot, LIFO), so each request
+	// signals once it exists and then runs synchronously — no scheduling
+	// points — from the router to its park on the shared build. With the
+	// main goroutine collecting the signals, a request only leaves the CPU
+	// it is sharing with it once parked; by the time all three signals are
+	// collected, every request is a waiter and close(release) can end the
+	// one build they all joined.
+	previousProcs := runtime.GOMAXPROCS(1)
+	defer runtime.GOMAXPROCS(previousProcs)
+
+	// Three concurrent first queries must share one initial build.
+	const waiters = 3
+	arrived := make(chan struct{}, waiters)
+	answered := make(chan *httptest.ResponseRecorder, waiters)
+	for range waiters {
+		go func() {
+			arrived <- struct{}{}
+			response := httptest.NewRecorder()
+			routed.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/search?q=shared-failure-token", nil))
+			answered <- response
+		}()
+	}
+	for range waiters {
+		<-arrived
+	}
+	<-started
+	close(release)
+
+	for range waiters {
+		select {
+		case response := <-answered:
+			assertJSONError(t, response, http.StatusInternalServerError)
+			if body := response.Body.String(); !strings.Contains(body, "discover Markdown files") {
+				t.Fatalf("waiter error = %q, want the shared build's failure", body)
+			}
+		case <-time.After(10 * time.Second):
+			t.Fatal("waiter did not answer in time")
+		}
+	}
+	if count := discoveries.Load(); count != 1 {
+		t.Fatalf("failed build ran discovery %d times, want exactly one shared build", count)
 	}
 }

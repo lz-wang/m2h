@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"sync"
@@ -68,29 +69,43 @@ type searchSnapshot struct {
 	Refreshed time.Time
 }
 
+// buildAttempt is one initial build's completion state, owned by that build
+// alone and shared by pointer with every waiter that joined it. The waiter
+// reads err only after done closes, so the attempt it joined reports its own
+// outcome even if a newer attempt has already replaced index.initial — a
+// per-index error field could not promise that: the next request's build
+// would reset it before an old waiter wakes up.
+type buildAttempt struct {
+	done chan struct{}
+	err  error
+}
+
 // searchIndex owns the shared snapshot behind /api/search.
 //
 // Lifecycle: the first query starts one initial build on the server's
 // lifecycle context — never a request context, because the WebUI cancels
 // superseded searches and a build tied to a dying request would restart
-// from scratch with every keystroke — and waits for it through the ready
-// channel like every concurrent first query. A cancelled waiter abandons
+// from scratch with every keystroke — and waits for it through its build
+// attempt like every concurrent first query. A cancelled waiter abandons
 // only its own wait; server shutdown is what cancels the build itself. A
-// failed build reports its error to the waiters as their 500 and the next
-// request may retry. Later queries answer from the published snapshot
+// failed build reports its own error to the waiters as their 500 and the
+// next request may retry. Later queries answer from the published snapshot
 // without any filesystem work; once it is older than the TTL, one query
 // triggers a single background refresh (the same lifecycle context) while
 // every query keeps answering from the old snapshot until the new one is
-// published. A failed refresh keeps the old snapshot and backs off for one
-// TTL before another may start.
+// published. A failed refresh keeps the old snapshot, backs off for one
+// TTL before another may start, and leaves one line in the server log —
+// clients still answer from the old snapshot, so the log is the only trace
+// that the index went stale.
 //
 // Locking: mu coordinates refresh state only — it is never held while
 // Markdown is read or parsed. Matching runs lock-free over an immutable
 // snapshot; refreshes build the next map in full (reusing unchanged entries
 // by pointer) and swap it in atomically, so a query already walking an older
-// snapshot never sees a mutation. clock is written only at construction
-// (before the first request) and read concurrently afterwards, so it needs
-// no lock; an injected test clock provides its own synchronization.
+// snapshot never sees a mutation. clock and logger are written only at
+// construction (before the first request) and read concurrently afterwards,
+// so they need no lock; an injected test clock or log buffer provides its
+// own synchronization.
 type searchIndex struct {
 	handler *documentHandler
 	// ctx scopes the initial build and background refreshes. It is the
@@ -99,22 +114,26 @@ type searchIndex struct {
 	// written or the client walks away.
 	ctx context.Context
 
-	clock searchClock
+	clock  searchClock
+	logger io.Writer
 
 	mu          sync.Mutex
 	snapshot    atomic.Pointer[searchSnapshot]
 	refreshing  bool
-	ready       chan struct{} // closed when an initial build finishes
-	buildErr    error         // outcome of the initial build, for its waiters
+	initial     *buildAttempt // the in-flight initial build, nil when none
 	nextRetry   time.Time     // no new refresh may start before this
 	onRefreshed func(error)   // test notification, invoked outside mu
 }
 
-func newSearchIndex(handler *documentHandler) *searchIndex {
+func newSearchIndex(handler *documentHandler, logger io.Writer) *searchIndex {
+	if logger == nil {
+		logger = io.Discard
+	}
 	return &searchIndex{
 		handler: handler,
 		ctx:     handler.runContext,
 		clock:   systemClock{},
+		logger:  logger,
 	}
 }
 
@@ -131,25 +150,23 @@ func (index *searchIndex) acquire(ctx context.Context) (*searchSnapshot, error) 
 		if current == nil {
 			// No snapshot yet: one shared initial build runs on the server's
 			// lifecycle context, and every first query — including the one
-			// that started it — waits for the same outcome through ready. A
+			// that started it — waits for the same attempt's outcome. A
 			// cancelled waiter abandons only its own wait, never the build.
-			if !index.refreshing {
+			if index.initial == nil {
 				index.refreshing = true
-				index.buildErr = nil
-				index.ready = make(chan struct{})
-				go index.initialBuild()
+				index.initial = &buildAttempt{done: make(chan struct{})}
+				go index.initialBuild(index.initial)
 			}
-			ready := index.ready
+			attempt := index.initial
 			index.mu.Unlock()
 			select {
-			case <-ready:
-				// Build finished: success published a snapshot (the loop
-				// re-reads it), failure left none and reports to waiters.
-				index.mu.Lock()
-				err := index.buildErr
-				index.mu.Unlock()
-				if err != nil {
-					return nil, err
+			case <-attempt.done:
+				// The attempt this query joined has finished: success
+				// published a snapshot (the loop re-reads it), failure
+				// reports this attempt's error — never the state of a newer
+				// attempt that may have started meanwhile.
+				if attempt.err != nil {
+					return nil, attempt.err
 				}
 				continue
 			case <-ctx.Done():
@@ -172,29 +189,29 @@ func (index *searchIndex) acquire(ctx context.Context) (*searchSnapshot, error) 
 }
 
 // initialBuild runs the first full build off the request path, on the
-// server's lifecycle context, and wakes every waiter with the outcome in
-// place: success publishes the snapshot, failure records the error for the
-// waiters (their 500). With no snapshot yet there is nothing to serve, so
-// the next request retries the build immediately — nextRetry's backoff
-// only governs refreshes once a snapshot exists.
-func (index *searchIndex) initialBuild() {
+// server's lifecycle context, and wakes every waiter of its attempt with
+// the outcome in place: success publishes the snapshot, failure records the
+// error on the attempt itself (the waiters' 500). With no snapshot yet
+// there is nothing to serve, so the next request retries the build
+// immediately — nextRetry's backoff only governs refreshes once a snapshot
+// exists.
+func (index *searchIndex) initialBuild(attempt *buildAttempt) {
 	snapshot, err := index.refresh(index.ctx, nil)
 
 	index.mu.Lock()
 	index.refreshing = false
-	ready := index.ready
-	index.ready = nil
-	index.buildErr = err
+	index.initial = nil
 	if err != nil {
 		index.nextRetry = index.clock.Now().Add(searchRefreshInterval)
 	} else {
 		index.snapshot.Store(snapshot)
 		index.nextRetry = time.Time{}
 	}
+	attempt.err = err
 	hook := index.onRefreshed
 	index.mu.Unlock()
 
-	close(ready) // wake every waiter with the outcome in place
+	close(attempt.done) // wake every waiter with the outcome in place
 	if hook != nil {
 		hook(err)
 	}
@@ -218,6 +235,13 @@ func (index *searchIndex) backgroundRefresh() {
 	hook := index.onRefreshed
 	index.mu.Unlock()
 
+	// The old snapshot keeps answering, so a failing refresh is invisible to
+	// clients — this line is the operator's only trace that the index has
+	// gone stale. A refresh cancelled by server shutdown is a normal exit,
+	// not a failure worth logging.
+	if err != nil && !errors.Is(err, context.Canceled) {
+		_, _ = fmt.Fprintf(index.logger, "m2h: search index refresh: %v\n", err)
+	}
 	if hook != nil {
 		hook(err)
 	}
@@ -243,9 +267,15 @@ func (index *searchIndex) refresh(ctx context.Context, previous *searchSnapshot)
 		}
 		discovered, err := handler.discover(ctx, root.scope)
 		if err != nil {
-			if errors.Is(err, fs.ErrNotExist) {
+			switch {
+			case errors.Is(err, fs.ErrNotExist):
 				discovered = files.Discovery{}
-			} else {
+			case ctx.Err() != nil:
+				// A cancelled lifecycle context reports bare cancellation:
+				// shutdown is not a discovery failure, and callers (the
+				// refresh error log among them) must recognize it as such.
+				return nil, ctx.Err()
+			default:
 				return nil, fmt.Errorf("%w: %v", errSearchDiscover, err)
 			}
 		}
