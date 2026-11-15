@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -608,5 +610,85 @@ func TestSearchBackfillsAfterInvalidCandidates(t *testing.T) {
 		if strings.HasPrefix(result.Path, "pinned-") {
 			t.Fatalf("ignored candidate leaked into the response: %+v", result)
 		}
+	}
+}
+
+// The first query must not own the initial build. The WebUI cancels a
+// search the moment the user types on; a build tied to that request's
+// context dies with it, only for the next keystroke to rebuild the whole
+// index from scratch. The build runs on the server's lifecycle context: a
+// cancelled request abandons only its own wait, every other request keeps
+// waiting for the one shared build, and server shutdown is what cancels
+// the build itself.
+func TestSearchInitialBuildSurvivesRequestCancellation(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	writeTestFile(t, filepath.Join(root, "a.md"), "# A\n\ninitial-cancel-token\n")
+	runContext, shutdown := context.WithCancel(context.Background())
+	defer shutdown()
+	handler := &documentHandler{
+		workspace:  singleRootWorkspace(rootScope{root: canonicalDirectory(t, root), discovery: files.DiscoverOptions{Depth: 2}}),
+		ui:         directoryTestUI(),
+		runContext: runContext,
+	}
+	release := make(chan struct{})
+	started := make(chan struct{}, 1)
+	var discoveries atomic.Int32
+	handler.discover = func(ctx context.Context, scope rootScope) (files.Discovery, error) {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+		discoveries.Add(1)
+		select {
+		case <-release:
+			return scope.discover(ctx)
+		case <-ctx.Done():
+			return files.Discovery{}, ctx.Err()
+		}
+	}
+	routed := handler.routes(nil)
+
+	// The first query starts the initial build, then its client walks away.
+	requestContext, abandon := context.WithCancel(context.Background())
+	abandoned := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		request := httptest.NewRequest(http.MethodGet, "/api/search?q=initial-cancel-token", nil).WithContext(requestContext)
+		response := httptest.NewRecorder()
+		routed.ServeHTTP(response, request)
+		abandoned <- response
+	}()
+	<-started
+	abandon()
+	select {
+	case response := <-abandoned:
+		if response.Body.Len() != 0 {
+			t.Fatalf("abandoned request wrote a body: %q", response.Body.String())
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("abandoned request did not return in time")
+	}
+
+	// A concurrent query waits for the shared build instead of restarting
+	// it, and answers once the build lands.
+	answer := make(chan *httptest.ResponseRecorder, 1)
+	go func() {
+		response := httptest.NewRecorder()
+		routed.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/api/search?q=initial-cancel-token", nil))
+		answer <- response
+	}()
+	close(release)
+	select {
+	case response := <-answer:
+		payload := decodeSearch(t, response)
+		if len(payload.Results) != 1 || payload.Results[0].Path != "a.md" {
+			t.Fatalf("results after shared build = %+v, want a.md", payload.Results)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("waiting request did not answer in time")
+	}
+	if count := discoveries.Load(); count != 1 {
+		t.Fatalf("initial build ran discovery %d times, want exactly one shared build", count)
 	}
 }

@@ -70,15 +70,19 @@ type searchSnapshot struct {
 
 // searchIndex owns the shared snapshot behind /api/search.
 //
-// Lifecycle: the first query builds the initial snapshot synchronously —
-// concurrent first queries wait on the same build through the ready channel.
-// Later queries answer from the published snapshot without any filesystem
-// work; once it is older than the TTL, one query triggers a single
-// background refresh (run on the server's lifecycle context, never a request
-// context) while every query keeps answering from the old snapshot until the
-// new one is published. A failed refresh keeps the old snapshot and backs off
-// for one TTL before another may start; with no snapshot at all, the failure
-// is the caller's 500 and the next request may retry the build.
+// Lifecycle: the first query starts one initial build on the server's
+// lifecycle context — never a request context, because the WebUI cancels
+// superseded searches and a build tied to a dying request would restart
+// from scratch with every keystroke — and waits for it through the ready
+// channel like every concurrent first query. A cancelled waiter abandons
+// only its own wait; server shutdown is what cancels the build itself. A
+// failed build reports its error to the waiters as their 500 and the next
+// request may retry. Later queries answer from the published snapshot
+// without any filesystem work; once it is older than the TTL, one query
+// triggers a single background refresh (the same lifecycle context) while
+// every query keeps answering from the old snapshot until the new one is
+// published. A failed refresh keeps the old snapshot and backs off for one
+// TTL before another may start.
 //
 // Locking: mu coordinates refresh state only — it is never held while
 // Markdown is read or parsed. Matching runs lock-free over an immutable
@@ -89,9 +93,10 @@ type searchSnapshot struct {
 // no lock; an injected test clock provides its own synchronization.
 type searchIndex struct {
 	handler *documentHandler
-	// ctx scopes background refreshes. It is the server's lifecycle context:
-	// request contexts die with their HTTP round trip and would abort the
-	// refresh the moment the triggering response is written.
+	// ctx scopes the initial build and background refreshes. It is the
+	// server's lifecycle context: request contexts die with their HTTP round
+	// trip and would abort the work the moment the triggering response is
+	// written or the client walks away.
 	ctx context.Context
 
 	clock searchClock
@@ -100,6 +105,7 @@ type searchIndex struct {
 	snapshot    atomic.Pointer[searchSnapshot]
 	refreshing  bool
 	ready       chan struct{} // closed when an initial build finishes
+	buildErr    error         // outcome of the initial build, for its waiters
 	nextRetry   time.Time     // no new refresh may start before this
 	onRefreshed func(error)   // test notification, invoked outside mu
 }
@@ -123,47 +129,32 @@ func (index *searchIndex) acquire(ctx context.Context) (*searchSnapshot, error) 
 		}
 
 		if current == nil {
-			// No snapshot yet: the initial build runs synchronously in one
-			// request while every other concurrent first query waits on the
-			// same build. A cancelled waiter leaves without disturbing it.
-			if index.refreshing {
-				ready := index.ready
+			// No snapshot yet: one shared initial build runs on the server's
+			// lifecycle context, and every first query — including the one
+			// that started it — waits for the same outcome through ready. A
+			// cancelled waiter abandons only its own wait, never the build.
+			if !index.refreshing {
+				index.refreshing = true
+				index.buildErr = nil
+				index.ready = make(chan struct{})
+				go index.initialBuild()
+			}
+			ready := index.ready
+			index.mu.Unlock()
+			select {
+			case <-ready:
+				// Build finished: success published a snapshot (the loop
+				// re-reads it), failure left none and reports to waiters.
+				index.mu.Lock()
+				err := index.buildErr
 				index.mu.Unlock()
-				select {
-				case <-ready:
-					// Build finished: success published a snapshot (the loop
-					// re-reads it), failure left none (a waiter may retry).
-					continue
-				case <-ctx.Done():
-					return nil, ctx.Err()
+				if err != nil {
+					return nil, err
 				}
+				continue
+			case <-ctx.Done():
+				return nil, ctx.Err()
 			}
-			index.refreshing = true
-			ready := make(chan struct{})
-			index.ready = ready
-			index.mu.Unlock()
-
-			snapshot, err := index.refresh(ctx, current)
-			index.mu.Lock()
-			index.refreshing = false
-			index.ready = nil
-			if err != nil {
-				index.nextRetry = index.clock.Now().Add(searchRefreshInterval)
-			} else {
-				index.snapshot.Store(snapshot)
-				index.nextRetry = time.Time{}
-			}
-			hook := index.onRefreshed
-			index.mu.Unlock()
-			close(ready) // wake every waiter with the outcome in place
-
-			if hook != nil {
-				hook(err)
-			}
-			if err != nil {
-				return nil, err
-			}
-			return snapshot, nil
 		}
 
 		// Stale snapshot: answer from it immediately and let one background
@@ -177,6 +168,34 @@ func (index *searchIndex) acquire(ctx context.Context) (*searchSnapshot, error) 
 			index.mu.Unlock()
 		}
 		return current, nil
+	}
+}
+
+// initialBuild runs the first full build off the request path, on the
+// server's lifecycle context, and wakes every waiter with the outcome in
+// place: success publishes the snapshot, failure records the error for the
+// waiters (their 500) and delays the next attempt by one TTL — the same
+// backoff a failed background refresh gets.
+func (index *searchIndex) initialBuild() {
+	snapshot, err := index.refresh(index.ctx, nil)
+
+	index.mu.Lock()
+	index.refreshing = false
+	ready := index.ready
+	index.ready = nil
+	index.buildErr = err
+	if err != nil {
+		index.nextRetry = index.clock.Now().Add(searchRefreshInterval)
+	} else {
+		index.snapshot.Store(snapshot)
+		index.nextRetry = time.Time{}
+	}
+	hook := index.onRefreshed
+	index.mu.Unlock()
+
+	close(ready) // wake every waiter with the outcome in place
+	if hook != nil {
+		hook(err)
 	}
 }
 
