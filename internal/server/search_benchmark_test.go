@@ -73,24 +73,36 @@ func benchmarkSearchColdStart(b *testing.B, count int) {
 	}
 }
 
-func BenchmarkSearchTitleHit2K(b *testing.B)     { benchmarkSearch(b, 2000, "document 0042") }
-func BenchmarkSearchTitleHit10K(b *testing.B)    { benchmarkSearch(b, 10000, "document 0042") }
-func BenchmarkSearchBodyHit2K(b *testing.B)      { benchmarkSearch(b, 2000, "中英文混合") }
-func BenchmarkSearchBodyHit10K(b *testing.B)     { benchmarkSearch(b, 10000, "中英文混合") }
-func BenchmarkSearchMiss2K(b *testing.B)         { benchmarkSearch(b, 2000, "missing-token-zzz") }
-func BenchmarkSearchMiss10K(b *testing.B)        { benchmarkSearch(b, 10000, "missing-token-zzz") }
+func BenchmarkSearchTitleHit2K(b *testing.B) { benchmarkSearch(b, 2000, "document 0042") }
+
+func BenchmarkSearchTitleHit10K(b *testing.B) { benchmarkSearch(b, 10000, "document 0042") }
+
+func BenchmarkSearchBodyHit2K(b *testing.B) { benchmarkSearch(b, 2000, "中英文混合") }
+
+func BenchmarkSearchBodyHit10K(b *testing.B) { benchmarkSearch(b, 10000, "中英文混合") }
+
+func BenchmarkSearchMiss2K(b *testing.B) { benchmarkSearch(b, 2000, "missing-token-zzz") }
+
+func BenchmarkSearchMiss10K(b *testing.B) { benchmarkSearch(b, 10000, "missing-token-zzz") }
+
 func BenchmarkSearchMultiKeyword2K(b *testing.B) { benchmarkSearch(b, 2000, "benchmark 混合文本") }
+
 func BenchmarkSearchMultiKeyword10K(b *testing.B) {
 	benchmarkSearch(b, 10000, "benchmark 混合文本")
 }
-func BenchmarkSearchCJK2K(b *testing.B)           { benchmarkSearch(b, 2000, "性能基准") }
-func BenchmarkSearchCJK10K(b *testing.B)          { benchmarkSearch(b, 10000, "性能基准") }
+
+func BenchmarkSearchCJK2K(b *testing.B) { benchmarkSearch(b, 2000, "性能基准") }
+
+func BenchmarkSearchCJK10K(b *testing.B) { benchmarkSearch(b, 10000, "性能基准") }
+
 func BenchmarkSearchHighFrequency2K(b *testing.B) { benchmarkSearch(b, 2000, "benchmark") }
+
 func BenchmarkSearchHighFrequency10K(b *testing.B) {
 	benchmarkSearch(b, 10000, "benchmark")
 }
 
-func BenchmarkSearchColdStart2K(b *testing.B)  { benchmarkSearchColdStart(b, 2000) }
+func BenchmarkSearchColdStart2K(b *testing.B) { benchmarkSearchColdStart(b, 2000) }
+
 func BenchmarkSearchColdStart10K(b *testing.B) { benchmarkSearchColdStart(b, 10000) }
 
 // benchmarkSearchRefresh measures one incremental refresh pass: every file
@@ -134,9 +146,12 @@ func benchmarkSearchRefresh(b *testing.B, count, changed int) {
 	}
 }
 
-func BenchmarkSearchRefreshUnchanged2K(b *testing.B)  { benchmarkSearchRefresh(b, 2000, 0) }
+func BenchmarkSearchRefreshUnchanged2K(b *testing.B) { benchmarkSearchRefresh(b, 2000, 0) }
+
 func BenchmarkSearchRefreshUnchanged10K(b *testing.B) { benchmarkSearchRefresh(b, 10000, 0) }
+
 func BenchmarkSearchRefreshOneChanged2K(b *testing.B) { benchmarkSearchRefresh(b, 2000, 1) }
+
 func BenchmarkSearchRefreshOneChanged10K(b *testing.B) {
 	benchmarkSearchRefresh(b, 10000, 1)
 }
@@ -164,9 +179,14 @@ func BenchmarkSearchConcurrent2K(b *testing.B) {
 	})
 }
 
-// benchmarkSearchIndexMemory reports the heap a fully built index retains
-// per document: the search projections plus their precompiled lowercase
-// forms, measured around one cold build after a GC.
+// benchmarkSearchIndexMemory approximates the heap one fully built index
+// retains per document: the search projections plus their precompiled
+// lowercase forms. A GC runs after the build and before the second sample,
+// with the index kept alive past it, so the temporaries the build produced
+// (AST nodes, parse strings, the response) drop out of the number and what
+// remains is close to retained heap rather than allocation churn. It is an
+// approximation — sampling noise and GC timing still move it — and never a
+// claim about process RSS.
 func benchmarkSearchIndexMemory(b *testing.B, count int) {
 	b.Helper()
 	_, root, _ := benchmarkWorkspace(b, count)
@@ -183,11 +203,16 @@ func benchmarkSearchIndexMemory(b *testing.B, count int) {
 		if response.Code != http.StatusOK {
 			b.Fatalf("build query status = %d", response.Code)
 		}
+		// Settle the heap before sampling again: the build's temporaries
+		// must be collectable, the retained index must not be.
+		runtime.GC()
 		runtime.ReadMemStats(&after)
+		runtime.KeepAlive(handler)
 		total += float64(after.HeapAlloc) - float64(before.HeapAlloc)
 	}
-	b.ReportMetric(total/float64(b.N)/float64(count), "bytes/doc")
+	b.ReportMetric(total/float64(b.N)/float64(count), "retained-bytes/doc")
 }
 
-func BenchmarkSearchIndexMemory2K(b *testing.B)  { benchmarkSearchIndexMemory(b, 2000) }
+func BenchmarkSearchIndexMemory2K(b *testing.B) { benchmarkSearchIndexMemory(b, 2000) }
+
 func BenchmarkSearchIndexMemory10K(b *testing.B) { benchmarkSearchIndexMemory(b, 10000) }

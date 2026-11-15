@@ -42,13 +42,15 @@ type searchResponse struct {
 }
 
 // serveSearch answers GET /api/search?q=<query> from the shared search
-// snapshot. The index refreshes the file set before answering (every file
-// re-discovered, only changed files re-read and re-parsed), so queries cost
-// a metadata scan plus in-memory matching instead of reading the whole
-// library. Scope rules are inherited unchanged from serveFiles — discovery
-// and every read go through the same resolveVisibleDocument boundary the
-// document routes use, so --glob, --depth, hidden paths, single-file scopes
-// and multi-root identities behave exactly as before.
+// snapshot. The first query starts one initial build and waits for it;
+// afterwards a query inside the TTL answers purely from memory, and the
+// first query after the TTL triggers one background refresh while still
+// answering from the previous snapshot (stale-while-revalidate) — no query
+// ever blocks on a filesystem scan it could avoid. Scope rules are
+// inherited unchanged from serveFiles — discovery and every read go
+// through the same resolveVisibleDocument boundary the document routes
+// use, so --glob, --depth, hidden paths, single-file scopes and multi-root
+// identities behave exactly as before.
 func (handler *documentHandler) serveSearch(response http.ResponseWriter, request *http.Request) {
 	query, ok := searchQuery(request, response)
 	if !ok {
