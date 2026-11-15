@@ -174,8 +174,9 @@ func (index *searchIndex) acquire(ctx context.Context) (*searchSnapshot, error) 
 // initialBuild runs the first full build off the request path, on the
 // server's lifecycle context, and wakes every waiter with the outcome in
 // place: success publishes the snapshot, failure records the error for the
-// waiters (their 500) and delays the next attempt by one TTL — the same
-// backoff a failed background refresh gets.
+// waiters (their 500). With no snapshot yet there is nothing to serve, so
+// the next request retries the build immediately — nextRetry's backoff
+// only governs refreshes once a snapshot exists.
 func (index *searchIndex) initialBuild() {
 	snapshot, err := index.refresh(index.ctx, nil)
 
