@@ -20,8 +20,9 @@ import (
 // authedTestServer assembles an authenticated document handler backed by a
 // real SQLite store and serves it through httptest.
 type authedTestServer struct {
-	server *httptest.Server
-	stack  *authStack
+	server  *httptest.Server
+	stack   *authStack
+	docsDir string
 }
 
 func newAuthedTestServer(t *testing.T, config *auth.Config) *authedTestServer {
@@ -61,7 +62,7 @@ func newAuthedTestServer(t *testing.T, config *auth.Config) *authedTestServer {
 	handler := newDocumentHandlerWithAuth(context.Background(), workspace, nil, ui, "test", false, "", stack)
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	return &authedTestServer{server: server, stack: stack}
+	return &authedTestServer{server: server, stack: stack, docsDir: docs}
 }
 
 func loginJSON(username, password string) io.Reader {

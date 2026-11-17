@@ -39,6 +39,35 @@ var migrations = []migration{
 			)`,
 		},
 	},
+	{
+		version: 2,
+		statements: []string{
+			`CREATE TABLE annotations (
+				id TEXT PRIMARY KEY,
+				root_id TEXT NOT NULL,
+				document_path TEXT NOT NULL,
+				author_id TEXT NOT NULL,
+				author_name TEXT NOT NULL,
+				quote_exact TEXT NOT NULL,
+				quote_prefix TEXT NOT NULL DEFAULT '',
+				quote_suffix TEXT NOT NULL DEFAULT '',
+				position_start INTEGER NOT NULL,
+				position_end INTEGER NOT NULL,
+				heading_id TEXT,
+				tab_id TEXT,
+				block_hint TEXT,
+				document_hash TEXT NOT NULL,
+				selector_version INTEGER NOT NULL DEFAULT 1,
+				comment TEXT NOT NULL DEFAULT '',
+				created_at INTEGER NOT NULL,
+				updated_at INTEGER NOT NULL,
+				FOREIGN KEY (root_id) REFERENCES document_roots(id)
+			)`,
+			`CREATE INDEX idx_annotations_document
+				ON annotations(root_id, document_path, created_at)`,
+			`CREATE INDEX idx_annotations_author ON annotations(author_id)`,
+		},
+	},
 }
 
 // latestVersion is the highest schema version this build understands.

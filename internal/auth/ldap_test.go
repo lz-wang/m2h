@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/tls"
 	"errors"
+	"net"
 	"testing"
+	"time"
 
 	goldap "github.com/go-ldap/ldap/v3"
 )
@@ -256,5 +258,39 @@ func TestLDAPRealDialerReachesNetwork(t *testing.T) {
 	}
 	if _, err := dialLDAP(LDAPConfig{URL: "ftp://example.com"}); err == nil {
 		t.Fatalf("invalid scheme accepted")
+	}
+}
+
+func TestConnAdapterForwardsCalls(t *testing.T) {
+	client, server := net.Pipe()
+	defer client.Close()
+	// Drain the server end so protocol writes never block forever.
+	go func() {
+		buffer := make([]byte, 256)
+		for {
+			if _, err := server.Read(buffer); err != nil {
+				return
+			}
+		}
+	}()
+	connection := goldap.NewConn(client, false)
+	// Nothing answers on the pipe, so every operation must time out fast
+	// instead of blocking.
+	connection.SetTimeout(100 * time.Millisecond)
+	go connection.Start()
+	defer connection.Close()
+	adapter := connAdapter{conn: connection}
+
+	if err := adapter.Bind("cn=x", "pw"); err == nil {
+		t.Fatalf("bind over a raw pipe unexpectedly succeeded")
+	}
+	if _, err := adapter.SearchDirectory(&goldap.SearchRequest{}); err == nil {
+		t.Fatalf("search over a raw pipe unexpectedly succeeded")
+	}
+	if err := adapter.Start(&tls.Config{}); err == nil {
+		t.Fatalf("starttls over a raw pipe unexpectedly succeeded")
+	}
+	if err := adapter.Close(); err != nil {
+		t.Fatalf("close failed: %v", err)
 	}
 }

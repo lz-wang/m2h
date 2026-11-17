@@ -67,12 +67,24 @@ export interface TocItem {
   text: string;
 }
 
+// DocumentRef is the persistent document identity: the root's stored UUID
+// plus the root-relative path. Authenticated deployments attach it (and the
+// document hash) to every document response; the default mode omits both.
+export interface DocumentRef {
+  rootId: string;
+  path: string;
+}
+
 export interface DocumentResponse {
   path: string;
   title: string;
   html: string;
   frontmatter: FrontMatter | null;
   toc: TocItem[];
+  documentRef?: DocumentRef;
+  // "sha256:…" of the raw Markdown source bytes — the version annotations
+  // are pinned against.
+  documentHash?: string;
 }
 
 // SearchHeading locates the section a full-text match belongs to. The id is
@@ -436,13 +448,31 @@ function parseDocument(payload: unknown): DocumentResponse {
   ) {
     throw new Error("文档响应格式无效");
   }
-  return {
+  const document: DocumentResponse = {
     path: payload.path,
     title: payload.title,
     html: payload.html,
     frontmatter: parseFrontMatter(payload.frontmatter),
     toc: parseTOC(payload.toc),
   };
+  if (payload.documentRef !== undefined && payload.documentRef !== null) {
+    const ref = payload.documentRef;
+    if (
+      !isRecord(ref) ||
+      typeof ref.rootId !== "string" ||
+      typeof ref.path !== "string"
+    ) {
+      throw new Error("文档响应格式无效");
+    }
+    document.documentRef = { rootId: ref.rootId, path: ref.path };
+  }
+  if (payload.documentHash !== undefined && payload.documentHash !== null) {
+    if (typeof payload.documentHash !== "string") {
+      throw new Error("文档响应格式无效");
+    }
+    document.documentHash = payload.documentHash;
+  }
+  return document;
 }
 
 function parseFileMetadata(payload: unknown): FileMetadata {

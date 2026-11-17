@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -77,12 +79,26 @@ type tocEntryResponse struct {
 	Text  string `json:"text"`
 }
 
+// documentRefResponse names a document by its persistent identity: the
+// root's stored UUID plus the root-relative path. It is the addressing
+// annotations and tokens use, stable across input reordering; the
+// positional r0/r1 URL shape stays the browser's concern.
+type documentRefResponse struct {
+	RootID string `json:"rootId"`
+	Path   string `json:"path"`
+}
+
 type documentResponse struct {
 	Path        string               `json:"path"`
 	Title       string               `json:"title"`
 	HTML        string               `json:"html"`
 	FrontMatter *frontMatterResponse `json:"frontmatter"`
 	TOC         []tocEntryResponse   `json:"toc"`
+	// DocumentRef and DocumentHash appear only in authenticated runs —
+	// the identity and content version annotations are pinned against.
+	// The hash is "sha256:" + hex of the raw Markdown source bytes.
+	DocumentRef  *documentRefResponse `json:"documentRef,omitempty"`
+	DocumentHash string               `json:"documentHash,omitempty"`
 }
 
 // documentHandler serves the unified React WebUI and its JSON API for every
@@ -188,6 +204,8 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 		mux.HandleFunc("/api/auth/login", handler.serveLogin)
 		mux.HandleFunc("/api/auth/logout", handler.serveLogout)
 		mux.HandleFunc("/api/auth/me", requireGET(handler.serveAuthMe))
+		mux.HandleFunc("/api/annotations", handler.serveAnnotations)
+		mux.HandleFunc("/api/annotations/", handler.serveAnnotationItem)
 	}
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
@@ -309,13 +327,24 @@ func (handler *documentHandler) serveDocument(response http.ResponseWriter, requ
 		writeJSONError(response, http.StatusInternalServerError, "render Markdown document")
 		return
 	}
-	writeJSON(response, http.StatusOK, documentResponse{
+	document := documentResponse{
 		Path:        handler.workspace.publicPath(root.id, relative),
 		Title:       markdown.PreferredTitle(frontMatter, rendered.Title),
 		HTML:        rendered.Body,
 		FrontMatter: frontMatterResponseFrom(frontMatter),
 		TOC:         tocEntriesFrom(rendered.Headings),
-	})
+	}
+	if handler.auth != nil {
+		// The annotation layer needs the persistent identity and the
+		// exact content version; both are omitted in the default mode.
+		digest := sha256.Sum256(contents)
+		document.DocumentHash = "sha256:" + hex.EncodeToString(digest[:])
+		document.DocumentRef = &documentRefResponse{
+			RootID: root.identity,
+			Path:   relative,
+		}
+	}
+	writeJSON(response, http.StatusOK, document)
 }
 
 // serveFileMetadata answers the display metadata (title, description) of one

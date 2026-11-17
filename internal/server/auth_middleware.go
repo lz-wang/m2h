@@ -93,6 +93,7 @@ func (handler *documentHandler) principalFromSession(request *http.Request) *pri
 		Username:    handler.auth.sessions.GetString(request.Context(), sessionUsername),
 		DisplayName: handler.auth.sessions.GetString(request.Context(), sessionDisplayName),
 		Provider:    handler.auth.sessions.GetString(request.Context(), sessionProvider),
+		Via:         principalViaSession,
 	}
 	if identity.ID == "" || identity.Username == "" {
 		return nil

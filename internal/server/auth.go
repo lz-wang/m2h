@@ -44,6 +44,9 @@ type authStack struct {
 	sessions      *scs.SessionManager
 	sessionStore  *auth.SQLiteSessionStore
 	limiter       *auth.LoginLimiter
+	// dataStore is the run's SQLite store: annotations and tokens
+	// persist through it.
+	dataStore *store.Store
 	// publicOrigin is the configured external origin (M2H_PUBLIC_URL
 	// without a path), or "" when unconfigured. Same-origin checks accept
 	// it in addition to the request's own Host, so deployments behind a
@@ -92,6 +95,7 @@ func buildAuthStack(config *auth.Config, dataStore *store.Store, basePath string
 		sessions:      sessions,
 		sessionStore:  sessionStore,
 		limiter:       auth.NewLoginLimiter(loginFailureMax, loginFailureWindow),
+		dataStore:     dataStore,
 	}
 	if config.PublicURL != "" {
 		stack.publicOrigin = publicOriginOf(config.PublicURL)
@@ -138,7 +142,17 @@ type principal struct {
 	Username    string
 	DisplayName string
 	Provider    string
+	// Via records which credential produced the identity — a browser
+	// session or (later) an API token. Write-scoped APIs (annotations)
+	// accept sessions only.
+	Via string
 }
+
+// Credential sources for principal.Via.
+const (
+	principalViaSession = "session"
+	principalViaToken   = "token"
+)
 
 type principalContextKey struct{}
 
