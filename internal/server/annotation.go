@@ -361,6 +361,10 @@ func (handler *documentHandler) serveReanchorAnnotation(response http.ResponseWr
 	request.Body = http.MaxBytesReader(response, request.Body, 64<<10)
 	var body struct {
 		Selector annotationSelectorRequest `json:"selector"`
+		// DocumentHash states which version the client re-selected text
+		// on. It must match the served document, or the new selector
+		// would be stored against a version it never addressed.
+		DocumentHash string `json:"documentHash"`
 	}
 	if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 		writeJSONError(response, http.StatusBadRequest, "invalid annotation request")
@@ -391,12 +395,20 @@ func (handler *documentHandler) serveReanchorAnnotation(response http.ResponseWr
 		writeJSONError(response, http.StatusNotFound, "annotation not found")
 		return
 	}
+	if !strings.HasPrefix(body.DocumentHash, "sha256:") {
+		writeJSONError(response, http.StatusBadRequest, "document hash is required")
+		return
+	}
 	hash, err := handler.documentHash(root, relative)
 	if err != nil {
 		writeJSONError(response, resolveVisibleStatus(err), "document not found")
 		return
 	}
-	if err := dataStore.UpdateAnnotationSelector(request.Context(), id, selector, hash); err != nil {
+	if hash != body.DocumentHash {
+		writeJSONError(response, http.StatusConflict, "document_changed")
+		return
+	}
+	if err := dataStore.UpdateAnnotationSelector(request.Context(), id, identity.ID, selector, hash); err != nil {
 		writeJSONError(response, http.StatusInternalServerError, "re-anchor annotation")
 		return
 	}

@@ -354,6 +354,12 @@ export function App({
   const annotationIndexRef = useRef<TextIndex | null>(null);
   const annotationLayerRef = useRef<HighlightLayer | null>(null);
   const annotationPositionsRef = useRef<Map<string, TextPosition>>(new Map());
+  // The loaded document's content hash, read through a ref so the rebuild
+  // callback keys on list changes only: an annotation whose stored hash
+  // equals the loaded hash may trust its stored position, one from an
+  // older version must re-earn it through context.
+  const annotationDocumentHashRef = useRef<string | null>(null);
+  annotationDocumentHashRef.current = annotationIdentity?.documentHash ?? null;
   if (annotationLayerRef.current === null) {
     annotationLayerRef.current = new HighlightLayer();
   }
@@ -375,11 +381,16 @@ export function App({
       return;
     }
     layer.attach(index);
+    const currentHash = annotationDocumentHashRef.current;
     const positions: TextPosition[] = [];
     const statuses: Record<string, "resolved" | "ambiguous" | "orphaned"> = {};
     const located = new Map<string, TextPosition>();
     for (const item of annotations.items) {
-      const result = reanchor(index, item.selector);
+      const result = reanchor(
+        index,
+        item.selector,
+        item.documentHash === currentHash,
+      );
       statuses[item.id] = result.status;
       if (result.position !== null) {
         positions.push(result.position);

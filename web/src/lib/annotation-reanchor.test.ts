@@ -122,4 +122,84 @@ describe("reanchor", () => {
     expect(result.status).toBe("resolved");
     expect(result.position).toEqual({ start: 3, end: 4 });
   });
+
+  it("disambiguates duplicate emoji quotes by context (code-point lengths)", () => {
+    // The same emoji twice; only the surrounding text tells them apart.
+    // The suffix probe must advance by the quote's code-point length (1),
+    // not its UTF-16 length (2) — a UTF-16 step reads the wrong window
+    // and both candidates collapse into "ambiguous".
+    const root = mountBody("<p>甲 \u{1F600} 乙</p><p>丙 \u{1F600} 丁</p>");
+    const index = new TextIndex(root);
+    const second = index.findAll("\u{1F600}")[1] ?? 0;
+    const selector = selectorFor(index, second, second + 1);
+    selector.position = { start: 999, end: 1000 };
+    const result = reanchor(index, selector);
+    expect(result.status).toBe("resolved");
+    expect(result.position).toEqual({ start: second, end: second + 1 });
+  });
+
+  it("re-verifies the original position by context after the document changed", () => {
+    // An edit pads the first paragraph so the OTHER paragraph's identical
+    // quote lands exactly on the annotation's old offset. String equality
+    // at the old offset must not confirm it — the context must, and it
+    // names the true (shifted) passage.
+    const before = mountBody("<p>AAAA。目标句。</p><p>BBBB。目标句。</p>");
+    const indexBefore = new TextIndex(before);
+    const annotated = indexBefore.findAll("目标句")[1] ?? 0;
+    const selector = selectorFor(indexBefore, annotated, annotated + 3);
+    selector.headingId = undefined;
+
+    before.innerHTML = "<p>PPPPPPPPPAAAA。目标句。</p><p>BBBB。目标句。</p>";
+    const after = new TextIndex(before);
+    // The old offset still reads the same exact string…
+    expect(after.slice(annotated, annotated + 3)).toBe("目标句");
+    // …yet the annotation must resolve onto the passage its context
+    // names (the second one, shifted by the padding), not the old offset.
+    const result = reanchor(after, selector);
+    expect(result.status).toBe("resolved");
+    const moved = after.findAll("目标句")[1] ?? 0;
+    expect(result.position).toEqual({ start: moved, end: moved + 3 });
+  });
+
+  it("does not confirm a lone match on string equality alone after a change", () => {
+    // The quote survived an edit that rewrote everything around it. The
+    // single occurrence matches only by string — the stored context
+    // matches nothing — and an unconfirmed association is worse than an
+    // undecided one.
+    const root = mountBody("<p>前文 甲乙 后文</p>");
+    const index = new TextIndex(root);
+    const selector = selectorFor(index, 3, 5);
+    root.innerHTML = "<p>全新 甲乙 结构</p>";
+    const after = new TextIndex(root);
+    const result = reanchor(after, selector);
+    expect(result.status).toBe("ambiguous");
+    expect(result.position).toBeNull();
+  });
+
+  it("reports ambiguous after a change when duplicates share context", () => {
+    const root = mountBody("<p>重复</p><p>重复</p>");
+    const index = new TextIndex(root);
+    const selector = selectorFor(index, 0, 2);
+    // No context to separate the two occurrences, and the document
+    // changed: the old position still holds the same string, but string
+    // equality proves nothing — ambiguity is the honest answer.
+    selector.quote.prefix = "";
+    selector.quote.suffix = "";
+    const result = reanchor(index, selector);
+    expect(result.status).toBe("ambiguous");
+    expect(result.position).toBeNull();
+  });
+
+  it("keeps the original position authoritative when the document is unchanged", () => {
+    // Same-hash re-renders (theme switches, tab toggles) must not move
+    // annotations: identical duplicate text at another offset is not a
+    // reason to re-search when the stored position still matches.
+    const root = mountBody("<p>重复</p><p>重复</p>");
+    const index = new TextIndex(root);
+    const second = index.findAll("重复")[1] ?? 0;
+    const selector = selectorFor(index, second, second + 2);
+    const result = reanchor(index, selector, true);
+    expect(result.status).toBe("resolved");
+    expect(result.position).toEqual({ start: second, end: second + 2 });
+  });
 });

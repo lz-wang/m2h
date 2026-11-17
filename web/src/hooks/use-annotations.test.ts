@@ -159,6 +159,13 @@ describe("useAnnotations", () => {
     });
     expect(done).toBe(true);
     expect(result.current.items[0]?.selector.position.start).toBe(4);
+    // The re-anchor states the document version it was made on.
+    const call = fetchMock.mock.calls.at(-1);
+    expect(String(call?.[0])).toBe("/api/annotations/a1/anchor");
+    const body = JSON.parse(String(call?.[1]?.body)) as {
+      documentHash: string;
+    };
+    expect(body.documentHash).toBe("sha256:abc");
   });
 
   it("select and clearError manage view state", async () => {

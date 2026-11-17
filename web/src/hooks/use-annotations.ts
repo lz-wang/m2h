@@ -148,8 +148,15 @@ export function useAnnotations(
 
   const reanchor = useCallback(
     async (id: string, selector: AnnotationSelectorData): Promise<boolean> => {
+      if (identity === null) {
+        return false;
+      }
       try {
-        const updated = await reanchorAnnotation(id, selector);
+        const updated = await reanchorAnnotation(
+          id,
+          identity.documentHash,
+          selector,
+        );
         setState((current) => ({
           ...current,
           items: current.items.map((item) =>
@@ -165,7 +172,7 @@ export function useAnnotations(
         return false;
       }
     },
-    [],
+    [identity],
   );
 
   const select = useCallback((id: string | null) => {

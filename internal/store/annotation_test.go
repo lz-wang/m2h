@@ -134,7 +134,16 @@ func TestUpdateAnnotationSelectorAuthorGate(t *testing.T) {
 		Position: annotation.PositionSelector{Start: 5, End: 11},
 		Version:  1,
 	}
-	if err := dataStore.UpdateAnnotationSelector(ctx, entry.ID, replacement, "sha256:new"); err != nil {
+	// A foreign author's UPDATE touches nothing — authorization rides
+	// the statement itself.
+	if err := dataStore.UpdateAnnotationSelector(ctx, entry.ID, "local:mallory", replacement, "sha256:evil"); err == nil {
+		t.Fatalf("foreign update accepted")
+	}
+	untouched, _ := dataStore.GetAnnotation(ctx, entry.ID)
+	if untouched.Selector.Quote.Exact != entry.Selector.Quote.Exact {
+		t.Fatalf("foreign update changed the row: %+v", untouched)
+	}
+	if err := dataStore.UpdateAnnotationSelector(ctx, entry.ID, entry.AuthorID, replacement, "sha256:new"); err != nil {
 		t.Fatalf("update failed: %v", err)
 	}
 	updated, _ := dataStore.GetAnnotation(ctx, entry.ID)

@@ -461,13 +461,17 @@ export async function deleteAnnotation(id: string): Promise<void> {
 }
 
 // reanchorAnnotation confirms a new selector for an annotation the caller
-// owns, after the document moved under it.
+// owns, after the document moved under it. The document hash states the
+// version the new selection was made on; a 409 means the document moved
+// again in between.
 export async function reanchorAnnotation(
   id: string,
+  documentHash: string,
   selector: AnnotationSelectorData,
 ): Promise<AnnotationItem> {
   return parseAnnotationItem(
     await requestMutation(appPath(`/api/annotations/${id}/anchor`), "PATCH", {
+      documentHash,
       selector,
     }),
   );

@@ -272,11 +272,14 @@ func TestAnnotationReanchorByAuthor(t *testing.T) {
 		t.Fatalf("foreign re-anchor = %d", forbidden.StatusCode)
 	}
 
-	own, _ := json.Marshal(map[string]any{"selector": map[string]any{
-		"quote":    map[string]any{"exact": "Guide", "prefix": "", "suffix": ""},
-		"position": map[string]any{"start": 2, "end": 7},
-		"version":  1,
-	}})
+	own, _ := json.Marshal(map[string]any{
+		"documentHash": fixture.document.Hash,
+		"selector": map[string]any{
+			"quote":    map[string]any{"exact": "Guide", "prefix": "", "suffix": ""},
+			"position": map[string]any{"start": 2, "end": 7},
+			"version":  1,
+		},
+	})
 	request, _ := http.NewRequest(http.MethodPatch,
 		fixture.server.URL+"/api/annotations/"+entry.ID+"/anchor", bytes.NewReader(own))
 	request.Header.Set("Content-Type", "application/json")
@@ -293,6 +296,70 @@ func TestAnnotationReanchorByAuthor(t *testing.T) {
 	}
 	if updated.Selector.Quote.Exact != "Guide" || updated.Quote != "Guide" {
 		t.Fatalf("re-anchored selector = %+v", updated.Selector)
+	}
+}
+
+// TestAnnotationReanchorRequiresCurrentDocumentHash pins the optimistic
+// concurrency contract of the human re-anchor flow: the client states
+// which version it re-selected text on, and a document that moved under
+// that selection is a 409, never a silently inconsistent stored anchor.
+func TestAnnotationReanchorRequiresCurrentDocumentHash(t *testing.T) {
+	fixture := newAnnotationFixture(t)
+	created := fixture.createAnnotation(t, fixture.alice, "reanchor hash")
+	var entry annotationResponse
+	if err := json.NewDecoder(created.Body).Decode(&entry); err != nil {
+		t.Fatal(err)
+	}
+	created.Body.Close()
+
+	selectorPayload := func() map[string]any {
+		return map[string]any{
+			"quote":    map[string]any{"exact": "Guide", "prefix": "", "suffix": ""},
+			"position": map[string]any{"start": 2, "end": 7},
+			"version":  1,
+		}
+	}
+	patch := func(body map[string]any) *http.Response {
+		encoded, _ := json.Marshal(body)
+		request := fixture.requestWithSession(
+			http.MethodPatch, "/api/annotations/"+entry.ID+"/anchor", fixture.alice, encoded)
+		return fixture.do(request)
+	}
+
+	// A re-anchor without a document version is malformed.
+	response := patch(map[string]any{"selector": selectorPayload()})
+	response.Body.Close()
+	if response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("hash-less re-anchor = %d, want 400", response.StatusCode)
+	}
+
+	// A re-anchor from a stale version conflicts instead of storing a
+	// selector bound to the wrong hash.
+	stale := map[string]any{
+		"selector":     selectorPayload(),
+		"documentHash": "sha256:" + strings.Repeat("0", 64),
+	}
+	conflict := patch(stale)
+	defer conflict.Body.Close()
+	if conflict.StatusCode != http.StatusConflict {
+		t.Fatalf("stale re-anchor = %d, want 409", conflict.StatusCode)
+	}
+	var payload struct {
+		Error string `json:"error"`
+	}
+	if err := json.NewDecoder(conflict.Body).Decode(&payload); err != nil || payload.Error != "document_changed" {
+		t.Fatalf("conflict body = %+v (err %v)", payload, err)
+	}
+
+	// The current version anchors cleanly.
+	current := map[string]any{
+		"selector":     selectorPayload(),
+		"documentHash": fixture.document.Hash,
+	}
+	accepted := patch(current)
+	defer accepted.Body.Close()
+	if accepted.StatusCode != http.StatusOK {
+		t.Fatalf("current re-anchor = %d, want 200", accepted.StatusCode)
 	}
 }
 

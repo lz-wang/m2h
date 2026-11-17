@@ -26,15 +26,23 @@ export interface AnchorResult {
 }
 
 // reanchor locates one stored selector on the index of the current body.
+// documentUnchanged reports whether the body still is the exact version
+// the selector was stored against (same content hash): then the stored
+// position stays authoritative. After an edit the original position is
+// demoted to just one candidate among equals — an identical string landing
+// at the old offset does not prove it is the same passage — and context
+// must confirm wherever the quote resolves.
 export function reanchor(
   index: TextIndex,
   selector: AnnotationSelector,
+  documentUnchanged = false,
 ): AnchorResult {
   const exact = selector.quote.exact;
 
-  // Step 1: the stored position still holds the quoted text — resolved
-  // without any search.
-  if (positionValid(index, selector.position, exact)) {
+  // Step 1: an unchanged document keeps the stored position — a same-hash
+  // re-render (theme switch, tab toggle) must not shift annotations, and
+  // re-searching duplicate text would only invite ambiguity.
+  if (documentUnchanged && positionValid(index, selector.position, exact)) {
     return {
       status: "resolved",
       position: selector.position,
@@ -48,9 +56,12 @@ export function reanchor(
     return { status: "orphaned", position: null, refreshed: null };
   }
 
-  // Step 3: prefix/suffix context narrows the candidates.
+  // Step 3: prefix/suffix context narrows the candidates. Lengths are in
+  // code points — the index's unit — never UTF-16 units, or every
+  // astral-plane quote (emoji) would probe its context at a shifted
+  // window and falsely collapse into ambiguity.
   const contextual = candidates.filter((start) =>
-    contextMatches(index, selector, start, exact.length),
+    contextMatches(index, selector, start, runeLength(exact)),
   );
   const narrowed = contextual.length > 0 ? contextual : candidates;
 
@@ -70,6 +81,21 @@ export function reanchor(
       winner = inHeading[0];
       unique = true;
     }
+  }
+
+  // Step 5: a winner that no stored context confirms may not resolve on
+  // string equality alone — the quote surviving an edit that rewrote its
+  // surroundings is exactly the silent mis-association the correctness
+  // principle forbids. The heading region is independent evidence and may
+  // rescue the match; anything else goes to a human.
+  if (
+    unique &&
+    contextual.length === 0 &&
+    (selector.quote.prefix !== "" || selector.quote.suffix !== "") &&
+    (selector.headingId === undefined ||
+      headingAt(index, winner) !== selector.headingId)
+  ) {
+    return { status: "ambiguous", position: null, refreshed: null };
   }
 
   if (winner === null || !unique) {

@@ -103,20 +103,22 @@ func (store *Store) DeleteAnnotation(ctx context.Context, id, authorID string) (
 }
 
 // UpdateAnnotationSelector re-anchors an annotation to new selector data —
-// the human-confirmed repair path after a document edit. Authorization is
-// the API layer's call (the author check needs the entry anyway).
-func (store *Store) UpdateAnnotationSelector(ctx context.Context, id string, selector annotation.Selector, documentHash string) error {
+// the human-confirmed repair path after a document edit. The author
+// condition rides the UPDATE itself, so authorization and the write are
+// one database-level fact even if the entry changed between the API
+// layer's check and this statement.
+func (store *Store) UpdateAnnotationSelector(ctx context.Context, id, authorID string, selector annotation.Selector, documentHash string) error {
 	result, err := store.db.ExecContext(ctx, `
 		UPDATE annotations SET
 			quote_exact = ?, quote_prefix = ?, quote_suffix = ?,
 			position_start = ?, position_end = ?,
 			heading_id = ?, tab_id = ?, block_hint = ?,
 			document_hash = ?, selector_version = ?, updated_at = ?
-		WHERE id = ?`,
+		WHERE id = ? AND author_id = ?`,
 		selector.Quote.Exact, selector.Quote.Prefix, selector.Quote.Suffix,
 		selector.Position.Start, selector.Position.End,
 		nullString(selector.HeadingID), nullString(selector.TabID), nullString(selector.BlockHint),
-		documentHash, selector.Version, time.Now().UnixMilli(), id)
+		documentHash, selector.Version, time.Now().UnixMilli(), id, authorID)
 	if err != nil {
 		return err
 	}
