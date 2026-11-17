@@ -66,7 +66,10 @@ export function useAnnotations(
   // The identity every in-flight write was started against. Writes cannot
   // be aborted like the listing fetch — the server must see them through —
   // but their responses must never update a different document's state:
-  // a write resolving after a document switch is dropped on arrival.
+  // a write resolving after a document switch is dropped on arrival. The
+  // check is by document (sameDocument), not object identity: switching
+  // away and back produces a fresh identity object for the same document,
+  // whose late responses still belong.
   const identityRef = useRef<AnnotationIdentity | null>(identity);
   identityRef.current = identity;
 
@@ -122,7 +125,7 @@ export function useAnnotations(
           selector,
           comment,
         );
-        if (identityRef.current === writtenFor) {
+        if (sameDocument(identityRef.current, writtenFor)) {
           setState((current) => ({
             ...current,
             items: [...current.items, created],
@@ -130,7 +133,7 @@ export function useAnnotations(
         }
         return true;
       } catch (error) {
-        if (identityRef.current === writtenFor) {
+        if (sameDocument(identityRef.current, writtenFor)) {
           setState((current) => ({
             ...current,
             error: errorMessage(error, "保存标注失败"),
@@ -146,7 +149,7 @@ export function useAnnotations(
     const writtenFor = identityRef.current;
     try {
       await deleteAnnotation(id);
-      if (identityRef.current === writtenFor) {
+      if (sameDocument(identityRef.current, writtenFor)) {
         setState((current) => ({
           ...current,
           items: current.items.filter((item) => item.id !== id),
@@ -154,7 +157,7 @@ export function useAnnotations(
         }));
       }
     } catch (error) {
-      if (identityRef.current === writtenFor) {
+      if (sameDocument(identityRef.current, writtenFor)) {
         setState((current) => ({
           ...current,
           error: errorMessage(error, "删除标注失败"),
@@ -175,7 +178,7 @@ export function useAnnotations(
           writtenFor.documentHash,
           selector,
         );
-        if (identityRef.current === writtenFor) {
+        if (sameDocument(identityRef.current, writtenFor)) {
           setState((current) => ({
             ...current,
             items: current.items.map((item) =>
@@ -185,7 +188,7 @@ export function useAnnotations(
         }
         return true;
       } catch (error) {
-        if (identityRef.current === writtenFor) {
+        if (sameDocument(identityRef.current, writtenFor)) {
           setState((current) => ({
             ...current,
             error: errorMessage(error, "更新标注位置失败"),
@@ -233,4 +236,19 @@ function errorMessage(error: unknown, fallback: string): string {
 
 function isAbort(error: unknown): boolean {
   return error instanceof DOMException && error.name === "AbortError";
+}
+
+// sameDocument reports whether two identities address the same document
+// at the same content version — the equivalence late write responses are
+// judged by.
+function sameDocument(
+  left: AnnotationIdentity | null,
+  right: AnnotationIdentity | null,
+): boolean {
+  return (
+    left !== null &&
+    right !== null &&
+    left.path === right.path &&
+    left.documentHash === right.documentHash
+  );
 }

@@ -224,6 +224,52 @@ describe("useAnnotations", () => {
     expect(result.current.items).toHaveLength(0);
   });
 
+  it("a late response still applies after switching AWAY and BACK to the same document", async () => {
+    // Same path, same content hash — a fresh identity object, but the
+    // same document. Dropping the response on object identity alone
+    // would hide a successfully saved annotation until the next reload.
+    let resolveCreate: (value: Response) => void = () => {};
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ annotations: [] }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveCreate = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ annotations: [] }));
+    const { result, rerender } = renderHook(
+      ({ identity: current }) => useAnnotations(true, current),
+      { initialProps: { identity } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let createDone: Promise<boolean> | null = null;
+    act(() => {
+      createDone = result.current.create(
+        {
+          quote: { exact: "同一段的引用", prefix: "", suffix: "" },
+          position: { start: 0, end: 7 },
+          version: 1,
+        },
+        "",
+      );
+    });
+    // Away to another document, then back to the same one (new object,
+    // same path + hash).
+    rerender({
+      identity: { ...identity, path: "other.md", documentHash: "sha256:def" },
+    });
+    rerender({ identity: { ...identity } });
+    await act(async () => {
+      resolveCreate(jsonResponse(item({ id: "applied" })));
+      await createDone;
+    });
+    expect(createDone).not.toBeNull();
+    await createDone;
+    expect(result.current.items.map((entry) => entry.id)).toEqual(["applied"]);
+  });
+
   it("a failed remove after a document switch does not surface on the new document", async () => {
     let rejectRemove: (reason?: unknown) => void = () => {};
     fetchMock

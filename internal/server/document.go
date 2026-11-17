@@ -49,9 +49,15 @@ type fileMetadataResponse struct {
 // paths, platform separators) never crosses this boundary, so nothing about
 // the serving machine leaks to any listener.
 type rootSummary struct {
-	ID    string        `json:"id"`
-	Name  string        `json:"name"`
-	Files []fileSummary `json:"files"`
+	// ID is the positional root id URLs are built from ("r0"); RootID is
+	// the persistent workspace identity token scopes and document refs
+	// are validated against. Both appear in authenticated runs, where the
+	// settings UI reads RootID to mint restricted token scopes; the
+	// default mode has no persistent identities and omits the field.
+	ID     string        `json:"id"`
+	RootID string        `json:"rootId,omitempty"`
+	Name   string        `json:"name"`
+	Files  []fileSummary `json:"files"`
 }
 
 type fileListResponse struct {
@@ -266,9 +272,10 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 			})
 		}
 		roots = append(roots, rootSummary{
-			ID:    root.id,
-			Name:  root.label,
-			Files: summaries,
+			ID:     root.id,
+			RootID: root.identity,
+			Name:   root.label,
+			Files:  summaries,
 		})
 	}
 	writeJSON(response, http.StatusOK, fileListResponse{

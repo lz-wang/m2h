@@ -634,6 +634,61 @@ func TestTokenRouteEdges(t *testing.T) {
 	}
 }
 
+// TestFilesExposeTokenScopeRootId pins the settings UI's real request
+// sequence: the listing must expose each root's persistent identity, and
+// that identity is what /api/tokens accepts for restricted scopes. The
+// positional root id ("r0") is a URL artifact the scope validation
+// rejects — a UI reading the wrong one fails on every creation.
+func TestFilesExposeTokenScopeRootId(t *testing.T) {
+	fixture := newTokenFixture(t)
+	alice := fixture.loginAs(t, "alice", "password-1")
+
+	list, _ := http.NewRequest(http.MethodGet, fixture.server.URL+"/api/files", nil)
+	list.AddCookie(alice)
+	response := fixture.do(list)
+	var payload struct {
+		Roots []struct {
+			ID     string `json:"id"`
+			RootID string `json:"rootId"`
+			Files  []struct {
+				Path string `json:"path"`
+			} `json:"files"`
+		} `json:"roots"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+		t.Fatal(err)
+	}
+	response.Body.Close()
+	if len(payload.Roots) != 1 {
+		t.Fatalf("roots = %d", len(payload.Roots))
+	}
+	root := payload.Roots[0]
+	if root.RootID == "" || root.RootID == root.ID {
+		t.Fatalf("listing must expose the persistent identity, got id=%q rootId=%q", root.ID, root.RootID)
+	}
+
+	// Both restricted scopes mint from the listing's identity.
+	for name, scope := range map[string]map[string]any{
+		"root": {
+			"permissions": []string{"document:read"},
+			"resource":    map[string]any{"type": "root", "rootId": root.RootID},
+		},
+		"document": {
+			"permissions": []string{"document:read"},
+			"resource":    map[string]any{"type": "document", "rootId": root.RootID, "path": "guide.md"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			status, _ := fixture.createTokenViaSession(t, alice, map[string]any{
+				"kind": "persistent", "name": "ui-sequence", "scope": scope,
+			})
+			if status != http.StatusCreated {
+				t.Fatalf("restricted scope from listing identity = %d, want 201", status)
+			}
+		})
+	}
+}
+
 func TestCreateRootScopedToken(t *testing.T) {
 	fixture := newTokenFixture(t)
 	alice := fixture.loginAs(t, "alice", "password-1")

@@ -307,4 +307,50 @@ test.describe("authenticated mode", () => {
     });
     await expect(page.getByText("未定位")).toBeHidden();
   });
+
+  test("the re-anchor flow cancels on Escape with nothing selected", async ({
+    page,
+    request,
+  }) => {
+    await login(page, "alice", "password-1");
+    const cookies = await page.context().cookies(baseURL);
+    const cookieHeader = cookies
+      .map((cookie) => `${cookie.name}=${cookie.value}`)
+      .join("; ");
+    const document = await request.get(
+      `${baseURL}/api/document?path=README.md`,
+      { headers: { Cookie: cookieHeader } },
+    );
+    const identity = (await document.json()) as {
+      documentRef: { rootId: string; path: string };
+      documentHash: string;
+    };
+    const created = await request.post(`${baseURL}/api/annotations`, {
+      headers: { Cookie: cookieHeader, Origin: baseURL },
+      data: {
+        documentRef: identity.documentRef,
+        documentHash: identity.documentHash,
+        selector: {
+          quote: { exact: "另一个失效引用", prefix: "", suffix: "" },
+          position: { start: 0, end: 7 },
+          version: 1,
+        },
+        comment: "待重新关联",
+      },
+    });
+    expect(created.status()).toBe(201);
+
+    await page.goto(`${baseURL}/doc/README.md`);
+    await page.waitForSelector("article p");
+    await page.getByRole("button", { name: /打开标注面板/ }).click();
+    await expect(page.getByText("未定位")).toBeVisible({ timeout: 10_000 });
+
+    // Enter the flow, select nothing, press Escape: the banner's promise.
+    await page.getByRole("button", { name: "重新关联" }).click();
+    await expect(page.getByText(/按 Esc 取消/)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(page.getByText(/按 Esc 取消/)).toBeHidden();
+    // The annotation is untouched — still unresolved.
+    await expect(page.getByText("未定位")).toBeVisible();
+  });
 });

@@ -26,7 +26,9 @@ function describeScope(token: TokenItem): string {
     case "all_published":
       return "全部已发布文档";
     case "root":
-      return "单个文档根";
+      // The identity travels with the token; it is what a multi-root
+      // workspace can tell two root-scoped tokens apart by.
+      return `单个文档根（${token.scope.resource.rootId ?? "?"}）`;
     case "document":
       return `单篇文档（${token.scope.resource.path ?? ""}）`;
     default:
@@ -94,12 +96,17 @@ export function TokenSettings() {
   }, [open]);
 
   // Restricted scopes need the workspace topology; fetch it once, on
-  // first need. A failure only disables the pickers, never the dialog.
+  // first need. Only the persistent root identities (rootId) are usable
+  // as token scopes — the positional ids are URL artifacts the server
+  // rejects — so roots without one are not offered. A loading failure
+  // says so instead of silently disabling creation.
+  const [rootsError, setRootsError] = useState<string | null>(null);
   useEffect(() => {
     if (!open || scopeType === "all_published" || roots !== null) {
       return;
     }
     const controller = new AbortController();
+    setRootsError(null);
     void fetch(appPath("/api/files"), { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) {
@@ -107,7 +114,7 @@ export function TokenSettings() {
         }
         return (await response.json()) as {
           roots?: Array<{
-            id?: string;
+            rootId?: string;
             name?: string;
             files?: Array<{ path?: string }>;
           }>;
@@ -122,16 +129,17 @@ export function TokenSettings() {
             (
               root,
             ): root is {
-              id: string;
+              rootId: string;
               name: string;
               files: Array<{ path: string }>;
             } =>
-              typeof root.id === "string" &&
+              typeof root.rootId === "string" &&
+              root.rootId !== "" &&
               typeof root.name === "string" &&
               Array.isArray(root.files),
           )
           .map((root) => ({
-            id: root.id,
+            id: root.rootId,
             name: root.name,
             paths: root.files
               .map((file) => file.path)
@@ -149,6 +157,7 @@ export function TokenSettings() {
       .catch(() => {
         if (!controller.signal.aborted) {
           setRoots([]);
+          setRootsError("无法加载文档列表，请稍后重试。");
         }
       });
     return () => {
@@ -340,21 +349,35 @@ export function TokenSettings() {
                 <option value="指定单篇文档">指定单篇文档</option>
               </select>
               {scopeType !== "all_published" ? (
-                <select
-                  aria-label="文档根目录"
-                  className="border-border bg-background h-8 max-w-36 rounded-md border px-2 text-xs"
-                  value={rootId}
-                  onChange={(event) => {
-                    setRootId(event.target.value);
-                    setDocumentPath("");
-                  }}
-                >
-                  {(roots ?? []).map((option) => (
-                    <option key={option.id} value={option.id}>
-                      {option.name}
-                    </option>
-                  ))}
-                </select>
+                rootsError !== null ? (
+                  <span className="text-destructive inline-flex items-center gap-1 text-xs">
+                    {rootsError}
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      aria-label="重试加载文档列表"
+                      onClick={() => setRoots(null)}
+                    >
+                      重试
+                    </Button>
+                  </span>
+                ) : (
+                  <select
+                    aria-label="文档根目录"
+                    className="border-border bg-background h-8 max-w-36 rounded-md border px-2 text-xs"
+                    value={rootId}
+                    onChange={(event) => {
+                      setRootId(event.target.value);
+                      setDocumentPath("");
+                    }}
+                  >
+                    {(roots ?? []).map((option) => (
+                      <option key={option.id} value={option.id}>
+                        {option.name}
+                      </option>
+                    ))}
+                  </select>
+                )
               ) : null}
               {scopeType === "document" && selectedRoot ? (
                 <select

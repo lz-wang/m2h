@@ -145,12 +145,16 @@ describe("TokenSettings", () => {
   });
 
   it("scopes a new token to a selected document root", async () => {
+    // The listing answers the URL positional id AND the persistent
+    // identity the token scope validation requires; the picker must
+    // submit the identity.
     const filesResponse = jsonResponse({
       kind: "directory",
       version: "test",
       roots: [
         {
-          id: "root-1",
+          id: "r0",
+          rootId: "root-uuid-1",
           name: "docs",
           files: [
             { path: "guide.md", name: "guide.md" },
@@ -193,7 +197,7 @@ describe("TokenSettings", () => {
     );
     await userEvent.selectOptions(
       screen.getByLabelText("文档根目录"),
-      "root-1",
+      "root-uuid-1",
     );
     await userEvent.type(screen.getByLabelText("令牌名称"), "root-agent");
     await userEvent.click(screen.getByRole("button", { name: "创建" }));
@@ -212,7 +216,7 @@ describe("TokenSettings", () => {
       scope: { resource: { type: string; rootId?: string } };
     };
     expect(body.scope.resource.type).toBe("root");
-    expect(body.scope.resource.rootId).toBe("root-1");
+    expect(body.scope.resource.rootId).toBe("root-uuid-1");
   });
 
   it("scopes a new token to a single selected document", async () => {
@@ -225,7 +229,8 @@ describe("TokenSettings", () => {
             version: "test",
             roots: [
               {
-                id: "root-1",
+                id: "r0",
+                rootId: "root-uuid-1",
                 name: "docs",
                 files: [{ path: "guide.md", name: "guide.md" }],
               },
@@ -244,7 +249,7 @@ describe("TokenSettings", () => {
     await waitFor(() => expect(screen.getByLabelText("文档路径")).toBeTruthy());
     await userEvent.selectOptions(
       screen.getByLabelText("文档根目录"),
-      "root-1",
+      "root-uuid-1",
     );
     await userEvent.selectOptions(
       screen.getByLabelText("文档路径"),
@@ -266,9 +271,28 @@ describe("TokenSettings", () => {
         };
       };
       expect(body.scope.resource.type).toBe("document");
-      expect(body.scope.resource.rootId).toBe("root-1");
+      expect(body.scope.resource.rootId).toBe("root-uuid-1");
       expect(body.scope.resource.path).toBe("guide.md");
     });
+  });
+
+  it("explains itself when the document listing cannot be loaded", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ tokens: [] }))
+      .mockImplementation(async (input: RequestInfo | URL) => {
+        if (String(input).includes("/api/files")) {
+          return jsonResponse({ error: "boom" }, 500);
+        }
+        return jsonResponse({ tokens: [] });
+      });
+    await openDialog();
+    await waitFor(() => expect(screen.getByText(/还没有令牌/)).toBeTruthy());
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("访问范围"),
+      "指定文档根目录",
+    );
+    expect(await screen.findByText(/无法加载文档列表/)).toBeTruthy();
   });
 });
 

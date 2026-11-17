@@ -212,4 +212,22 @@ describe("SelectionToolbar", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onReanchorCancel).toHaveBeenCalledTimes(1);
   });
+
+  it("re-anchor mode cancels on Escape with NO selection yet", async () => {
+    // The banner promises "press Esc to cancel" — most of the flow is
+    // spent with nothing selected, so Escape must work in that state too.
+    const onReanchorCancel = vi.fn();
+    render(
+      <SelectionToolbar
+        bodyRef={{ current: body }}
+        indexRef={{ current: index }}
+        onAnnotate={vi.fn()}
+        reanchorPending={{ quote: "旧版本的引用" }}
+        onReanchorCancel={onReanchorCancel}
+      />,
+    );
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onReanchorCancel).toHaveBeenCalledTimes(1);
+  });
 });

@@ -140,7 +140,12 @@ export function SelectionToolbar({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && selector !== null) {
+      // Escape also serves the re-anchor flow's banner promise while no
+      // text is selected yet — that is most of the flow's lifetime.
+      if (
+        event.key === "Escape" &&
+        (selector !== null || reanchorPending !== null)
+      ) {
         setSelector(null);
         setPosition(null);
         setCommenting(false);

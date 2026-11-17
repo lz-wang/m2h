@@ -409,6 +409,13 @@ func (handler *documentHandler) serveReanchorAnnotation(response http.ResponseWr
 		return
 	}
 	if err := dataStore.UpdateAnnotationSelector(request.Context(), id, identity.ID, selector, hash); err != nil {
+		// The conditional UPDATE can lose its own race: the annotation
+		// deleted between the load above and this statement is a plain
+		// miss, not a server fault.
+		if errors.Is(err, store.ErrAnnotationNotFound) {
+			writeJSONError(response, http.StatusNotFound, "annotation not found")
+			return
+		}
 		writeJSONError(response, http.StatusInternalServerError, "re-anchor annotation")
 		return
 	}
