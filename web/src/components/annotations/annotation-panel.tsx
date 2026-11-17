@@ -6,6 +6,7 @@ import {
   FileJson,
   FileText,
   LoaderCircle,
+  LocateFixed,
   MessageSquare,
   Trash2,
   X,
@@ -44,6 +45,9 @@ export interface AnnotationPanelProps {
   // Scrolls the body to the annotation's live position.
   onLocate(id: string): void;
   onDelete(id: string): void;
+  // Starts the human re-anchor flow for one of the caller's unresolved
+  // annotations: the reader switches to "select the new passage" mode.
+  onReanchor?(id: string): void;
   // Optional: mints a temporary document-scoped token and copies an
   // agent-ready review packet to the clipboard (authenticated runs with
   // tokens enabled).
@@ -65,6 +69,7 @@ export function AnnotationPanel({
   document,
   onLocate,
   onDelete,
+  onReanchor,
   onCopyForAgent,
 }: AnnotationPanelProps) {
   const isMobile = useIsMobile();
@@ -170,6 +175,17 @@ export function AnnotationPanel({
                     >
                       <Crosshair aria-hidden="true" />
                     </Button>
+                    {status !== "resolved" && item.mine && onReanchor ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="重新关联"
+                        title="重新选取正文，重新关联此标注"
+                        onClick={() => onReanchor(item.id)}
+                      >
+                        <LocateFixed aria-hidden="true" />
+                      </Button>
+                    ) : null}
                     <Button
                       variant="ghost"
                       size="icon-xs"

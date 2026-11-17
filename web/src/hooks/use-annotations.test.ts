@@ -180,4 +180,125 @@ describe("useAnnotations", () => {
     act(() => result.current.clearError());
     expect(result.current.error).toBeNull();
   });
+
+  it("a create resolving after a document switch never touches the new document", async () => {
+    let resolveCreate: (value: Response) => void = () => {};
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ annotations: [] }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveCreate = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ annotations: [] }));
+    const { result, rerender } = renderHook(
+      ({ identity: current }) => useAnnotations(true, current),
+      { initialProps: { identity } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    let createDone: Promise<boolean> | null = null;
+    act(() => {
+      createDone = result.current.create(
+        {
+          quote: { exact: "旧文档的引用", prefix: "", suffix: "" },
+          position: { start: 0, end: 7 },
+          version: 1,
+        },
+        "",
+      );
+    });
+    // The user switches documents while the create is in flight.
+    rerender({
+      identity: { ...identity, path: "other.md", documentHash: "sha256:def" },
+    });
+    await act(async () => {
+      resolveCreate(jsonResponse(item({ id: "stale" })));
+      await createDone;
+    });
+    expect(createDone).not.toBeNull();
+    await createDone;
+    // The late response belongs to the previous document: the new
+    // document's list must stay untouched.
+    expect(result.current.items).toHaveLength(0);
+  });
+
+  it("a failed remove after a document switch does not surface on the new document", async () => {
+    let rejectRemove: (reason?: unknown) => void = () => {};
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ annotations: [item()] }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((_resolve, reject) => {
+            rejectRemove = reject;
+          }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ annotations: [] }));
+    const { result, rerender } = renderHook(
+      ({ identity: current }) => useAnnotations(true, current),
+      { initialProps: { identity } },
+    );
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+
+    let removeDone: Promise<void> | null = null;
+    act(() => {
+      removeDone = result.current.remove("a1");
+    });
+    rerender({ identity: { ...identity, path: "other.md" } });
+    await act(async () => {
+      rejectRemove(new Error("network died"));
+      await removeDone;
+    });
+    expect(result.current.error).toBeNull();
+    expect(result.current.loading).toBe(false);
+  });
+
+  it("a reanchor resolving after a document switch never mutates the new list", async () => {
+    let resolveReanchor: (value: Response) => void = () => {};
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ annotations: [item()] }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveReanchor = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ annotations: [] }));
+    const { result, rerender } = renderHook(
+      ({ identity: current }) => useAnnotations(true, current),
+      { initialProps: { identity } },
+    );
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+
+    let done: Promise<boolean> | null = null;
+    act(() => {
+      done = result.current.reanchor("a1", {
+        quote: { exact: "改用", prefix: "", suffix: "" },
+        position: { start: 4, end: 6 },
+        version: 1,
+      });
+    });
+    rerender({
+      identity: { ...identity, path: "other.md", documentHash: "sha256:def" },
+    });
+    await act(async () => {
+      resolveReanchor(
+        jsonResponse(
+          item({
+            selector: {
+              quote: { exact: "改用", prefix: "", suffix: "" },
+              position: { start: 4, end: 6 },
+              version: 1,
+            },
+          }),
+        ),
+      );
+      await done;
+    });
+    expect(done).not.toBeNull();
+    await done;
+    expect(result.current.items).toHaveLength(0);
+    expect(result.current.error).toBeNull();
+  });
 });

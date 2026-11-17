@@ -90,6 +90,7 @@ export function reanchor(
   // rescue the match; anything else goes to a human.
   if (
     unique &&
+    winner !== null &&
     contextual.length === 0 &&
     (selector.quote.prefix !== "" || selector.quote.suffix !== "") &&
     (selector.headingId === undefined ||

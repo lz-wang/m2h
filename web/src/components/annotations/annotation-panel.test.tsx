@@ -125,4 +125,29 @@ describe("AnnotationPanel", () => {
     renderPanel({ open: false });
     expect(screen.queryByRole("region", { name: "标注面板" })).toBeNull();
   });
+
+  it("offers re-anchoring for the author's unresolved annotation", async () => {
+    const onReanchor = vi.fn();
+    renderPanel({
+      statuses: { a1: "orphaned" },
+      onReanchor,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "重新关联" }));
+    expect(onReanchor).toHaveBeenCalledWith("a1");
+  });
+
+  it("offers no re-anchoring for resolved annotations or others' items", () => {
+    renderPanel({
+      statuses: { a1: "resolved" },
+      onReanchor: vi.fn(),
+    });
+    expect(screen.queryByRole("button", { name: "重新关联" })).toBeNull();
+
+    renderPanel({
+      items: [item({ mine: false })],
+      statuses: { a1: "orphaned" },
+      onReanchor: vi.fn(),
+    });
+    expect(screen.queryByRole("button", { name: "重新关联" })).toBeNull();
+  });
 });

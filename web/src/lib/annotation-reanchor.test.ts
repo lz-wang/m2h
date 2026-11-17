@@ -1,11 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { reanchor } from "./annotation-reanchor";
-import {
-  type AnnotationSelector,
-  selectorFromRange,
-  TextIndex,
-} from "./annotation-selector";
+import { type AnnotationSelector, TextIndex } from "./annotation-selector";
 
 function mountBody(html: string): HTMLElement {
   const root = document.createElement("article");

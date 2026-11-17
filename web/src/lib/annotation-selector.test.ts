@@ -14,8 +14,6 @@ function mountBody(html: string): HTMLElement {
   return root;
 }
 
-const sequence = 0;
-
 beforeEach(() => {
   document.body.replaceChildren();
 });
@@ -159,5 +157,64 @@ describe("selectorFromRange", () => {
     quoteRange.selectNodeContents(quoteText);
     const quoteSelector = selectorFromRange(index, quoteRange);
     expect(quoteSelector?.blockHint).toBe("blockquote");
+  });
+
+  it("rejects selections spanning multiple blocks (paragraphs)", () => {
+    const root = mountBody("<p>第一段的正文</p><p>第二段的正文</p>");
+    const index = new TextIndex(root);
+    const first = root.querySelectorAll("p")[0]?.firstChild as Text;
+    const second = root.querySelectorAll("p")[1]?.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(first, 0);
+    range.setEnd(second, 4);
+    expect(selectorFromRange(index, range)).toBeNull();
+  });
+
+  it("rejects selections spanning table cells", () => {
+    const root = mountBody(
+      "<table><tbody><tr><td>单元格甲</td><td>单元格乙</td></tr></tbody></table>",
+    );
+    const index = new TextIndex(root);
+    const cells = root.querySelectorAll("td");
+    const first = cells[0]?.firstChild as Text;
+    const second = cells[1]?.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(first, 0);
+    range.setEnd(second, 3);
+    expect(selectorFromRange(index, range)).toBeNull();
+  });
+
+  it("rejects selections whose visible text crosses excluded regions", () => {
+    // The endpoints are plain content text, but the range's own text runs
+    // through a KaTeX render — the canonical slice and the browser's
+    // selection text disagree, and such a span cannot round-trip.
+    const root = mountBody(
+      '<p>正文起点</p><span class="katex">rendered math</span><p>正文终点</p>',
+    );
+    const index = new TextIndex(root);
+    const first = root.querySelectorAll("p")[0]?.firstChild as Text;
+    const last = root.querySelectorAll("p")[1]?.firstChild as Text;
+    const range = document.createRange();
+    range.setStart(first, 0);
+    range.setEnd(last, 4);
+    expect(selectorFromRange(index, range)).toBeNull();
+  });
+
+  it("accepts multi-node inline selections inside one block", () => {
+    // Bold and inline code split one paragraph into several text nodes;
+    // one logical block, one annotation.
+    const root = mountBody(
+      "<p>普通<strong>加粗</strong><code>代码</code>结尾</p>",
+    );
+    const index = new TextIndex(root);
+    const paragraph = root.querySelector("p") as HTMLElement;
+    const first = paragraph.firstChild as Text;
+    const last = paragraph.lastChild as Text;
+    const range = document.createRange();
+    range.setStart(first, 0);
+    range.setEnd(last, 2);
+    const selector = selectorFromRange(index, range);
+    expect(selector).not.toBeNull();
+    expect(selector?.quote.exact).toBe("普通加粗代码结尾");
   });
 });

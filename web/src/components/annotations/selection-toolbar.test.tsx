@@ -162,4 +162,54 @@ describe("SelectionToolbar", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(screen.queryByRole("toolbar")).toBeNull();
   });
+
+  it("re-anchor mode saves the new selection as the confirmed anchor", async () => {
+    const onAnnotate = vi.fn();
+    const onReanchor = vi.fn<(selector: unknown) => Promise<boolean>>();
+    onReanchor.mockResolvedValue(true);
+    render(
+      <SelectionToolbar
+        bodyRef={{ current: body }}
+        indexRef={{ current: index }}
+        onAnnotate={onAnnotate as never}
+        reanchorPending={{ quote: "旧版本的引用" }}
+        onReanchor={onReanchor as never}
+      />,
+    );
+
+    select(2, 11);
+    await waitFor(() =>
+      expect(
+        screen.getByRole("toolbar", { name: "重新关联标注" }),
+      ).toBeTruthy(),
+    );
+    // The annotation entry stays visible while re-anchoring.
+    expect(screen.getByText(/旧版本的引用/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "关联到此选区" }));
+    await waitFor(() => expect(onReanchor).toHaveBeenCalledTimes(1));
+    expect(onAnnotate).not.toHaveBeenCalled();
+    const [selector] = onReanchor.mock.calls[0] as [
+      { quote: { exact: string } },
+    ];
+    expect(selector.quote.exact).toBe("使用 SQLite");
+    // A confirmed re-anchor clears the toolbar and the selection.
+    expect(screen.queryByRole("toolbar")).toBeNull();
+  });
+
+  it("re-anchor mode cancels on Escape", async () => {
+    const onReanchorCancel = vi.fn();
+    render(
+      <SelectionToolbar
+        bodyRef={{ current: body }}
+        indexRef={{ current: index }}
+        onAnnotate={vi.fn()}
+        reanchorPending={{ quote: "旧版本的引用" }}
+        onReanchorCancel={onReanchorCancel}
+      />,
+    );
+    select(0, 3);
+    await waitFor(() => expect(screen.getByRole("toolbar")).toBeTruthy());
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(onReanchorCancel).toHaveBeenCalledTimes(1);
+  });
 });

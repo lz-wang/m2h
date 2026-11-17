@@ -35,6 +35,7 @@ import {
 } from "react";
 
 import {
+  type AnnotationSelectorData,
   type AuthIdentity,
   createToken,
   type FrontMatter,
@@ -347,6 +348,13 @@ export function App({
   }, [annotationsEnabled, preview.document]);
   const annotations = useAnnotations(annotationsEnabled, annotationIdentity);
   const [annotationsOpen, setAnnotationsOpen] = useState(false);
+  // The human re-anchor flow: the annotation awaiting a new passage, or
+  // null. While pending, the selection toolbar serves the re-association
+  // instead of creating new annotations.
+  const [reanchorPending, setReanchorPending] = useState<{
+    id: string;
+    quote: string;
+  } | null>(null);
   const [annotationStatuses, setAnnotationStatuses] = useState<
     Record<string, "resolved" | "ambiguous" | "orphaned">
   >({});
@@ -503,6 +511,45 @@ export function App({
       hash: annotationIdentity.documentHash,
     };
   }, [preview.document, annotationIdentity]);
+
+  // The re-anchor flow: a document switch mid-flow orphans the pending
+  // re-association (the annotation belongs to the previous document), so
+  // the identity change cancels it — state adjusted during render, not in
+  // an effect, so the pending flow can never paint onto a new document.
+  const reanchorIdentityRef = useRef(annotationIdentity);
+  if (reanchorIdentityRef.current !== annotationIdentity) {
+    reanchorIdentityRef.current = annotationIdentity;
+    if (reanchorPending !== null) {
+      setReanchorPending(null);
+    }
+  }
+  const startReanchor = useCallback(
+    (id: string) => {
+      setReanchorPending((current) => {
+        if (current !== null && current.id === id) {
+          return null; // clicking again toggles the flow off
+        }
+        const quote =
+          annotations.items.find((item) => item.id === id)?.selector.quote
+            .exact ?? "";
+        return { id, quote };
+      });
+    },
+    [annotations.items],
+  );
+  const confirmReanchor = useCallback(
+    async (selector: AnnotationSelectorData): Promise<boolean> => {
+      if (reanchorPending === null) {
+        return false;
+      }
+      const saved = await annotations.reanchor(reanchorPending.id, selector);
+      if (saved) {
+        setReanchorPending(null);
+      }
+      return saved;
+    },
+    [reanchorPending, annotations],
+  );
   // Search-result activation mirrors Markdown-link navigation exactly: a hit
   // in the already-open document scrolls in place (never refetching, so
   // Mermaid/图片 etc. are not re-rendered), a hit in another document
@@ -1016,18 +1063,37 @@ export function App({
                 document={annotationExportDocument}
                 onLocate={locateAnnotation}
                 onDelete={(id) => void annotations.remove(id)}
+                onReanchor={startReanchor}
                 onCopyForAgent={tokensEnabled ? copyForAgent : undefined}
               />
             ) : null}
           </div>
           {annotationsEnabled ? (
-            <SelectionToolbar
-              bodyRef={annotationBodyRef}
-              indexRef={annotationIndexRef}
-              onAnnotate={(selector, comment) =>
-                annotations.create(selector, comment)
-              }
-            />
+            <>
+              {reanchorPending !== null ? (
+                <div className="copy-status" role="status" aria-live="polite">
+                  请在正文中选中要关联的新文本（按 Esc 取消）
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    aria-label="取消重新关联"
+                    onClick={() => setReanchorPending(null)}
+                  >
+                    取消
+                  </Button>
+                </div>
+              ) : null}
+              <SelectionToolbar
+                bodyRef={annotationBodyRef}
+                indexRef={annotationIndexRef}
+                onAnnotate={(selector, comment) =>
+                  annotations.create(selector, comment)
+                }
+                reanchorPending={reanchorPending}
+                onReanchor={confirmReanchor}
+                onReanchorCancel={() => setReanchorPending(null)}
+              />
+            </>
           ) : null}
           {/* Floating edge jumps for the window-scrolled reader; one instance
            * for both single-file and directory previews. When the TOC rail is

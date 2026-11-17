@@ -63,6 +63,13 @@ export function useAnnotations(
   });
 
   const requestRef = useRef<AbortController | null>(null);
+  // The identity every in-flight write was started against. Writes cannot
+  // be aborted like the listing fetch — the server must see them through —
+  // but their responses must never update a different document's state:
+  // a write resolving after a document switch is dropped on arrival.
+  const identityRef = useRef<AnnotationIdentity | null>(identity);
+  identityRef.current = identity;
+
   useEffect(() => {
     requestRef.current?.abort();
     if (!enabled || identity === null) {
@@ -107,23 +114,28 @@ export function useAnnotations(
       if (identity === null) {
         return false;
       }
+      const writtenFor = identity;
       try {
         const created = await createAnnotation(
-          identity.documentRef,
-          identity.documentHash,
+          writtenFor.documentRef,
+          writtenFor.documentHash,
           selector,
           comment,
         );
-        setState((current) => ({
-          ...current,
-          items: [...current.items, created],
-        }));
+        if (identityRef.current === writtenFor) {
+          setState((current) => ({
+            ...current,
+            items: [...current.items, created],
+          }));
+        }
         return true;
       } catch (error) {
-        setState((current) => ({
-          ...current,
-          error: errorMessage(error, "保存标注失败"),
-        }));
+        if (identityRef.current === writtenFor) {
+          setState((current) => ({
+            ...current,
+            error: errorMessage(error, "保存标注失败"),
+          }));
+        }
         return false;
       }
     },
@@ -131,18 +143,23 @@ export function useAnnotations(
   );
 
   const remove = useCallback(async (id: string): Promise<void> => {
+    const writtenFor = identityRef.current;
     try {
       await deleteAnnotation(id);
-      setState((current) => ({
-        ...current,
-        items: current.items.filter((item) => item.id !== id),
-        selectedId: current.selectedId === id ? null : current.selectedId,
-      }));
+      if (identityRef.current === writtenFor) {
+        setState((current) => ({
+          ...current,
+          items: current.items.filter((item) => item.id !== id),
+          selectedId: current.selectedId === id ? null : current.selectedId,
+        }));
+      }
     } catch (error) {
-      setState((current) => ({
-        ...current,
-        error: errorMessage(error, "删除标注失败"),
-      }));
+      if (identityRef.current === writtenFor) {
+        setState((current) => ({
+          ...current,
+          error: errorMessage(error, "删除标注失败"),
+        }));
+      }
     }
   }, []);
 
@@ -151,24 +168,29 @@ export function useAnnotations(
       if (identity === null) {
         return false;
       }
+      const writtenFor = identity;
       try {
         const updated = await reanchorAnnotation(
           id,
-          identity.documentHash,
+          writtenFor.documentHash,
           selector,
         );
-        setState((current) => ({
-          ...current,
-          items: current.items.map((item) =>
-            item.id === id ? { ...updated, mine: item.mine } : item,
-          ),
-        }));
+        if (identityRef.current === writtenFor) {
+          setState((current) => ({
+            ...current,
+            items: current.items.map((item) =>
+              item.id === id ? { ...updated, mine: item.mine } : item,
+            ),
+          }));
+        }
         return true;
       } catch (error) {
-        setState((current) => ({
-          ...current,
-          error: errorMessage(error, "更新标注位置失败"),
-        }));
+        if (identityRef.current === writtenFor) {
+          setState((current) => ({
+            ...current,
+            error: errorMessage(error, "更新标注位置失败"),
+          }));
+        }
         return false;
       }
     },

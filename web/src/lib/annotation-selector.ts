@@ -273,9 +273,19 @@ function cpSlice(data: string, startCP: number, endCP: number): string {
   return data.slice(start, end);
 }
 
+// The block containers a selection must live inside as ONE unit: a
+// selection spanning two paragraphs, two table cells or a paragraph and
+// the heading above it has no stable single anchor, so the first version
+// of annotating rejects it outright.
+const SELECTOR_BLOCK =
+  "p, li, td, th, pre, blockquote, h1, h2, h3, h4, h5, h6, figcaption, dt, dd";
+
 // selectorFromRange builds the versioned selector for one selection. It
-// returns null when the range does not address canonical content (empty,
-// collapsed, or touching excluded regions).
+// returns null when the range does not address canonical content: empty,
+// collapsed, touching excluded regions, or spanning more than one logical
+// block (paragraph, cell, heading…). The browser's own selection text
+// must also agree with the canonical slice — disagreement means the
+// visible selection crossed content the canonical text never indexes.
 export function selectorFromRange(
   index: TextIndex,
   range: Range,
@@ -286,6 +296,14 @@ export function selectorFromRange(
   }
   const exact = index.slice(position.start, position.end);
   if (exact.trim() === "") {
+    return null;
+  }
+  if (range.toString() !== exact) {
+    return null;
+  }
+  const startBlock = blockOf(range.startContainer);
+  const endBlock = blockOf(range.endContainer);
+  if (startBlock === null || endBlock === null || startBlock !== endBlock) {
     return null;
   }
   const context = index.context(position);
@@ -310,6 +328,13 @@ export function selectorFromRange(
     }
   }
   return selector;
+}
+
+// blockOf resolves the logical block element governing one boundary node.
+function blockOf(boundary: Node): Element | null {
+  const element =
+    boundary instanceof Element ? boundary : boundary.parentElement;
+  return element?.closest(SELECTOR_BLOCK) ?? null;
 }
 
 // nearestHeadingId finds the id of the heading governing the annotated

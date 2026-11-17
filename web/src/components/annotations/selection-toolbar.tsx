@@ -1,4 +1,4 @@
-import { Highlighter, MessageSquarePlus } from "lucide-react";
+import { Highlighter, LocateFixed, MessageSquarePlus } from "lucide-react";
 import {
   type RefObject,
   useCallback,
@@ -26,6 +26,14 @@ export interface SelectionToolbarProps {
     selector: AnnotationSelector,
     comment: string,
   ) => Promise<boolean>;
+  // Re-anchor mode: while pending, the toolbar serves the human
+  // re-association flow — the next valid selection becomes the
+  // annotation's new anchor instead of a new annotation.
+  reanchorPending?: { quote: string } | null;
+  // Confirms the re-anchor with the freshly selected text.
+  onReanchor?: (selector: AnnotationSelector) => Promise<boolean>;
+  // Aborts re-anchor mode (Escape).
+  onReanchorCancel?: () => void;
   disabled?: boolean;
 }
 
@@ -42,6 +50,9 @@ export function SelectionToolbar({
   bodyRef,
   indexRef,
   onAnnotate,
+  reanchorPending = null,
+  onReanchor,
+  onReanchorCancel,
   disabled = false,
 }: SelectionToolbarProps) {
   const [selector, setSelector] = useState<AnnotationSelector | null>(null);
@@ -52,6 +63,15 @@ export function SelectionToolbar({
   // The live DOM selection is re-read on demand; only its derived selector
   // and rectangle live in state.
   const rangeRef = useRef<Range | null>(null);
+
+  // Leaving re-anchor mode discards any pending toolbar state.
+  useEffect(() => {
+    if (reanchorPending === null) {
+      return;
+    }
+    setCommenting(false);
+    setFailure(null);
+  }, [reanchorPending]);
 
   useEffect(() => {
     if (disabled) {
@@ -124,11 +144,14 @@ export function SelectionToolbar({
         setSelector(null);
         setPosition(null);
         setCommenting(false);
+        if (reanchorPending !== null) {
+          onReanchorCancel?.();
+        }
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selector]);
+  }, [selector, reanchorPending, onReanchorCancel]);
 
   if (selector === null || position === null || disabled) {
     return null;
@@ -151,6 +174,61 @@ export function SelectionToolbar({
       setFailure("保存失败，可重试");
     }
   };
+
+  const confirmReanchor = async () => {
+    if (selector === null || saving || onReanchor === undefined) {
+      return;
+    }
+    setSaving(true);
+    setFailure(null);
+    const saved = await onReanchor(selector);
+    setSaving(false);
+    if (saved) {
+      setSelector(null);
+      setPosition(null);
+      document.getSelection()?.removeAllRanges();
+    } else {
+      setFailure("保存失败，可重试");
+    }
+  };
+
+  if (reanchorPending !== null && onReanchor !== undefined) {
+    return (
+      <div
+        className="bg-popover text-popover-foreground border-border fixed z-40 flex flex-col gap-1 rounded-lg border p-1 shadow-lg"
+        style={{
+          top: position.top,
+          left: position.left,
+          transform: "translateX(-50%)",
+        }}
+        role="toolbar"
+        aria-label="重新关联标注"
+      >
+        <p
+          className="text-muted-foreground max-w-60 truncate px-2 pt-1 text-xs"
+          title={reanchorPending.quote}
+        >
+          重新关联：{reanchorPending.quote}
+        </p>
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={saving}
+            onClick={() => void confirmReanchor()}
+          >
+            <LocateFixed aria-hidden="true" />
+            关联到此选区
+          </Button>
+        </div>
+        {failure !== null ? (
+          <p className="text-destructive px-2 pb-1 text-xs" role="alert">
+            {failure}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
 
   return (
     <div
