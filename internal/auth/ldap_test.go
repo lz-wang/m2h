@@ -110,6 +110,24 @@ func TestLDAPAuthenticateHappyPath(t *testing.T) {
 	}
 }
 
+// TestLDAPPrincipalAuthorization pins the allowlist re-check persisted
+// sessions and tokens rely on: dropping a username from the allowlist must
+// retire that principal's existing credentials without a directory round
+// trip.
+func TestLDAPPrincipalAuthorization(t *testing.T) {
+	authenticator, err := NewLDAPAuthenticator(testLDAPConfig())
+	if err != nil {
+		t.Fatalf("NewLDAPAuthenticator failed: %v", err)
+	}
+	allowed := Principal{ID: "ldap:uuid-1", Username: "alice", Provider: "ldap"}
+	if !authenticator.IsPrincipalAllowed(allowed) {
+		t.Fatalf("allowlisted user must stay allowed")
+	}
+	if authenticator.IsPrincipalAllowed(Principal{ID: "ldap:uuid-2", Username: "carol", Provider: "ldap"}) {
+		t.Fatalf("user dropped from the allowlist must lose authorization")
+	}
+}
+
 func TestLDAPIdentityFallsBackFromUUIDToDN(t *testing.T) {
 	conn := &fakeLDAPConn{searchResult: singleEntry("uid=alice,ou=people,dc=example,dc=internal", "")}
 	authenticator := withFakeLDAP(t, conn, testLDAPConfig())

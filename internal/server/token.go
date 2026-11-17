@@ -211,6 +211,7 @@ func (handler *documentHandler) serveCreateToken(response http.ResponseWriter, r
 		Name:         name,
 		Kind:         string(kind),
 		OwnerID:      identity.ID,
+		OwnerName:    identity.Username,
 		ScopeJSON:    scopeJSON,
 		DocumentHash: documentHash,
 		ExpiresAt:    time.Now().Add(lifetime).UnixMilli(),
@@ -281,6 +282,15 @@ func (handler *documentHandler) authorizeBearer(response http.ResponseWriter, re
 	// LDAP, without waiting for anyone to revoke it.
 	ownerProvider, _, _ := strings.Cut(record.OwnerID, ":")
 	if ownerProvider != string(handler.auth.mode) {
+		writeUnauthorized(response, request.URL.Path)
+		return
+	}
+	// …and must still be authorized: removing a local account or dropping
+	// an LDAP allowlist entry retires its tokens at the next request. A
+	// token whose owner username cannot be established (pre-schema-v4
+	// LDAP rows) fails closed.
+	if record.OwnerName == "" ||
+		!handler.auth.authorizer.IsPrincipalAllowed(auth.Principal{Username: record.OwnerName}) {
 		writeUnauthorized(response, request.URL.Path)
 		return
 	}

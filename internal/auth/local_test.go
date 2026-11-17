@@ -106,6 +106,29 @@ func TestNewLocalAuthenticatorRejectsBrokenInput(t *testing.T) {
 	}
 }
 
+// TestLocalPrincipalAuthorization pins the re-authorization check persisted
+// sessions and tokens rely on: a principal minted by an earlier process must
+// stop being allowed the moment its account leaves the configuration.
+func TestLocalPrincipalAuthorization(t *testing.T) {
+	authenticator, err := NewLocalAuthenticator([]User{
+		{Username: "alice", Password: "password-1"},
+	})
+	if err != nil {
+		t.Fatalf("NewLocalAuthenticator failed: %v", err)
+	}
+	if !authenticator.IsPrincipalAllowed(Principal{ID: "local:alice", Username: "alice", Provider: "local"}) {
+		t.Fatalf("configured user must stay allowed")
+	}
+	if authenticator.IsPrincipalAllowed(Principal{ID: "local:bob", Username: "bob", Provider: "local"}) {
+		t.Fatalf("removed user must lose authorization immediately")
+	}
+	// The username decides — a live username stays allowed whatever stale
+	// id or provider the persisted credential carries.
+	if !authenticator.IsPrincipalAllowed(Principal{ID: "local:bob", Username: "alice", Provider: "ldap"}) {
+		t.Fatalf("authorization must key on the configured username, not the id")
+	}
+}
+
 // encodeArgon2idForTest builds a PHC string with fixed fast parameters.
 func encodeArgon2idForTest(password string) (string, error) {
 	params, err := decodePHC("$argon2id$v=19$m=32768,t=2,p=2$" +

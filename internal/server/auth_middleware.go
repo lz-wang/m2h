@@ -3,6 +3,8 @@ package server
 import (
 	"net/http"
 	"strings"
+
+	"github.com/lz-wang/m2h/internal/auth"
 )
 
 // publicAuthPath reports whether one internal (base-path-stripped) URL is
@@ -86,7 +88,9 @@ func (handler *documentHandler) authenticate(next http.Handler) http.Handler {
 
 // principalFromSession validates the request's session against the
 // current auth mode. A session minted under a different mode — local
-// accounts after a switch to LDAP, or back — is destroyed on sight.
+// accounts after a switch to LDAP, or back — is destroyed on sight, and so
+// is a session whose account no longer exists in the configuration: a
+// removed user's cookie dies at its next use, not at its expiry.
 func (handler *documentHandler) principalFromSession(request *http.Request) *principal {
 	identity := &principal{
 		ID:          handler.auth.sessions.GetString(request.Context(), sessionPrincipalID),
@@ -98,7 +102,10 @@ func (handler *documentHandler) principalFromSession(request *http.Request) *pri
 	if identity.ID == "" || identity.Username == "" {
 		return nil
 	}
-	if identity.Provider != string(handler.auth.mode) {
+	if identity.Provider != string(handler.auth.mode) ||
+		!handler.auth.authorizer.IsPrincipalAllowed(auth.Principal{
+			ID: identity.ID, Username: identity.Username, Provider: identity.Provider,
+		}) {
 		_ = handler.auth.sessions.Destroy(request.Context())
 		return nil
 	}

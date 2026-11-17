@@ -46,6 +46,11 @@ type authStack struct {
 	sessions      *scs.SessionManager
 	sessionStore  *auth.SQLiteSessionStore
 	limiter       *auth.LoginLimiter
+	// authorizer re-validates previously issued credentials — sessions
+	// and API tokens — against the current configuration on every
+	// request, so removing an account retires its outstanding
+	// credentials without waiting for expiry.
+	authorizer auth.PrincipalAuthorizer
 	// dataStore is the run's SQLite store: annotations and tokens
 	// persist through it.
 	dataStore *store.Store
@@ -99,12 +104,17 @@ func buildAuthStack(config *auth.Config, dataStore *store.Store, basePath string
 	// plain HTTP, so only the deployment's own declaration is trusted.
 	sessions.Cookie.Secure = strings.HasPrefix(config.PublicURL, "https://")
 
+	authorizer, ok := authenticator.(auth.PrincipalAuthorizer)
+	if !ok {
+		return nil, fmt.Errorf("auth mode %q cannot re-validate persisted credentials", config.Mode)
+	}
 	stack := &authStack{
 		mode:          config.Mode,
 		authenticator: authenticator,
 		sessions:      sessions,
 		sessionStore:  sessionStore,
 		limiter:       auth.NewLoginLimiter(loginFailureMax, loginFailureWindow),
+		authorizer:    authorizer,
 		dataStore:     dataStore,
 	}
 	if config.PublicURL != "" {

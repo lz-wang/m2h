@@ -46,10 +46,10 @@ func (store *Store) CreateToken(ctx context.Context, record *TokenRecord) error 
 	now := time.Now().UnixMilli()
 	_, err = store.db.ExecContext(ctx, `
 		INSERT INTO api_tokens (
-			id, secret_hash, name, kind, owner_id, scope_json, document_hash,
+			id, secret_hash, name, kind, owner_id, owner_name, scope_json, document_hash,
 			created_at, expires_at, last_used_at, revoked_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
-		id, record.SecretHash, record.Name, record.Kind, record.OwnerID,
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)`,
+		id, record.SecretHash, record.Name, record.Kind, record.OwnerID, record.OwnerName,
 		record.ScopeJSON, nullString(record.DocumentHash), now, record.ExpiresAt)
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func (store *Store) CreateToken(ctx context.Context, record *TokenRecord) error 
 // ListTokens returns one owner's active tokens, newest first.
 func (store *Store) ListTokens(ctx context.Context, ownerID string) ([]TokenRecord, error) {
 	rows, err := store.db.QueryContext(ctx, `
-		SELECT id, secret_hash, name, kind, owner_id, '' AS owner_name, scope_json,
+		SELECT id, secret_hash, name, kind, owner_id, owner_name, scope_json,
 			COALESCE(document_hash, ''), created_at, expires_at,
 			COALESCE(last_used_at, 0), COALESCE(revoked_at, 0)
 		FROM api_tokens
@@ -88,7 +88,7 @@ func (store *Store) ListTokens(ctx context.Context, ownerID string) ([]TokenReco
 // missing: an invalid credential is a 401, never a tombstone.
 func (store *Store) FindTokenByHash(ctx context.Context, secretHash string) (TokenRecord, error) {
 	row := store.db.QueryRowContext(ctx, `
-		SELECT id, secret_hash, name, kind, owner_id, '' AS owner_name, scope_json,
+		SELECT id, secret_hash, name, kind, owner_id, owner_name, scope_json,
 			COALESCE(document_hash, ''), created_at, expires_at,
 			COALESCE(last_used_at, 0), COALESCE(revoked_at, 0)
 		FROM api_tokens

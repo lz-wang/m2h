@@ -150,6 +150,14 @@ func (authenticator *LDAPAuthenticator) allowed(username string) bool {
 	return slices.Contains(authenticator.config.AllowedUsers, username)
 }
 
+// IsPrincipalAllowed applies the local allowlist to a previously
+// authenticated principal: a username dropped from M2H_LDAP_ALLOWED_USERS
+// loses its sessions and tokens at the next request, without a directory
+// round trip.
+func (authenticator *LDAPAuthenticator) IsPrincipalAllowed(principal Principal) bool {
+	return authenticator.allowed(principal.Username)
+}
+
 // ldapPrincipal derives the stable internal identity: the directory's
 // entryUUID when present (survives renames), else the distinguished name,
 // else the allowlisted username.

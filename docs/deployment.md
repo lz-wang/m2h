@@ -5,12 +5,12 @@ tags:
   - 部署
   - 安全
 create_date: 2026-08-30
-update_date: 2026-10-28
+update_date: 2026-11-18
 ---
 
 # VPS 部署指南
 
-m2h 是面向**可信 Markdown 内容**的轻量只读 Web 文档服务：它负责安全地把显式指定的文档 root 暴露为 Web 内容；身份认证、TLS 和公网访问控制由反向代理负责。本文给出把 m2h 作为 systemd 常驻服务、经 Nginx 对外发布的推荐配置。
+m2h 是面向**可信 Markdown 内容**的轻量只读 Web 文档服务：它负责安全地把显式指定的文档 root 暴露为 Web 内容；TLS 和公网访问控制由反向代理负责，身份认证既可交给反向代理，也可启用 m2h 内置认证（见[内置认证](#内置认证可选-v0270-起)一节）。本文给出把 m2h 作为 systemd 常驻服务、经 Nginx 对外发布的推荐配置。
 
 ## 目标架构
 
@@ -346,9 +346,9 @@ M2H_LDAP_ALLOWED_USERS='alice,bob' \
 
 ### 会话与数据
 
-- 浏览器使用 `m2h_session` Cookie（HttpOnly、SameSite=Lax、路径跟随 `--base-path`），12 小时闲置 / 7 天绝对过期；登录失败统一报错并按用户+IP 限流（15 分钟 5 次）。
-- 标注、会话与 Token 全部存在数据目录的 `m2h.db`（纯 Go SQLite 驱动，权限 0600）。备份即复制该文件；Schema 由版本号管理，旧库自动迁移，比程序新的库拒绝打开。
-- 切换 Local/LDAP 后，旧模式签发的会话与 Token 立即失效（属主身份提供方不匹配）。
+- 浏览器使用 `m2h_session` Cookie（HttpOnly、SameSite=Lax、路径跟随 `--base-path`），12 小时闲置 / 7 天绝对过期；登录失败统一报错并按用户名限流（15 分钟 10 次失败锁定该用户名）。
+- 标注、会话与 Token 全部存在数据目录的 `m2h.db`（纯 Go SQLite 驱动，权限 0600）。数据库运行在 WAL 模式，**运行期间直接复制该文件不是一致性备份**——尚未合并进主文件的写入可能丢失。停机时复制文件即可；运行中备份使用 `sqlite3 <data-dir>/m2h.db "VACUUM INTO '<backup-path>/m2h.db'"`（或 SQLite Online Backup，`sqlite3 … ".backup '<backup-path>/m2h.db'"`）生成一致性快照，恢复时把快照放回数据目录重启即可。Schema 由版本号管理，旧库自动迁移，比程序新的库拒绝打开。
+- 切换 Local/LDAP 后，旧模式签发的会话与 Token 立即失效（属主身份提供方不匹配）；从 `M2H_LOCAL_USERS_JSON` 删除账号或从 `M2H_LDAP_ALLOWED_USERS` 白名单移除用户后，该账号既有的会话与 Token 在下一次请求即失效，无需等待过期或重启。
 - 不要同时启用反向代理层的外置登录（如 Tinyauth）与 m2h 内置认证——两道登录会互相干扰；二选一。
 
 ### Agent 与 API Token

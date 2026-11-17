@@ -87,6 +87,18 @@ var migrations = []migration{
 			`CREATE INDEX idx_tokens_owner ON api_tokens(owner_id, created_at)`,
 		},
 	},
+	{
+		// owner_name carries the username a token's authorization is
+		// re-checked against (the id alone is not reversible for LDAP
+		// uuid identities). Rows whose username cannot be recovered keep
+		// the empty marker and fail closed at authorization time.
+		version: 4,
+		statements: []string{
+			`ALTER TABLE api_tokens ADD COLUMN owner_name TEXT NOT NULL DEFAULT ''`,
+			`UPDATE api_tokens SET owner_name = substr(owner_id, 7)
+				WHERE owner_name = '' AND owner_id LIKE 'local:%'`,
+		},
+	},
 }
 
 // latestVersion is the highest schema version this build understands.

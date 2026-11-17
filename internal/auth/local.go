@@ -32,6 +32,15 @@ type Authenticator interface {
 	Authenticate(ctx context.Context, username, password string) (Principal, error)
 }
 
+// PrincipalAuthorizer reports whether a previously authenticated principal
+// is still authorized under the current configuration. Persisted sessions
+// and API tokens re-check this on every request, so removing an account
+// (or dropping it from the LDAP allowlist) retires its outstanding
+// credentials without waiting for their expiry.
+type PrincipalAuthorizer interface {
+	IsPrincipalAllowed(principal Principal) bool
+}
+
 // LocalAuthenticator verifies accounts declared by M2H_LOCAL_USERS_JSON.
 // Passwords and hashes live only in memory for the lifetime of the process;
 // nothing is persisted or logged.
@@ -90,6 +99,14 @@ func (authenticator *LocalAuthenticator) Authenticate(_ context.Context, usernam
 		DisplayName: user.Username,
 		Provider:    string(ModeLocal),
 	}, nil
+}
+
+// IsPrincipalAllowed answers whether the account still exists in the
+// configured user table. A local account removed from M2H_LOCAL_USERS_JSON
+// loses its sessions and tokens at the next request.
+func (authenticator *LocalAuthenticator) IsPrincipalAllowed(principal Principal) bool {
+	_, known := authenticator.users[principal.Username]
+	return known
 }
 
 // burnDummy performs one hash verification with the dummy parameters so an

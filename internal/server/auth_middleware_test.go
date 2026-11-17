@@ -23,16 +23,24 @@ type authedTestServer struct {
 	server  *httptest.Server
 	stack   *authStack
 	docsDir string
+	dataDir string
 }
 
 func newAuthedTestServer(t *testing.T, config *auth.Config) *authedTestServer {
 	t.Helper()
 	base := t.TempDir()
-	docs := filepath.Join(base, "docs")
-	writeTestFile(t, filepath.Join(docs, "guide.md"), "# Guide\n\nBody text.")
-	writeTestFile(t, filepath.Join(docs, "asset.txt"), "attachment")
+	return newAuthedTestServerAt(t, config, filepath.Join(base, "docs"), filepath.Join(base, "m2h-data"))
+}
+
+// newAuthedTestServerAt builds the fixture on explicit directories so a test
+// can re-create the server against the same documents and the same
+// persisted sessions and tokens — the restart a configuration edit models.
+func newAuthedTestServerAt(t *testing.T, config *auth.Config, docsDir, dataDir string) *authedTestServer {
+	t.Helper()
+	writeTestFile(t, filepath.Join(docsDir, "guide.md"), "# Guide\n\nBody text.")
+	writeTestFile(t, filepath.Join(docsDir, "asset.txt"), "attachment")
 	resolved := make([]files.Input, 0)
-	for _, raw := range []string{docs} {
+	for _, raw := range []string{docsDir} {
 		input, err := files.Resolve(raw)
 		if err != nil {
 			t.Fatalf("resolve %q: %v", raw, err)
@@ -43,7 +51,7 @@ func newAuthedTestServer(t *testing.T, config *auth.Config) *authedTestServer {
 	if err != nil {
 		t.Fatalf("newWorkspace failed: %v", err)
 	}
-	dataStore, err := store.Open(filepath.Join(base, "m2h-data"))
+	dataStore, err := store.Open(dataDir)
 	if err != nil {
 		t.Fatalf("store.Open failed: %v", err)
 	}
@@ -62,7 +70,7 @@ func newAuthedTestServer(t *testing.T, config *auth.Config) *authedTestServer {
 	handler := newDocumentHandlerWithAuth(context.Background(), workspace, nil, ui, "test", false, "", stack)
 	server := httptest.NewServer(handler)
 	t.Cleanup(server.Close)
-	return &authedTestServer{server: server, stack: stack, docsDir: docs}
+	return &authedTestServer{server: server, stack: stack, docsDir: docsDir, dataDir: dataDir}
 }
 
 func loginJSON(username, password string) io.Reader {
@@ -102,6 +110,57 @@ func (fixture *authedTestServer) do(request *http.Request) *http.Response {
 		panic(err)
 	}
 	return response
+}
+
+// TestRevokedLocalUserCredentialsDieOnRebuild pins the P1-1 acceptance
+// flow: mint a session and a token, remove the account from the
+// configuration, restart against the same database — both credentials must
+// die, while the surviving account keeps working.
+func TestRevokedLocalUserCredentialsDieOnRebuild(t *testing.T) {
+	base := t.TempDir()
+	docsDir := filepath.Join(base, "docs")
+	dataDir := filepath.Join(base, "m2h-data")
+	fixture := &tokenFixture{authedTestServer: newAuthedTestServerAt(t, localAuthConfig(), docsDir, dataDir)}
+	session := fixture.loginAs(t, "alice", "password-1")
+	status, created := fixture.createTokenViaSession(t, session, map[string]any{
+		"kind": "persistent",
+		"name": "agent",
+		"scope": map[string]any{
+			"permissions": []string{"document:read", "search:read"},
+			"resource":    map[string]any{"type": "all_published"},
+		},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("mint = %d", status)
+	}
+
+	// Restart with alice removed from M2H_LOCAL_USERS_JSON.
+	reduced := &auth.Config{
+		Mode:       auth.ModeLocal,
+		LocalUsers: []auth.User{{Username: "bob", Password: "password-2"}},
+	}
+	reborn := newAuthedTestServerAt(t, reduced, docsDir, dataDir)
+
+	stale, _ := http.NewRequest(http.MethodGet, reborn.server.URL+"/api/files", nil)
+	stale.AddCookie(session)
+	response := reborn.do(stale)
+	response.Body.Close()
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("revoked user's session = %d, want 401", response.StatusCode)
+	}
+
+	bearer, _ := http.NewRequest(http.MethodGet, reborn.server.URL+"/api/files", nil)
+	bearer.Header.Set("Authorization", "Bearer "+created.Secret)
+	bearerResponse := reborn.do(bearer)
+	bearerResponse.Body.Close()
+	if bearerResponse.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("revoked user's token = %d, want 401", bearerResponse.StatusCode)
+	}
+
+	// The surviving account is unaffected.
+	if bob := reborn.loginAs(t, "bob", "password-2"); bob == nil {
+		t.Fatalf("bob must still log in after the rebuild")
+	}
 }
 
 func TestAuthenticatedRouteProtectionMatrix(t *testing.T) {
