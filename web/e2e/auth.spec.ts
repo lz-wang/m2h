@@ -219,5 +219,12 @@ test.describe("authenticated mode", () => {
       headers: { Authorization: `Bearer ${token}` },
     });
     expect(listed.status()).toBe(403);
+
+    // Shared review comments are never part of document:read.
+    const annotations = await request.get(
+      `${baseURL}/api/annotations?path=README.md`,
+      { headers: { Authorization: `Bearer ${token}` } },
+    );
+    expect(annotations.status()).toBe(403);
   });
 });

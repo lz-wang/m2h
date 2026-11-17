@@ -338,7 +338,9 @@ func bearerForbiddenPath(path string) bool {
 }
 
 // enforceTokenScope applies the route-specific authorization. It answers
-// the response itself when the scope falls short.
+// the response itself when the scope falls short. Anything not explicitly
+// listed here is denied: a future API must opt tokens in deliberately, not
+// leak open by omission.
 func (handler *documentHandler) enforceTokenScope(
 	response http.ResponseWriter,
 	request *http.Request,
@@ -364,12 +366,13 @@ func (handler *documentHandler) enforceTokenScope(
 		return nil
 	case path == "/api/document", path == "/api/file-metadata", path == "/raw/", strings.HasPrefix(path, "/raw/"):
 		return handler.enforceTokenDocumentScope(response, request, path, scope, record)
-	case path == "/api/annotations":
-		if request.Method != http.MethodGet {
-			// Writes are session-only; the handler double-checks.
-			return nil
-		}
-		return handler.enforceTokenDocumentScope(response, request, path, scope, record)
+	case path == "/api/annotations" || strings.HasPrefix(path, "/api/annotations/"):
+		// Shared review comments are a human surface: reading them is
+		// not part of document:read, and writes were always
+		// session-only. Agent access to annotations would need its own
+		// explicitly granted permission.
+		writeJSONError(response, http.StatusForbidden, "annotations are only available to browser sessions")
+		return errHandled
 	case path == "/assets/" || strings.HasPrefix(path, "/assets/"):
 		writeJSONError(response, http.StatusForbidden, "tokens cannot read attachments")
 		return errHandled
@@ -379,8 +382,14 @@ func (handler *documentHandler) enforceTokenScope(
 		// the shell's status codes.
 		writeJSONError(response, http.StatusForbidden, "tokens cannot fetch the document shell")
 		return errHandled
-	default:
+	case path == "/healthz" || path == "/api/config" ||
+		strings.HasPrefix(path, "/ui/") || strings.HasPrefix(path, "/runtime/"):
+		// The public capability surfaces carry no document knowledge and
+		// stay reachable, exactly as for anonymous callers.
 		return nil
+	default:
+		writeJSONError(response, http.StatusForbidden, "tokens cannot call this endpoint")
+		return errHandled
 	}
 }
 
@@ -403,8 +412,8 @@ func (handler *documentHandler) enforceTokenDocumentScope(
 		return errHandled
 	}
 	var virtual string
-	switch {
-	case path == "/api/document" || path == "/api/file-metadata" || path == "/api/annotations":
+	switch path {
+	case "/api/document", "/api/file-metadata":
 		value, ok := singlePathQuery(request)
 		if !ok {
 			writeJSONError(response, http.StatusBadRequest, "exactly one path query parameter is required")

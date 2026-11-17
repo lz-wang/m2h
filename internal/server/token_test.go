@@ -266,12 +266,12 @@ func TestBearerAuthorization(t *testing.T) {
 		}
 	})
 
-	t.Run("tokens cannot read annotations or write anything", func(t *testing.T) {
+	t.Run("tokens never touch annotations, read or write", func(t *testing.T) {
 		secret := mint(t, allScope)
 		annotations, _ := http.NewRequest(http.MethodGet, fixture.server.URL+"/api/annotations?path=guide.md", nil)
 		annotations.Header.Set("Authorization", "Bearer "+secret)
-		if response := fixture.do(annotations); response.StatusCode != http.StatusOK {
-			t.Fatalf("annotation read via bearer = %d", response.StatusCode)
+		if response := fixture.do(annotations); response.StatusCode != http.StatusForbidden {
+			t.Fatalf("annotation read via bearer = %d, want 403 — shared review comments are session-only", response.StatusCode)
 		}
 		create, _ := http.NewRequest(http.MethodPost, fixture.server.URL+"/api/annotations",
 			bytes.NewReader([]byte("{}")))
@@ -296,6 +296,33 @@ func TestBearerAuthorization(t *testing.T) {
 			request.Header.Set("Authorization", credential)
 			if response := fixture.do(request); response.StatusCode != http.StatusUnauthorized {
 				t.Fatalf("credential %q = %d, want 401", credential, response.StatusCode)
+			}
+		}
+	})
+
+	t.Run("unlisted routes deny tokens by default", func(t *testing.T) {
+		secret := mint(t, allScope)
+		// Routes the scope matrix never names must fail closed: a future
+		// API cannot leak open to bearers just by being added.
+		for _, path := range []string{
+			"/api/annotations/some-id",
+			"/api/annotations/some-id/anchor",
+			"/api/some-future-endpoint",
+			"/",
+		} {
+			request, _ := http.NewRequest(http.MethodGet, fixture.server.URL+path, nil)
+			request.Header.Set("Authorization", "Bearer "+secret)
+			if response := fixture.do(request); response.StatusCode != http.StatusForbidden {
+				t.Fatalf("unlisted %s = %d, want 403", path, response.StatusCode)
+			}
+		}
+		// The public capability surfaces stay reachable for monitoring and
+		// agent bootstrapping, exactly as for anonymous callers.
+		for _, path := range []string{"/healthz", "/api/config"} {
+			request, _ := http.NewRequest(http.MethodGet, fixture.server.URL+path, nil)
+			request.Header.Set("Authorization", "Bearer "+secret)
+			if response := fixture.do(request); response.StatusCode != http.StatusOK {
+				t.Fatalf("public %s = %d, want 200", path, response.StatusCode)
 			}
 		}
 	})
@@ -565,9 +592,10 @@ func TestTokenRouteEdges(t *testing.T) {
 		t.Fatalf("out-of-scope metadata = %d, want 403", response.StatusCode)
 	}
 
-	// Annotations listing through a token obeys the document scope.
-	if response := fixture.do(bearer(http.MethodGet, "/api/annotations?path=guide.md")); response.StatusCode != http.StatusOK {
-		t.Fatalf("in-scope annotations = %d", response.StatusCode)
+	// Annotations are session-only for tokens, whatever the scope: the
+	// listing is a human review surface, not part of document reading.
+	if response := fixture.do(bearer(http.MethodGet, "/api/annotations?path=guide.md")); response.StatusCode != http.StatusForbidden {
+		t.Fatalf("in-scope annotations = %d, want 403", response.StatusCode)
 	}
 	if response := fixture.do(bearer(http.MethodGet, "/api/annotations?path=foreign.md")); response.StatusCode != http.StatusForbidden {
 		t.Fatalf("out-of-scope annotations = %d, want 403", response.StatusCode)
