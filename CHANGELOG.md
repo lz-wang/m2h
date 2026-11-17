@@ -8,6 +8,16 @@
 
 ## [Unreleased]
 
+### 新增
+
+- 新增可选认证模式：`m2h docs --auth local` 使用 `M2H_LOCAL_USERS_JSON` 声明的本地账号（支持 Argon2id 哈希），`--auth ldap` 经 LDAPS/StartTLS 连接目录并按 `M2H_LDAP_ALLOWED_USERS` 白名单登录，默认不开启时行为与旧版完全一致。
+- 认证模式下所有文档、附件与搜索接口均要求登录，浏览器使用 Session Cookie（HttpOnly、SameSite=Lax，`M2H_PUBLIC_URL` 为 https 时附加 Secure），登录失败统一报错并带限流。
+- 认证数据（会话等）持久化到 `--data-dir`（默认 `M2H_DATA_DIR` 或系统用户数据目录下的 `m2h`）的 SQLite 数据库，纯 Go 驱动，跨平台构建不受影响。
+
+### 安全
+
+- 认证模式下未登录深链接不再通过 HTTP 状态码泄露文档是否存在；跨源的登录、注销等状态变更请求被拒绝。
+
 ## [0.26.0] - 2026-11-15
 
 ### 变更

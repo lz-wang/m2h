@@ -137,6 +137,7 @@ async function requestJSON(
   });
   const payload: unknown = await response.json().catch(() => null);
   if (!response.ok) {
+    reportUnauthorized(url, response.status);
     const message =
       isRecord(payload) && typeof payload.error === "string"
         ? payload.error
@@ -154,12 +155,142 @@ async function requestText(url: string, signal?: AbortSignal): Promise<string> {
     signal,
   });
   if (!response.ok) {
+    reportUnauthorized(url, response.status);
     throw new APIError(
       response.status,
       response.statusText || `HTTP ${response.status}`,
     );
   }
   return response.text();
+}
+
+// unauthorizedEventName announces that a protected request came back 401 —
+// a session that expired mid-reading. The auth gate listens and swaps the
+// reader for the login page. The /api/auth/* endpoints are exempt: a 401
+// from "who am I" is the expected anonymous answer, not a session loss.
+export const unauthorizedEventName = "m2h:unauthorized";
+
+function reportUnauthorized(url: string, status: number): void {
+  if (status !== 401 || url.includes("/api/auth/")) {
+    return;
+  }
+  window.dispatchEvent(new CustomEvent(unauthorizedEventName));
+}
+
+// SiteConfig is the deployment's capability description — public in every
+// mode because the WebUI needs it before it can even show a login page. It
+// deliberately carries no user or deployment details.
+export interface SiteConfig {
+  authMode: AuthMode;
+  features: { annotations: boolean; tokens: boolean };
+}
+
+export type AuthMode = "none" | "local" | "ldap";
+
+export interface AuthIdentity {
+  username: string;
+  displayName: string;
+  provider: string;
+}
+
+function parseSiteConfig(payload: unknown): SiteConfig {
+  if (!isRecord(payload) || typeof payload.authMode !== "string") {
+    throw new Error("站点配置响应格式无效");
+  }
+  const authMode = parseAuthMode(payload.authMode);
+  const features = isRecord(payload.features) ? payload.features : {};
+  return {
+    authMode,
+    features: {
+      annotations: features.annotations === true,
+      tokens: features.tokens === true,
+    },
+  };
+}
+
+function parseAuthMode(value: string): AuthMode {
+  if (value === "local" || value === "ldap" || value === "none") {
+    return value;
+  }
+  return "none";
+}
+
+function parseIdentity(payload: unknown): AuthIdentity {
+  if (
+    !isRecord(payload) ||
+    typeof payload.username !== "string" ||
+    typeof payload.displayName !== "string" ||
+    typeof payload.provider !== "string"
+  ) {
+    throw new Error("会话响应格式无效");
+  }
+  return {
+    username: payload.username,
+    displayName: payload.displayName,
+    provider: payload.provider,
+  };
+}
+
+// fetchSiteConfig loads the capability description. Public in every mode.
+export async function fetchSiteConfig(
+  signal?: AbortSignal,
+): Promise<SiteConfig> {
+  return parseSiteConfig(await requestJSON(appPath("/api/config"), signal));
+}
+
+// fetchCurrentIdentity answers the session check: the identity when the
+// session is valid, null when it is absent or expired.
+export async function fetchCurrentIdentity(
+  signal?: AbortSignal,
+): Promise<AuthIdentity | null> {
+  try {
+    return parseIdentity(await requestJSON(appPath("/api/auth/me"), signal));
+  } catch (error) {
+    if (error instanceof APIError && error.status === 401) {
+      return null;
+    }
+    throw error;
+  }
+}
+
+// loginRequest submits credentials. Same-origin fetch sends the Origin
+// header the server's CSRF check expects; the response carries the session
+// cookie. Throws APIError 401 (bad credentials) or 429 (rate limited).
+export async function loginRequest(
+  username: string,
+  password: string,
+  signal?: AbortSignal,
+): Promise<AuthIdentity> {
+  const response = await fetch(appPath("/api/auth/login"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ username, password }),
+    signal,
+  });
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message =
+      isRecord(payload) && typeof payload.error === "string"
+        ? payload.error
+        : response.statusText;
+    throw new APIError(response.status, message || `HTTP ${response.status}`);
+  }
+  return parseIdentity(payload);
+}
+
+// logoutRequest destroys the current session.
+export async function logoutRequest(signal?: AbortSignal): Promise<void> {
+  const response = await fetch(appPath("/api/auth/logout"), {
+    method: "POST",
+    headers: { Accept: "application/json" },
+    signal,
+  });
+  if (!response.ok) {
+    throw new APIError(
+      response.status,
+      response.statusText || `HTTP ${response.status}`,
+    );
+  }
 }
 
 function parseFileList(payload: unknown): FileListResponse {

@@ -157,7 +157,10 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	// Authenticated modes open the SQLite store before listening: a
 	// database that cannot open or migrate fails the run outright, and the
 	// persistent workspace identities are assigned while the workspace is
-	// already resolved. The default mode stays database-free.
+	// already resolved. The default mode stays database-free and starts no
+	// authentication goroutines.
+	var stack *authStack
+	var sessionCleanupDone chan struct{}
 	if normalized.AuthMode != auth.ModeNone {
 		if err := checkDataDirBoundary(normalized.DataDir, workspace); err != nil {
 			return err
@@ -173,12 +176,13 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		if err := workspace.assignIdentities(runContext, dataStore.EnsureDocumentRoot); err != nil {
 			return fmt.Errorf("auth mode %q: %w", normalized.AuthMode, err)
 		}
-		// Phase-1 guard: the authentication middleware does not exist in
-		// this build yet. Refusing to listen keeps an explicitly protected
-		// server from accidentally serving anonymously.
-		return fmt.Errorf("auth mode %q is not available in this build", normalized.AuthMode)
+		stack, err = buildAuthStack(normalized.AuthConfig, dataStore, normalized.BasePath)
+		if err != nil {
+			return fmt.Errorf("auth mode %q: %w", normalized.AuthMode, err)
+		}
+		sessionCleanupDone = stack.startSessionCleanup(runContext)
 	}
-	handler := newDocumentHandlerWithContext(runContext, workspace, logger, options.UI, normalized.Version, normalized.CDN, normalized.BasePath)
+	handler := newDocumentHandlerWithAuth(runContext, workspace, logger, options.UI, normalized.Version, normalized.CDN, normalized.BasePath, stack)
 	httpServer := newHTTPServer(handler, runContext, logger)
 	requestedAddress := net.JoinHostPort(normalized.Host, strconv.Itoa(normalized.Port))
 	listener, err := deps.listen("tcp", requestedAddress)
@@ -216,6 +220,11 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	defer stopShutdown()
 	if err := httpServer.Shutdown(shutdownContext); err != nil && runErr == nil {
 		runErr = fmt.Errorf("shut down server: %w", err)
+	}
+	// Let the session-cleanup loop observe the cancellation before the
+	// deferred store close takes the database away from it.
+	if sessionCleanupDone != nil {
+		<-sessionCleanupDone
 	}
 	return runErr
 }

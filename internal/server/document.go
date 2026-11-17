@@ -96,6 +96,10 @@ type documentHandler struct {
 	cdn       bool
 	basePath  string
 
+	// auth is the authentication layer of an authenticated run; nil keeps
+	// the default stateless mode where every route stays public.
+	auth *authStack
+
 	discover func(context.Context, rootScope) (files.Discovery, error)
 	search   *searchIndex
 
@@ -133,12 +137,29 @@ func newDocumentHandlerWithContext(
 	cdn bool,
 	basePath string,
 ) http.Handler {
+	return newDocumentHandlerWithAuth(runContext, workspace, logger, ui, buildVersion, cdn, basePath, nil)
+}
+
+// newDocumentHandlerWithAuth additionally attaches the authentication
+// layer: authenticated runs route through the session middleware and
+// register the auth APIs.
+func newDocumentHandlerWithAuth(
+	runContext context.Context,
+	workspace workspace,
+	logger io.Writer,
+	ui fs.FS,
+	buildVersion string,
+	cdn bool,
+	basePath string,
+	stack *authStack,
+) http.Handler {
 	handler := &documentHandler{
 		workspace:  workspace,
 		ui:         ui,
 		version:    buildVersion,
 		cdn:        cdn,
 		basePath:   basePath,
+		auth:       stack,
 		runContext: runContext,
 	}
 	return handler.routes(logger)
@@ -162,6 +183,12 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handler.serveHealth)
+	mux.HandleFunc("/api/config", handler.serveConfig)
+	if handler.auth != nil {
+		mux.HandleFunc("/api/auth/login", handler.serveLogin)
+		mux.HandleFunc("/api/auth/logout", handler.serveLogout)
+		mux.HandleFunc("/api/auth/me", requireGET(handler.serveAuthMe))
+	}
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
 	mux.HandleFunc("/api/file-metadata", requireGET(handler.serveFileMetadata))
@@ -175,11 +202,17 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 	mux.HandleFunc("/doc/", handler.serveDirectoryIndex)
 	mux.HandleFunc("/raw/", handler.serveRawMarkdown)
 	mux.HandleFunc("/", handler.serveDirectoryIndex)
-	// requestLogger → securityHeaders → mux: the log sees the final status,
-	// and securityHeaders sits directly above the mux so every response —
-	// pages, APIs, assets, runtime, 404s — gets the same hardening baseline
-	// while handlers keep the ability to override individual headers.
-	return requestLogger(securityHeaders(mountBasePath(handler.basePath, mux), handler.cdn), logger)
+	// requestLogger → securityHeaders → (sessions → authenticate) → mux:
+	// the log sees the final status, and securityHeaders sits directly above
+	// the base-path mount so every response — pages, APIs, assets, runtime,
+	// 404s — gets the same hardening baseline while handlers keep the
+	// ability to override individual headers. Authentication runs inside
+	// mountBasePath, so its path decisions see the internal URL shape.
+	chain := http.Handler(mux)
+	if handler.auth != nil {
+		chain = handler.auth.sessions.LoadAndSave(handler.authenticate(mux))
+	}
+	return requestLogger(securityHeaders(mountBasePath(handler.basePath, chain), handler.cdn), logger)
 }
 
 func (handler *documentHandler) serveFiles(response http.ResponseWriter, request *http.Request) {
@@ -463,7 +496,11 @@ func (handler *documentHandler) serveDirectoryIndex(response http.ResponseWriter
 	}
 
 	status := http.StatusOK
-	if strings.HasPrefix(request.URL.Path, "/doc/") {
+	// In authenticated runs, anonymous deep links still receive the shell
+	// without probing the document: the HTTP status must not reveal
+	// whether a document exists before the visitor logs in.
+	if strings.HasPrefix(request.URL.Path, "/doc/") &&
+		(handler.auth == nil || principalFromRequest(request) != nil) {
 		virtual, err := files.DecodeRelativePath(strings.TrimPrefix(request.URL.Path, "/doc/"))
 		if err != nil {
 			http.NotFound(response, request)

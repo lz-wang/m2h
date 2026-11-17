@@ -85,3 +85,8 @@ func decodePHC(value string) (argon2Params, error) {
 func decodePHCBase64(value string) ([]byte, error) {
 	return base64.RawStdEncoding.DecodeString(value)
 }
+
+// phcBase64 encodes bytes in the PHC profile's unpadded base64 alphabet.
+func phcBase64(value []byte) string {
+	return base64.RawStdEncoding.EncodeToString(value)
+}

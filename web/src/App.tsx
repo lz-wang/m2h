@@ -8,6 +8,7 @@ import {
   ImageOff,
   Inbox,
   LoaderCircle,
+  LogOut,
   Maximize2,
   Moon,
   RefreshCw,
@@ -32,7 +33,13 @@ import {
   useState,
 } from "react";
 
-import type { FrontMatter, PreviewAPI, SearchResult, TocItem } from "./api";
+import type {
+  AuthIdentity,
+  FrontMatter,
+  PreviewAPI,
+  SearchResult,
+  TocItem,
+} from "./api";
 import { DocumentLightbox } from "./components/document-lightbox";
 import { DocumentTree } from "./components/document-tree";
 import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
@@ -99,6 +106,11 @@ import { useSearch } from "./use-search";
 
 interface AppProps {
   api?: PreviewAPI;
+  // Authenticated deployments pass the session identity and a logout
+  // handler; the default unauthenticated mode leaves both unset so the
+  // toolbar shows no account controls at all.
+  authIdentity?: AuthIdentity | null;
+  onLogout?: () => void;
 }
 
 const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
@@ -163,7 +175,7 @@ const documentWidths: Array<{
   { value: "full", label: "全屏", icon: Maximize2 },
 ];
 
-export function App({ api }: AppProps) {
+export function App({ api, authIdentity, onLogout }: AppProps) {
   const preview = usePreview(api);
   // A single-file scope has nothing to switch between, so the file sidebar and
   // its toolbar trigger stay hidden; directories and multi-root workspaces
@@ -685,6 +697,28 @@ export function App({ api }: AppProps) {
                 onChange={preview.setWidth}
               />
               <ThemeMenu mode={preview.mode} onChange={preview.setMode} />
+              {authIdentity !== null &&
+              authIdentity !== undefined &&
+              onLogout !== undefined ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="toolbar-control"
+                        aria-label={`退出登录（${authIdentity.displayName}）`}
+                        onClick={() => void onLogout()}
+                      >
+                        <LogOut aria-hidden="true" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent side="bottom">
+                    退出登录（{authIdentity.displayName}）
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
               <TOCToggle
                 enabled={preview.toc}
                 available={tocItems.length > 0}

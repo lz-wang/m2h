@@ -4,11 +4,13 @@ import (
 	"context"
 	"io"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/lz-wang/m2h/internal/auth"
 	"github.com/lz-wang/m2h/internal/files"
@@ -27,8 +29,11 @@ func symlink(t *testing.T, target, link string) error {
 
 func localAuthConfig() *auth.Config {
 	return &auth.Config{
-		Mode:       auth.ModeLocal,
-		LocalUsers: []auth.User{{Username: "alice", Password: "password-1"}},
+		Mode: auth.ModeLocal,
+		LocalUsers: []auth.User{
+			{Username: "alice", Password: "password-1"},
+			{Username: "bob", Password: "password-2"},
+		},
 	}
 }
 
@@ -211,44 +216,91 @@ func TestCheckDataDirBoundary(t *testing.T) {
 	}
 }
 
-// TestRunAuthModeInitializesStoreThenRefuses verifies phase-1 behavior: a
-// valid authenticated configuration opens and migrates the SQLite store and
-// assigns root identities, then refuses to listen because the auth
-// middleware is not wired yet. No half-protected serving, but the data
-// foundation is real.
-func TestRunAuthModeInitializesStoreThenRefuses(t *testing.T) {
+// startAuthenticatedServer boots one authenticated run on an ephemeral
+// port and hands back its base URL. It backs the full-stack auth tests.
+func startAuthenticatedServer(t *testing.T, options Options) string {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	listening := make(chan string, 1)
+	deps := testDependencies()
+	deps.openBrowser = func(string) error { return nil }
+	deps.listen = func(network, address string) (net.Listener, error) {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err == nil {
+			select {
+			case listening <- "http://" + listener.Addr().String() + "/":
+			default:
+			}
+		}
+		return listener, err
+	}
+	if options.OnListening != nil {
+		panic("startAuthenticatedServer owns OnListening")
+	}
+	options.OnListening = func(address string) {
+		select {
+		case listening <- address:
+		default:
+		}
+	}
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, options, deps) }()
+	// Cancel first, then drain the run — one cleanup so ordering cannot
+	// invert.
+	t.Cleanup(func() {
+		cancel()
+		if err := <-done; err != nil {
+			t.Errorf("authenticated run returned %v", err)
+		}
+	})
+	select {
+	case address := <-listening:
+		return address
+	case <-time.After(5 * time.Second):
+		cancel()
+		t.Fatal("authenticated server never listened")
+		return ""
+	}
+}
+
+func authenticatedOptions(t *testing.T, config *auth.Config) Options {
+	t.Helper()
 	base := t.TempDir()
 	docs := filepath.Join(base, "docs")
 	writeTestFile(t, filepath.Join(docs, "guide.md"), "# Guide")
-	dataDir := filepath.Join(base, "m2h-data")
-
-	listened := false
-	deps := testDependencies()
-	deps.listen = func(network, address string) (net.Listener, error) {
-		listened = true
-		return net.Listen("tcp", "127.0.0.1:0")
-	}
-
-	err := run(context.Background(), Options{
+	writeTestFile(t, filepath.Join(docs, "secret.md"), "# Secret")
+	return Options{
 		Inputs:     []string{docs},
 		Mode:       markdown.ModeAuto,
-		AuthMode:   auth.ModeLocal,
-		AuthConfig: localAuthConfig(),
-		DataDir:    dataDir,
+		AuthMode:   config.Mode,
+		AuthConfig: config,
+		DataDir:    filepath.Join(base, "m2h-data"),
 		Log:        io.Discard,
 		UI:         testUIFilesystem(),
-	}, deps)
-	if err == nil || !strings.Contains(err.Error(), "not available in this build") {
-		t.Fatalf("run() = %v, want the not-available refusal", err)
 	}
-	if listened {
-		t.Fatalf("authenticated mode opened a listening socket")
+}
+
+// TestRunAuthModeInitializesStore verifies an authenticated run boots with
+// the SQLite foundation: database created, migrated, root identity
+// registered — checked from a second process-like reopen.
+func TestRunAuthModeInitializesStore(t *testing.T) {
+	options := authenticatedOptions(t, localAuthConfig())
+	address := startAuthenticatedServer(t, options)
+
+	if response, err := http.Get(address + "api/config"); err != nil {
+		t.Fatalf("api/config failed: %v", err)
+	} else {
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("api/config = %d", response.StatusCode)
+		}
 	}
-	database := filepath.Join(dataDir, "m2h.db")
+
+	database := filepath.Join(options.DataDir, "m2h.db")
 	if _, statErr := os.Stat(database); statErr != nil {
 		t.Fatalf("database not initialized: %v", statErr)
 	}
-	dataStore, openErr := store.Open(dataDir)
+	dataStore, openErr := store.Open(options.DataDir)
 	if openErr != nil {
 		t.Fatalf("reopen store failed: %v", openErr)
 	}
