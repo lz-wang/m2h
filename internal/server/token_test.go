@@ -199,11 +199,30 @@ func TestBearerAuthorization(t *testing.T) {
 		if response := fixture.do(other); response.StatusCode != http.StatusForbidden {
 			t.Fatalf("foreign raw read = %d, want 403", response.StatusCode)
 		}
-		// Listing and searching the whole workspace stay out of reach.
+		// Listing answers only the in-scope document.
 		files, _ := http.NewRequest(http.MethodGet, fixture.server.URL+"/api/files", nil)
 		files.Header.Set("Authorization", "Bearer "+secret)
-		if response := fixture.do(files); response.StatusCode != http.StatusForbidden {
-			t.Fatalf("files = %d, want 403", response.StatusCode)
+		response := fixture.do(files)
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("files = %d, want 200", response.StatusCode)
+		}
+		var payload struct {
+			Roots []struct {
+				Files []struct {
+					Path string `json:"path"`
+				} `json:"files"`
+			} `json:"roots"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		for _, root := range payload.Roots {
+			for _, file := range root.Files {
+				if file.Path != "guide.md" {
+					t.Fatalf("document token listed out-of-scope file %q", file.Path)
+				}
+			}
 		}
 	})
 
@@ -355,5 +374,50 @@ func TestTokenExpiryEnforcedOnWire(t *testing.T) {
 	request.Header.Set("Authorization", "Bearer "+created.Secret)
 	if response := fixture.do(request); response.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("expired bearer = %d", response.StatusCode)
+	}
+}
+
+func TestScopedSearchFiltersInsideTheScan(t *testing.T) {
+	fixture := newTokenFixture(t)
+	alice := fixture.loginAs(t, "alice", "password-1")
+
+	ref := fixtureDocumentRef(t, fixture)
+	status, created := fixture.createTokenViaSession(t, alice, map[string]any{
+		"kind": "persistent",
+		"name": "doc-token",
+		"scope": map[string]any{
+			"permissions": []string{"document:read", "search:read"},
+			"resource": map[string]any{
+				"type": "document", "rootId": ref.RootID, "path": "guide.md",
+			},
+		},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create = %d", status)
+	}
+
+	writeTestFile(t, fixture.docsDir+"/other.md", "# Guide\n\nBody text.")
+	request, _ := http.NewRequest(http.MethodGet, fixture.server.URL+"/api/search?q=body", nil)
+	request.Header.Set("Authorization", "Bearer "+created.Secret)
+	response := fixture.do(request)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("scoped search = %d", response.StatusCode)
+	}
+	var results struct {
+		Results []struct {
+			Path string `json:"path"`
+		} `json:"results"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&results); err != nil {
+		t.Fatal(err)
+	}
+	if len(results.Results) == 0 {
+		t.Fatalf("scoped search found nothing")
+	}
+	for _, result := range results.Results {
+		if result.Path != "guide.md" {
+			t.Fatalf("document token searched out of scope: %q", result.Path)
+		}
 	}
 }

@@ -285,7 +285,10 @@ func (handler *documentHandler) authorizeBearer(response http.ResponseWriter, re
 		Provider:    ownerProvider,
 		Via:         principalViaToken,
 	}
-	next.ServeHTTP(response, requestWithPrincipal(request, identity))
+	// The validated scope rides the request so scope-aware handlers
+	// (listing, search) filter without a second database lookup.
+	scoped := request.WithContext(context.WithValue(request.Context(), tokenRecordContextKey{}, record))
+	next.ServeHTTP(response, requestWithPrincipal(scoped, identity))
 
 	// Bookkeeping after the response: throttled last-used stamp.
 	if time.Since(time.UnixMilli(record.LastUsedAt)) > tokenLastUsedThrottle {
@@ -323,20 +326,15 @@ func (handler *documentHandler) enforceTokenScope(
 			writeJSONError(response, http.StatusForbidden, "token scope does not permit search")
 			return errHandled
 		}
-		if scope.Resource.Type != auth.ResourceAllPublished {
-			writeJSONError(response, http.StatusForbidden, "token scope does not cover workspace-wide search")
-			return errHandled
-		}
+		// Scoped tokens search too — serveSearch filters matches inside
+		// the scan loop, never after truncating the result page.
 		return nil
 	case path == "/api/files":
 		if !scope.Allows(auth.PermissionDocumentRead) {
 			writeJSONError(response, http.StatusForbidden, "token scope does not permit document listing")
 			return errHandled
 		}
-		if scope.Resource.Type != auth.ResourceAllPublished {
-			writeJSONError(response, http.StatusForbidden, "token scope does not cover the workspace listing")
-			return errHandled
-		}
+		// Scoped tokens list too — serveFiles filters by the same scope.
 		return nil
 	case path == "/api/document", path == "/api/file-metadata", path == "/raw/", strings.HasPrefix(path, "/raw/"):
 		return handler.enforceTokenDocumentScope(response, request, path, scope, record)
@@ -416,3 +414,50 @@ func (handler *documentHandler) enforceTokenDocumentScope(
 	}
 	return nil
 }
+
+// tokenScopeFilter returns the per-document authorization predicate for
+// the listing and search routes. Session callers (and the default mode,
+// which never reaches these helpers with a scope) see everything; token
+// callers see exactly their scope. The filter runs on the addressable
+// (public) path so search snapshots and listings share one rule.
+func (handler *documentHandler) tokenScopeFilter(request *http.Request) func(publicPath string) bool {
+	identity := principalFromRequest(request)
+	if identity == nil || identity.Via != principalViaToken {
+		return func(string) bool { return true }
+	}
+	scope, ok := handler.scopeOfRequestToken(request)
+	if !ok {
+		return func(string) bool { return false }
+	}
+	if scope.Resource.Type == auth.ResourceAllPublished {
+		return func(string) bool { return true }
+	}
+	return func(publicPath string) bool {
+		root, relative, err := handler.workspace.locate(publicPath)
+		if err != nil {
+			return false
+		}
+		return scope.CoversDocument(root.identity, relative)
+	}
+}
+
+// scopeOfRequestToken reads the validated scope back from the request
+// context. The middleware resolved it while authorizing the bearer; the
+// scope rides the principal's record via the token store lookup the
+// middleware already performed (re-reading would double the database
+// round-trips on hot search paths).
+func (handler *documentHandler) scopeOfRequestToken(request *http.Request) (auth.TokenScope, bool) {
+	record, ok := request.Context().Value(tokenRecordContextKey{}).(store.TokenRecord)
+	if !ok {
+		return auth.TokenScope{}, false
+	}
+	scope, err := auth.UnmarshalScope(record.ScopeJSON)
+	if err != nil {
+		return auth.TokenScope{}, false
+	}
+	return scope, true
+}
+
+// tokenRecordContextKey carries the validated token record from the
+// authorization middleware to scope-aware handlers.
+type tokenRecordContextKey struct{}

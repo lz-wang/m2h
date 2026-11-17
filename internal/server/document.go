@@ -240,6 +240,7 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 		writeJSONError(response, http.StatusBadRequest, "query parameters are not supported")
 		return
 	}
+	scopeFilter := handler.tokenScopeFilter(request)
 	roots := make([]rootSummary, 0, handler.workspace.rootCount())
 	for _, root := range handler.workspace.roots {
 		discovered, err := handler.discover(request.Context(), root.scope)
@@ -254,6 +255,11 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 
 		summaries := make([]fileSummary, 0, len(discovered.Markdown))
 		for _, entry := range discovered.Markdown {
+			// Token scopes apply to the listing too: names, titles and
+			// directory shapes of out-of-scope documents stay invisible.
+			if !scopeFilter(handler.workspace.publicPath(root.id, entry.RelativePath)) {
+				continue
+			}
 			summaries = append(summaries, fileSummary{
 				Path: entry.RelativePath,
 				Name: path.Base(entry.RelativePath),

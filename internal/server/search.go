@@ -79,12 +79,21 @@ func (handler *documentHandler) serveSearch(response http.ResponseWriter, reques
 	// inside the per-document loop.
 	preparedQuery := search.PrepareQuery(query)
 
+	// Token callers carry a scope; it filters the scan itself — matching
+	// unauthorized documents is skipped before ranking, so the 50-result
+	// page fills with documents the caller may actually read. Sessions
+	// and the default mode have no scope filter.
+	scopeFilter := handler.tokenScopeFilter(request)
+
 	// The client aborts superseded queries; matching the rest of the cached
 	// library to build a response nobody reads is wasted work.
 	matches := make([]search.Result, 0)
 	for publicPath, indexed := range snapshot.Files {
 		if request.Context().Err() != nil {
 			return
+		}
+		if !scopeFilter(publicPath) {
+			continue
 		}
 		if result, matched := preparedQuery.Match(&indexed.Prepared); matched {
 			result.Path = publicPath
