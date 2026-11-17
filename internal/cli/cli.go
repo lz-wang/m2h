@@ -91,6 +91,8 @@ func serverFlags() []urfavecli.Flag {
 		},
 		modeFlag(),
 		widthFlag(),
+		authFlag(),
+		dataDirFlag(),
 		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
 		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
 		&urfavecli.BoolWithInverseFlag{Name: "open", Value: true, Usage: "open the default browser after listening", Local: true},
@@ -136,6 +138,10 @@ func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buil
 	if err != nil {
 		return err
 	}
+	mode, authConfig, dataDir, err := authOptions(command)
+	if err != nil {
+		return err
+	}
 	err = runServer(ctx, server.Options{
 		Inputs:     inputs,
 		BasePath:   command.String("base-path"),
@@ -153,6 +159,10 @@ func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buil
 		PatternSet: command.IsSet("glob"),
 		DepthSet:   command.IsSet("depth"),
 		TOCSet:     command.IsSet("toc"),
+		AuthMode:   mode,
+		AuthConfig: authConfig,
+		DataDir:    dataDir,
+		PublicURL:  authConfig.PublicURL,
 		Log:        command.Root().ErrWriter,
 		UI:         ui,
 		Version:    buildVersion,

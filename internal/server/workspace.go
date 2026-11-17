@@ -1,22 +1,28 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"strings"
 
 	"github.com/lz-wang/m2h/internal/files"
+	"github.com/lz-wang/m2h/internal/store"
 )
 
 // workspaceRoot couples one resolved CLI input with its rootScope and the
 // identity the workspace addresses it by. The id is positional (r0, r1, …) and
 // stable for the lifetime of the server; the label is the display name shown
 // in the sidebar. Labels may collide across machines and users; ids never do.
+// identity is the persistent UUID stored in the SQLite database of
+// authenticated runs ("" in the default mode): stable across input
+// reordering and restarts, used by annotations and tokens to name the root.
 type workspaceRoot struct {
-	id    string
-	label string
-	input files.Input
-	scope rootScope
+	id       string
+	label    string
+	input    files.Input
+	scope    rootScope
+	identity string
 }
 
 // workspace is the whole serving session: one or more independent
@@ -79,6 +85,44 @@ func (workspace workspace) root(id string) (workspaceRoot, bool) {
 		}
 	}
 	return workspaceRoot{}, false
+}
+
+// rootByIdentity looks a root up by its persistent UUID. It only ever
+// matches roots of the current run: a stored reference naming an absent
+// root simply does not resolve.
+func (workspace workspace) rootByIdentity(identity string) (workspaceRoot, bool) {
+	for _, root := range workspace.roots {
+		if root.identity != "" && root.identity == identity {
+			return root, true
+		}
+	}
+	return workspaceRoot{}, false
+}
+
+// ensureRootIdentity persists one root identity (store-backed in
+// production, faked in tests).
+type ensureRootIdentity func(ctx context.Context, canonicalPath, kind string) (string, error)
+
+// assignIdentities gives every root its persistent document identity. The
+// identity key is the canonical path the root serves — a directory root
+// names its tree, a single-file root names the file itself — so reordering
+// CLI inputs or re-creating a deleted file keeps ids, while moving a root
+// deliberately starts a new identity instead of guessing from content.
+func (workspace workspace) assignIdentities(ctx context.Context, ensure ensureRootIdentity) error {
+	for index, root := range workspace.roots {
+		key := root.scope.root
+		kind := store.RootKindDirectory
+		if root.scope.isSingleFile() {
+			key = filepath.Join(root.scope.root, filepath.FromSlash(root.scope.file))
+			kind = store.RootKindFile
+		}
+		identity, err := ensure(ctx, key, kind)
+		if err != nil {
+			return fmt.Errorf("register root identity for %q: %w", root.input.Path, err)
+		}
+		workspace.roots[index].identity = identity
+	}
+	return nil
 }
 
 // kind reports the API kind. A lone single-file root stays "single" and a

@@ -15,8 +15,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/lz-wang/m2h/internal/auth"
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
+	"github.com/lz-wang/m2h/internal/store"
 	appversion "github.com/lz-wang/m2h/internal/version"
 )
 
@@ -65,6 +67,18 @@ type Options struct {
 	Log     io.Writer
 	UI      fs.FS
 	Version string
+
+	// AuthMode selects the optional authentication layer. ModeNone (the
+	// zero value) keeps the server stateless: no database, no login, no
+	// annotations, no tokens. Any other mode requires AuthConfig, opens the
+	// SQLite database under DataDir, and protects every document route.
+	AuthMode   auth.Mode
+	AuthConfig *auth.Config
+	DataDir    string
+	// PublicURL is the externally reachable origin behind a reverse proxy
+	// (M2H_PUBLIC_URL). It decides the session cookie's Secure attribute;
+	// m2h never trusts client-sent forwarded headers for it.
+	PublicURL string
 
 	OnListening func(string)
 }
@@ -139,6 +153,30 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 	}, normalized.Gitignore)
 	if err != nil {
 		return err
+	}
+	// Authenticated modes open the SQLite store before listening: a
+	// database that cannot open or migrate fails the run outright, and the
+	// persistent workspace identities are assigned while the workspace is
+	// already resolved. The default mode stays database-free.
+	if normalized.AuthMode != auth.ModeNone {
+		if err := checkDataDirBoundary(normalized.DataDir, workspace); err != nil {
+			return err
+		}
+		dataStore, err := store.Open(normalized.DataDir)
+		if err != nil {
+			return fmt.Errorf("auth mode %q: %w", normalized.AuthMode, err)
+		}
+		defer dataStore.Close()
+		if err := dataStore.Migrate(runContext); err != nil {
+			return fmt.Errorf("auth mode %q: %w", normalized.AuthMode, err)
+		}
+		if err := workspace.assignIdentities(runContext, dataStore.EnsureDocumentRoot); err != nil {
+			return fmt.Errorf("auth mode %q: %w", normalized.AuthMode, err)
+		}
+		// Phase-1 guard: the authentication middleware does not exist in
+		// this build yet. Refusing to listen keeps an explicitly protected
+		// server from accidentally serving anonymously.
+		return fmt.Errorf("auth mode %q is not available in this build", normalized.AuthMode)
 	}
 	handler := newDocumentHandlerWithContext(runContext, workspace, logger, options.UI, normalized.Version, normalized.CDN, normalized.BasePath)
 	httpServer := newHTTPServer(handler, runContext, logger)
@@ -249,6 +287,30 @@ func normalizeOptions(options Options) (Options, error) {
 	}
 	if err := files.ValidateDiscoverOptions(files.DiscoverOptions{Depth: options.Depth, Pattern: options.Pattern}); err != nil {
 		return Options{}, err
+	}
+	mode, err := auth.ParseMode(string(options.AuthMode))
+	if err != nil {
+		return Options{}, fmt.Errorf("invalid auth mode %q: expected none, local, or ldap", options.AuthMode)
+	}
+	options.AuthMode = mode
+	if options.PublicURL != "" {
+		parsed, parseErr := url.Parse(options.PublicURL)
+		if parseErr != nil || parsed.Scheme == "" || parsed.Host == "" ||
+			(parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return Options{}, fmt.Errorf("invalid public URL %q: expected an absolute http(s) URL", options.PublicURL)
+		}
+	}
+	if options.AuthMode != auth.ModeNone {
+		if options.AuthConfig == nil {
+			return Options{}, fmt.Errorf("auth mode %q requires an auth configuration", options.AuthMode)
+		}
+		if options.AuthConfig.Mode != options.AuthMode {
+			return Options{}, fmt.Errorf("auth configuration mode %q does not match --auth %q",
+				options.AuthConfig.Mode, options.AuthMode)
+		}
+		if strings.TrimSpace(options.DataDir) == "" {
+			return Options{}, fmt.Errorf("auth mode %q requires a data directory", options.AuthMode)
+		}
 	}
 	return options, nil
 }
