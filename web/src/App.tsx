@@ -10,6 +10,7 @@ import {
   LoaderCircle,
   LogOut,
   Maximize2,
+  MessageSquare,
   Moon,
   RefreshCw,
   Scaling,
@@ -40,6 +41,8 @@ import type {
   SearchResult,
   TocItem,
 } from "./api";
+import { AnnotationPanel } from "./components/annotations/annotation-panel";
+import { SelectionToolbar } from "./components/annotations/selection-toolbar";
 import { DocumentLightbox } from "./components/document-lightbox";
 import { DocumentTree } from "./components/document-tree";
 import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
@@ -72,7 +75,11 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "./components/ui/tooltip";
+import { useAnnotations } from "./hooks/use-annotations";
 import { useIsMobile } from "./hooks/use-mobile";
+import { HighlightLayer } from "./lib/annotation-highlight";
+import { reanchor } from "./lib/annotation-reanchor";
+import { TextIndex, type TextPosition } from "./lib/annotation-selector";
 import {
   collectLightboxState,
   type LightboxState,
@@ -111,6 +118,8 @@ interface AppProps {
   // toolbar shows no account controls at all.
   authIdentity?: AuthIdentity | null;
   onLogout?: () => void;
+  // Whether this deployment exposes annotations (authenticated runs).
+  annotationsAvailable?: boolean;
 }
 
 const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
@@ -175,7 +184,12 @@ const documentWidths: Array<{
   { value: "full", label: "全屏", icon: Maximize2 },
 ];
 
-export function App({ api, authIdentity, onLogout }: AppProps) {
+export function App({
+  api,
+  authIdentity,
+  onLogout,
+  annotationsAvailable,
+}: AppProps) {
   const preview = usePreview(api);
   // A single-file scope has nothing to switch between, so the file sidebar and
   // its toolbar trigger stay hidden; directories and multi-root workspaces
@@ -308,6 +322,109 @@ export function App({ api, authIdentity, onLogout }: AppProps) {
     readerMainRef,
     preview.replaceHash,
   );
+  // Annotations: the document identity the annotation API needs (only
+  // present in authenticated runs), the annotation list of the selected
+  // document, and the highlight layer rendered onto the live body.
+  const annotationsEnabled = annotationsAvailable === true;
+  const annotationIdentity = useMemo(() => {
+    if (!annotationsEnabled || preview.document === null) {
+      return null;
+    }
+    const { documentRef, documentHash, path } = preview.document;
+    if (documentRef === undefined || documentHash === undefined) {
+      return null;
+    }
+    return { path, documentRef, documentHash };
+  }, [annotationsEnabled, preview.document]);
+  const annotations = useAnnotations(annotationsEnabled, annotationIdentity);
+  const [annotationsOpen, setAnnotationsOpen] = useState(false);
+  const [annotationStatuses, setAnnotationStatuses] = useState<
+    Record<string, "resolved" | "ambiguous" | "orphaned">
+  >({});
+  const annotationBodyRef = useRef<HTMLElement | null>(null);
+  const annotationIndexRef = useRef<TextIndex | null>(null);
+  const annotationLayerRef = useRef<HighlightLayer | null>(null);
+  const annotationPositionsRef = useRef<Map<string, TextPosition>>(new Map());
+  if (annotationLayerRef.current === null) {
+    annotationLayerRef.current = new HighlightLayer();
+  }
+  // rebuildAnnotationLayer re-resolves every annotation against the live
+  // body index: exact-match re-anchoring, highlight registration, status
+  // computation. It runs after the body settles (onBodyReady) and after
+  // every list change; a theme switch never rebuilds it (the body DOM is
+  // unchanged), which is exactly the no-flip contract.
+  const rebuildAnnotationLayer = useCallback(() => {
+    const layer = annotationLayerRef.current;
+    if (layer === null) {
+      return;
+    }
+    const index = annotationIndexRef.current;
+    if (index === null) {
+      layer.release();
+      annotationPositionsRef.current.clear();
+      setAnnotationStatuses({});
+      return;
+    }
+    layer.attach(index);
+    const positions: TextPosition[] = [];
+    const statuses: Record<string, "resolved" | "ambiguous" | "orphaned"> = {};
+    const located = new Map<string, TextPosition>();
+    for (const item of annotations.items) {
+      const result = reanchor(index, item.selector);
+      statuses[item.id] = result.status;
+      if (result.position !== null) {
+        positions.push(result.position);
+        located.set(item.id, result.position);
+      }
+    }
+    annotationPositionsRef.current = located;
+    layer.render(positions);
+    setAnnotationStatuses(statuses);
+  }, [annotations.items]);
+  useEffect(() => {
+    rebuildAnnotationLayer();
+  }, [rebuildAnnotationLayer]);
+  useEffect(
+    () => () => {
+      annotationLayerRef.current?.release();
+    },
+    [],
+  );
+  const handleAnnotationBodyReady = useCallback(
+    (root: HTMLElement) => {
+      annotationBodyRef.current = root;
+      annotationIndexRef.current = new TextIndex(root);
+      rebuildAnnotationLayer();
+    },
+    [rebuildAnnotationLayer],
+  );
+  const locateAnnotation = useCallback(
+    (id: string) => {
+      const position = annotationPositionsRef.current.get(id);
+      const index = annotationIndexRef.current;
+      if (position === undefined || index === null) {
+        return;
+      }
+      const range = index.rangeFromSpan(position);
+      const element =
+        range?.startContainer.parentElement ?? annotationBodyRef.current;
+      element?.scrollIntoView({ behavior: "smooth", block: "center" });
+      annotations.select(id);
+      window.setTimeout(() => annotations.select(null), 2400);
+    },
+    [annotations],
+  );
+  const annotationExportDocument = useMemo(() => {
+    if (preview.document === null || annotationIdentity === null) {
+      return null;
+    }
+    return {
+      title: preview.document.title,
+      path: preview.document.path,
+      ref: annotationIdentity.documentRef,
+      hash: annotationIdentity.documentHash,
+    };
+  }, [preview.document, annotationIdentity]);
   // Search-result activation mirrors Markdown-link navigation exactly: a hit
   // in the already-open document scrolls in place (never refetching, so
   // Mermaid/图片 etc. are not re-rendered), a hit in another document
@@ -719,6 +836,29 @@ export function App({ api, authIdentity, onLogout }: AppProps) {
                   </TooltipContent>
                 </Tooltip>
               ) : null}
+              {annotationsEnabled ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="toolbar-control"
+                        aria-pressed={annotationsOpen}
+                        aria-label={
+                          annotationsOpen ? "收起标注面板" : "打开标注面板"
+                        }
+                        onClick={() => setAnnotationsOpen((open) => !open)}
+                      >
+                        <MessageSquare aria-hidden="true" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent side="bottom">
+                    {annotationsOpen ? "收起标注面板" : "打开标注面板"}
+                  </TooltipContent>
+                </Tooltip>
+              ) : null}
               <TOCToggle
                 enabled={preview.toc}
                 available={tocItems.length > 0}
@@ -760,6 +900,9 @@ export function App({ api, authIdentity, onLogout }: AppProps) {
                 onKeyDown={handleMarkdownKeyDown}
                 onErrorCapture={handleAssetError}
                 onVisualError={preview.reportVisualError}
+                onBodyReady={
+                  annotationsEnabled ? handleAnnotationBodyReady : undefined
+                }
               />
               {/* The attribution belongs to a successfully opened document
                * page, not the app shell: loading, unselected, not-found and
@@ -782,7 +925,30 @@ export function App({ api, authIdentity, onLogout }: AppProps) {
                 }
               />
             ) : null}
+            {annotationsEnabled ? (
+              <AnnotationPanel
+                open={annotationsOpen}
+                onOpenChange={setAnnotationsOpen}
+                items={annotations.items}
+                statuses={annotationStatuses}
+                loading={annotations.loading}
+                error={annotations.error}
+                selectedId={annotations.selectedId}
+                document={annotationExportDocument}
+                onLocate={locateAnnotation}
+                onDelete={(id) => void annotations.remove(id)}
+              />
+            ) : null}
           </div>
+          {annotationsEnabled ? (
+            <SelectionToolbar
+              bodyRef={annotationBodyRef}
+              indexRef={annotationIndexRef}
+              onAnnotate={(selector, comment) =>
+                annotations.create(selector, comment)
+              }
+            />
+          ) : null}
           {/* Floating edge jumps for the window-scrolled reader; one instance
            * for both single-file and directory previews. When the TOC rail is
            * up, the buttons shift left of it (see .reader-navigation CSS). */}
@@ -1058,6 +1224,10 @@ interface PreviewContentProps {
   onKeyDown(event: ReactKeyboardEvent<HTMLElement>): void;
   onErrorCapture(event: SyntheticEvent<HTMLElement>): void;
   onVisualError(message: string): void;
+  // Notified once the mounted body's rich-content rendering has settled —
+  // after Mermaid/KaTeX/table enhancement, so annotation anchoring sees
+  // the final DOM shape. Only the "ready" phase fires it.
+  onBodyReady?(root: HTMLElement): void;
 }
 
 function PreviewContent({
@@ -1071,6 +1241,7 @@ function PreviewContent({
   onKeyDown,
   onErrorCapture,
   onVisualError,
+  onBodyReady,
 }: PreviewContentProps) {
   const contentRef = useRef<HTMLElement>(null);
   // Body generation: bumped on every body swap and teardown, never by a
@@ -1168,6 +1339,36 @@ function PreviewContent({
       lazyImages.disconnect();
     };
   }, [html, phase, onVisualError]);
+
+  // Annotation anchoring waits for the rich-content pass: Mermaid and
+  // KaTeX replace text nodes, so indexing any earlier would anchor against
+  // DOM that is about to disappear. The body generation guard keeps a slow
+  // runtime from notifying about a body the reader has already left, and a
+  // theme switch never re-fires this (the body effect does not re-run).
+  useEffect(() => {
+    // `html` re-arms this effect on every body swap; the generation guard
+    // below discards notifications from a body the reader has left.
+    void html;
+    if (phase !== "ready" || onBodyReady === undefined) {
+      return;
+    }
+    let cancelled = false;
+    const generation = bodyGenerationRef.current;
+    void initialRenderRef.current?.then(() => {
+      const root = contentRef.current;
+      if (
+        !cancelled &&
+        root !== null &&
+        bodyGenerationRef.current === generation &&
+        root.isConnected
+      ) {
+        onBodyReady(root);
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [html, phase, onBodyReady]);
 
   // A theme switch repaints only Mermaid diagrams, leaving the article DOM,
   // KaTeX, copy buttons, and any in-body focus untouched. On the initial render

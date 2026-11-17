@@ -21,6 +21,9 @@ export type AuthPhase = "booting" | "off" | "anonymous" | "authenticated";
 export interface UseAuthResult {
   phase: AuthPhase;
   authMode: AuthMode;
+  // The deployment's capability flags from /api/config (annotations,
+  // tokens); both false in the default mode.
+  features: SiteConfig["features"];
   identity: AuthIdentity | null;
   // Non-null while a login request is in flight; the login form disables
   // its submit button to prevent double submits.
@@ -40,6 +43,10 @@ export interface UseAuthResult {
 export function useAuth(): UseAuthResult {
   const [phase, setPhase] = useState<AuthPhase>("booting");
   const [authMode, setAuthMode] = useState<AuthMode>("none");
+  const [features, setFeatures] = useState<SiteConfig["features"]>({
+    annotations: false,
+    tokens: false,
+  });
   const [identity, setIdentity] = useState<AuthIdentity | null>(null);
   const [loginPending, setLoginPending] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -70,6 +77,7 @@ export function useAuth(): UseAuthResult {
         return;
       }
       setAuthMode(config.authMode);
+      setFeatures(config.features);
       if (config.authMode === "none") {
         setPhase("off");
         return;
@@ -153,7 +161,16 @@ export function useAuth(): UseAuthResult {
     }
   }, []);
 
-  return { phase, authMode, identity, loginPending, loginError, login, logout };
+  return {
+    phase,
+    authMode,
+    features,
+    identity,
+    loginPending,
+    loginError,
+    login,
+    logout,
+  };
 }
 
 function loginErrorMessage(error: unknown): string {

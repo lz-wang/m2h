@@ -2024,3 +2024,11 @@ body,
     transition: none;
   }
 }
+
+/* Annotation highlights (CSS Custom Highlight API). The registry group is
+ * owned by lib/annotation-highlight.ts; these rules only style it. Browsers
+ * without the API simply never match — the panel carries the state. */
+::highlight(m2h-annotations) {
+  background-color: color-mix(in oklch, var(--primary) 22%, transparent);
+  color: inherit;
+}

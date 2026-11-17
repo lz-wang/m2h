@@ -305,6 +305,174 @@ export async function logoutRequest(signal?: AbortSignal): Promise<void> {
   }
 }
 
+// Annotation wire types. The selector mirrors the server's model: quote
+// and position over the browser-normalized reading text, in Unicode code
+// points.
+export interface AnnotationSelectorData {
+  quote: { exact: string; prefix: string; suffix: string };
+  position: { start: number; end: number };
+  headingId?: string;
+  tabId?: string;
+  blockHint?: string;
+  version: 1;
+}
+
+export interface AnnotationItem {
+  id: string;
+  authorId: string;
+  authorName: string;
+  comment: string;
+  quote: string;
+  selector: AnnotationSelectorData;
+  documentHash: string;
+  mine: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+function parseAnnotationList(payload: unknown): AnnotationItem[] {
+  if (!isRecord(payload) || !Array.isArray(payload.annotations)) {
+    throw new Error("标注列表响应格式无效");
+  }
+  return payload.annotations.map(parseAnnotationItem);
+}
+
+function parseAnnotationItem(value: unknown): AnnotationItem {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.authorId !== "string" ||
+    typeof value.authorName !== "string" ||
+    typeof value.comment !== "string" ||
+    typeof value.quote !== "string" ||
+    typeof value.documentHash !== "string" ||
+    typeof value.mine !== "boolean" ||
+    typeof value.createdAt !== "number" ||
+    typeof value.updatedAt !== "number" ||
+    !isRecord(value.selector)
+  ) {
+    throw new Error("标注响应格式无效");
+  }
+  const selector = value.selector;
+  if (
+    !isRecord(selector.quote) ||
+    typeof selector.quote.exact !== "string" ||
+    typeof selector.quote.prefix !== "string" ||
+    typeof selector.quote.suffix !== "string" ||
+    !isRecord(selector.position) ||
+    typeof selector.position.start !== "number" ||
+    typeof selector.position.end !== "number" ||
+    selector.version !== 1
+  ) {
+    throw new Error("标注响应格式无效");
+  }
+  const parsed: AnnotationItem = {
+    id: value.id,
+    authorId: value.authorId,
+    authorName: value.authorName,
+    comment: value.comment,
+    quote: value.quote,
+    documentHash: value.documentHash,
+    mine: value.mine,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    selector: {
+      quote: {
+        exact: selector.quote.exact,
+        prefix: selector.quote.prefix,
+        suffix: selector.quote.suffix,
+      },
+      position: {
+        start: selector.position.start,
+        end: selector.position.end,
+      },
+      version: selector.version,
+    },
+  };
+  if (typeof selector.headingId === "string") {
+    parsed.selector.headingId = selector.headingId;
+  }
+  if (typeof selector.tabId === "string") {
+    parsed.selector.tabId = selector.tabId;
+  }
+  if (typeof selector.blockHint === "string") {
+    parsed.selector.blockHint = selector.blockHint;
+  }
+  return parsed;
+}
+
+async function requestMutation(
+  url: string,
+  method: "POST" | "DELETE" | "PATCH",
+  body?: unknown,
+): Promise<unknown> {
+  const response = await fetch(url, {
+    method,
+    headers: {
+      Accept: "application/json",
+      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
+    },
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  const payload: unknown = await response.json().catch(() => null);
+  if (!response.ok) {
+    const message =
+      isRecord(payload) && typeof payload.error === "string"
+        ? payload.error
+        : response.statusText;
+    throw new APIError(response.status, message || `HTTP ${response.status}`);
+  }
+  return payload;
+}
+
+// listAnnotations fetches one document's annotations (oldest first).
+export async function listAnnotations(
+  path: string,
+  signal?: AbortSignal,
+): Promise<AnnotationItem[]> {
+  const query = new URLSearchParams({ path });
+  return parseAnnotationList(
+    await requestJSON(appPath(`/api/annotations?${query.toString()}`), signal),
+  );
+}
+
+// createAnnotation posts a new annotation pinned to the given document
+// identity and content version. A 409 means the document changed since the
+// caller loaded it.
+export async function createAnnotation(
+  documentRef: DocumentRef,
+  documentHash: string,
+  selector: AnnotationSelectorData,
+  comment: string,
+): Promise<AnnotationItem> {
+  return parseAnnotationItem(
+    await requestMutation(appPath("/api/annotations"), "POST", {
+      documentRef,
+      documentHash,
+      selector,
+      comment,
+    }),
+  );
+}
+
+// deleteAnnotation removes one of the caller's own annotations.
+export async function deleteAnnotation(id: string): Promise<void> {
+  await requestMutation(appPath(`/api/annotations/${id}`), "DELETE");
+}
+
+// reanchorAnnotation confirms a new selector for an annotation the caller
+// owns, after the document moved under it.
+export async function reanchorAnnotation(
+  id: string,
+  selector: AnnotationSelectorData,
+): Promise<AnnotationItem> {
+  return parseAnnotationItem(
+    await requestMutation(appPath(`/api/annotations/${id}/anchor`), "PATCH", {
+      selector,
+    }),
+  );
+}
+
 function parseFileList(payload: unknown): FileListResponse {
   if (
     !isRecord(payload) ||

@@ -1,0 +1,206 @@
+import { Highlighter, MessageSquarePlus } from "lucide-react";
+import {
+  type RefObject,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import { Button } from "@/components/ui/button";
+import {
+  type AnnotationSelector,
+  selectorFromRange,
+  type TextIndex,
+} from "@/lib/annotation-selector";
+import { AnnotationEditor } from "./annotation-editor";
+
+export interface SelectionToolbarProps {
+  // The rendered body root; selections outside it never open the toolbar.
+  bodyRef: RefObject<HTMLElement | null>;
+  // The live text index of the current body (kept fresh by the app).
+  indexRef: RefObject<TextIndex | null>;
+  // Saves an annotation for the given selector; resolves false on failure
+  // (the toolbar then stays put, selection intact, so nothing is lost).
+  onAnnotate: (
+    selector: AnnotationSelector,
+    comment: string,
+  ) => Promise<boolean>;
+  disabled?: boolean;
+}
+
+interface ToolbarPosition {
+  top: number;
+  left: number;
+}
+
+// SelectionToolbar is the floating 高亮/评论 pill that appears on a valid
+// body selection. Only canonical-content selections qualify: a range the
+// text index cannot address (empty, collapsed, or touching UI decorations
+// and generated visuals) never shows it.
+export function SelectionToolbar({
+  bodyRef,
+  indexRef,
+  onAnnotate,
+  disabled = false,
+}: SelectionToolbarProps) {
+  const [selector, setSelector] = useState<AnnotationSelector | null>(null);
+  const [position, setPosition] = useState<ToolbarPosition | null>(null);
+  const [commenting, setCommenting] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [failure, setFailure] = useState<string | null>(null);
+  // The live DOM selection is re-read on demand; only its derived selector
+  // and rectangle live in state.
+  const rangeRef = useRef<Range | null>(null);
+
+  useEffect(() => {
+    if (disabled) {
+      setSelector(null);
+      setPosition(null);
+      setCommenting(false);
+    }
+  }, [disabled]);
+
+  const updateFromSelection = useCallback(() => {
+    if (disabled) {
+      return;
+    }
+    const body = bodyRef.current;
+    const index = indexRef.current;
+    const selection = document.getSelection();
+    if (
+      body === null ||
+      index === null ||
+      selection === null ||
+      selection.rangeCount === 0
+    ) {
+      return;
+    }
+    const range = selection.getRangeAt(0);
+    if (range.collapsed || !body.contains(range.commonAncestorContainer)) {
+      return;
+    }
+    const candidate = selectorFromRange(index, range);
+    if (candidate === null) {
+      return;
+    }
+    rangeRef.current = range.cloneRange();
+    setSelector(candidate);
+    setFailure(null);
+    // Some engines (and test DOMs) lack Range.getBoundingClientRect; a
+    // zero rectangle only means the pill parks at the top-left — the
+    // annotation itself is unaffected.
+    let top = 8;
+    let center = 90;
+    if (typeof range.getBoundingClientRect === "function") {
+      const rectangle = range.getBoundingClientRect();
+      top = Math.max(rectangle.top - 44, 8);
+      center = rectangle.left + rectangle.width / 2;
+    }
+    const left = Math.min(Math.max(center, 90), window.innerWidth - 90);
+    setPosition({ top, left });
+  }, [bodyRef, indexRef, disabled]);
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      // The editor's own textarea drives selectionchange too; ignore those.
+      if (commenting || saving) {
+        return;
+      }
+      updateFromSelection();
+      if (document.getSelection()?.isCollapsed === true) {
+        setSelector(null);
+        setPosition(null);
+      }
+    };
+    document.addEventListener("selectionchange", handleSelectionChange);
+    return () =>
+      document.removeEventListener("selectionchange", handleSelectionChange);
+  }, [updateFromSelection, commenting, saving]);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && selector !== null) {
+        setSelector(null);
+        setPosition(null);
+        setCommenting(false);
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [selector]);
+
+  if (selector === null || position === null || disabled) {
+    return null;
+  }
+
+  const save = async (comment: string) => {
+    if (selector === null || saving) {
+      return;
+    }
+    setSaving(true);
+    setFailure(null);
+    const saved = await onAnnotate(selector, comment);
+    setSaving(false);
+    if (saved) {
+      setSelector(null);
+      setPosition(null);
+      setCommenting(false);
+      document.getSelection()?.removeAllRanges();
+    } else {
+      setFailure("保存失败，可重试");
+    }
+  };
+
+  return (
+    <div
+      className="bg-popover text-popover-foreground border-border fixed z-40 flex flex-col gap-1 rounded-lg border p-1 shadow-lg"
+      style={{
+        top: position.top,
+        left: position.left,
+        transform: "translateX(-50%)",
+      }}
+      role="toolbar"
+      aria-label="标注选中文本"
+    >
+      {commenting ? (
+        <AnnotationEditor
+          autoFocus
+          pending={saving}
+          onCancel={() => {
+            setCommenting(false);
+            setFailure(null);
+          }}
+          onSave={(comment) => void save(comment)}
+          width={260}
+        />
+      ) : (
+        <div className="flex items-center gap-0.5">
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={saving}
+            onClick={() => void save("")}
+          >
+            <Highlighter aria-hidden="true" />
+            高亮
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={saving}
+            onClick={() => setCommenting(true)}
+          >
+            <MessageSquarePlus aria-hidden="true" />
+            评论
+          </Button>
+        </div>
+      )}
+      {failure !== null ? (
+        <p className="text-destructive px-2 pb-1 text-xs" role="alert">
+          {failure}
+        </p>
+      ) : null}
+    </div>
+  );
+}

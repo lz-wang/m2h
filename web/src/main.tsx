@@ -44,6 +44,7 @@ function AuthGate() {
     <App
       authIdentity={auth.phase === "authenticated" ? auth.identity : null}
       onLogout={auth.logout}
+      annotationsAvailable={auth.features.annotations}
     />
   );
 }

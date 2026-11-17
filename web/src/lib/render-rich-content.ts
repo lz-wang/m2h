@@ -379,6 +379,7 @@ function addHeadingPermalinks(root: HTMLElement): void {
     }
     const anchor = document.createElement("a");
     anchor.className = "m2h-heading-anchor";
+    anchor.dataset.m2hDecor = "heading-anchor";
     anchor.href = `#${id}`;
     // aria-hidden keeps the icon out of the accessibility tree so it never
     // pollutes the heading's own accessible name (screen-reader users navigate
@@ -440,6 +441,7 @@ function addCodeCopyButtons(root: HTMLElement): void {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "m2h-code-copy";
+    button.dataset.m2hDecor = "code-copy";
     button.innerHTML = COPY_ICON;
     button.setAttribute("aria-label", "复制代码");
     button.title = "复制代码";
@@ -518,6 +520,7 @@ function addCodeLineNumbers(root: HTMLElement): void {
 
     const gutter = document.createElement("span");
     gutter.className = "m2h-code-line-numbers";
+    gutter.dataset.m2hDecor = "line-numbers";
     gutter.setAttribute("aria-hidden", "true");
     const lineCount = Math.max(codeSourceLineCount(code), 1);
     for (let line = 1; line <= lineCount; line += 1) {
@@ -570,6 +573,7 @@ function enhanceCodeBlock(pre: HTMLPreElement, lineCount: number): void {
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.className = "m2h-code-toggle";
+  toggle.dataset.m2hDecor = "code-toggle";
   toggle.setAttribute("aria-expanded", "false");
   toggle.setAttribute("aria-controls", preID);
   toggle.textContent = collapsedLabel;
@@ -696,6 +700,7 @@ function addImageMetadataTooltip(
 ): void {
   const tooltip = document.createElement("span");
   tooltip.className = "m2h-image-name-tooltip";
+  tooltip.dataset.m2hDecor = "image-tooltip";
   tooltip.setAttribute("aria-hidden", "true");
   const name = image.alt.trim();
   const hasAlt = name !== "";
@@ -902,6 +907,7 @@ function createLightboxTrigger(ariaLabel: string): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
   button.className = "m2h-lightbox-trigger";
+  button.dataset.m2hDecor = "lightbox-trigger";
   button.setAttribute("aria-label", ariaLabel);
   button.title = ariaLabel;
   button.innerHTML = IMAGE_ZOOM_ICON;
@@ -1053,6 +1059,7 @@ function renderMermaidFailure(
   const message = MERMAID_FAILURE_TITLE;
   const container = document.createElement("div");
   container.className = "m2h-rich-visual-error";
+  container.dataset.m2hDecor = "visual-error";
   const title = document.createElement("div");
   title.className = "m2h-rich-visual-error-title";
   title.textContent = message;
