@@ -14,7 +14,7 @@ function mountBody(html: string): HTMLElement {
   return root;
 }
 
-let sequence = 0;
+const sequence = 0;
 
 beforeEach(() => {
   document.body.replaceChildren();
@@ -75,9 +75,7 @@ describe("TextIndex", () => {
   });
 
   it("rejects ranges touching excluded regions", () => {
-    const root = mountBody(
-      "<p>正文</p><span data-m2h-decor=\"x\">装饰</span>",
-    );
+    const root = mountBody('<p>正文</p><span data-m2h-decor="x">装饰</span>');
     const index = new TextIndex(root);
     const decoration = root.querySelector("span")?.firstChild as Text;
     const range = document.createRange();

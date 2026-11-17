@@ -2,7 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AnnotationItem } from "../api";
-import { useAnnotations, type AnnotationIdentity } from "./use-annotations";
+import { type AnnotationIdentity, useAnnotations } from "./use-annotations";
 
 const fetchMock = vi.fn<typeof fetch>();
 
@@ -125,9 +125,7 @@ describe("useAnnotations", () => {
     });
     expect(result.current.items).toHaveLength(0);
 
-    fetchMock.mockResolvedValueOnce(
-      jsonResponse({ error: "forbidden" }, 403),
-    );
+    fetchMock.mockResolvedValueOnce(jsonResponse({ error: "forbidden" }, 403));
     await act(async () => {
       await result.current.remove("a1");
     });

@@ -3,8 +3,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AnnotationItem } from "@/api";
-import { AnnotationPanel } from "./annotation-panel";
 import * as clipboard from "@/lib/clipboard";
+import { AnnotationPanel } from "./annotation-panel";
 
 function item(overrides: Partial<AnnotationItem> = {}): AnnotationItem {
   return {
@@ -34,7 +34,9 @@ const document_ = {
   hash: "sha256:abc",
 };
 
-function renderPanel(overrides: Partial<Parameters<typeof AnnotationPanel>[0]> = {}) {
+function renderPanel(
+  overrides: Partial<Parameters<typeof AnnotationPanel>[0]> = {},
+) {
   const onLocate = vi.fn();
   const onDelete = vi.fn();
   const onOpenChange = vi.fn();
@@ -92,9 +94,7 @@ describe("AnnotationPanel", () => {
   });
 
   it("exports the whole set as Markdown and JSON via the clipboard", async () => {
-    const copySpy = vi
-      .spyOn(clipboard, "copyText")
-      .mockResolvedValue(true);
+    const copySpy = vi.spyOn(clipboard, "copyText").mockResolvedValue(true);
     renderPanel();
     await userEvent.click(
       screen.getByRole("button", { name: "复制全部标注（Markdown）" }),

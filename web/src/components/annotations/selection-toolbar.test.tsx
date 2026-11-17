@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,7 +44,8 @@ describe("SelectionToolbar", () => {
   }
 
   it("shows the actions for a valid content selection and saves highlights", async () => {
-    const onAnnotate = vi.fn<(selector: unknown, comment: string) => Promise<boolean>>();
+    const onAnnotate =
+      vi.fn<(selector: unknown, comment: string) => Promise<boolean>>();
     onAnnotate.mockResolvedValue(true);
     const bodyRef = { current: body };
     const indexRef = { current: index };
@@ -52,7 +59,9 @@ describe("SelectionToolbar", () => {
 
     select(2, 11);
     await waitFor(() =>
-      expect(screen.getByRole("toolbar", { name: "标注选中文本" })).toBeTruthy(),
+      expect(
+        screen.getByRole("toolbar", { name: "标注选中文本" }),
+      ).toBeTruthy(),
     );
 
     await userEvent.click(screen.getByRole("button", { name: "高亮" }));
@@ -65,13 +74,12 @@ describe("SelectionToolbar", () => {
     expect(selector.position.start).toBe(2);
     expect(comment).toBe("");
     // A saved annotation clears the toolbar.
-    expect(
-      screen.queryByRole("toolbar", { name: "标注选中文本" }),
-    ).toBeNull();
+    expect(screen.queryByRole("toolbar", { name: "标注选中文本" })).toBeNull();
   });
 
   it("opens the comment editor and submits its text", async () => {
-    const onAnnotate = vi.fn<(selector: unknown, comment: string) => Promise<boolean>>();
+    const onAnnotate =
+      vi.fn<(selector: unknown, comment: string) => Promise<boolean>>();
     onAnnotate.mockResolvedValue(true);
     render(
       <SelectionToolbar
@@ -82,9 +90,7 @@ describe("SelectionToolbar", () => {
     );
 
     select(0, 2);
-    await waitFor(() =>
-      expect(screen.getByRole("toolbar")).toBeTruthy(),
-    );
+    await waitFor(() => expect(screen.getByRole("toolbar")).toBeTruthy());
     await userEvent.click(screen.getByRole("button", { name: "评论" }));
     const editor = await screen.findByPlaceholderText("添加评论…");
     await userEvent.type(editor, "需要补充备份");
@@ -94,7 +100,8 @@ describe("SelectionToolbar", () => {
   });
 
   it("keeps the toolbar with a failure notice when saving fails", async () => {
-    const onAnnotate = vi.fn<(selector: unknown, comment: string) => Promise<boolean>>();
+    const onAnnotate =
+      vi.fn<(selector: unknown, comment: string) => Promise<boolean>>();
     onAnnotate.mockResolvedValue(false);
     render(
       <SelectionToolbar
@@ -107,7 +114,9 @@ describe("SelectionToolbar", () => {
     select(0, 2);
     await waitFor(() => expect(screen.getByRole("toolbar")).toBeTruthy());
     await userEvent.click(screen.getByRole("button", { name: "高亮" }));
-    expect((await screen.findByRole("alert")).textContent).toContain("保存失败");
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "保存失败",
+    );
     expect(screen.getByRole("toolbar")).toBeTruthy();
   });
 

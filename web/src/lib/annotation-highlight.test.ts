@@ -1,11 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-
-import { TextIndex } from "./annotation-selector";
 import {
   ANNOTATION_HIGHLIGHT_NAME,
   HighlightLayer,
   supportsHighlights,
 } from "./annotation-highlight";
+import { TextIndex } from "./annotation-selector";
 
 function mountBody(html: string): HTMLElement {
   document.body.replaceChildren();

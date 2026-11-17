@@ -1,7 +1,11 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
 import { reanchor } from "./annotation-reanchor";
-import { selectorFromRange, TextIndex, type AnnotationSelector } from "./annotation-selector";
+import {
+  type AnnotationSelector,
+  selectorFromRange,
+  TextIndex,
+} from "./annotation-selector";
 
 function mountBody(html: string): HTMLElement {
   const root = document.createElement("article");
@@ -57,10 +61,13 @@ describe("reanchor", () => {
   });
 
   it("disambiguates identical quotes with prefix/suffix", () => {
-    let root = mountBody("<p>前文 甲乙 后文</p><p>无关 甲乙 结尾</p>");
+    const root = mountBody("<p>前文 甲乙 后文</p><p>无关 甲乙 结尾</p>");
     const index = new TextIndex(root);
     const selector = selectorFor(index, 3, 5); // 第一段的“甲乙”
-    const result = reanchor(index, { ...selector, position: { start: 999, end: 1001 } });
+    const result = reanchor(index, {
+      ...selector,
+      position: { start: 999, end: 1001 },
+    });
     expect(result.status).toBe("resolved");
     expect(result.position).toEqual({ start: 3, end: 5 });
   });
@@ -108,7 +115,10 @@ describe("reanchor", () => {
     const root = mountBody("<p>前缀 \u{1F680} 尾缀</p>");
     const index = new TextIndex(root);
     const selector = selectorFor(index, 3, 4); // the rocket
-    const result = reanchor(index, { ...selector, position: { start: 0, end: 1 } });
+    const result = reanchor(index, {
+      ...selector,
+      position: { start: 0, end: 1 },
+    });
     expect(result.status).toBe("resolved");
     expect(result.position).toEqual({ start: 3, end: 4 });
   });

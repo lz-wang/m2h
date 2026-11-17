@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  type ExportAnnotation,
+  type ExportDocument,
   exportAnnotationsJSON,
   exportAnnotationsMarkdown,
   exportSingleAnnotationMarkdown,
-  type ExportAnnotation,
-  type ExportDocument,
 } from "./annotation-export";
 
 const document: ExportDocument = {
@@ -15,7 +15,9 @@ const document: ExportDocument = {
   hash: "sha256:abc",
 };
 
-function annotation(overrides: Partial<ExportAnnotation> = {}): ExportAnnotation {
+function annotation(
+  overrides: Partial<ExportAnnotation> = {},
+): ExportAnnotation {
   return {
     id: "a1",
     documentPath: "design.md",
