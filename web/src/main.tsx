@@ -1,9 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { App } from "./App";
-import { LoginPage } from "./components/auth/login-page";
-import { useAuth } from "./hooks/use-auth";
+import { AuthGate } from "./components/auth/auth-gate";
 import "./index.css";
 
 // Keep the browser's scroll restoration enabled: an early release had stored
@@ -22,32 +20,6 @@ const root = document.getElementById("root");
 
 if (root === null) {
   throw new Error("m2h WebUI root element is missing");
-}
-
-// AuthGate resolves the deployment's auth mode and the caller's session
-// before any protected document API is touched: the default mode renders the
-// classic reader immediately, authenticated deployments render the login
-// page until a session exists. Rendering at the reader's own URL keeps the
-// originally requested document and anchor intact through a login.
-function AuthGate() {
-  const auth = useAuth();
-  if (auth.phase === "anonymous") {
-    return (
-      <LoginPage
-        onLogin={auth.login}
-        loginPending={auth.loginPending}
-        loginError={auth.loginError}
-      />
-    );
-  }
-  return (
-    <App
-      authIdentity={auth.phase === "authenticated" ? auth.identity : null}
-      onLogout={auth.logout}
-      annotationsAvailable={auth.features.annotations}
-      tokensAvailable={auth.features.tokens}
-    />
-  );
 }
 
 createRoot(root).render(

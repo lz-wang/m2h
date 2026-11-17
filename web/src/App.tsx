@@ -903,6 +903,7 @@ export function App({
                   </TooltipContent>
                 </Tooltip>
               ) : null}
+              {tokensEnabled ? <TokenSettings /> : null}
               {annotationsEnabled ? (
                 <Tooltip>
                   <TooltipTrigger

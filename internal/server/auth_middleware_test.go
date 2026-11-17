@@ -374,6 +374,7 @@ func TestLoginRateLimit(t *testing.T) {
 			t.Fatalf("attempt %d = %d, want 401", attemptIndex+1, got)
 		}
 	}
+
 	if got := attempt(); got != http.StatusTooManyRequests {
 		t.Fatalf("attempt after limit = %d, want 429", got)
 	}

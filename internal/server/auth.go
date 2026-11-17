@@ -24,10 +24,12 @@ const (
 	sessionProvider    = "provider"
 )
 
-// Login limiter bounds: five failures per username+address inside fifteen
-// minutes lock that pair out.
+// Login limiter bounds: ten failures per username inside fifteen minutes
+// lock that name out. Keys are usernames alone — behind a reverse proxy
+// every client shares the proxy address, so an address-keyed limiter would
+// let anyone lock out any username at will.
 const (
-	loginFailureMax    = 5
+	loginFailureMax    = 10
 	loginFailureWindow = 15 * time.Minute
 )
 
@@ -212,7 +214,7 @@ func (handler *documentHandler) serveLogin(response http.ResponseWriter, request
 		return
 	}
 
-	limiterKey := clientIP(request.RemoteAddr) + "|" + credentials.Username
+	limiterKey := credentials.Username
 	stack := handler.auth
 	if !stack.limiter.Allowed(limiterKey) {
 		writeJSONError(response, http.StatusTooManyRequests, "too many failed attempts")

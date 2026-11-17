@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"path"
 	"strings"
 	"time"
 
@@ -161,15 +162,30 @@ func (handler *documentHandler) serveCreateToken(response http.ResponseWriter, r
 	}
 	// Root- and document-scoped tokens must name documents this workspace
 	// actually serves — otherwise the scope is a stale reference at birth.
+	// Both the root id and the document path are stored in their
+	// server-normalized spellings, so a client-side "./x.md" or aliased
+	// root reference still mints a token that matches the canonical
+	// listing comparisons.
 	if scope.Resource.Type != auth.ResourceAllPublished {
-		root, _, resolveErr := handler.resolveAnnotationDocument(documentRefRequest{
-			RootID: scope.Resource.RootID, Path: scope.Resource.Path,
-		})
-		if resolveErr != nil {
-			writeJSONError(response, http.StatusBadRequest, "scope names a document this server does not serve")
+		root, found := handler.workspace.rootByIdentity(scope.Resource.RootID)
+		if !found {
+			writeJSONError(response, http.StatusBadRequest, "scope names a document root this server does not serve")
 			return
 		}
 		scope.Resource.RootID = root.identity
+		if scope.Resource.Type == auth.ResourceDocument {
+			// Normalize client-side spellings ("./a.md", "a//b.md") to
+			// the canonical slash-separated form before resolution.
+			scope.Resource.Path = path.Clean("/" + scope.Resource.Path)[1:]
+			_, relative, resolveErr := handler.resolveAnnotationDocument(documentRefRequest{
+				RootID: scope.Resource.RootID, Path: scope.Resource.Path,
+			})
+			if resolveErr != nil {
+				writeJSONError(response, http.StatusBadRequest, "scope names a document this server does not serve")
+				return
+			}
+			scope.Resource.Path = relative
+		}
 	}
 	documentHash := ""
 	if body.DocumentHash != "" {
@@ -347,6 +363,12 @@ func (handler *documentHandler) enforceTokenScope(
 	case path == "/assets/" || strings.HasPrefix(path, "/assets/"):
 		writeJSONError(response, http.StatusForbidden, "tokens cannot read attachments")
 		return errHandled
+	case path == "/doc" || strings.HasPrefix(path, "/doc/"):
+		// The HTML shell serves humans; a bearer has no use for it, and
+		// letting it through would leak out-of-scope existence through
+		// the shell's status codes.
+		writeJSONError(response, http.StatusForbidden, "tokens cannot fetch the document shell")
+		return errHandled
 	default:
 		return nil
 	}
@@ -401,7 +423,8 @@ func (handler *documentHandler) enforceTokenDocumentScope(
 		writeJSONError(response, http.StatusForbidden, "token scope does not cover this document")
 		return errHandled
 	}
-	if record.DocumentHash != "" && (path == "/api/document" || strings.HasPrefix(path, "/raw/")) {
+	if record.DocumentHash != "" &&
+		(path == "/api/document" || path == "/api/file-metadata" || strings.HasPrefix(path, "/raw/")) {
 		current, err := handler.documentHash(root, relative)
 		if err != nil {
 			writeJSONError(response, resolveVisibleStatus(err), "document not found")

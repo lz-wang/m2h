@@ -125,7 +125,9 @@ func (authenticator *LDAPAuthenticator) Authenticate(ctx context.Context, userna
 		authenticator.config.UserBaseDN,
 		goldap.ScopeWholeSubtree, goldap.NeverDerefAliases, 2, int(ldapTimeout.Seconds()), false,
 		filter,
-		[]string{"dn"}, // entryUUID is returned on the entry itself
+		// The distinguished name rides on the entry itself; entryUUID is
+		// the stable identity (survives renames) and cn the display name.
+		[]string{"dn", "entryUUID", "cn"},
 		nil,
 	)
 	result, err := connection.SearchDirectory(request)

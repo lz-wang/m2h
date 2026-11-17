@@ -605,3 +605,103 @@ func TestTokenRouteEdges(t *testing.T) {
 		t.Fatalf("document without path = %d, want 400", response.StatusCode)
 	}
 }
+
+func TestCreateRootScopedToken(t *testing.T) {
+	fixture := newTokenFixture(t)
+	alice := fixture.loginAs(t, "alice", "password-1")
+	ref := fixtureDocumentRef(t, fixture)
+
+	// Root scopes carry no path — creation must accept them and the
+	// resulting token must read every document under the root.
+	status, created := fixture.createTokenViaSession(t, alice, map[string]any{
+		"kind": "persistent",
+		"name": "root-token",
+		"scope": map[string]any{
+			"permissions": []string{"document:read"},
+			"resource":    map[string]any{"type": "root", "rootId": ref.RootID},
+		},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("root-scoped create = %d, want 201", status)
+	}
+	writeTestFile(t, fixture.docsDir+"/another.md", "# Another")
+	read, _ := http.NewRequest(http.MethodGet, fixture.server.URL+"/raw/another.md", nil)
+	read.Header.Set("Authorization", "Bearer "+created.Secret)
+	if response := fixture.do(read); response.StatusCode != http.StatusOK {
+		t.Fatalf("root token reading sibling = %d", response.StatusCode)
+	}
+
+	// Document scopes normalize the stored path: a client-side
+	// non-canonical spelling must still mint a usable token.
+	status, normalized := fixture.createTokenViaSession(t, alice, map[string]any{
+		"kind": "persistent",
+		"name": "doc-token",
+		"scope": map[string]any{
+			"permissions": []string{"document:read"},
+			"resource": map[string]any{
+				"type": "document", "rootId": ref.RootID, "path": "./guide.md",
+			},
+		},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("non-canonical document create = %d, want 201", status)
+	}
+	if normalized.Scope.Resource.Path != "guide.md" {
+		t.Fatalf("stored path = %q, want normalized guide.md", normalized.Scope.Resource.Path)
+	}
+	read, _ = http.NewRequest(http.MethodGet, fixture.server.URL+"/raw/guide.md", nil)
+	read.Header.Set("Authorization", "Bearer "+normalized.Secret)
+	if response := fixture.do(read); response.StatusCode != http.StatusOK {
+		t.Fatalf("normalized document token = %d", response.StatusCode)
+	}
+}
+
+func TestBearerCannotProbeDeepLinkExistence(t *testing.T) {
+	fixture := newTokenFixture(t)
+	alice := fixture.loginAs(t, "alice", "password-1")
+	ref := fixtureDocumentRef(t, fixture)
+	status, created := fixture.createTokenViaSession(t, alice, map[string]any{
+		"kind": "persistent",
+		"name": "doc-only",
+		"scope": map[string]any{
+			"permissions": []string{"document:read"},
+			"resource":    map[string]any{"type": "document", "rootId": ref.RootID, "path": "guide.md"},
+		},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create = %d", status)
+	}
+	// A token has no use for the HTML shell; it must not learn whether
+	// out-of-scope documents exist through /doc/ status codes either.
+	writeTestFile(t, fixture.docsDir+"/secret.md", "# Secret")
+	request, _ := http.NewRequest(http.MethodGet, fixture.server.URL+"/doc/secret.md", nil)
+	request.Header.Set("Authorization", "Bearer "+created.Secret)
+	if response := fixture.do(request); response.StatusCode != http.StatusForbidden {
+		t.Fatalf("bearer deep link = %d, want 403", response.StatusCode)
+	}
+}
+
+func TestContentBoundTokenCoversMetadata(t *testing.T) {
+	fixture := newTokenFixture(t)
+	alice := fixture.loginAs(t, "alice", "password-1")
+	hash := fixtureDocumentHash(t, fixture)
+	ref := fixtureDocumentRef(t, fixture)
+	status, created := fixture.createTokenViaSession(t, alice, map[string]any{
+		"kind": "temporary",
+		"name": "share",
+		"scope": map[string]any{
+			"permissions": []string{"document:read"},
+			"resource":    map[string]any{"type": "document", "rootId": ref.RootID, "path": "guide.md"},
+		},
+		"documentHash": hash,
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create = %d", status)
+	}
+	writeTestFile(t, fixture.docsDir+"/guide.md", "# Edited\n\nNew body.")
+	request, _ := http.NewRequest(http.MethodGet, fixture.server.URL+"/api/file-metadata?path=guide.md", nil)
+	request.Header.Set("Authorization", "Bearer "+created.Secret)
+	if response := fixture.do(request); response.StatusCode != http.StatusConflict {
+		t.Fatalf("stale metadata read = %d, want 409", response.StatusCode)
+	}
+}

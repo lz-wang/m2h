@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { useState } from "react";
-import { type AnnotationItem, createToken } from "@/api";
+import type { AnnotationItem } from "@/api";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {

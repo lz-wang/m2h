@@ -294,3 +294,35 @@ func TestConnAdapterForwardsCalls(t *testing.T) {
 		t.Fatalf("close failed: %v", err)
 	}
 }
+
+func TestLDAPSearchRequestsIdentityAttributes(t *testing.T) {
+	conn := &fakeLDAPConn{searchResult: singleEntry("uid=alice,ou=people,dc=example,dc=internal", "uuid-1")}
+	authenticator := withFakeLDAP(t, conn, testLDAPConfig())
+
+	principal, err := authenticator.Authenticate(context.Background(), "alice", "pw")
+	if err != nil {
+		t.Fatalf("authenticate failed: %v", err)
+	}
+	// The stable identity must come from entryUUID — only possible when the
+	// search actually asked the directory for it (and for the cn display
+	// name).
+	if principal.ID != "ldap:uuid-1" {
+		t.Fatalf("identity fell back to DN: %q — the search attributes are missing entryUUID/cn", principal.ID)
+	}
+	if len(conn.searches) != 1 {
+		t.Fatalf("searches = %d", len(conn.searches))
+	}
+	attributes := conn.searches[0].Attributes
+	for _, want := range []string{"dn", "entryUUID", "cn"} {
+		found := false
+		for _, attribute := range attributes {
+			if attribute == want {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("search attributes = %v, want %q included", attributes, want)
+		}
+	}
+}

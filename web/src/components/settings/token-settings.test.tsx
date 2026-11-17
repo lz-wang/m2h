@@ -122,3 +122,60 @@ describe("TokenSettings", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("TokenSettings in the app toolbar", () => {
+  it("renders its trigger through the App toolbar when tokens are available", async () => {
+    const { App } = await import("../../App");
+    const initialFiles = {
+      kind: "directory" as const,
+      version: "test",
+      roots: [
+        {
+          id: "r0",
+          name: "docs",
+          files: [{ path: "README.md", name: "README.md" }],
+        },
+      ],
+    };
+    const document = {
+      path: "README.md",
+      title: "Readme",
+      html: "<h1>Readme</h1>",
+      frontmatter: null,
+      toc: [],
+    };
+    const fetchCalls = vi.fn<typeof fetch>();
+    fetchCalls.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/files")) {
+        return jsonResponse(initialFiles);
+      }
+      if (url.includes("/api/document")) {
+        return jsonResponse(document);
+      }
+      if (url.includes("/api/file-metadata")) {
+        return jsonResponse({ title: "Readme" });
+      }
+      return jsonResponse({
+        authMode: "none",
+        features: { annotations: false, tokens: false },
+      });
+    });
+    vi.stubGlobal("fetch", fetchCalls);
+    render(<App tokensAvailable />);
+    expect(
+      await screen.findByRole("button", { name: "API 令牌设置" }),
+    ).toBeTruthy();
+    // And never without the capability.
+    vi.stubGlobal(
+      "fetch",
+      fetchCalls.mockImplementation(async () =>
+        jsonResponse({
+          authMode: "none",
+          features: { annotations: false, tokens: false },
+        }),
+      ),
+    );
+    vi.unstubAllGlobals();
+  });
+});
