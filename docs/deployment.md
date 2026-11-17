@@ -313,6 +313,48 @@ python3 scripts/nginx-smoke.py ./m2h
 它不修改已有 Nginx 服务配置；CI 在浏览器回归后单独执行该 Smoke。
 测试不包含公网 TLS 或 Tinyauth 登录验收。
 
+## 内置认证（可选，v0.27.0 起）
+
+m2h 自带可选的认证与协作层。默认启动（不带 `--auth`）保持零状态：不建数据库、不读认证配置、不注册登录接口。显式选择认证模式后，全部文档、附件与搜索接口都要求登录，并解锁文档标注与 API Token。
+
+### 启动
+
+```console
+# 本地账号（明文或 Argon2id PHC 哈希）
+M2H_LOCAL_USERS_JSON='{"alice":"password-1"}' \
+  m2h docs --auth local --host 127.0.0.1 /srv/docs
+
+# LDAP（LDAPS 或 StartTLS + 用户白名单）
+M2H_LDAP_URL=ldaps://ldap.example.internal:636 \
+M2H_LDAP_BIND_DN='uid=service,ou=people,dc=example,dc=internal' \
+M2H_LDAP_BIND_PASSWORD=... \
+M2H_LDAP_USER_BASE_DN='ou=people,dc=example,dc=internal' \
+M2H_LDAP_USER_FILTER='(uid=%s)' \
+M2H_LDAP_ALLOWED_USERS='alice,bob' \
+  m2h docs --auth ldap /srv/docs
+```
+
+### 配置一览
+
+| 变量 / 参数 | 作用 |
+| --- | --- |
+| `--auth <none\|local\|ldap>` | 认证模式；默认 `none`。仅设置环境变量不会启用认证 |
+| `--data-dir` / `M2H_DATA_DIR` | SQLite 数据目录（默认为各操作系统用户数据目录下的 `m2h`）；不得位于任何发布的文档目录内 |
+| `M2H_LOCAL_USERS_JSON` | 本地账号表，JSON 对象；值支持 `$argon2id$…` PHC 哈希 |
+| `M2H_LDAP_*` | LDAP 连接、服务账号、检索基准/过滤器与白名单；过滤器中的 `%s` 会经 `ldap.EscapeFilter` 转义 |
+| `M2H_PUBLIC_URL` | 对外完整 URL（如 `https://docs.example.com/docs`）；为 https 时会话 Cookie 附加 `Secure`。m2h 不信任 `X-Forwarded-Proto` |
+
+### 会话与数据
+
+- 浏览器使用 `m2h_session` Cookie（HttpOnly、SameSite=Lax、路径跟随 `--base-path`），12 小时闲置 / 7 天绝对过期；登录失败统一报错并按用户+IP 限流（15 分钟 5 次）。
+- 标注、会话与 Token 全部存在数据目录的 `m2h.db`（纯 Go SQLite 驱动，权限 0600）。备份即复制该文件；Schema 由版本号管理，旧库自动迁移，比程序新的库拒绝打开。
+- 切换 Local/LDAP 后，旧模式签发的会话与 Token 立即失效（属主身份提供方不匹配）。
+- 不要同时启用反向代理层的外置登录（如 Tinyauth）与 m2h 内置认证——两道登录会互相干扰；二选一。
+
+### Agent 与 API Token
+
+认证模式下可在 WebUI「API 令牌」设置中创建长期只读 Token，或在标注面板一键生成绑定当前文档版本的临时分享。Agent 通过 `Authorization: Bearer m2h_…` 搜索与读取原文，规范见 [Agent 知识库接入](agent-access.md)。
+
 ## Tinyauth 认证（可选）
 
 m2h 不需要知道 Tinyauth 的存在。Tinyauth 为 Nginx 提供专用 `/api/auth/nginx` endpoint，配合 `auth_request` 使用：

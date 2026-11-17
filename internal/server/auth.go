@@ -83,7 +83,15 @@ func buildAuthStack(config *auth.Config, dataStore *store.Store, basePath string
 	sessions.Cookie.Name = auth.SessionCookieName
 	sessions.Cookie.HttpOnly = true
 	sessions.Cookie.SameSite = http.SameSiteLaxMode
-	sessions.Cookie.Path = basePath
+	// The cookie must carry an explicit path: an unset Path makes browsers
+	// fall back to the request-directory default ("/api/auth"), which
+	// would confine the session cookie to the login endpoint. The base
+	// path arrives normalized ("/" collapses to "").
+	cookiePath := basePath
+	if cookiePath == "" {
+		cookiePath = "/"
+	}
+	sessions.Cookie.Path = cookiePath
 	// The Secure flag follows the configured public origin, never a
 	// client-supplied forwarded-proto header: m2h itself always speaks
 	// plain HTTP, so only the deployment's own declaration is trusted.

@@ -19,6 +19,7 @@
 - 正文图片延迟加载：接近视口时才请求实际资源，加载中显示内置占位图，失败折叠为统一占位并提示原始路径
 - 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
 - 输入 root 即发布边界：目录默认隐藏点开头路径（`--hidden` 可包含），附件路由拒绝 HTML/JS/CSS 等主动 Web 内容，响应携带统一浏览器安全头
+- 可选认证模式（`--auth local` / `--auth ldap`）：Form 登录保护全部文档与搜索，支持文档标注（高亮、评论、重定位与导出）、API Token 与 Agent 知识库接入，详见[认证部署](docs/deployment.md)与 [Agent 接入](docs/agent-access.md)；默认不开启时零状态、零依赖，行为与旧版完全一致
 - 可将单个 Markdown 文件导出为 HTML
 - 可检查 Markdown 文档的 Frontmatter、本地引用、锚点与结构问题（[32 条规则与演示](docs/demos/checkers/00-index.md)）
 

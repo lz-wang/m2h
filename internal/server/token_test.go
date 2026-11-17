@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -9,6 +10,8 @@ import (
 	"time"
 
 	"github.com/lz-wang/m2h/internal/auth"
+	"github.com/lz-wang/m2h/internal/files"
+	"github.com/lz-wang/m2h/internal/store"
 )
 
 // tokenFixtureServer extends the authenticated fixture with token helpers.
@@ -419,5 +422,186 @@ func TestScopedSearchFiltersInsideTheScan(t *testing.T) {
 		if result.Path != "guide.md" {
 			t.Fatalf("document token searched out of scope: %q", result.Path)
 		}
+	}
+}
+
+func TestSessionCookiePathCoversRootDeployment(t *testing.T) {
+	base := t.TempDir()
+	dataStore, err := store.Open(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dataStore.Close()
+	if err := dataStore.Migrate(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	// A root deployment normalizes to "" internally; the cookie must say
+	// "/" or browsers would default it to the login endpoint's directory.
+	stack, err := buildAuthStack(localAuthConfig(), dataStore, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stack.sessions.Cookie.Path != "/" {
+		t.Fatalf("cookie path = %q, want /", stack.sessions.Cookie.Path)
+	}
+}
+
+func TestTokenScopeFilterBranches(t *testing.T) {
+	fixture := newTokenFixture(t)
+	alice := fixture.loginAs(t, "alice", "password-1")
+	handler := newTokenHandlerForTest(t, fixture)
+
+	// Session callers see everything.
+	sessionRequest, _ := http.NewRequest(http.MethodGet, "/api/files", nil)
+	sessionRequest = requestWithPrincipal(sessionRequest, &principal{
+		ID: "local:alice", Username: "alice", Provider: "local", Via: principalViaSession,
+	})
+	if !handler.tokenScopeFilter(sessionRequest)("r0/anything.md") {
+		t.Fatalf("session caller filtered")
+	}
+
+	// Anonymous requests see everything (the middleware already gated).
+	anonymous, _ := http.NewRequest(http.MethodGet, "/api/files", nil)
+	if !handler.tokenScopeFilter(anonymous)("r0/anything.md") {
+		t.Fatalf("anonymous request filtered")
+	}
+
+	// A token caller with a document scope sees exactly its document.
+	ref := fixtureDocumentRef(t, fixture)
+	status, created := fixture.createTokenViaSession(t, alice, map[string]any{
+		"kind": "persistent",
+		"name": "scoped",
+		"scope": map[string]any{
+			"permissions": []string{"document:read"},
+			"resource":    map[string]any{"type": "document", "rootId": ref.RootID, "path": "guide.md"},
+		},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create = %d", status)
+	}
+	record, err := fixture.stack.dataStore.FindTokenByHash(
+		context.Background(), auth.HashTokenSecret(created.Secret))
+	if err != nil {
+		t.Fatal(err)
+	}
+	scopedRequest, _ := http.NewRequest(http.MethodGet, "/api/files", nil)
+	scopedRequest = scopedRequest.WithContext(
+		context.WithValue(scopedRequest.Context(), tokenRecordContextKey{}, record))
+	scopedRequest = requestWithPrincipal(scopedRequest, &principal{
+		ID: "local:alice", Via: principalViaToken, Provider: "local",
+	})
+	filter := handler.tokenScopeFilter(scopedRequest)
+	if !filter("guide.md") {
+		t.Fatalf("document scope rejected its own document")
+	}
+	if filter("other.md") {
+		t.Fatalf("document scope accepted a foreign document")
+	}
+
+	// A malformed record on the context fails closed.
+	brokenRequest, _ := http.NewRequest(http.MethodGet, "/api/files", nil)
+	brokenRequest = brokenRequest.WithContext(context.WithValue(
+		brokenRequest.Context(), tokenRecordContextKey{}, store.TokenRecord{ScopeJSON: "{"}))
+	brokenRequest = requestWithPrincipal(brokenRequest, &principal{
+		ID: "local:alice", Via: principalViaToken, Provider: "local",
+	})
+	if handler.tokenScopeFilter(brokenRequest)("guide.md") {
+		t.Fatalf("malformed scope allowed everything")
+	}
+}
+
+// newTokenHandlerForTest digs the documentHandler out of the fixture's
+// serving stack for direct unit access.
+func newTokenHandlerForTest(t *testing.T, fixture *tokenFixture) *documentHandler {
+	t.Helper()
+	// Serve the fixture's own docs directory so root identities match
+	// the tokens the fixture minted.
+	docs := fixture.docsDir
+	resolved, err := files.Resolve(docs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	workspace, err := newWorkspace([]files.Input{resolved}, files.DiscoverOptions{}, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := workspace.assignIdentities(context.Background(), fixture.stack.dataStore.EnsureDocumentRoot); err != nil {
+		t.Fatal(err)
+	}
+	handler := &documentHandler{
+		workspace: workspace,
+		auth:      fixture.stack,
+	}
+	return handler
+}
+
+func TestTokenRouteEdges(t *testing.T) {
+	fixture := newTokenFixture(t)
+	alice := fixture.loginAs(t, "alice", "password-1")
+	ref := fixtureDocumentRef(t, fixture)
+	status, created := fixture.createTokenViaSession(t, alice, map[string]any{
+		"kind": "persistent",
+		"name": "edges",
+		"scope": map[string]any{
+			"permissions": []string{"document:read"},
+			"resource":    map[string]any{"type": "document", "rootId": ref.RootID, "path": "guide.md"},
+		},
+	})
+	if status != http.StatusCreated {
+		t.Fatalf("create = %d", status)
+	}
+	bearer := func(method, path string) *http.Request {
+		request, _ := http.NewRequest(method, fixture.server.URL+path, nil)
+		request.Header.Set("Authorization", "Bearer "+created.Secret)
+		return request
+	}
+
+	// File metadata follows the same scope rule as the document itself.
+	if response := fixture.do(bearer(http.MethodGet, "/api/file-metadata?path=guide.md")); response.StatusCode != http.StatusOK {
+		t.Fatalf("in-scope metadata = %d", response.StatusCode)
+	}
+	writeTestFile(t, fixture.docsDir+"/foreign.md", "# Foreign")
+	if response := fixture.do(bearer(http.MethodGet, "/api/file-metadata?path=foreign.md")); response.StatusCode != http.StatusForbidden {
+		t.Fatalf("out-of-scope metadata = %d, want 403", response.StatusCode)
+	}
+
+	// Annotations listing through a token obeys the document scope.
+	if response := fixture.do(bearer(http.MethodGet, "/api/annotations?path=guide.md")); response.StatusCode != http.StatusOK {
+		t.Fatalf("in-scope annotations = %d", response.StatusCode)
+	}
+	if response := fixture.do(bearer(http.MethodGet, "/api/annotations?path=foreign.md")); response.StatusCode != http.StatusForbidden {
+		t.Fatalf("out-of-scope annotations = %d, want 403", response.StatusCode)
+	}
+
+	// Token management route guards: a bearer never reaches the handler
+	// (403 first), a session sees the method guard.
+	if response := fixture.do(bearer(http.MethodPut, "/api/tokens")); response.StatusCode != http.StatusForbidden {
+		t.Fatalf("PUT /api/tokens via bearer = %d", response.StatusCode)
+	}
+	sessionPut, _ := http.NewRequest(http.MethodPut, fixture.server.URL+"/api/tokens", nil)
+	sessionPut.AddCookie(alice)
+	sessionPut.Header.Set("Origin", fixture.server.URL)
+	if response := fixture.do(sessionPut); response.StatusCode != http.StatusMethodNotAllowed {
+		t.Fatalf("PUT /api/tokens via session = %d", response.StatusCode)
+	}
+	invalidRevoke, _ := http.NewRequest(http.MethodDelete, fixture.server.URL+"/api/tokens/", nil)
+	invalidRevoke.AddCookie(alice)
+	invalidRevoke.Header.Set("Origin", fixture.server.URL)
+	if response := fixture.do(invalidRevoke); response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid revoke id = %d", response.StatusCode)
+	}
+	unknownRevoke, _ := http.NewRequest(http.MethodDelete, fixture.server.URL+"/api/tokens/no-such", nil)
+	unknownRevoke.AddCookie(alice)
+	unknownRevoke.Header.Set("Origin", fixture.server.URL)
+	if response := fixture.do(unknownRevoke); response.StatusCode != http.StatusNotFound {
+		t.Fatalf("unknown revoke = %d", response.StatusCode)
+	}
+
+	// Raw paths with traversal are refused before scope checks.
+	if response := fixture.do(bearer(http.MethodGet, "/raw/../etc/passwd")); response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("traversal raw = %d, want 400", response.StatusCode)
+	}
+	if response := fixture.do(bearer(http.MethodGet, "/api/document")); response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("document without path = %d, want 400", response.StatusCode)
 	}
 }
