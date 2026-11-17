@@ -34,12 +34,13 @@ import {
   useState,
 } from "react";
 
-import type {
-  AuthIdentity,
-  FrontMatter,
-  PreviewAPI,
-  SearchResult,
-  TocItem,
+import {
+  type AuthIdentity,
+  createToken,
+  type FrontMatter,
+  type PreviewAPI,
+  type SearchResult,
+  type TocItem,
 } from "./api";
 import { AnnotationPanel } from "./components/annotations/annotation-panel";
 import { SelectionToolbar } from "./components/annotations/selection-toolbar";
@@ -49,6 +50,7 @@ import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
 import { ReaderFooter } from "./components/reader-footer";
 import { ReaderNavigation } from "./components/reader-navigation";
 import { SearchDialog } from "./components/search-dialog";
+import { TokenSettings } from "./components/settings/token-settings";
 import {
   TableOfContentsPanel,
   TableOfContentsSheet,
@@ -77,9 +79,11 @@ import {
 } from "./components/ui/tooltip";
 import { useAnnotations } from "./hooks/use-annotations";
 import { useIsMobile } from "./hooks/use-mobile";
+import { agentReviewMarkdown } from "./lib/annotation-export";
 import { HighlightLayer } from "./lib/annotation-highlight";
 import { reanchor } from "./lib/annotation-reanchor";
 import { TextIndex, type TextPosition } from "./lib/annotation-selector";
+import { copyText } from "./lib/clipboard";
 import {
   collectLightboxState,
   type LightboxState,
@@ -103,6 +107,7 @@ import {
   decodeHeadingHash,
   encodeHeadingHash,
   type Mode,
+  markdownURL,
   type ResolvedMode,
   readRoute,
 } from "./model";
@@ -118,8 +123,10 @@ interface AppProps {
   // toolbar shows no account controls at all.
   authIdentity?: AuthIdentity | null;
   onLogout?: () => void;
-  // Whether this deployment exposes annotations (authenticated runs).
+  // Whether this deployment exposes annotations and API tokens
+  // (authenticated runs).
   annotationsAvailable?: boolean;
+  tokensAvailable?: boolean;
 }
 
 const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
@@ -189,6 +196,7 @@ export function App({
   authIdentity,
   onLogout,
   annotationsAvailable,
+  tokensAvailable,
 }: AppProps) {
   const preview = usePreview(api);
   // A single-file scope has nothing to switch between, so the file sidebar and
@@ -326,6 +334,7 @@ export function App({
   // present in authenticated runs), the annotation list of the selected
   // document, and the highlight layer rendered onto the live body.
   const annotationsEnabled = annotationsAvailable === true;
+  const tokensEnabled = tokensAvailable === true;
   const annotationIdentity = useMemo(() => {
     if (!annotationsEnabled || preview.document === null) {
       return null;
@@ -414,6 +423,64 @@ export function App({
     },
     [annotations],
   );
+  // copyForAgent mints a temporary token scoped to the current document
+  // and bound to its content version, then copies an agent-ready review
+  // packet. The URL comes from the browser's own origin (never a
+  // client-supplied Host header); the token dies with the clock.
+  const copyForAgent = useCallback(async (): Promise<boolean> => {
+    if (annotationIdentity === null || preview.document === null) {
+      return false;
+    }
+    try {
+      const token = await createToken({
+        kind: "temporary",
+        name: `评审分享 ${preview.document.title}`,
+        scope: {
+          permissions: ["document:read"],
+          resource: {
+            type: "document",
+            rootId: annotationIdentity.documentRef.rootId,
+            path: annotationIdentity.documentRef.path,
+          },
+        },
+        documentHash: annotationIdentity.documentHash,
+      });
+      if (token.secret === undefined) {
+        return false;
+      }
+      const rawURL = `${window.location.origin}${markdownURL(
+        preview.document.path,
+      )}`;
+      const packet = agentReviewMarkdown(
+        {
+          title: preview.document.title,
+          path: preview.document.path,
+          ref: annotationIdentity.documentRef,
+          hash: annotationIdentity.documentHash,
+        },
+        annotations.items.map((item) => ({
+          id: item.id,
+          documentPath: preview.document?.path ?? "",
+          documentHash: item.documentHash,
+          authorName: item.authorName,
+          comment: item.comment,
+          selector: item.selector,
+          status: annotationStatuses[item.id] ?? "resolved",
+          createdAt: item.createdAt,
+        })),
+        { url: rawURL, token: token.secret, expiresInMinutes: 30 },
+      );
+      return await copyText(packet);
+    } catch {
+      return false;
+    }
+  }, [
+    annotationIdentity,
+    preview.document,
+    annotations.items,
+    annotationStatuses,
+  ]);
+
   const annotationExportDocument = useMemo(() => {
     if (preview.document === null || annotationIdentity === null) {
       return null;
@@ -937,6 +1004,7 @@ export function App({
                 document={annotationExportDocument}
                 onLocate={locateAnnotation}
                 onDelete={(id) => void annotations.remove(id)}
+                onCopyForAgent={tokensEnabled ? copyForAgent : undefined}
               />
             ) : null}
           </div>

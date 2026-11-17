@@ -473,6 +473,109 @@ export async function reanchorAnnotation(
   );
 }
 
+// API token wire types.
+export interface TokenScopeData {
+  permissions: string[];
+  resource: {
+    type: "all_published" | "root" | "document";
+    rootId?: string;
+    path?: string;
+  };
+}
+
+export interface TokenItem {
+  id: string;
+  name: string;
+  kind: "temporary" | "persistent";
+  scope: TokenScopeData;
+  createdAt: number;
+  expiresAt: number;
+  lastUsedAt: number;
+  documentHash?: string;
+  // The plaintext secret appears exactly once, in the creation response.
+  secret?: string;
+}
+
+function parseTokenItem(value: unknown): TokenItem {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    typeof value.name !== "string" ||
+    typeof value.kind !== "string" ||
+    typeof value.createdAt !== "number" ||
+    typeof value.expiresAt !== "number" ||
+    typeof value.lastUsedAt !== "number" ||
+    !isRecord(value.scope) ||
+    !Array.isArray(value.scope.permissions) ||
+    !isRecord(value.scope.resource)
+  ) {
+    throw new Error("令牌响应格式无效");
+  }
+  const resource = value.scope.resource;
+  if (typeof resource.type !== "string") {
+    throw new Error("令牌响应格式无效");
+  }
+  const token: TokenItem = {
+    id: value.id,
+    name: value.name,
+    kind: value.kind === "temporary" ? "temporary" : "persistent",
+    scope: {
+      permissions: value.scope.permissions.filter(
+        (item): item is string => typeof item === "string",
+      ),
+      resource: {
+        type: resource.type as TokenScopeData["resource"]["type"],
+      },
+    },
+    createdAt: value.createdAt,
+    expiresAt: value.expiresAt,
+    lastUsedAt: value.lastUsedAt,
+  };
+  if (typeof resource.rootId === "string") {
+    token.scope.resource.rootId = resource.rootId;
+  }
+  if (typeof resource.path === "string") {
+    token.scope.resource.path = resource.path;
+  }
+  if (typeof value.documentHash === "string") {
+    token.documentHash = value.documentHash;
+  }
+  if (typeof value.secret === "string") {
+    token.secret = value.secret;
+  }
+  return token;
+}
+
+// listTokens answers the caller's own tokens (metadata only).
+export async function listTokens(signal?: AbortSignal): Promise<TokenItem[]> {
+  const payload = await requestJSON(appPath("/api/tokens"), signal);
+  if (!isRecord(payload) || !Array.isArray(payload.tokens)) {
+    throw new Error("令牌列表响应格式无效");
+  }
+  return payload.tokens.map(parseTokenItem);
+}
+
+// createTokenInput is the creation request's shape.
+export interface CreateTokenInput {
+  kind: "temporary" | "persistent";
+  name: string;
+  expiresInDays?: number;
+  scope: TokenScopeData;
+  documentHash?: string;
+}
+
+// createToken mints a token; the response carries the secret exactly once.
+export async function createToken(input: CreateTokenInput): Promise<TokenItem> {
+  return parseTokenItem(
+    await requestMutation(appPath("/api/tokens"), "POST", input),
+  );
+}
+
+// revokeToken tombstones one of the caller's own tokens.
+export async function revokeToken(id: string): Promise<void> {
+  await requestMutation(appPath(`/api/tokens/${id}`), "DELETE");
+}
+
 function parseFileList(payload: unknown): FileListResponse {
   if (
     !isRecord(payload) ||

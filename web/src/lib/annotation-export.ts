@@ -121,3 +121,43 @@ export function exportSingleAnnotationMarkdown(
     `— ${annotation.authorName} · ${formatTime(annotation.createdAt)}`,
   ].join("\n");
 }
+
+// agentReviewMarkdown assembles the "copy for agent" packet: the
+// document's address, a temporary read credential bound to its current
+// version, and the annotation list as review instructions. The URL and
+// token are supplied by the caller — the browser builds them from its own
+// trusted origin, the server from its configured public URL.
+export function agentReviewMarkdown(
+  document: ExportDocument,
+  annotations: ExportAnnotation[],
+  credentials: { url: string; token: string; expiresInMinutes: number },
+): string {
+  const lines: string[] = [
+    "# m2h 文档评审",
+    "",
+    "文档：",
+    credentials.url,
+    "",
+    "访问凭证：",
+    `Authorization: Bearer ${credentials.token}`,
+    "",
+    `有效期：${credentials.expiresInMinutes} 分钟（仅限此文档的当前版本）`,
+    "",
+  ];
+  if (annotations.length > 0) {
+    lines.push("## 评审意见");
+    annotations.forEach((annotation, index) => {
+      const section = annotation.selector.headingId ?? "";
+      lines.push("", `### ${index + 1}. ${section === "" ? "正文" : section}`);
+      lines.push(`引用：${annotation.selector.quote.exact}`);
+      lines.push(
+        annotation.comment === ""
+          ? "评论：（仅高亮）"
+          : `评论：${annotation.comment}`,
+      );
+    });
+  } else {
+    lines.push("## 评审意见", "", "（暂无标注，请直接审阅全文。）");
+  }
+  return lines.join("\n");
+}

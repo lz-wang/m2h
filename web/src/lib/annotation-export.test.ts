@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  agentReviewMarkdown,
   type ExportAnnotation,
   type ExportDocument,
   exportAnnotationsJSON,
@@ -82,5 +83,30 @@ describe("exportSingleAnnotationMarkdown", () => {
     expect(markdown).toContain("# 设计文档 的标注");
     expect(markdown).toContain("所在章节：存储");
     expect(markdown).toContain("> 使用 SQLite");
+  });
+});
+
+describe("agentReviewMarkdown", () => {
+  it("assembles the credential, URL and review comments", () => {
+    const packet = agentReviewMarkdown(document, [annotation()], {
+      url: "https://docs.example.com/raw/design.md",
+      token: "m2h_x",
+      expiresInMinutes: 30,
+    });
+    expect(packet).toContain("# m2h 文档评审");
+    expect(packet).toContain("https://docs.example.com/raw/design.md");
+    expect(packet).toContain("Authorization: Bearer m2h_x");
+    expect(packet).toContain("有效期：30 分钟");
+    expect(packet).toContain("### 1. 存储");
+    expect(packet).toContain("评论：需要补充备份方案");
+  });
+
+  it("states plainly when there are no annotations", () => {
+    const packet = agentReviewMarkdown(document, [], {
+      url: "u",
+      token: "t",
+      expiresInMinutes: 30,
+    });
+    expect(packet).toContain("暂无标注");
   });
 });

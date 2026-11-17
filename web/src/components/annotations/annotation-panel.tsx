@@ -1,15 +1,17 @@
 import {
+  Bot,
   Check,
   ClipboardCopy,
   Crosshair,
   FileJson,
   FileText,
+  LoaderCircle,
   MessageSquare,
   Trash2,
   X,
 } from "lucide-react";
 import { useState } from "react";
-import type { AnnotationItem } from "@/api";
+import { type AnnotationItem, createToken } from "@/api";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -42,6 +44,10 @@ export interface AnnotationPanelProps {
   // Scrolls the body to the annotation's live position.
   onLocate(id: string): void;
   onDelete(id: string): void;
+  // Optional: mints a temporary document-scoped token and copies an
+  // agent-ready review packet to the clipboard (authenticated runs with
+  // tokens enabled).
+  onCopyForAgent?: () => Promise<boolean>;
 }
 
 // AnnotationPanel is the right-hand annotation rail (a Sheet on mobile):
@@ -59,10 +65,13 @@ export function AnnotationPanel({
   document,
   onLocate,
   onDelete,
+  onCopyForAgent,
 }: AnnotationPanelProps) {
   const isMobile = useIsMobile();
   const [confirming, setConfirming] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [agentPending, setAgentPending] = useState(false);
+  const [agentNotice, setAgentNotice] = useState<string | null>(null);
 
   const asExport = (item: AnnotationItem): ExportAnnotation => ({
     id: item.id,
@@ -91,6 +100,18 @@ export function AnnotationPanel({
       setCopied(ok);
       window.setTimeout(() => setCopied(false), 1500);
     });
+  };
+
+  const copyForAgent = async () => {
+    if (onCopyForAgent === undefined || agentPending) {
+      return;
+    }
+    setAgentPending(true);
+    setAgentNotice(null);
+    const ok = await onCopyForAgent();
+    setAgentPending(false);
+    setAgentNotice(ok ? "已复制评审材料与临时凭证" : "复制失败，请重试");
+    window.setTimeout(() => setAgentNotice(null), 2500);
   };
 
   const list = (
@@ -219,10 +240,31 @@ export function AnnotationPanel({
         </span>
       </div>
       <div className="flex items-center gap-1">
+        {agentNotice !== null ? (
+          <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
+            <Check aria-hidden="true" className="size-3" /> {agentNotice}
+          </span>
+        ) : null}
         {copied ? (
           <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
             <Check aria-hidden="true" className="size-3" /> 已复制
           </span>
+        ) : null}
+        {onCopyForAgent !== undefined && document !== null ? (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="复制给 Agent"
+            title="复制给 Agent（临时只读凭证 + 评审意见）"
+            disabled={agentPending}
+            onClick={() => void copyForAgent()}
+          >
+            {agentPending ? (
+              <LoaderCircle aria-hidden="true" className="animate-spin" />
+            ) : (
+              <Bot aria-hidden="true" />
+            )}
+          </Button>
         ) : null}
         <Button
           variant="ghost"

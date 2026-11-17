@@ -13,10 +13,14 @@
 - 新增可选认证模式：`m2h docs --auth local` 使用 `M2H_LOCAL_USERS_JSON` 声明的本地账号（支持 Argon2id 哈希），`--auth ldap` 经 LDAPS/StartTLS 连接目录并按 `M2H_LDAP_ALLOWED_USERS` 白名单登录，默认不开启时行为与旧版完全一致。
 - 认证模式下所有文档、附件与搜索接口均要求登录，浏览器使用 Session Cookie（HttpOnly、SameSite=Lax，`M2H_PUBLIC_URL` 为 https 时附加 Secure），登录失败统一报错并带限流。
 - 认证数据（会话等）持久化到 `--data-dir`（默认 `M2H_DATA_DIR` 或系统用户数据目录下的 `m2h`）的 SQLite 数据库，纯 Go 驱动，跨平台构建不受影响。
+- 认证模式支持文档标注：选中正文即可高亮或评论，标注存储于 SQLite，多人共享查看、仅作者可删除；支持定位、导出（Markdown/JSON）与编辑后自动重定位（resolved/ambiguous/orphaned 三态），Markdown 原文保持只读。
+- 新增 API Token：认证模式可在设置中创建长期只读 Token（全部已发布文档 + 搜索，最长 365 天），明文仅创建时显示一次；标注面板可一键「复制给 Agent」——生成仅限当前文档当前版本的 30 分钟临时 Token，与评审意见一并复制。
+- Token 经 `Authorization: Bearer m2h_…` 使用，撤销立即失效；不允许调用登录、令牌管理与标注写入接口，也不能读取文档附件。
 
 ### 安全
 
 - 认证模式下未登录深链接不再通过 HTTP 状态码泄露文档是否存在；跨源的登录、注销等状态变更请求被拒绝。
+- 提供 Bearer 凭证时一律按 Token 权限处理，无效即 401，不回退到 Cookie 会话。
 
 ## [0.26.0] - 2026-11-15
 

@@ -206,6 +206,8 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 		mux.HandleFunc("/api/auth/me", requireGET(handler.serveAuthMe))
 		mux.HandleFunc("/api/annotations", handler.serveAnnotations)
 		mux.HandleFunc("/api/annotations/", handler.serveAnnotationItem)
+		mux.HandleFunc("/api/tokens", handler.serveTokens)
+		mux.HandleFunc("/api/tokens/", handler.serveTokenItem)
 	}
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))

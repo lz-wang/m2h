@@ -45,6 +45,7 @@ function AuthGate() {
       authIdentity={auth.phase === "authenticated" ? auth.identity : null}
       onLogout={auth.logout}
       annotationsAvailable={auth.features.annotations}
+      tokensAvailable={auth.features.tokens}
     />
   );
 }

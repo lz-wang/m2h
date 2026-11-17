@@ -68,6 +68,25 @@ var migrations = []migration{
 			`CREATE INDEX idx_annotations_author ON annotations(author_id)`,
 		},
 	},
+	{
+		version: 3,
+		statements: []string{
+			`CREATE TABLE api_tokens (
+				id TEXT PRIMARY KEY,
+				secret_hash TEXT NOT NULL UNIQUE,
+				name TEXT NOT NULL,
+				kind TEXT NOT NULL,
+				owner_id TEXT NOT NULL,
+				scope_json TEXT NOT NULL,
+				document_hash TEXT,
+				created_at INTEGER NOT NULL,
+				expires_at INTEGER NOT NULL,
+				last_used_at INTEGER,
+				revoked_at INTEGER
+			)`,
+			`CREATE INDEX idx_tokens_owner ON api_tokens(owner_id, created_at)`,
+		},
+	},
 }
 
 // latestVersion is the highest schema version this build understands.

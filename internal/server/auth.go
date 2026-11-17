@@ -298,10 +298,9 @@ func (handler *documentHandler) serveConfig(response http.ResponseWriter, reques
 	var config configResponse
 	if handler.auth != nil {
 		config.AuthMode = string(handler.auth.mode)
-		// Annotations ship with the authenticated reader; tokens arrive
-		// with the token stage.
+		// Annotations and tokens ship with the authenticated reader.
 		config.Features.Annotations = true
-		config.Features.Tokens = false
+		config.Features.Tokens = true
 	} else {
 		config.AuthMode = string(auth.ModeNone)
 	}

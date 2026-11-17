@@ -51,6 +51,14 @@ func (handler *documentHandler) authenticate(next http.Handler) http.Handler {
 			return
 		}
 		path := request.URL.Path
+		if presented := request.Header.Get("Authorization"); presented != "" {
+			// A presented bearer is the only authority for the request,
+			// whatever the path: invalid tokens are a 401, valid tokens
+			// never borrow cookie reach, and token management stays
+			// session-only even for a valid token.
+			handler.authorizeBearer(response, request, next)
+			return
+		}
 		if publicAuthPath(path) {
 			// Public paths stay reachable, but a valid session still
 			// identifies the caller — the document shell needs to know
@@ -60,14 +68,6 @@ func (handler *documentHandler) authenticate(next http.Handler) http.Handler {
 				request = requestWithPrincipal(request, identity)
 			}
 			next.ServeHTTP(response, request)
-			return
-		}
-
-		if presented := request.Header.Get("Authorization"); presented != "" {
-			// Bearer credentials are validated in the token stage; until
-			// then a presented credential is uniformly rejected rather
-			// than silently downgraded to the cookie.
-			writeUnauthorized(response, path)
 			return
 		}
 
