@@ -68,10 +68,32 @@ describe("useAuth", () => {
     await waitFor(() => expect(result.current.phase).toBe("anonymous"));
   });
 
-  it("falls back to the reader when the config cannot be loaded", async () => {
-    fetchMock.mockRejectedValueOnce(new TypeError("network down"));
+  it("a config failure parks the gate in error — never silently unauthenticated", async () => {
+    fetchMock
+      .mockRejectedValueOnce(new TypeError("network down"))
+      .mockResolvedValueOnce(
+        jsonResponse({
+          authMode: "local",
+          features: { annotations: false, tokens: false },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          username: "alice",
+          displayName: "Alice",
+          provider: "local",
+        }),
+      );
     const { result } = renderHook(() => useAuth());
-    await waitFor(() => expect(result.current.phase).toBe("off"));
+    await waitFor(() => expect(result.current.phase).toBe("error"));
+    expect(result.current.bootError).not.toBeNull();
+
+    // Retrying re-runs the probe and recovers.
+    await act(async () => {
+      await result.current.retryBoot();
+    });
+    await waitFor(() => expect(result.current.phase).toBe("authenticated"));
+    expect(result.current.bootError).toBeNull();
   });
 
   it("login stores the identity on success", async () => {
@@ -169,6 +191,71 @@ describe("useAuth", () => {
     });
     expect(result.current.phase).toBe("anonymous");
     expect(result.current.identity).toBeNull();
+    expect(result.current.logoutError).toBeNull();
+  });
+
+  it("a failed logout keeps the session and asks for a retry", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          authMode: "local",
+          features: { annotations: false, tokens: false },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          username: "alice",
+          displayName: "Alice",
+          provider: "local",
+        }),
+      )
+      // First logout attempt dies on the wire; the retry succeeds.
+      .mockRejectedValueOnce(new TypeError("network down"))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }));
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.phase).toBe("authenticated"));
+
+    await act(async () => {
+      await result.current.logout();
+    });
+    // Without server confirmation the session is NOT declared gone.
+    expect(result.current.phase).toBe("authenticated");
+    expect(result.current.identity?.username).toBe("alice");
+    expect(result.current.logoutError).not.toBeNull();
+
+    await act(async () => {
+      await result.current.logout();
+    });
+    expect(result.current.phase).toBe("anonymous");
+    expect(result.current.logoutError).toBeNull();
+  });
+
+  it("a logout answering 401 means the session was already gone", async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        jsonResponse({
+          authMode: "local",
+          features: { annotations: false, tokens: false },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          username: "alice",
+          displayName: "Alice",
+          provider: "local",
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({ error: "authentication required" }, 401),
+      );
+    const { result } = renderHook(() => useAuth());
+    await waitFor(() => expect(result.current.phase).toBe("authenticated"));
+
+    await act(async () => {
+      await result.current.logout();
+    });
+    expect(result.current.phase).toBe("anonymous");
+    expect(result.current.logoutError).toBeNull();
   });
 
   it("a mid-reading 401 event flips an authenticated session to anonymous", async () => {

@@ -18,6 +18,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { appPath } from "@/lib/base-path";
 import { copyText } from "@/lib/clipboard";
 
 function describeScope(token: TokenItem): string {
@@ -33,10 +34,18 @@ function describeScope(token: TokenItem): string {
   }
 }
 
+// One selectable document root from /api/files.
+interface RootOption {
+  id: string;
+  name: string;
+  paths: string[];
+}
+
 // TokenSettings is the authenticated deployment's API-token manager:
-// create (secret shown exactly once), list with last-used time, revoke.
-// Scope edits are deliberately absent — a token whose reach changed would
-// need re-issuing; revocation plus a new token is the honest flow.
+// create with a scope picker (secret shown exactly once), list with
+// last-used time, revoke. Scope edits are deliberately absent — a token
+// whose reach changed would need re-issuing; revocation plus a new token
+// is the honest flow.
 export function TokenSettings() {
   const [open, setOpen] = useState(false);
   const [tokens, setTokens] = useState<TokenItem[]>([]);
@@ -48,6 +57,13 @@ export function TokenSettings() {
   const [freshSecret, setFreshSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [confirming, setConfirming] = useState<string | null>(null);
+  // The scope picker. Roots load lazily — the default scope needs nothing.
+  const [scopeType, setScopeType] = useState<
+    "all_published" | "root" | "document"
+  >("all_published");
+  const [roots, setRoots] = useState<RootOption[] | null>(null);
+  const [rootId, setRootId] = useState("");
+  const [documentPath, setDocumentPath] = useState("");
 
   useEffect(() => {
     if (!open) {
@@ -77,9 +93,90 @@ export function TokenSettings() {
     };
   }, [open]);
 
+  // Restricted scopes need the workspace topology; fetch it once, on
+  // first need. A failure only disables the pickers, never the dialog.
+  useEffect(() => {
+    if (!open || scopeType === "all_published" || roots !== null) {
+      return;
+    }
+    const controller = new AbortController();
+    void fetch(appPath("/api/files"), { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error("无法加载文档列表");
+        }
+        return (await response.json()) as {
+          roots?: Array<{
+            id?: string;
+            name?: string;
+            files?: Array<{ path?: string }>;
+          }>;
+        };
+      })
+      .then((payload) => {
+        if (controller.signal.aborted) {
+          return;
+        }
+        const options = (payload.roots ?? [])
+          .filter(
+            (
+              root,
+            ): root is {
+              id: string;
+              name: string;
+              files: Array<{ path: string }>;
+            } =>
+              typeof root.id === "string" &&
+              typeof root.name === "string" &&
+              Array.isArray(root.files),
+          )
+          .map((root) => ({
+            id: root.id,
+            name: root.name,
+            paths: root.files
+              .map((file) => file.path)
+              .filter((path): path is string => typeof path === "string"),
+          }));
+        setRoots(options);
+        if (options.length > 0) {
+          setRootId((current) =>
+            current === "" || options.every((option) => option.id !== current)
+              ? options[0].id
+              : current,
+          );
+        }
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) {
+          setRoots([]);
+        }
+      });
+    return () => {
+      controller.abort();
+    };
+  }, [open, scopeType, roots]);
+
+  const selectedRoot = roots?.find((option) => option.id === rootId);
+
+  // Closing the dialog drops the secret: the one-time display is exactly
+  // that, and a stale secret must never reappear on reopen.
+  const handleOpenChange = (next: boolean) => {
+    setOpen(next);
+    if (!next) {
+      setFreshSecret(null);
+      setCopied(false);
+    }
+  };
+
   const create = async () => {
     const trimmed = name.trim();
     if (trimmed === "" || creating) {
+      return;
+    }
+    if (scopeType !== "all_published" && rootId === "") {
+      return;
+    }
+    if (scopeType === "document" && documentPath === "") {
       return;
     }
     setCreating(true);
@@ -92,7 +189,12 @@ export function TokenSettings() {
         expiresInDays: Number.isFinite(days) ? days : undefined,
         scope: {
           permissions: ["document:read", "search:read"],
-          resource: { type: "all_published" },
+          resource:
+            scopeType === "all_published"
+              ? { type: "all_published" }
+              : scopeType === "root"
+                ? { type: "root", rootId }
+                : { type: "document", rootId, path: documentPath },
         },
       });
       setTokens((current) => [created, ...current]);
@@ -116,7 +218,7 @@ export function TokenSettings() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogTrigger
         render={
           <Button
@@ -188,7 +290,12 @@ export function TokenSettings() {
               />
               <Button
                 size="sm"
-                disabled={creating || name.trim() === ""}
+                disabled={
+                  creating ||
+                  name.trim() === "" ||
+                  (scopeType !== "all_published" && rootId === "") ||
+                  (scopeType === "document" && documentPath === "")
+                }
                 onClick={() => void create()}
               >
                 {creating ? (
@@ -199,8 +306,80 @@ export function TokenSettings() {
                 创建
               </Button>
             </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <label
+                htmlFor="token-scope-type"
+                className="text-muted-foreground text-xs"
+              >
+                访问范围
+              </label>
+              <select
+                id="token-scope-type"
+                aria-label="访问范围"
+                className="border-border bg-background h-8 rounded-md border px-2 text-xs"
+                value={
+                  scopeType === "all_published"
+                    ? "全部已发布文档"
+                    : scopeType === "root"
+                      ? "指定文档根目录"
+                      : "指定单篇文档"
+                }
+                onChange={(event) => {
+                  const next = event.target.value;
+                  setScopeType(
+                    next === "指定文档根目录"
+                      ? "root"
+                      : next === "指定单篇文档"
+                        ? "document"
+                        : "all_published",
+                  );
+                }}
+              >
+                <option value="全部已发布文档">全部已发布文档</option>
+                <option value="指定文档根目录">指定文档根目录</option>
+                <option value="指定单篇文档">指定单篇文档</option>
+              </select>
+              {scopeType !== "all_published" ? (
+                <select
+                  aria-label="文档根目录"
+                  className="border-border bg-background h-8 max-w-36 rounded-md border px-2 text-xs"
+                  value={rootId}
+                  onChange={(event) => {
+                    setRootId(event.target.value);
+                    setDocumentPath("");
+                  }}
+                >
+                  {(roots ?? []).map((option) => (
+                    <option key={option.id} value={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+              {scopeType === "document" && selectedRoot ? (
+                <select
+                  aria-label="文档路径"
+                  className="border-border bg-background h-8 max-w-44 rounded-md border px-2 text-xs"
+                  value={documentPath}
+                  onChange={(event) => setDocumentPath(event.target.value)}
+                >
+                  <option value="" disabled>
+                    选择文档…
+                  </option>
+                  {selectedRoot.paths.map((path) => (
+                    <option key={path} value={path}>
+                      {path}
+                    </option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
             <p className="text-muted-foreground text-xs">
-              新令牌可读取全部已发布文档并使用搜索（有效期最长 365 天）。
+              {scopeType === "all_published"
+                ? "新令牌可读取全部已发布文档并使用搜索（有效期最长 365 天）。"
+                : scopeType === "root"
+                  ? "新令牌只能读取所选文档根目录下的文档（有效期最长 365 天）。"
+                  : "新令牌只能读取所选的单篇文档（有效期最长 365 天）。"}
             </p>
           </div>
 

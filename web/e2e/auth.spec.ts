@@ -240,9 +240,12 @@ test.describe("authenticated mode", () => {
 
     // Seed an annotation whose quote no longer exists in the document —
     // the state an edit behind the server's back leaves behind.
-    const document = await request.get(`${baseURL}/api/document?path=README.md`, {
-      headers: { Cookie: cookieHeader },
-    });
+    const document = await request.get(
+      `${baseURL}/api/document?path=README.md`,
+      {
+        headers: { Cookie: cookieHeader },
+      },
+    );
     const identity = (await document.json()) as {
       documentRef: { rootId: string; path: string };
       documentHash: string;

@@ -15,8 +15,15 @@ import {
 // AuthPhase is the gate's lifecycle: the configuration and session are
 // probed once at boot; "off" is the default unauthenticated mode (no login
 // page ever shows), "anonymous" waits on the login form, "authenticated"
-// unlocks the reader.
-export type AuthPhase = "booting" | "off" | "anonymous" | "authenticated";
+// unlocks the reader, and "error" parks the gate when the capability
+// probe itself failed — an unknown auth mode must never be mistaken for
+// "no auth required".
+export type AuthPhase =
+  | "booting"
+  | "off"
+  | "anonymous"
+  | "authenticated"
+  | "error";
 
 export interface UseAuthResult {
   phase: AuthPhase;
@@ -25,6 +32,12 @@ export interface UseAuthResult {
   // tokens); both false in the default mode.
   features: SiteConfig["features"];
   identity: AuthIdentity | null;
+  // Non-null while the boot probe failed and the gate shows its retry
+  // screen; cleared by a successful retryBoot.
+  bootError: string | null;
+  // Non-null while a logout request failed on the wire: the session is
+  // still live server-side, so the reader stays and the user may retry.
+  logoutError: string | null;
   // Non-null while a login request is in flight; the login form disables
   // its submit button to prevent double submits.
   loginPending: boolean;
@@ -33,6 +46,8 @@ export interface UseAuthResult {
   loginError: string | null;
   login: (username: string, password: string) => Promise<boolean>;
   logout: () => Promise<void>;
+  // Re-runs the boot probe after a failure.
+  retryBoot: () => Promise<void>;
 }
 
 // useAuth drives the whole authentication state machine of the WebUI: the
@@ -48,6 +63,8 @@ export function useAuth(): UseAuthResult {
     tokens: false,
   });
   const [identity, setIdentity] = useState<AuthIdentity | null>(null);
+  const [bootError, setBootError] = useState<string | null>(null);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
   const [loginPending, setLoginPending] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const mounted = useRef(true);
@@ -58,53 +75,69 @@ export function useAuth(): UseAuthResult {
     };
   }, []);
 
+  // probeBoot resolves the deployment's auth mode and the caller's
+  // session. It is the boot path and the retry path in one: a network
+  // failure answering the capability probe is an ERROR, never a silent
+  // downgrade to the unauthenticated reader — a server that actually runs
+  // authenticated would then answer every document request with 401s.
+  const probeBoot = useCallback(async (signal?: AbortSignal) => {
+    setPhase("booting");
+    let config: SiteConfig;
+    try {
+      config = await fetchSiteConfig(signal);
+    } catch (error) {
+      if (signal?.aborted || !mounted.current) {
+        return;
+      }
+      setBootError(
+        error instanceof Error && error.message !== ""
+          ? error.message
+          : "无法连接服务，请检查网络后重试。",
+      );
+      setPhase("error");
+      return;
+    }
+    if (signal?.aborted || !mounted.current) {
+      return;
+    }
+    setBootError(null);
+    setAuthMode(config.authMode);
+    setFeatures(config.features);
+    if (config.authMode === "none") {
+      setPhase("off");
+      return;
+    }
+    try {
+      const current = await fetchCurrentIdentity(signal);
+      if (signal?.aborted || !mounted.current) {
+        return;
+      }
+      if (current !== null) {
+        setIdentity(current);
+        setPhase("authenticated");
+      } else {
+        setPhase("anonymous");
+      }
+    } catch {
+      if (!signal?.aborted && mounted.current) {
+        // The session check failing hard is an anonymous boot; the next
+        // login attempt surfaces real errors.
+        setPhase("anonymous");
+      }
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
-    void (async () => {
-      let config: SiteConfig;
-      try {
-        config = await fetchSiteConfig(controller.signal);
-      } catch {
-        // Without the capability description the safest shape is the
-        // classic reader: never trap the user on a login page the server
-        // never advertised.
-        if (!controller.signal.aborted && mounted.current) {
-          setPhase("off");
-        }
-        return;
-      }
-      if (controller.signal.aborted || !mounted.current) {
-        return;
-      }
-      setAuthMode(config.authMode);
-      setFeatures(config.features);
-      if (config.authMode === "none") {
-        setPhase("off");
-        return;
-      }
-      try {
-        const current = await fetchCurrentIdentity(controller.signal);
-        if (controller.signal.aborted || !mounted.current) {
-          return;
-        }
-        if (current !== null) {
-          setIdentity(current);
-          setPhase("authenticated");
-        } else {
-          setPhase("anonymous");
-        }
-      } catch {
-        if (!controller.signal.aborted && mounted.current) {
-          // The session check failing hard is an anonymous boot; the next
-          // login attempt surfaces real errors.
-          setPhase("anonymous");
-        }
-      }
-    })();
+    void probeBoot(controller.signal);
     return () => {
       controller.abort();
     };
-  }, []);
+  }, [probeBoot]);
+
+  const retryBoot = useCallback(async () => {
+    await probeBoot();
+  }, [probeBoot]);
 
   // A protected request answering 401 mid-reading ends the session: swap
   // straight to the login page instead of leaving the reader accumulating
@@ -151,11 +184,26 @@ export function useAuth(): UseAuthResult {
   const logout = useCallback(async (): Promise<void> => {
     try {
       await logoutRequest();
-    } catch {
-      // Logout is best-effort on the wire; locally the session is gone
-      // either way once the reader unmounts.
+    } catch (error) {
+      if (error instanceof APIError && error.status === 401) {
+        // The server no longer knows the session — it is as logged out as
+        // it ever will be.
+        setLogoutError(null);
+        if (mounted.current) {
+          setIdentity(null);
+          setPhase("anonymous");
+        }
+        return;
+      }
+      // Without server confirmation the session cookie may still be live:
+      // say so instead of silently pretending the logout succeeded.
+      if (mounted.current) {
+        setLogoutError("注销失败，会话可能仍然有效，请重试。");
+      }
+      return;
     }
     if (mounted.current) {
+      setLogoutError(null);
       setIdentity(null);
       setPhase("anonymous");
     }
@@ -166,10 +214,13 @@ export function useAuth(): UseAuthResult {
     authMode,
     features,
     identity,
+    bootError,
+    logoutError,
     loginPending,
     loginError,
     login,
     logout,
+    retryBoot,
   };
 }
 
