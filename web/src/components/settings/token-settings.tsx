@@ -77,11 +77,11 @@ export function TokenSettings({
   const [sort, setSort] = useState<{
     key: "name" | "scope" | "expiresAt" | "lastUsedAt";
     ascending: boolean;
-  }>({ key: "name", ascending: true });
+  }>({ key: "lastUsedAt", ascending: false });
   const [creating, setCreating] = useState(false);
   const [freshSecret, setFreshSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const [revoking, setRevoking] = useState<string | null>(null);
   // The scope picker. Roots load lazily — the default scope needs nothing.
   const [scopeType, setScopeType] = useState<
     "all_published" | "root" | "document"
@@ -250,11 +250,16 @@ export function TokenSettings({
   };
 
   const revoke = async (id: string) => {
+    if (revoking !== null) return;
+    setRevoking(id);
+    setError(null);
     try {
       await revokeToken(id);
       setTokens((current) => current.filter((token) => token.id !== id));
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "撤销令牌失败");
+      setError(cause instanceof Error ? cause.message : "删除令牌失败");
+    } finally {
+      setRevoking(null);
     }
   };
 
@@ -384,36 +389,15 @@ export function TokenSettings({
                         : "从未使用"}
                     </td>
                     <td className="px-3 py-3">
-                      {confirming === token.id ? (
-                        <span className="flex items-center gap-1">
-                          <Button
-                            variant="destructive"
-                            size="xs"
-                            onClick={() => {
-                              void revoke(token.id);
-                              setConfirming(null);
-                            }}
-                          >
-                            确认撤销
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            onClick={() => setConfirming(null)}
-                          >
-                            取消
-                          </Button>
-                        </span>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label={`撤销 ${token.name}`}
-                          onClick={() => setConfirming(token.id)}
-                        >
-                          <Trash2 aria-hidden="true" />
-                        </Button>
-                      )}
+                      <Button
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label={`删除 ${token.name}`}
+                        disabled={revoking !== null}
+                        onClick={() => void revoke(token.id)}
+                      >
+                        <Trash2 aria-hidden="true" />
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -433,6 +417,7 @@ export function TokenSettings({
         >
           <DialogContent
             aria-describedby={undefined}
+            forceBackdrop
             overlayClassName="z-[60] bg-black/30 supports-backdrop-filter:backdrop-blur-sm"
             className="top-1/2 z-[61] -translate-y-1/2 gap-4 p-5 data-ending-style:-translate-y-[calc(50%-0.5rem)] data-starting-style:-translate-y-[calc(50%-0.5rem)] sm:max-w-lg"
           >

@@ -378,6 +378,26 @@ test.describe("authenticated mode", () => {
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "新建" }).click();
     const createDialog = page.getByRole("dialog", { name: "新建 API 令牌" });
+    const mainBounds = await page
+      .locator('[data-slot="dialog-content"]')
+      .first()
+      .boundingBox();
+    if (!mainBounds) throw new Error("missing token manager geometry");
+    const backdrop = await page.evaluate(
+      ({ x, y }) => {
+        const target = document.elementFromPoint(x, y);
+        if (!target) return null;
+        return {
+          slot: target.getAttribute("data-slot"),
+          blur: getComputedStyle(target).backdropFilter,
+          pointerEvents: getComputedStyle(target).pointerEvents,
+        };
+      },
+      { x: mainBounds.x + 20, y: mainBounds.y + 20 },
+    );
+    expect(backdrop?.slot).toBe("dialog-overlay");
+    expect(backdrop?.blur).toContain("blur(");
+    expect(backdrop?.pointerEvents).toBe("auto");
     await expect(
       createDialog.getByLabel("有效期").locator("option"),
     ).toHaveCount(11);
@@ -428,8 +448,8 @@ test.describe("authenticated mode", () => {
     await expect(dialog.getByText("permanent-e2e")).toBeVisible();
     await expect(dialog.getByText("单篇文档（README.md）")).toBeVisible();
     await expect(dialog.getByText(/永久/).last()).toBeVisible();
-    await dialog.getByRole("button", { name: "撤销 permanent-e2e" }).click();
-    await dialog.getByRole("button", { name: "确认撤销" }).click();
+    await dialog.getByRole("button", { name: "删除 permanent-e2e" }).click();
+    await expect(dialog.getByText("permanent-e2e")).toHaveCount(0);
   });
 
   test("outline and annotations share a fixed, resizable rail", async ({

@@ -83,10 +83,33 @@ describe("TokenSettings", () => {
     expect(screen.queryByText("Expired")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "令牌名称" }));
     const rows = screen.getAllByRole("row");
-    expect(rows[1]?.textContent).toContain("Beta");
+    expect(rows[1]?.textContent).toContain("Alpha");
     expect(
       screen
         .getByRole("columnheader", { name: "令牌名称" })
+        .getAttribute("aria-sort"),
+    ).toBe("ascending");
+  });
+
+  it("sorts by most recently used by default, with unused tokens last", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        tokens: [
+          tokenPayload({ id: "a", name: "unused", lastUsedAt: 0 }),
+          tokenPayload({ id: "b", name: "older", lastUsedAt: 100 }),
+          tokenPayload({ id: "c", name: "recent", lastUsedAt: 200 }),
+        ],
+      }),
+    );
+    await openDialog();
+    await screen.findByText("recent");
+    const rows = screen.getAllByRole("row");
+    expect(
+      rows.slice(1).map((row) => row.querySelector("td")?.textContent),
+    ).toEqual(["recent", "older", "unused"]);
+    expect(
+      screen
+        .getByRole("columnheader", { name: "上次使用" })
         .getAttribute("aria-sort"),
     ).toBe("descending");
   });
@@ -114,7 +137,7 @@ describe("TokenSettings", () => {
     expect(body.scope.resource.type).toBe("all_published");
   });
 
-  it("revokes after confirmation and reports failures", async () => {
+  it("deletes a token immediately", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ tokens: [tokenPayload()] }))
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
@@ -122,13 +145,25 @@ describe("TokenSettings", () => {
     await waitFor(() => expect(screen.getByText("llm-agent")).toBeTruthy());
 
     await userEvent.click(
-      screen.getByRole("button", { name: "撤销 llm-agent" }),
+      screen.getByRole("button", { name: "删除 llm-agent" }),
     );
-    expect(screen.queryByRole("button", { name: "确认撤销" })).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "确认撤销" }));
     await waitFor(() =>
       expect(screen.getByText(/还没有令牌|无法/)).toBeTruthy(),
     );
+  });
+
+  it("keeps the token and reports an error if deletion fails", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ tokens: [tokenPayload()] }))
+      .mockResolvedValueOnce(jsonResponse({ error: "删除失败" }, 500));
+    await openDialog();
+    await userEvent.click(
+      await screen.findByRole("button", { name: "删除 llm-agent" }),
+    );
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "删除失败",
+    );
+    expect(screen.getByText("llm-agent")).toBeTruthy();
   });
 
   it("copies the fresh secret to the clipboard", async () => {
