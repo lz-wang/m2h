@@ -5,7 +5,7 @@ tags:
   - 文档检查
   - 演示索引
 create_date: 2026-08-30
-update_date: 2026-11-14
+update_date: 2026-11-18
 ---
 
 # 检查规则演示索引
@@ -32,6 +32,23 @@ m2h check docs/demos/checkers/15-heading-level-skip.md
 ```bash
 m2h check docs/demos/checkers --enable section.empty,link.text-nondescriptive,unicode.mojibake,unicode.invisible-character
 ```
+
+## 检查范围与输出
+
+用 `--depth` 和 `--glob` 选择检查范围，与浏览命令的用法相同：
+
+```console
+m2h check docs --depth 8 --glob '**/*.md'
+```
+
+用 `--format json` 输出结构化结果。默认仅 error 导致检查失败，`--strict` 将 warning 也视为失败：
+
+```console
+m2h check docs --format json
+m2h check docs --strict
+```
+
+全部选项见 `m2h check --help`。输出格式与退出码见 [输出契约](#与规则清单的对应)。
 
 ## 选择规则
 

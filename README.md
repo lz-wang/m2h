@@ -6,26 +6,19 @@
 
 [![codecov](https://codecov.io/gh/lz-wang/m2h/graph/badge.svg?token=iNo6LuOlzm)](https://codecov.io/gh/lz-wang/m2h)
 
-`m2h` 是一个轻量、零配置的 Markdown Web 文档浏览与 HTML 导出工具。
+`m2h` 是一个 Markdown 浏览、标注、检查与 HTML 导出工具。
 
 ## 特性
 
-- 直接浏览 Markdown 文件、目录或多个文档目录（打开目录时自动进入 README/index 或第一个根级文档）
-- 文件树与文件名/路径筛选、全文搜索（Ctrl/Cmd+K，支持从结果直接跳转到匹配章节）、文档目录、主题和正文宽度切换
-- 支持 GFM、语法高亮、数学公式、Mermaid、脚注、Emoji 和 GitHub Alerts
-- 支持 [Frontmatter 标题与日期元数据](docs/demos/frontmatter/00-index.md)、可排序表格、代码行号与长代码块折叠
-- 图片与 Mermaid 图表支持全屏 Lightbox 查看，可切换、平滑缩放、拖动和旋转；位图加载后可通过工具栏按钮显示默认隐藏的图片信息；普通 SVG 与图表保持矢量清晰度，正文及 Lightbox 中可选中文字（远程 SVG 需允许 CORS）；[SVG 演示与兼容说明](docs/demos/svg-images.md)
-- 正文图片（含链接、picture、SVG）与 Mermaid 图表统一居中，WebUI 与 HTML 导出保持一致
-- 正文图片延迟加载：接近视口时才请求实际资源，加载中显示内置占位图，失败折叠为统一占位并提示原始路径
-- 文件修改后重新打开即可读取最新内容，刷新页面可重新扫描目录
-- 输入 root 即发布边界：目录默认隐藏点开头路径（`--hidden` 可包含），附件路由拒绝 HTML/JS/CSS 等主动 Web 内容，响应携带统一浏览器安全头
-- 可选认证模式（`--auth local` / `--auth ldap`）：Form 登录保护全部文档与搜索，支持文档标注（高亮、评论、重定位与导出）、API Token 与 Agent 知识库接入，详见[认证部署](docs/deployment.md)与 [Agent 接入](docs/agent-access.md)；默认不开启时零状态、零依赖，行为与旧版完全一致
-- 登录后可在设置中切换主题、管理令牌和退出；目录与标注共用右侧栏，复制标注会生成绑定当前文档版本的临时 Agent 凭证。
-- 可将单个 Markdown 文件导出为 HTML
-- 可检查 Markdown 文档的 Frontmatter、本地引用、锚点与结构问题（[32 条规则与演示](docs/demos/checkers/00-index.md)）
-
-认证服务通过反向代理访问时，须设置 `M2H_PUBLIC_URL` 为用户访问的完整 URL。
-升级后，超出单篇文档读取范围的旧临时 Token 不再有效，需要重新创建。
+- 浏览单个 Markdown 文件、目录或多个文档目录。
+- 文件树筛选、全文搜索与匹配章节跳转。
+- 文档目录、明暗主题与正文宽度切换。
+- GFM、语法高亮、数学公式、Mermaid、Frontmatter 与扩展语法。
+- 可排序表格、代码复制、行号与长代码块折叠。
+- 图片与图表全屏查看，支持缩放、拖动和旋转。
+- 单个 Markdown 文件导出为 HTML。
+- 登录后高亮、评论、定位与导出标注，支持分享给 Agent。
+- 检查 Frontmatter、本地引用、锚点与文档结构。
 
 ## 安装
 
@@ -58,249 +51,67 @@ brew upgrade m2h
 
 ### 浏览 Markdown
 
-打开单个文件：
+打开文件、目录或多个文档目录：
 
 ```console
 m2h README.md
-```
-
-打开目录：
-
-```console
 m2h docs
-```
-
-同时打开多个目录或文件：
-
-```console
 m2h docs wiki notes.md
 ```
 
-也支持逗号分隔：
+默认在 `127.0.0.1:8793` 启动并打开浏览器。按 **Ctrl/Cmd + K** 打开全局搜索。
 
-```console
-m2h docs,wiki
-```
-
-默认监听 `127.0.0.1:8793` 并自动打开浏览器。
-
-直接向局域网提供文档服务：
-
-```console
-m2h docs --host 0.0.0.0 --no-open
-```
-
-反向代理部署时建议保持 loopback 监听，仅由代理暴露公网入口：
-
-```console
-m2h /srv/docs --host 127.0.0.1 --port 8793 --no-open
-```
-
-### VPS 部署
-
-部署到 URL 子路径时显式设置前缀（默认 `/`，支持多级路径）：
-
-```console
-m2h docs --base-path /apps/docs --no-open
-```
-
-同一二进制无需重建即可用于不同路径；代理须保留请求前缀，健康检查使用
-`/apps/docs/healthz`。参数格式与 Nginx 示例见 [子路径部署](docs/deployment.md#子路径部署)。
-
-通过 Nginx 等反向代理长期运行（systemd、TLS、Tinyauth 认证与健康检查）时，参见 [VPS 部署指南](docs/deployment.md)。
-
-常用选项：
-
-| 选项 | 说明 |
-| --- | --- |
-| `--host` | 监听地址 |
-| `--base-path` | HTTP 部署路径，默认 `/`；支持 `/docs`、`/apps/docs`，详见 [子路径部署](docs/deployment.md#子路径部署) |
-| `--port`, `-p` | 监听端口，默认 `8793` |
-| `--mode` | `light`、`dark` 或 `auto` |
-| `--width` | `standard`、`wide` 或 `full` |
-| `--glob` | Markdown 文件过滤规则 |
-| `--depth`, `-d` | 目录最大递归深度，默认 `4` |
-| `--open` / `--no-open` | 是否自动打开浏览器 |
-| `--cdn` / `--no-cdn` | 是否从 jsDelivr CDN 按需加载 WebUI 富内容依赖，默认关闭 |
-| `--toc` / `--no-toc` | 是否显示文档目录，默认开启（`true`）；只接受开关形式，不接受 `=值` |
-| `--gitignore` / `--no-gitignore` | 是否遵循目录内的 `.gitignore` 规则，默认开启（`true`） |
-| `--hidden` / `--no-hidden` | 是否包含隐藏文件和目录，默认关闭（`false`）；`.git`、`.ssh`、`.env` 等保护路径始终排除 |
-
-更多选项：
-
-```console
-m2h --help
-```
-
-VPS 带宽受限时，可启用 CDN，让访问者的浏览器直接下载固定版本的 Mermaid、
-KaTeX（含样式与字体）和表格排序运行时：
-
-```console
-m2h /srv/docs --no-open --cdn
-```
-
-默认或显式 `--no-cdn` 时使用二进制内嵌资源，可离线渲染上述内容。启用后需要访问者
-能连接 `cdn.jsdelivr.net`，实际速度取决于其网络；WebUI 主程序与文档仍由 m2h 提供。
-CDN 选项适用于整个服务，直接打开文档链接同样生效；不适用于 `export` 和 `check`。
-
-### 导出 HTML
+导出单个文件为同名 HTML：
 
 ```console
 m2h export README.md
 ```
 
-默认在 Markdown 文件旁生成同名 `.html`：
+更多用法见 [浏览与导出 Markdown](docs/browsing.md)，全部选项见 `m2h --help`。
 
-```text
-README.md
-README.html
-```
+### 标注 Markdown
 
-指定输出文件名：
+配置本地账号并启用认证：
 
 ```console
-m2h export README.md -o index.html
+M2H_LOCAL_USERS_JSON='{"alice":"请替换为你的密码"}' m2h docs --auth local
 ```
 
-覆盖已有文件：
+登录后，选中正文即可高亮或添加评论。在右侧标注栏查看、定位或复制标注。
 
-```console
-m2h export README.md --force
-```
+账号与 LDAP 配置见 [内置认证](docs/deployment.md#内置认证可选v0270-起)，
+标注分享与 API 令牌用法见 [Agent 接入](docs/agent-access.md)。
 
-导出的 HTML 内联 Markdown 页面样式；数学公式、Mermaid 和表格排序等
-增强功能按需加载网络资源；只有包含可渲染 Mermaid 代码块时才加载 Mermaid。
+### 检查 Markdown
 
-查看全部选项：
-
-```console
-m2h export --help
-```
-
-### 检查文档
-
-`m2h check` 检查单个文件或目录的 Frontmatter、本地引用、锚点与文档结构：
+检查文件或目录：
 
 ```console
 m2h check README.md
 m2h check docs
 ```
 
-输出遵循 `path:line:column` 约定，便于终端与 IDE 定位；发现 error（或
-`--strict` 下存在 warning）时退出码为 `1`。交互式终端中只为问题等级和
-总结结果着色：error 为红色、warning 为黄色、全部通过为绿色；重定向、管道、
-`NO_COLOR` 环境变量及 `--format json` 保持无 ANSI 颜色。文本报告以统计摘要
-作为最后一行，不再重复输出 `Error: check found ...`：
+输出问题位置与规则名称，发现错误时退出码为 `1`。
+高级选项与 32 条规则见 [检查指南与规则演示](docs/demos/checkers/00-index.md)。
 
-```text
-docs/guide.md:42:17: error [local-target.missing]: target "images/topology.png" does not exist
-docs/index.md:18:5: error [anchor.missing]: heading "#installation" does not exist in "guide.md"
-```
+### 高级主题
 
-`--depth` 与 `--glob` 和浏览命令使用同一文档范围；`--format json` 输出
-结构化结果，`--strict` 把 warning 也视为失败。`--enable` 在默认规则之上
-追加规则，`--disable` 移除规则且优先级更高，`all` 代表全部规则：
-
-```console
-m2h check docs --depth 8 --glob '**/*.md'
-m2h check docs --format json
-m2h check docs --strict
-m2h check docs --enable all --disable image.alt-empty
-```
-
-完整的 32 条规则、默认开关、触发样例、行为边界与逐字输出见
-[检查规则演示索引](docs/demos/checkers/00-index.md)；全部命令选项见
-`m2h check --help`。末尾检查要求恰好一个结束换行（`正文\n`，兼容 CRLF），
-编辑器显示最后一行为空即可，无需再添加空白行。
-
-本地目录链接（如 `[算法](./algorithm/)`）会打开该目录内可见的入口文档：
-依次优先 README、index、00-index（`.md` / `.markdown`，名称不区分大小写），
-再按路径字典序选择直属 Markdown 文件；没有直属文档时按路径深度、字典序选择可见子目录文档，不跨 root 回退。
-空目录、没有可见文档的目录和目录符号链接不可作为文档入口。
-
-本地引用使用与 WebUI 相同的路径语义：`images/logo.png` 相对当前文档，
-`/images/logo.png` 相对当前输入 root（不是宿主机文件系统根目录）；多 root 模式
-始终锚定引用所在的 root。`//cdn.example.com/logo.png` 仍是协议相对网络 URL，
-与带 scheme 的外链一样不会映射到本地文件。已经识别为本地、但解析后越出
-当前 root 的引用会在 WebUI 中改写到专用的 404 地址，不再把原始相对 URL
-交给浏览器重新解析；`m2h check` 同时报告 `local-target.outside-root`。
-
-### .gitignore 过滤
-
-目录输入默认遵循其中的 `.gitignore` 规则：被忽略的 Markdown 不出现在侧边栏
-与全文搜索中，被忽略的文档、图片等资源通过 URL 直接访问时一律返回 404；
-`m2h check` 同样默认跳过被忽略的文件，并把指向它们的引用报告为无法访问。
-规则文件修改后立即生效（文档与文件列表的下一次请求重新读取，无需重启；
-全文搜索中被重新忽略的文档立即从结果中消失，新纳入的文档在下一次
-索引刷新完成后才可检索，见
-[全文搜索一致性](#全文搜索一致性)）。
-
-显式指定的单个文件不受影响——`m2h README.md` 总是照常发布与检查。
-不读取 `.gitignore` 时使用 `--no-gitignore`：
-
-```console
-m2h --no-gitignore ./docs
-m2h check --no-gitignore ./docs
-```
-
-隐藏文件限制、符号链接边界与 root 隔离等安全规则独立于该开关，始终生效。
-完整的规则语法、嵌套覆盖关系与实现边界见 [Git Ignore 过滤](docs/gitignore.md)。
-
-### 隐藏文件发布
-
-目录输入默认隐藏点前缀路径：`.draft.md`、`.notes/` 等不出现在侧边栏与全文搜索中，
-文档与资源通过 URL 直接访问时一律返回 404；`m2h check` 同样默认跳过。需要发布
-隐藏内容时使用 `--hidden`，侧边栏、文档路由、静态资源、全文搜索与 check 同步生效：
-
-```console
-m2h --hidden ./docs
-m2h check --hidden ./docs
-```
-
-`--hidden` 只放宽隐藏路径过滤，不覆盖 `.gitignore`、`--glob`、`--depth` 与符号链接
-边界；被 `.gitignore` 排除的隐藏文档需要同时 `--hidden --no-gitignore` 才会纳入。
-`.git`、`.ssh`、`.env` 及 `.env.*` 等敏感路径受独立的永久保护，任何开关都无法发布，
-直接或经符号链接把受保护路径指定为输入（含单文件输入）会在启动或检查时被拒绝。
-显式指定的单个文件不受影响——`m2h .draft.md` 照常预览与检查。
-
-完整的入口表、保护规则与链接一致性说明见 [隐藏文件发布](docs/hidden.md)。
-
-### 全文搜索一致性
-
-全文搜索（Ctrl/Cmd+K）由进程内的共享索引驱动：首次搜索时同步构建，
-此后按需异步增量刷新——自上次成功刷新经过约 30 秒，下一次搜索会在
-应答的同时触发一次后台刷新，该次请求仍使用旧快照。因此搜索结果
-采用最终一致性，索引更新时间不作严格上限保证：新文件或修改内容
-通常需要在刷新完成后的下一次搜索中才能检索到；TTL 未过期期间的
-热查询不再扫描文档库，命中结果返回前仍逐条重新校验发布规则与
-文件元数据。安全边界不受刷新延迟影响：已删除、被
-`.gitignore` 重新忽略、大小或修改时间已变化、读取权限被撤销或符号链接改指
-Root 外目标的文档会立即从搜索结果中消失，每条结果返回前都重新
-经过 `/api/document` 同款的发布校验。文档阅读（`/api/document`、
-`/raw/`）与文件列表（`/api/files`）始终读取当前磁盘状态，不受索引
-影响。索引驻留内存、随进程结束释放，不落盘、不引入配置项。
+- [VPS 部署](docs/deployment.md)
+- [.gitignore 过滤](docs/gitignore.md)
+- [隐藏文件发布](docs/hidden.md)
+- [全文搜索一致性](docs/search.md)
 
 ## Markdown 支持
 
-m2h 支持常用 GFM Markdown，并提供以下扩展：
-
-内置 Mermaid 12.2.0，图表需要支持 ES2024 的现代浏览器（Safari 17.4+）；
-默认布局与旧版迁移说明见 [Mermaid 图表](docs/demos/mermaid/00-index.md)。
-WebUI 富内容运行时默认从本地加载，也可通过 `--cdn` 切换到固定版本的 CDN，
-渲染语法保持一致；HTML 导出继续按需使用 CDN。WebUI 与 HTML 导出中，代码块内的
-公式标记不会触发公式运行时加载。
-
 | 类别 | 支持内容与演示 |
 | --- | --- |
-| GitHub 风格 | [语法高亮](docs/demos/syntax-highlight/00-index.md)（32 种编程语言与常用配置格式）、标题锚点、脚注、Emoji、GitHub Alerts 与可排序表格 |
-| 富内容 | [数学公式](docs/demos/math.md)（`$...$` / `$$...$$`，解析阶段保留公式原文，金额保持普通文本）、[Mermaid 图表](docs/demos/mermaid/00-index.md)（常用图表语法与兼容说明） |
-| 元数据 | YAML Frontmatter；标题、日期别名、描述（description）与回退规则见 [Frontmatter 演示](docs/demos/frontmatter/00-index.md) |
-| 本地引用 | 当前文档相对路径与 `/` 开头的当前 root 相对路径；检查行为见 [本地目标演示](docs/demos/checkers/02-local-target-missing.md) |
-| 行内扩展 | `==高亮==`、`^^插入^^` 与 [`++ctrl+alt+del++` 键盘按键](docs/demos/pymarkdown/keyboards.md) |
-| 标签内容 | [PyMdown Tabbed 基础语法](docs/demos/pymarkdown/tabbed.md)，支持独立分组、默认标签、TOC/锚点与搜索自动定位，HTML 打印展开全部内容 |
-| 协作标记 | [Critic Markup 行内与块级语法](docs/demos/pymarkdown/critic.md) |
-| 图片排版 | HTML `img` / `picture` 的 `srcset` 候选资源沿用本地引用路径规则并支持子路径部署；普通图片、链接图片、picture、SVG 与图表在正文中居中显示（WebUI 与 HTML 导出）；[普通 SVG](docs/demos/svg-images.md) 在 WebUI 正文与 Lightbox 中保持矢量清晰度并支持文字选择 |
-| WebUI 增强 | 代码复制、行号、长代码块折叠、跨站链接新标签页打开、正文图片临近视口延迟加载，以及图片、Mermaid 图表 Lightbox（使用整个视口缩放与拖动，工具栏浮于图像上方，支持滚轮平滑缩放和按需显示位图信息；普通 SVG 与图表以原生 SVG 放大，文字可选中，SVG 不显示图片信息） |
+| GitHub 风格 | GFM、[语法高亮](docs/demos/syntax-highlight/00-index.md)、标题锚点、脚注、Emoji、GitHub Alerts、可排序表格 |
+| 富内容 | [数学公式](docs/demos/math.md)、[Mermaid 图表与浏览器兼容要求](docs/demos/mermaid/00-index.md) |
+| 元数据 | [Frontmatter 标题、日期与描述](docs/demos/frontmatter/00-index.md) |
+| 本地引用 | [文档、图片与目录链接](docs/demos/checkers/02-local-target-missing.md) |
+| 行内扩展 | `==高亮==`、`^^插入^^`、[键盘按键](docs/demos/pymarkdown/keyboards.md) |
+| 标签与协作 | [标签分组](docs/demos/pymarkdown/tabbed.md)、[Critic Markup](docs/demos/pymarkdown/critic.md) |
+| 图片 | 图片居中、延迟加载、全屏查看与 [SVG 文字选择](docs/demos/svg-images.md) |
 
 ## 许可证
 
