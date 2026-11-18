@@ -19,6 +19,7 @@ import (
 	"unicode"
 
 	"github.com/lz-wang/m2h/internal/assets"
+	"github.com/lz-wang/m2h/internal/auth"
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/markdown"
 	appversion "github.com/lz-wang/m2h/internal/version"
@@ -249,6 +250,12 @@ func (handler *documentHandler) serveFiles(response http.ResponseWriter, request
 	scopeFilter := handler.tokenScopeFilter(request)
 	roots := make([]rootSummary, 0, handler.workspace.rootCount())
 	for _, root := range handler.workspace.roots {
+		if identity := principalFromRequest(request); identity != nil && identity.Via == principalViaToken {
+			scope, ok := handler.scopeOfRequestToken(request)
+			if !ok || (scope.Resource.Type != auth.ResourceAllPublished && scope.Resource.RootID != root.identity) {
+				continue
+			}
+		}
 		discovered, err := handler.discover(request.Context(), root.scope)
 		if err != nil {
 			if errors.Is(err, fs.ErrNotExist) {

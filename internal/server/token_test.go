@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -15,6 +16,41 @@ import (
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/store"
 )
+
+func TestScopedFilesHideOtherRoots(t *testing.T) {
+	workspace := multiRootFixture(t)
+	workspace.roots[0].identity = "first"
+	workspace.roots[1].identity = "second"
+	for _, kind := range []string{auth.ResourceRoot, auth.ResourceDocument} {
+		t.Run(kind, func(t *testing.T) {
+			scope := auth.TokenScope{Permissions: []string{auth.PermissionDocumentRead}}
+			scope.Resource.Type, scope.Resource.RootID = kind, "first"
+			if kind == auth.ResourceDocument {
+				scope.Resource.Path = "README.md"
+			}
+			encoded, err := auth.MarshalScope(scope)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := httptest.NewRequest(http.MethodGet, "/api/files", nil)
+			request = request.WithContext(context.WithValue(request.Context(), tokenRecordContextKey{}, store.TokenRecord{ScopeJSON: encoded}))
+			request = requestWithPrincipal(request, &principal{Via: principalViaToken})
+			handler := &documentHandler{workspace: workspace, discover: func(ctx context.Context, scope rootScope) (files.Discovery, error) { return scope.discover(ctx) }}
+			response := httptest.NewRecorder()
+			handler.serveFiles(response, request)
+			var payload fileListResponse
+			if err := json.Unmarshal(response.Body.Bytes(), &payload); err != nil {
+				t.Fatal(err)
+			}
+			if len(payload.Roots) != 1 || payload.Roots[0].RootID != "first" {
+				t.Fatalf("roots = %+v", payload.Roots)
+			}
+			if kind == auth.ResourceDocument && (len(payload.Roots[0].Files) != 1 || payload.Roots[0].Files[0].Path != "README.md") {
+				t.Fatalf("files = %+v", payload.Roots[0].Files)
+			}
+		})
+	}
+}
 
 func TestTokenContentMatchesResponseBytes(t *testing.T) {
 	request, _ := http.NewRequest(http.MethodGet, "/raw/guide.md", nil)
@@ -139,6 +175,8 @@ func TestTokenCreateValidation(t *testing.T) {
 			"scope": map[string]any{"permissions": []string{"document:read"}, "resource": map[string]any{"type": "all_published"}},
 		}},
 		{name: "bad scope", body: map[string]any{"kind": "persistent", "name": "x", "scope": map[string]any{"permissions": []string{"document:write"}, "resource": map[string]any{"type": "all_published"}}}},
+		{name: "temporary all documents", body: map[string]any{"kind": "temporary", "name": "x", "scope": map[string]any{"permissions": []string{"document:read"}, "resource": map[string]any{"type": "all_published"}}}},
+		{name: "temporary search permission", body: map[string]any{"kind": "temporary", "name": "x", "scope": map[string]any{"permissions": []string{"document:read", "search:read"}, "resource": map[string]any{"type": "document", "rootId": "root", "path": "guide.md"}}}},
 		{name: "unknown document scope", body: map[string]any{"kind": "persistent", "name": "x", "scope": map[string]any{
 			"permissions": []string{"document:read"},
 			"resource":    map[string]any{"type": "document", "rootId": "nope", "path": "a.md"},
@@ -393,6 +431,7 @@ func fixtureDocument(t *testing.T, fixture *tokenFixture) struct {
 func TestTokenExpiryEnforcedOnWire(t *testing.T) {
 	fixture := newTokenFixture(t)
 	alice := fixture.loginAs(t, "alice", "password-1")
+	ref := fixtureDocumentRef(t, fixture)
 
 	// The shortest temporary expiry the API allows in days is too long for
 	// a test, so the record is expired directly in the database.
@@ -401,7 +440,7 @@ func TestTokenExpiryEnforcedOnWire(t *testing.T) {
 		"name": "share",
 		"scope": map[string]any{
 			"permissions": []string{"document:read"},
-			"resource":    map[string]any{"type": "all_published"},
+			"resource":    map[string]any{"type": "document", "rootId": ref.RootID, "path": "guide.md"},
 		},
 	})
 	if status != http.StatusCreated {

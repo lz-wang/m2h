@@ -260,6 +260,32 @@ func TestExpiredTokensAreMissing(t *testing.T) {
 	}
 }
 
+func TestTokenCleanupRetention(t *testing.T) {
+	dataStore := openMigrated(t)
+	ctx := context.Background()
+	old := tokenFixture("local:alice", -8*24*time.Hour)
+	old.record.Kind = string(auth.TokenTemporary)
+	recent := tokenFixture("local:alice", -time.Hour)
+	recent.record.Kind = string(auth.TokenTemporary)
+	active := tokenFixture("local:alice", time.Hour)
+	for _, entry := range []*storeTokenFixture{&old, &recent, &active} {
+		if err := dataStore.CreateToken(ctx, &entry.record); err != nil {
+			t.Fatal(err)
+		}
+	}
+	listed, err := dataStore.ListTokens(ctx, "local:alice")
+	if err != nil || len(listed) != 1 || listed[0].ID != active.record.ID {
+		t.Fatalf("active list = %v, %v", listed, err)
+	}
+	if err := dataStore.CleanupTokens(ctx, time.Now().Add(-7*24*time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	var count int
+	if err := dataStore.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM api_tokens").Scan(&count); err != nil || count != 2 {
+		t.Fatalf("remaining = %d, %v", count, err)
+	}
+}
+
 func TestUnknownTokenHashIsMissing(t *testing.T) {
 	dataStore := openMigrated(t)
 	if _, err := dataStore.FindTokenByHash(context.Background(), "deadbeef"); !errors.Is(err, ErrTokenNotFound) {

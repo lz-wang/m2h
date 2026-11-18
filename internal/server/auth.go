@@ -151,6 +151,7 @@ func (stack *authStack) startSessionCleanup(ctx context.Context) chan struct{} {
 			case <-ticker.C:
 				cleanupContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				_ = stack.sessionStore.CleanupSessions(cleanupContext)
+				_ = stack.dataStore.CleanupTokens(cleanupContext, time.Now().Add(-7*24*time.Hour))
 				cancel()
 			}
 		}

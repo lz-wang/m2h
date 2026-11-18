@@ -162,6 +162,10 @@ func (handler *documentHandler) serveCreateToken(response http.ResponseWriter, r
 		writeJSONError(response, http.StatusBadRequest, err.Error())
 		return
 	}
+	if kind == auth.TokenTemporary && !temporaryScopeAllowed(scope) {
+		writeJSONError(response, http.StatusBadRequest, "temporary tokens require document-only read scope")
+		return
+	}
 	// Root- and document-scoped tokens must name documents this workspace
 	// actually serves — otherwise the scope is a stale reference at birth.
 	// Both the root id and the document path are stored in their
@@ -276,6 +280,10 @@ func (handler *documentHandler) authorizeBearer(response http.ResponseWriter, re
 	}
 	scope, err := auth.UnmarshalScope(record.ScopeJSON)
 	if err != nil {
+		writeUnauthorized(response, request.URL.Path)
+		return
+	}
+	if record.Kind == string(auth.TokenTemporary) && !temporaryScopeAllowed(scope) {
 		writeUnauthorized(response, request.URL.Path)
 		return
 	}
@@ -505,6 +513,10 @@ func (handler *documentHandler) scopeOfRequestToken(request *http.Request) (auth
 // tokenRecordContextKey carries the validated token record from the
 // authorization middleware to scope-aware handlers.
 type tokenRecordContextKey struct{}
+
+func temporaryScopeAllowed(scope auth.TokenScope) bool {
+	return scope.Resource.Type == auth.ResourceDocument && len(scope.Permissions) == 1 && scope.Allows(auth.PermissionDocumentRead)
+}
 
 // tokenContentMatches checks the bytes that the handler will actually serve.
 func tokenContentMatches(request *http.Request, contents []byte) bool {
