@@ -63,6 +63,10 @@ export function useAnnotations(
   });
 
   const requestRef = useRef<AbortController | null>(null);
+  const pendingWrites = useRef<{
+    identity: AnnotationIdentity;
+    changes: Map<string, AnnotationItem | null>;
+  } | null>(null);
   // The identity every in-flight write was started against. Writes cannot
   // be aborted like the listing fetch — the server must see them through —
   // but their responses must never update a different document's state:
@@ -76,11 +80,17 @@ export function useAnnotations(
   useEffect(() => {
     requestRef.current?.abort();
     if (!enabled || identity === null) {
+      pendingWrites.current = null;
       setState({ items: [], loading: false, error: null, selectedId: null });
       return;
     }
     const controller = new AbortController();
     requestRef.current = controller;
+    const writes = {
+      identity,
+      changes: new Map<string, AnnotationItem | null>(),
+    };
+    pendingWrites.current = writes;
     // The identity changed: the previous document's annotations are stale
     // immediately, not when the fetch resolves — old highlights must never
     // ride along onto the new document.
@@ -91,17 +101,27 @@ export function useAnnotations(
         if (controller.signal.aborted) {
           return;
         }
-        setState({ items, loading: false, error: null, selectedId: null });
+        const merged = new Map(items.map((item) => [item.id, item]));
+        for (const [id, item] of writes.changes) {
+          if (item === null) merged.delete(id);
+          else merged.set(id, item);
+        }
+        if (pendingWrites.current === writes) pendingWrites.current = null;
+        setState((current) => ({
+          ...current,
+          items: [...merged.values()],
+          loading: false,
+        }));
       } catch (error) {
         if (controller.signal.aborted || isAbort(error)) {
           return;
         }
-        setState({
-          items: [],
+        if (pendingWrites.current === writes) pendingWrites.current = null;
+        setState((current) => ({
+          ...current,
           loading: false,
           error: errorMessage(error, "无法加载标注"),
-          selectedId: null,
-        });
+        }));
       }
     })();
     return () => {
@@ -126,6 +146,12 @@ export function useAnnotations(
           comment,
         );
         if (sameDocument(identityRef.current, writtenFor)) {
+          if (
+            pendingWrites.current &&
+            sameDocument(pendingWrites.current.identity, writtenFor)
+          ) {
+            pendingWrites.current.changes.set(created.id, created);
+          }
           setState((current) => ({
             ...current,
             items: current.items.some((item) => item.id === created.id)
@@ -152,6 +178,12 @@ export function useAnnotations(
     try {
       await deleteAnnotation(id);
       if (sameDocument(identityRef.current, writtenFor)) {
+        if (
+          pendingWrites.current &&
+          sameDocument(pendingWrites.current.identity, writtenFor)
+        ) {
+          pendingWrites.current.changes.set(id, null);
+        }
         setState((current) => ({
           ...current,
           items: current.items.filter((item) => item.id !== id),
@@ -181,6 +213,12 @@ export function useAnnotations(
           selector,
         );
         if (sameDocument(identityRef.current, writtenFor)) {
+          if (
+            pendingWrites.current &&
+            sameDocument(pendingWrites.current.identity, writtenFor)
+          ) {
+            pendingWrites.current.changes.set(id, updated);
+          }
           setState((current) => ({
             ...current,
             items: current.items.map((item) =>

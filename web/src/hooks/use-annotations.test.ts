@@ -301,6 +301,46 @@ describe("useAnnotations", () => {
     expect(result.current.items.map((entry) => entry.id)).toEqual(["a1"]);
   });
 
+  it("retains a creation when an older list response arrives afterward", async () => {
+    let resolveCreate: (value: Response) => void = () => {};
+    let resolveList: (value: Response) => void = () => {};
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ annotations: [] }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveCreate = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ annotations: [] }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveList = resolve;
+          }),
+      );
+    const { result, rerender } = renderHook(
+      ({ identity: current }) => useAnnotations(true, current),
+      { initialProps: { identity } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let pending: Promise<boolean> | undefined;
+    act(() => {
+      pending = result.current.create(item().selector, "评论");
+    });
+    rerender({ identity: { ...identity, path: "other.md" } });
+    rerender({ identity: { ...identity } });
+    await act(async () => {
+      resolveCreate(jsonResponse(item()));
+      await pending;
+    });
+    await act(async () => {
+      resolveList(jsonResponse({ annotations: [] }));
+    });
+    expect(result.current.items.map((entry) => entry.id)).toEqual(["a1"]);
+    expect(result.current.loading).toBe(false);
+  });
+
   it("a failed remove after a document switch does not surface on the new document", async () => {
     let rejectRemove: (reason?: unknown) => void = () => {};
     fetchMock
