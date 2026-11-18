@@ -289,7 +289,7 @@ export function App({
   // any document is selected — single file, directory and multi-root
   // workspaces alike. Since the top-bar search button was removed,
   // Ctrl/Cmd+K is the global search's only entry.
-  useEffect(() => {
+  useLayoutEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) {
         event.preventDefault();
