@@ -3,7 +3,6 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { AnnotationItem } from "@/api";
-import * as clipboard from "@/lib/clipboard";
 import { AnnotationPanel } from "./annotation-panel";
 
 function item(overrides: Partial<AnnotationItem> = {}): AnnotationItem {
@@ -110,24 +109,33 @@ describe("AnnotationPanel", () => {
   });
 
   it("exports the whole set as Markdown and JSON via the clipboard", async () => {
-    const copySpy = vi.spyOn(clipboard, "copyText").mockResolvedValue(true);
-    renderPanel();
+    const onCopy = vi.fn().mockResolvedValue(true);
+    renderPanel({ onCopy });
     await userEvent.click(
       screen.getByRole("button", { name: "复制全部标注（Markdown）" }),
     );
-    await waitFor(() =>
-      expect(copySpy.mock.calls[0]?.[0]).toContain("# 设计文档 — 标注"),
-    );
+    await waitFor(() => expect(onCopy).toHaveBeenCalledWith("markdown"));
     await userEvent.click(
       screen.getByRole("button", { name: "复制全部标注（JSON）" }),
     );
-    await waitFor(() => {
-      const payload = JSON.parse(String(copySpy.mock.calls[1]?.[0])) as {
-        annotations: unknown[];
-      };
-      expect(payload.annotations).toHaveLength(1);
+    await waitFor(() => expect(onCopy).toHaveBeenCalledWith("json"));
+    await userEvent.click(
+      screen.getByRole("button", { name: "复制此标注（JSON）" }),
+    );
+    await waitFor(() => expect(onCopy).toHaveBeenCalledWith("json", ["a1"]));
+    expect(screen.queryByText(/已复制/)).toBeNull();
+  });
+
+  it("shows an error when copying fails instead of a success check", async () => {
+    const onCopy = vi.fn().mockResolvedValue(false);
+    renderPanel({ onCopy });
+    const button = screen.getByRole("button", {
+      name: "复制全部标注（Markdown）",
     });
-    copySpy.mockRestore();
+    await userEvent.click(button);
+    await screen.findByRole("alert");
+    expect(button.querySelector(".lucide-check")).toBeNull();
+    expect(button.getAttribute("title")).toBe("复制失败，请重试");
   });
 
   it("shows the empty state without a header close button", () => {

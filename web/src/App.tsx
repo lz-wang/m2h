@@ -13,10 +13,12 @@ import {
   Maximize2,
   MessageSquare,
   Moon,
+  Pencil,
   RefreshCw,
   Scaling,
   Sun,
   SunMoon,
+  Trash2,
   TriangleAlert,
   UserRoundCog,
 } from "lucide-react";
@@ -42,9 +44,14 @@ import {
   createToken,
   type FrontMatter,
   type PreviewAPI,
+  revokeToken,
   type SearchResult,
   type TocItem,
 } from "./api";
+import {
+  AnnotationCopyButton,
+  type AnnotationCopyFormat,
+} from "./components/annotations/annotation-copy-button";
 import { AnnotationEditor } from "./components/annotations/annotation-editor";
 import { AnnotationPanel } from "./components/annotations/annotation-panel";
 import { SelectionToolbar } from "./components/annotations/selection-toolbar";
@@ -83,7 +90,10 @@ import {
 } from "./components/ui/tooltip";
 import { useAnnotations } from "./hooks/use-annotations";
 import { useIsMobile } from "./hooks/use-mobile";
-import { agentReviewMarkdown } from "./lib/annotation-export";
+import {
+  exportAnnotationsJSON,
+  exportAnnotationsMarkdown,
+} from "./lib/annotation-export";
 import { HighlightLayer } from "./lib/annotation-highlight";
 import { reanchor } from "./lib/annotation-reanchor";
 import { TextIndex, type TextPosition } from "./lib/annotation-selector";
@@ -349,6 +359,8 @@ export function App({
     }
     return { path, documentRef, documentHash };
   }, [annotationsEnabled, preview.document]);
+  const currentAnnotationIdentity = useRef(annotationIdentity);
+  currentAnnotationIdentity.current = annotationIdentity;
   const annotations = useAnnotations(annotationsEnabled, annotationIdentity);
   const [annotationsOpen, setAnnotationsOpen] = useState(false);
   const [annotationSelectionVersion, setAnnotationSelectionVersion] =
@@ -519,63 +531,97 @@ export function App({
     },
     [annotations],
   );
-  // copyForAgent mints a temporary token scoped to the current document
-  // and bound to its content version, then copies an agent-ready review
-  // packet. The URL comes from the browser's own origin (never a
-  // client-supplied Host header); the token dies with the clock.
-  const copyForAgent = useCallback(async (): Promise<boolean> => {
-    if (annotationIdentity === null || preview.document === null) {
-      return false;
-    }
-    try {
-      const token = await createToken({
-        kind: "temporary",
-        name: `评审分享 ${preview.document.title}`,
-        scope: {
-          permissions: ["document:read"],
-          resource: {
-            type: "document",
-            rootId: annotationIdentity.documentRef.rootId,
-            path: annotationIdentity.documentRef.path,
-          },
-        },
-        documentHash: annotationIdentity.documentHash,
-      });
-      if (token.secret === undefined) {
+  // Each copy issues a short-lived credential scoped to these exact bytes.
+  const copyAnnotations = useCallback(
+    async (format: AnnotationCopyFormat, ids?: string[]): Promise<boolean> => {
+      if (
+        annotationIdentity === null ||
+        preview.document === null ||
+        !tokensEnabled
+      )
         return false;
-      }
-      const rawURL = `${window.location.origin}${markdownURL(
-        preview.document.path,
-      )}`;
-      const packet = agentReviewMarkdown(
-        {
+      const selected = annotations.items.filter(
+        (item) => ids === undefined || ids.includes(item.id),
+      );
+      if (
+        selected.length === 0 ||
+        (ids !== undefined && selected.length !== ids.length)
+      )
+        return false;
+      let tokenID: string | undefined;
+      try {
+        const token = await createToken({
+          kind: "temporary",
+          name: "文档评审",
+          expiresInDays: 30 / 1440,
+          scope: {
+            permissions: ["document:read"],
+            resource: {
+              type: "document",
+              rootId: annotationIdentity.documentRef.rootId,
+              path: annotationIdentity.documentRef.path,
+            },
+          },
+          documentHash: annotationIdentity.documentHash,
+        });
+        tokenID = token.id;
+        if (!token.secret) throw new Error("temporary token is missing");
+        const current = currentAnnotationIdentity.current;
+        if (
+          !current ||
+          current.path !== annotationIdentity.path ||
+          current.documentHash !== annotationIdentity.documentHash ||
+          current.documentRef.rootId !== annotationIdentity.documentRef.rootId
+        ) {
+          throw new Error("document changed during copy");
+        }
+        const doc = {
           title: preview.document.title,
           path: preview.document.path,
           ref: annotationIdentity.documentRef,
           hash: annotationIdentity.documentHash,
-        },
-        annotations.items.map((item) => ({
+        };
+        const entries = selected.map((item) => ({
           id: item.id,
-          documentPath: preview.document?.path ?? "",
+          documentPath: doc.path,
           documentHash: item.documentHash,
           authorName: item.authorName,
           comment: item.comment,
           selector: item.selector,
           status: annotationStatuses[item.id] ?? "resolved",
           createdAt: item.createdAt,
-        })),
-        { url: rawURL, token: token.secret, expiresInMinutes: 30 },
-      );
-      return await copyText(packet);
-    } catch {
-      return false;
-    }
-  }, [
-    annotationIdentity,
-    preview.document,
-    annotations.items,
-    annotationStatuses,
-  ]);
+        }));
+        const credentials = {
+          url: `${window.location.origin}${markdownURL(doc.path)}`,
+          token: token.secret,
+          expiresInMinutes: 30,
+        };
+        const packet =
+          format === "markdown"
+            ? exportAnnotationsMarkdown(doc, entries, credentials)
+            : exportAnnotationsJSON(doc, entries, credentials);
+        if (!(await copyText(packet)))
+          throw new Error("clipboard write failed");
+        return true;
+      } catch {
+        if (tokenID) {
+          try {
+            await revokeToken(tokenID);
+          } catch {
+            /* Expiry remains enforced if revocation fails. */
+          }
+        }
+        return false;
+      }
+    },
+    [
+      annotationIdentity,
+      preview.document,
+      tokensEnabled,
+      annotations.items,
+      annotationStatuses,
+    ],
+  );
 
   const annotationExportDocument = useMemo(() => {
     if (preview.document === null || annotationIdentity === null) {
@@ -1329,7 +1375,7 @@ export function App({
                     onDelete={(id) => void annotations.remove(id)}
                     onEditComment={annotations.editComment}
                     onReanchor={startReanchor}
-                    onCopyForAgent={tokensEnabled ? copyForAgent : undefined}
+                    onCopy={tokensEnabled ? copyAnnotations : undefined}
                   />
                 ) : null}
               </div>
@@ -1393,43 +1439,56 @@ export function App({
                   />
                 ) : (
                   <>
-                    <div className="annotation-comment-box">
+                    {/* biome-ignore lint/a11y/noStaticElementInteractions: The edit button provides the keyboard equivalent of this shortcut. */}
+                    <div
+                      className="annotation-comment-box"
+                      onDoubleClick={() => {
+                        if (hoveredItem.mine) setEditingAnnotation(true);
+                      }}
+                    >
                       {hoveredItem.comment || "无评论"}
                     </div>
                     <div className="annotation-hover-actions">
+                      <AnnotationCopyButton
+                        format="markdown"
+                        label="复制标注（Markdown）"
+                        disabled={!tokensEnabled}
+                        onCopy={() =>
+                          copyAnnotations("markdown", [hoveredItem.id])
+                        }
+                      />
+                      <AnnotationCopyButton
+                        format="json"
+                        label="复制标注（JSON）"
+                        disabled={!tokensEnabled}
+                        onCopy={() => copyAnnotations("json", [hoveredItem.id])}
+                      />
                       {hoveredItem.mine ? (
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => {
-                            void annotations.remove(hoveredItem.id);
-                            setHoverAnnotation(null);
-                          }}
-                        >
-                          删除
-                        </Button>
-                      ) : (
-                        <span />
-                      )}
-                      <div className="flex gap-1">
-                        {hoveredItem.mine ? (
+                        <>
                           <Button
-                            size="xs"
+                            size="icon-xs"
                             variant="ghost"
+                            aria-label="编辑评论"
+                            title="编辑评论"
                             onClick={() => setEditingAnnotation(true)}
                           >
-                            编辑
+                            <Pencil aria-hidden="true" />
                           </Button>
-                        ) : null}
-                        <Button
-                          size="xs"
-                          variant="ghost"
-                          onClick={() => setHoverAnnotation(null)}
-                        >
-                          关闭
-                        </Button>
-                      </div>
+                          <Button
+                            size="icon-xs"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            aria-label="删除标注"
+                            title="删除标注"
+                            onClick={() => {
+                              void annotations.remove(hoveredItem.id);
+                              setHoverAnnotation(null);
+                            }}
+                          >
+                            <Trash2 aria-hidden="true" />
+                          </Button>
+                        </>
+                      ) : null}
                     </div>
                   </>
                 )}

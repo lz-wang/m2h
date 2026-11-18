@@ -1,112 +1,84 @@
 import { describe, expect, it } from "vitest";
-
 import {
-  agentReviewMarkdown,
   type ExportAnnotation,
   type ExportDocument,
   exportAnnotationsJSON,
   exportAnnotationsMarkdown,
-  exportSingleAnnotationMarkdown,
 } from "./annotation-export";
 
 const document: ExportDocument = {
-  title: "设计文档",
-  path: "design.md",
-  ref: { rootId: "root-1", path: "design.md" },
+  title: "m2h",
+  path: "README.md",
+  ref: { rootId: "root-1", path: "README.md" },
   hash: "sha256:abc",
 };
+const credentials = {
+  url: "https://docs.example.com/docs/raw/README.md",
+  token: "m2h_test",
+  expiresInMinutes: 30,
+};
+const entry: ExportAnnotation = {
+  id: "a1",
+  documentPath: "README.md",
+  documentHash: "sha256:abc",
+  authorName: "alice",
+  comment: "建议修改",
+  selector: {
+    quote: { exact: "引用内容", prefix: "前", suffix: "后" },
+    position: { start: 4, end: 8 },
+    headingId: "特性",
+    version: 1,
+  },
+  createdAt: 1760000000000,
+};
 
-function annotation(
-  overrides: Partial<ExportAnnotation> = {},
-): ExportAnnotation {
-  return {
-    id: "a1",
-    documentPath: "design.md",
-    documentHash: "sha256:abc",
-    authorName: "alice",
-    comment: "需要补充备份方案",
-    selector: {
-      quote: {
-        exact: "使用 SQLite",
-        prefix: "建议",
-        suffix: "作为存储",
+describe("agent review export", () => {
+  it("includes the scoped credentials and numbered review delimiters in Markdown", () => {
+    const result = exportAnnotationsMarkdown(
+      document,
+      [entry, { ...entry, id: "a2", comment: "" }],
+      credentials,
+    );
+    expect(result).toContain("# m2h 文档评审");
+    expect(result).toContain(
+      "- 文档: https://docs.example.com/docs/raw/README.md",
+    );
+    expect(result).toContain("- 版本: `sha256:abc`");
+    expect(result).toContain("Authorization: Bearer m2h_test");
+    expect(result).toContain("<!--评审意见--1--START-->");
+    expect(result).toContain("<!--评审意见--2--END-->");
+    expect(result).toContain("- 正文定位: start 4, end 8");
+    expect(result).toContain("- 评论人员: alice");
+    expect(result).toContain("（仅高亮，无评论）");
+  });
+  it("produces valid JSON with credentials, selector, and offset timestamps", () => {
+    const parsed: unknown = JSON.parse(
+      exportAnnotationsJSON(document, [entry], credentials),
+    );
+    expect(parsed).toMatchObject({
+      document: {
+        title: "m2h",
+        url: credentials.url,
+        documentHash: document.hash,
+        authentication: {
+          authorization: "Bearer m2h_test",
+          expiresInMinutes: 30,
+        },
+        documentRef: document.ref,
       },
-      position: { start: 2, end: 9 },
-      headingId: "存储",
-      version: 1,
-    },
-    createdAt: 1760000000000,
-    ...overrides,
-  };
-}
-
-describe("exportAnnotationsMarkdown", () => {
-  it("renders quotes, comments, authors and sections", () => {
-    const markdown = exportAnnotationsMarkdown(document, [annotation()]);
-    expect(markdown).toContain("# 设计文档 — 标注");
-    expect(markdown).toContain("文档路径：design.md");
-    expect(markdown).toContain("## 1. 存储");
-    expect(markdown).toContain("> 使用 SQLite");
-    expect(markdown).toContain("需要补充备份方案");
-    expect(markdown).toContain("— alice ·");
-  });
-
-  it("marks highlight-only entries and anchor states", () => {
-    const markdown = exportAnnotationsMarkdown(document, [
-      annotation({ comment: "", status: "orphaned", id: "a2" }),
-    ]);
-    expect(markdown).toContain("仅高亮，无评论");
-    expect(markdown).toContain("未定位");
-  });
-
-  it("states the empty set plainly", () => {
-    expect(exportAnnotationsMarkdown(document, [])).toContain("暂无标注");
-  });
-});
-
-describe("exportAnnotationsJSON", () => {
-  it("keeps the complete selector shape and parses back", () => {
-    const raw = exportAnnotationsJSON(document, [annotation()]);
-    interface ParsedExport {
-      document: { documentRef: { rootId: string } };
-      annotations: Array<{ selector: { position: { start: number } } }>;
-    }
-    const parsed: ParsedExport = JSON.parse(raw);
-    expect(parsed.document.documentRef.rootId).toBe("root-1");
-    expect(parsed.annotations[0]?.selector.position.start).toBe(2);
-  });
-});
-
-describe("exportSingleAnnotationMarkdown", () => {
-  it("renders one annotation with document context", () => {
-    const markdown = exportSingleAnnotationMarkdown(document, annotation());
-    expect(markdown).toContain("# 设计文档 的标注");
-    expect(markdown).toContain("所在章节：存储");
-    expect(markdown).toContain("> 使用 SQLite");
-  });
-});
-
-describe("agentReviewMarkdown", () => {
-  it("assembles the credential, URL and review comments", () => {
-    const packet = agentReviewMarkdown(document, [annotation()], {
-      url: "https://docs.example.com/raw/design.md",
-      token: "m2h_x",
-      expiresInMinutes: 30,
+      annotations: [
+        {
+          id: "a1",
+          selector: {
+            position: { start: 4, end: 8 },
+            tabId: "",
+            blockHint: "",
+          },
+        },
+      ],
     });
-    expect(packet).toContain("# m2h 文档评审");
-    expect(packet).toContain("https://docs.example.com/raw/design.md");
-    expect(packet).toContain("Authorization: Bearer m2h_x");
-    expect(packet).toContain("有效期：30 分钟");
-    expect(packet).toContain("### 1. 存储");
-    expect(packet).toContain("评论：需要补充备份方案");
-  });
-
-  it("states plainly when there are no annotations", () => {
-    const packet = agentReviewMarkdown(document, [], {
-      url: "u",
-      token: "t",
-      expiresInMinutes: 30,
-    });
-    expect(packet).toContain("暂无标注");
+    expect(exportAnnotationsJSON(document, [entry], credentials)).toMatch(
+      /\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d/,
+    );
   });
 });

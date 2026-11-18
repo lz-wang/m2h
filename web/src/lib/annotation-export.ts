@@ -1,7 +1,3 @@
-// Annotation export: one annotation or a whole document's set, as
-// clipboard-ready Markdown or loss-less JSON. Comments and quotes travel
-// as plain text; nothing here interprets or emits HTML.
-
 import type { AnnotationSelector } from "./annotation-selector";
 
 export interface ExportAnnotation {
@@ -11,7 +7,6 @@ export interface ExportAnnotation {
   authorName: string;
   comment: string;
   selector: AnnotationSelector;
-  // Anchor state the reader computed for this export, if known.
   status?: "resolved" | "ambiguous" | "orphaned";
   createdAt: number;
 }
@@ -23,141 +18,93 @@ export interface ExportDocument {
   hash: string;
 }
 
-function formatTime(milliseconds: number): string {
-  return new Date(milliseconds).toLocaleString();
+export interface ReviewCredentials {
+  url: string;
+  token: string;
+  expiresInMinutes: number;
 }
 
-function headingOf(annotation: ExportAnnotation): string {
-  return annotation.selector.headingId ?? "";
+// Format local time with its actual UTC offset for portable JSON consumers.
+function localISO(date: Date): string {
+  const offset = -date.getTimezoneOffset();
+  const pad = (value: number) => String(Math.abs(value)).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}${offset >= 0 ? "+" : "-"}${pad(Math.trunc(offset / 60))}:${pad(offset % 60)}`;
 }
 
-// exportAnnotationsMarkdown renders a document's annotations as a review
-// document: quote, comment, author, section and anchor state per entry.
 export function exportAnnotationsMarkdown(
   document: ExportDocument,
   annotations: ExportAnnotation[],
+  credentials: ReviewCredentials,
 ): string {
-  const lines: string[] = [
-    `# ${document.title} — 标注`,
+  const lines = [
+    "# m2h 文档评审",
     "",
-    `- 文档路径：${document.path}`,
-    `- 文档版本：${document.hash}`,
-    `- 标注数量：${annotations.length}`,
+    `- 文档: ${credentials.url}`,
+    `- 版本: \`${document.hash}\``,
+    `- 访问凭证: \`Authorization: Bearer ${credentials.token}\``,
+    `- 凭证有效期: ${credentials.expiresInMinutes} 分钟（仅限此文档的当前版本）`,
     "",
   ];
-  if (annotations.length === 0) {
-    lines.push("（暂无标注）");
-    return lines.join("\n");
-  }
-  annotations.forEach((annotation, index) => {
-    const section = headingOf(annotation);
-    lines.push(`## ${index + 1}. ${section === "" ? "正文" : section}`);
-    lines.push("");
-    lines.push(`> ${annotation.selector.quote.exact.replaceAll("\n", "\n> ")}`);
-    lines.push("");
+  annotations.forEach((entry, index) => {
+    const number = index + 1;
     lines.push(
-      annotation.comment === "" ? "_（仅高亮，无评论）_" : annotation.comment,
+      `<!--评审意见--${number}--START-->`,
+      "",
+      `### ${number}. ${entry.selector.headingId || "正文"}`,
+      "",
+      `- 正文引用: ${entry.selector.quote.exact.replaceAll("\n", "\n  ")}`,
+      `- 正文定位: start ${entry.selector.position.start}, end ${entry.selector.position.end}`,
+      `- 评论内容: ${(entry.comment || "（仅高亮，无评论）").replaceAll("\n", "\n  ")}`,
+      `- 评论人员: ${entry.authorName}`,
+      `- 评论时间: ${new Date(entry.createdAt).toLocaleString("zh-CN", { hour12: false })}`,
+      ...(entry.status && entry.status !== "resolved"
+        ? [`- 定位状态: ${entry.status}`]
+        : []),
+      "",
+      `<!--评审意见--${number}--END-->`,
+      "",
     );
-    lines.push("");
-    lines.push(
-      `— ${annotation.authorName} · ${formatTime(annotation.createdAt)}` +
-        (annotation.status !== undefined && annotation.status !== "resolved"
-          ? ` · 状态：${annotation.status === "ambiguous" ? "位置不确定" : "未定位"}`
-          : ""),
-    );
-    lines.push("");
   });
   return lines.join("\n").trimEnd();
 }
 
-// exportAnnotationsJSON keeps the complete stored shape — selectors,
-// identity, hash, ids and timestamps — for re-import or archival tooling.
 export function exportAnnotationsJSON(
   document: ExportDocument,
   annotations: ExportAnnotation[],
+  credentials: ReviewCredentials,
 ): string {
   return JSON.stringify(
     {
       document: {
         title: document.title,
         path: document.path,
+        url: credentials.url,
+        authentication: {
+          authorization: `Bearer ${credentials.token}`,
+          expiresInMinutes: credentials.expiresInMinutes,
+          scope: "current-document-version",
+        },
         documentRef: document.ref,
         documentHash: document.hash,
       },
-      exportedAt: new Date().toISOString(),
-      annotations: annotations.map((annotation) => ({
-        id: annotation.id,
-        documentPath: annotation.documentPath,
-        documentHash: annotation.documentHash,
-        authorName: annotation.authorName,
-        comment: annotation.comment,
-        status: annotation.status ?? "resolved",
-        selector: annotation.selector,
-        createdAt: annotation.createdAt,
+      exportedAt: localISO(new Date()),
+      annotations: annotations.map((entry) => ({
+        id: entry.id,
+        documentPath: entry.documentPath,
+        documentHash: entry.documentHash,
+        authorName: entry.authorName,
+        comment: entry.comment,
+        status: entry.status ?? "resolved",
+        selector: {
+          ...entry.selector,
+          headingId: entry.selector.headingId ?? "",
+          tabId: entry.selector.tabId ?? "",
+          blockHint: entry.selector.blockHint ?? "",
+        },
+        createdAt: localISO(new Date(entry.createdAt)),
       })),
     },
     null,
     2,
   );
-}
-
-// exportSingleAnnotationMarkdown renders one annotation with its document
-// context — the clipboard shape for sharing a single remark.
-export function exportSingleAnnotationMarkdown(
-  document: ExportDocument,
-  annotation: ExportAnnotation,
-): string {
-  const section = headingOf(annotation);
-  return [
-    `# ${document.title} 的标注`,
-    "",
-    `- 文档路径：${document.path}`,
-    section === "" ? "" : `- 所在章节：${section}`,
-    "",
-    `> ${annotation.selector.quote.exact.replaceAll("\n", "\n> ")}`,
-    "",
-    annotation.comment === "" ? "_（仅高亮，无评论）_" : annotation.comment,
-    "",
-    `— ${annotation.authorName} · ${formatTime(annotation.createdAt)}`,
-  ].join("\n");
-}
-
-// agentReviewMarkdown assembles the "copy for agent" packet: the
-// document's address, a temporary read credential bound to its current
-// version, and the annotation list as review instructions. The URL and
-// token are supplied by the caller — the browser builds them from its own
-// trusted origin, the server from its configured public URL.
-export function agentReviewMarkdown(
-  document: ExportDocument,
-  annotations: ExportAnnotation[],
-  credentials: { url: string; token: string; expiresInMinutes: number },
-): string {
-  const lines: string[] = [
-    "# m2h 文档评审",
-    "",
-    "文档：",
-    credentials.url,
-    "",
-    "访问凭证：",
-    `Authorization: Bearer ${credentials.token}`,
-    "",
-    `有效期：${credentials.expiresInMinutes} 分钟（仅限此文档的当前版本）`,
-    "",
-  ];
-  if (annotations.length > 0) {
-    lines.push("## 评审意见");
-    annotations.forEach((annotation, index) => {
-      const section = annotation.selector.headingId ?? "";
-      lines.push("", `### ${index + 1}. ${section === "" ? "正文" : section}`);
-      lines.push(`引用：${annotation.selector.quote.exact}`);
-      lines.push(
-        annotation.comment === ""
-          ? "评论：（仅高亮）"
-          : `评论：${annotation.comment}`,
-      );
-    });
-  } else {
-    lines.push("## 评审意见", "", "（暂无标注，请直接审阅全文。）");
-  }
-  return lines.join("\n");
 }

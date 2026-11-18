@@ -1,28 +1,13 @@
-import {
-  Bot,
-  Check,
-  ClipboardCopy,
-  Crosshair,
-  FileJson,
-  FileText,
-  LoaderCircle,
-  LocateFixed,
-  MessageSquare,
-  Pencil,
-  Trash2,
-} from "lucide-react";
+import { Crosshair, LocateFixed, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AnnotationItem } from "@/api";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { ExportDocument } from "@/lib/annotation-export";
 import {
-  type ExportAnnotation,
-  type ExportDocument,
-  exportAnnotationsJSON,
-  exportAnnotationsMarkdown,
-  exportSingleAnnotationMarkdown,
-} from "@/lib/annotation-export";
-import { copyText } from "@/lib/clipboard";
+  AnnotationCopyButton,
+  type AnnotationCopyFormat,
+} from "./annotation-copy-button";
 import { AnnotationEditor } from "./annotation-editor";
 
 export type AnnotationAnchorStatus = "resolved" | "ambiguous" | "orphaned";
@@ -44,13 +29,11 @@ export interface AnnotationPanelProps {
   // Starts the human re-anchor flow for one of the caller's unresolved
   // annotations: the reader switches to "select the new passage" mode.
   onReanchor?(id: string): void;
-  // Optional: mints a temporary document-scoped token and copies an
-  // agent-ready review packet to the clipboard (authenticated runs with
-  // tokens enabled).
-  onCopyForAgent?: () => Promise<boolean>;
+  // Copies one item or the full list with a document-scoped credential.
+  onCopy?: (format: AnnotationCopyFormat, ids?: string[]) => Promise<boolean>;
 }
 
-// AnnotationPanel is the right-hand annotation rail (a Sheet on mobile):
+// AnnotationPanel is the right-hand annotation rail:
 // the document's annotation list with locate, copy, delete and whole-set
 // export. Other users' annotations are read-only; the panel states that
 // with a badge instead of hiding entries — review is a shared view.
@@ -67,14 +50,11 @@ export function AnnotationPanel({
   onDelete,
   onEditComment,
   onReanchor,
-  onCopyForAgent,
+  onCopy,
 }: AnnotationPanelProps) {
   const [confirming, setConfirming] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingComment, setSavingComment] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [agentPending, setAgentPending] = useState(false);
-  const [agentNotice, setAgentNotice] = useState<string | null>(null);
   const panelRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
     // A second click on the same highlight must scroll its row again.
@@ -93,47 +73,6 @@ export function AnnotationPanel({
         viewport.getBoundingClientRect().top -
         12;
   }, [open, selectedId, selectionVersion]);
-
-  const asExport = (item: AnnotationItem): ExportAnnotation => ({
-    id: item.id,
-    documentPath: document?.path ?? "",
-    documentHash: item.documentHash,
-    authorName: item.authorName,
-    comment: item.comment,
-    selector: {
-      quote: {
-        exact: item.selector.quote.exact,
-        prefix: item.selector.quote.prefix,
-        suffix: item.selector.quote.suffix,
-      },
-      position: item.selector.position,
-      headingId: item.selector.headingId,
-      tabId: item.selector.tabId,
-      blockHint: item.selector.blockHint,
-      version: 1,
-    },
-    status: statuses[item.id] ?? "resolved",
-    createdAt: item.createdAt,
-  });
-
-  const copy = (text: string) => {
-    void copyText(text).then((ok) => {
-      setCopied(ok);
-      window.setTimeout(() => setCopied(false), 1500);
-    });
-  };
-
-  const copyForAgent = async () => {
-    if (onCopyForAgent === undefined || agentPending) {
-      return;
-    }
-    setAgentPending(true);
-    setAgentNotice(null);
-    const ok = await onCopyForAgent();
-    setAgentPending(false);
-    setAgentNotice(ok ? "已复制评审材料与临时凭证" : "复制失败，请重试");
-    window.setTimeout(() => setAgentNotice(null), 2500);
-  };
 
   const list = (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -218,23 +157,23 @@ export function AnnotationPanel({
                         <LocateFixed aria-hidden="true" />
                       </Button>
                     ) : null}
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label="复制此标注"
-                      title="复制此标注"
-                      onClick={() =>
-                        document !== null &&
-                        copy(
-                          exportSingleAnnotationMarkdown(
-                            document,
-                            asExport(item),
-                          ),
-                        )
+                    <AnnotationCopyButton
+                      format="markdown"
+                      label="复制此标注（Markdown）"
+                      disabled={!onCopy || !document}
+                      onCopy={() =>
+                        onCopy?.("markdown", [item.id]) ??
+                        Promise.resolve(false)
                       }
-                    >
-                      <ClipboardCopy aria-hidden="true" />
-                    </Button>
+                    />
+                    <AnnotationCopyButton
+                      format="json"
+                      label="复制此标注（JSON）"
+                      disabled={!onCopy || !document}
+                      onCopy={() =>
+                        onCopy?.("json", [item.id]) ?? Promise.resolve(false)
+                      }
+                    />
                     {item.mine ? (
                       <>
                         {onEditComment ? (
@@ -293,66 +232,23 @@ export function AnnotationPanel({
 
   const header = (
     <div className="flex items-center justify-between gap-2">
-      <div className="flex items-center gap-2 font-medium">
-        <MessageSquare aria-hidden="true" className="size-4" />
-        标注
-        <span className="text-muted-foreground text-xs font-normal">
-          {items.length}
-        </span>
+      <div className="reader-toc-title mb-0 flex items-center gap-1">
+        本页标注
+        <span>{items.length}</span>
       </div>
       <div className="flex items-center gap-1">
-        {agentNotice !== null ? (
-          <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-            <Check aria-hidden="true" className="size-3" /> {agentNotice}
-          </span>
-        ) : null}
-        {copied ? (
-          <span className="text-muted-foreground inline-flex items-center gap-1 text-xs">
-            <Check aria-hidden="true" className="size-3" /> 已复制
-          </span>
-        ) : null}
-        {onCopyForAgent !== undefined && document !== null ? (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="复制给 Agent"
-            title="复制给 Agent（临时只读凭证 + 评审意见）"
-            disabled={agentPending}
-            onClick={() => void copyForAgent()}
-          >
-            {agentPending ? (
-              <LoaderCircle aria-hidden="true" className="animate-spin" />
-            ) : (
-              <Bot aria-hidden="true" />
-            )}
-          </Button>
-        ) : null}
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label="复制全部标注（Markdown）"
-          title="复制全部标注（Markdown）"
-          disabled={document === null || items.length === 0}
-          onClick={() =>
-            document !== null &&
-            copy(exportAnnotationsMarkdown(document, items.map(asExport)))
-          }
-        >
-          <FileText aria-hidden="true" />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          aria-label="复制全部标注（JSON）"
-          title="复制全部标注（JSON）"
-          disabled={document === null || items.length === 0}
-          onClick={() =>
-            document !== null &&
-            copy(exportAnnotationsJSON(document, items.map(asExport)))
-          }
-        >
-          <FileJson aria-hidden="true" />
-        </Button>
+        <AnnotationCopyButton
+          format="markdown"
+          label="复制全部标注（Markdown）"
+          disabled={!onCopy || !document || items.length === 0}
+          onCopy={() => onCopy?.("markdown") ?? Promise.resolve(false)}
+        />
+        <AnnotationCopyButton
+          format="json"
+          label="复制全部标注（JSON）"
+          disabled={!onCopy || !document || items.length === 0}
+          onCopy={() => onCopy?.("json") ?? Promise.resolve(false)}
+        />
       </div>
     </div>
   );

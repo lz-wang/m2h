@@ -131,6 +131,11 @@ test.describe("authenticated mode", () => {
   test("annotations: highlight, comment, reload, and delete", async ({
     page,
   }) => {
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: baseURL,
+      });
     await login(page, "alice", "password-1");
     await page.goto(`${baseURL}/doc/README.md`);
     // The body mounts asynchronously after the document API answers.
@@ -186,9 +191,7 @@ test.describe("authenticated mode", () => {
     await expect(async () => {
       await page.mouse.move(point.x + 2, point.y);
       await page.mouse.move(point.x, point.y);
-      await expect(
-        page.getByRole("button", { name: "编辑", exact: true }),
-      ).toBeVisible({
+      await expect(page.getByRole("button", { name: "编辑评论" })).toBeVisible({
         timeout: 500,
       });
     }).toPass({ timeout: 10_000 });
@@ -200,17 +203,54 @@ test.describe("authenticated mode", () => {
     const positions = await actions.evaluate((element) => {
       const buttons = [...element.querySelectorAll("button")];
       return buttons.map((button) => ({
-        text: button.textContent,
+        text: button.getAttribute("aria-label"),
         left: button.getBoundingClientRect().left,
       }));
     });
     expect(positions.map((button) => button.text?.trim())).toEqual([
-      "删除",
-      "编辑",
-      "关闭",
+      "复制标注（Markdown）",
+      "复制标注（JSON）",
+      "编辑评论",
+      "删除标注",
     ]);
     expect(positions[0].left).toBeLessThan(positions[1].left);
-    await page.getByRole("button", { name: "编辑", exact: true }).click();
+    await page.getByRole("button", { name: "复制标注（Markdown）" }).click();
+    await expect(
+      page
+        .getByRole("button", { name: "复制标注（Markdown）" })
+        .locator(".lucide-check"),
+    ).toBeVisible();
+    const copiedMarkdown = await page.evaluate(() =>
+      navigator.clipboard.readText(),
+    );
+    expect(copiedMarkdown).toContain("# m2h 文档评审");
+    expect(copiedMarkdown).toContain("<!--评审意见--1--START-->");
+    expect(copiedMarkdown).toContain("需要补充备份方案");
+    const match = copiedMarkdown.match(
+      /Authorization: Bearer (m2h_[A-Za-z0-9_-]+)/,
+    );
+    expect(match).not.toBeNull();
+    const token = match?.[1];
+    if (!token) throw new Error("missing temporary credential");
+    const allowed = await page.request.get(`${baseURL}/raw/README.md`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const denied = await page.request.get(`${baseURL}/raw/scroll.md`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(allowed.status()).toBe(200);
+    expect(denied.status()).toBe(403);
+    await page.getByRole("button", { name: "复制标注（JSON）" }).click();
+    await expect(
+      page
+        .getByRole("button", { name: "复制标注（JSON）" })
+        .locator(".lucide-check"),
+    ).toBeVisible();
+    const singleExport = JSON.parse(
+      await page.evaluate(() => navigator.clipboard.readText()),
+    ) as { annotations: unknown[] };
+    expect(singleExport.annotations).toHaveLength(1);
+    await page.locator(".annotation-comment-box").dblclick();
     await page.getByPlaceholder("添加评论…").fill("已经补充备份方案");
     await page.getByRole("button", { name: "保存" }).click();
     await expect(page.locator(".annotation-hover-card")).toContainText(
@@ -232,6 +272,54 @@ test.describe("authenticated mode", () => {
     await expect(
       page.getByRole("complementary", { name: "标注面板" }),
     ).toContainText("侧边栏已更新");
+    await expect(page.getByText(/本页标注/)).toBeVisible();
+    await page.getByRole("button", { name: "复制全部标注（JSON）" }).click();
+    await expect(
+      page
+        .getByRole("button", { name: "复制全部标注（JSON）" })
+        .locator(".lucide-check"),
+    ).toBeVisible();
+    const exported = JSON.parse(
+      await page.evaluate(() => navigator.clipboard.readText()),
+    ) as {
+      document: {
+        url: string;
+        authentication: { authorization: string; expiresInMinutes: number };
+      };
+      annotations: Array<{ comment: string; createdAt: string }>;
+    };
+    expect(exported.document.url).toBe(`${baseURL}/raw/README.md`);
+    expect(exported.document.authentication.expiresInMinutes).toBe(30);
+    expect(exported.document.authentication.authorization).toMatch(
+      /^Bearer m2h_/,
+    );
+    expect(exported.annotations).toHaveLength(1);
+    expect(exported.annotations[0].comment).toBe("侧边栏已更新");
+    expect(exported.annotations[0].createdAt).toMatch(/T.*[+-]\d\d:\d\d$/);
+    await expect(page.getByText(/已复制/)).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "复制全部标注（Markdown）" })
+      .click();
+    await expect(
+      page
+        .getByRole("button", { name: "复制全部标注（Markdown）" })
+        .locator(".lucide-check"),
+    ).toBeVisible();
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toContain(
+      "侧边栏已更新",
+    );
+    await page.getByRole("button", { name: "复制此标注（Markdown）" }).click();
+    await expect(
+      page
+        .getByRole("button", { name: "复制此标注（Markdown）" })
+        .locator(".lucide-check"),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "复制此标注（JSON）" }).click();
+    await expect(
+      page
+        .getByRole("button", { name: "复制此标注（JSON）" })
+        .locator(".lucide-check"),
+    ).toBeVisible();
     await expect(
       page.getByRole("button", { name: "收起标注面板" }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -253,13 +341,11 @@ test.describe("authenticated mode", () => {
     await expect(async () => {
       await page.mouse.move(point.x + 2, point.y);
       await page.mouse.move(point.x, point.y);
-      await expect(
-        page.getByRole("button", { name: "删除", exact: true }),
-      ).toBeVisible({
+      await expect(page.getByRole("button", { name: "删除标注" })).toBeVisible({
         timeout: 500,
       });
     }).toPass({ timeout: 10_000 });
-    await page.getByRole("button", { name: "删除", exact: true }).click();
+    await page.getByRole("button", { name: "删除标注" }).click();
     await expect(page.getByText(/还没有标注/)).toBeVisible();
   });
 
