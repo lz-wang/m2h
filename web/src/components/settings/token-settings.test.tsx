@@ -291,9 +291,9 @@ describe("TokenSettings", () => {
       screen.getByLabelText("文档根目录"),
       "root-uuid-1",
     );
-    await userEvent.selectOptions(
-      screen.getByLabelText("文档路径"),
-      "guide.md",
+    await userEvent.click(screen.getByLabelText("文档路径"));
+    await userEvent.click(
+      await screen.findByRole("option", { name: "guide.md" }),
     );
     await userEvent.type(screen.getByLabelText("令牌名称"), "doc-agent");
     await userEvent.click(screen.getByRole("button", { name: "创建" }));

@@ -1,8 +1,10 @@
+import { Select } from "@base-ui/react/select";
 import {
   ArrowDown,
   ArrowUp,
   ArrowUpDown,
   Check,
+  ChevronDown,
   ClipboardCopy,
   LoaderCircle,
   Plus,
@@ -194,7 +196,6 @@ export function TokenSettings({
     onOpenChange(next);
     if (next) setNow(Date.now());
     if (!next) {
-      setFreshSecret(null);
       setCreateOpen(false);
       setCopied(false);
     }
@@ -424,15 +425,16 @@ export function TokenSettings({
           open={createOpen}
           onOpenChange={(next) => {
             setCreateOpen(next);
-            if (!next) {
-              setFreshSecret(null);
-              setCopied(false);
-            }
+            if (!next) setCopied(false);
+          }}
+          onOpenChangeComplete={(next) => {
+            if (!next) setFreshSecret(null);
           }}
         >
           <DialogContent
             aria-describedby={undefined}
-            className="gap-4 p-5 sm:max-w-lg"
+            overlayClassName="z-[60] bg-black/30 supports-backdrop-filter:backdrop-blur-sm"
+            className="top-1/2 z-[61] -translate-y-1/2 gap-4 p-5 data-ending-style:-translate-y-[calc(50%-0.5rem)] data-starting-style:-translate-y-[calc(50%-0.5rem)] sm:max-w-lg"
           >
             <DialogTitle>新建 API 令牌</DialogTitle>
             {freshSecret !== null ? (
@@ -501,79 +503,109 @@ export function TokenSettings({
                 </label>
                 <div className="flex flex-col gap-1.5 text-sm">
                   <label htmlFor="token-scope-type">访问范围</label>
-                  <select
-                    id="token-scope-type"
-                    aria-label="访问范围"
-                    className="border-border bg-background h-8 rounded-md border px-2 text-xs"
-                    value={
-                      scopeType === "all_published"
-                        ? "全部已发布文档"
-                        : scopeType === "root"
-                          ? "指定文档根目录"
-                          : "指定单篇文档"
-                    }
-                    onChange={(event) => {
-                      const next = event.target.value;
-                      setScopeType(
-                        next === "指定文档根目录"
-                          ? "root"
-                          : next === "指定单篇文档"
-                            ? "document"
-                            : "all_published",
-                      );
-                    }}
-                  >
-                    <option value="全部已发布文档">全部已发布文档</option>
-                    <option value="指定文档根目录">指定文档根目录</option>
-                    <option value="指定单篇文档">指定单篇文档</option>
-                  </select>
-                  {scopeType !== "all_published" ? (
-                    rootsError !== null ? (
-                      <span className="text-destructive inline-flex items-center gap-1 text-xs">
-                        {rootsError}
-                        <Button
-                          variant="ghost"
-                          size="xs"
-                          aria-label="重试加载文档列表"
-                          onClick={() => setRoots(null)}
-                        >
-                          重试
-                        </Button>
-                      </span>
-                    ) : (
-                      <select
-                        aria-label="文档根目录"
-                        className="border-border bg-background h-8 max-w-36 rounded-md border px-2 text-xs"
-                        value={rootId}
-                        onChange={(event) => {
-                          setRootId(event.target.value);
-                          setDocumentPath("");
-                        }}
-                      >
-                        {(roots ?? []).map((option) => (
-                          <option key={option.id} value={option.id}>
-                            {option.name}
-                          </option>
-                        ))}
-                      </select>
-                    )
-                  ) : null}
-                  {scopeType === "document" && selectedRoot ? (
+                  <div className="flex gap-2">
                     <select
-                      aria-label="文档路径"
-                      className="border-border bg-background h-8 max-w-44 rounded-md border px-2 text-xs"
-                      value={documentPath}
-                      onChange={(event) => setDocumentPath(event.target.value)}
+                      id="token-scope-type"
+                      aria-label="访问范围"
+                      className="border-border bg-background h-9 min-w-0 flex-1 rounded-md border px-2 text-sm"
+                      value={
+                        scopeType === "all_published"
+                          ? "全部已发布文档"
+                          : scopeType === "root"
+                            ? "指定文档根目录"
+                            : "指定单篇文档"
+                      }
+                      onChange={(event) => {
+                        const next = event.target.value;
+                        setScopeType(
+                          next === "指定文档根目录"
+                            ? "root"
+                            : next === "指定单篇文档"
+                              ? "document"
+                              : "all_published",
+                        );
+                      }}
                     >
-                      <option value="" disabled>
-                        选择文档…
-                      </option>
-                      {selectedRoot.paths.map((path) => (
-                        <option key={path} value={path}>
-                          {path}
-                        </option>
-                      ))}
+                      <option value="全部已发布文档">全部已发布文档</option>
+                      <option value="指定文档根目录">指定文档根目录</option>
+                      <option value="指定单篇文档">指定单篇文档</option>
                     </select>
+                    {scopeType !== "all_published" ? (
+                      rootsError !== null ? (
+                        <span className="text-destructive inline-flex items-center gap-1 text-xs">
+                          {rootsError}
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            aria-label="重试加载文档列表"
+                            onClick={() => setRoots(null)}
+                          >
+                            重试
+                          </Button>
+                        </span>
+                      ) : (
+                        <select
+                          aria-label="文档根目录"
+                          className="border-border bg-background h-9 min-w-0 flex-1 rounded-md border px-2 text-sm"
+                          value={rootId}
+                          onChange={(event) => {
+                            setRootId(event.target.value);
+                            setDocumentPath("");
+                          }}
+                        >
+                          {(roots ?? []).map((option) => (
+                            <option key={option.id} value={option.id}>
+                              {option.name}
+                            </option>
+                          ))}
+                        </select>
+                      )
+                    ) : null}
+                  </div>
+                  {scopeType === "document" && selectedRoot ? (
+                    <Select.Root
+                      value={documentPath || null}
+                      onValueChange={(value) => setDocumentPath(value ?? "")}
+                    >
+                      <Select.Trigger
+                        aria-label="文档路径"
+                        className="border-border bg-background flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md border px-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <Select.Value
+                          placeholder="选择文档…"
+                          className="min-w-0 truncate"
+                        />
+                        <Select.Icon>
+                          <ChevronDown className="size-4 shrink-0" />
+                        </Select.Icon>
+                      </Select.Trigger>
+                      <Select.Portal>
+                        <Select.Positioner
+                          className="z-[70]"
+                          sideOffset={4}
+                          alignItemWithTrigger={false}
+                        >
+                          <Select.Popup className="border-border bg-popover text-popover-foreground max-h-60 w-[var(--anchor-width)] min-w-0 overflow-y-auto rounded-md border p-1 shadow-lg">
+                            <Select.List>
+                              {selectedRoot.paths.map((path) => (
+                                <Select.Item
+                                  key={path}
+                                  value={path}
+                                  className="relative flex cursor-default items-center gap-2 rounded px-2 py-1.5 text-sm outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                                >
+                                  <Select.ItemText className="min-w-0 flex-1 truncate">
+                                    {path}
+                                  </Select.ItemText>
+                                  <Select.ItemIndicator>
+                                    <Check className="size-4" />
+                                  </Select.ItemIndicator>
+                                </Select.Item>
+                              ))}
+                            </Select.List>
+                          </Select.Popup>
+                        </Select.Positioner>
+                      </Select.Portal>
+                    </Select.Root>
                   ) : null}
                 </div>
                 <Button

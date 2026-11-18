@@ -381,12 +381,52 @@ test.describe("authenticated mode", () => {
     await expect(
       createDialog.getByLabel("有效期").locator("option"),
     ).toHaveCount(11);
+    await expect
+      .poll(async () => {
+        const popupBox = await createDialog.boundingBox();
+        const viewport = page.viewportSize();
+        if (!popupBox || !viewport) return Infinity;
+        return Math.abs(popupBox.y + popupBox.height / 2 - viewport.height / 2);
+      })
+      .toBeLessThan(2);
+    await createDialog.getByLabel("访问范围").selectOption("指定单篇文档");
+    const rootSelect = createDialog.getByLabel("文档根目录");
+    await expect(rootSelect.locator("option")).not.toHaveCount(0);
+    const scopeBox = await createDialog.getByLabel("访问范围").boundingBox();
+    const rootBox = await rootSelect.boundingBox();
+    const documentBox = await createDialog
+      .getByRole("combobox", { name: "文档路径" })
+      .boundingBox();
+    if (!scopeBox || !rootBox || !documentBox)
+      throw new Error("missing scope geometry");
+    expect(Math.abs(scopeBox.y - rootBox.y)).toBeLessThan(2);
+    expect(
+      Math.abs(documentBox.width - (rootBox.x + rootBox.width - scopeBox.x)),
+    ).toBeLessThan(2);
+    await createDialog.getByRole("combobox", { name: "文档路径" }).click();
+    await page.getByRole("option", { name: "README.md", exact: true }).click();
+    await expect(
+      createDialog.getByRole("combobox", { name: "文档路径" }),
+    ).toContainText("README.md");
     await createDialog.getByLabel("令牌名称").fill("permanent-e2e");
     await createDialog.getByLabel("有效期").selectOption("permanent");
     await createDialog.getByRole("button", { name: "创建" }).click();
     await expect(createDialog.getByText(/令牌已创建/)).toBeVisible();
-    await createDialog.getByRole("button", { name: "关闭" }).click();
+    const closing = await createDialog.evaluate((element) => {
+      const button = element.querySelector<HTMLButtonElement>(
+        '[data-slot="dialog-close"]',
+      );
+      if (!button) throw new Error("missing close button");
+      button.click();
+      return {
+        hasResult: element.textContent?.includes("令牌已创建"),
+        hasForm: !!element.querySelector('input[aria-label="令牌名称"]'),
+      };
+    });
+    expect(closing).toEqual({ hasResult: true, hasForm: false });
+    await expect(createDialog).toBeHidden();
     await expect(dialog.getByText("permanent-e2e")).toBeVisible();
+    await expect(dialog.getByText("单篇文档（README.md）")).toBeVisible();
     await expect(dialog.getByText(/永久/).last()).toBeVisible();
     await dialog.getByRole("button", { name: "撤销 permanent-e2e" }).click();
     await dialog.getByRole("button", { name: "确认撤销" }).click();
