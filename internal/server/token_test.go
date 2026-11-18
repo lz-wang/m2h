@@ -215,6 +215,26 @@ func TestTokenCreateValidation(t *testing.T) {
 	}
 }
 
+func TestPermanentTokenLifecycle(t *testing.T) {
+	fixture := newTokenFixture(t)
+	alice := fixture.loginAs(t, "alice", "password-1")
+	status, token := fixture.createTokenViaSession(t, alice, map[string]any{"kind": "persistent", "name": "permanent", "permanent": true, "scope": map[string]any{"permissions": []string{"document:read"}, "resource": map[string]any{"type": "all_published"}}})
+	if status != http.StatusCreated || token.ExpiresAt != 0 {
+		t.Fatalf("created = %d %+v", status, token)
+	}
+	request, _ := http.NewRequest(http.MethodGet, fixture.server.URL+"/api/files", nil)
+	request.Header.Set("Authorization", "Bearer "+token.Secret)
+	response := fixture.do(request)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("permanent token status = %d", response.StatusCode)
+	}
+	status, _ = fixture.createTokenViaSession(t, alice, map[string]any{"kind": "temporary", "name": "bad", "permanent": true, "scope": map[string]any{"permissions": []string{"document:read"}, "resource": map[string]any{"type": "all_published"}}})
+	if status != http.StatusBadRequest {
+		t.Fatalf("permanent temporary token = %d", status)
+	}
+}
+
 func TestBearerAuthorization(t *testing.T) {
 	fixture := newTokenFixture(t)
 	alice := fixture.loginAs(t, "alice", "password-1")

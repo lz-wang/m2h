@@ -46,7 +46,7 @@ type TokenScope struct {
 	} `json:"resource"`
 }
 
-// TokenExpiry bounds per kind. No token may be permanent.
+// TokenExpiry bounds finite lifetimes. Persistent tokens can also be permanent.
 const (
 	TemporaryTokenDefault  = 30 * time.Minute
 	TemporaryTokenMax      = 24 * time.Hour

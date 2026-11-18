@@ -33,6 +33,7 @@ type createTokenRequest struct {
 	Kind          string            `json:"kind"`
 	Name          string            `json:"name"`
 	ExpiresInDays *float64          `json:"expiresInDays"`
+	Permanent     bool              `json:"permanent"`
 	Scope         tokenScopeRequest `json:"scope"`
 	DocumentHash  string            `json:"documentHash"`
 }
@@ -144,6 +145,10 @@ func (handler *documentHandler) serveCreateToken(response http.ResponseWriter, r
 		return
 	}
 	lifetime := def
+	if body.Permanent && (kind != auth.TokenPersistent || body.ExpiresInDays != nil) {
+		writeJSONError(response, http.StatusBadRequest, "permanent requires a persistent token without expiresInDays")
+		return
+	}
 	if body.ExpiresInDays != nil {
 		lifetime = time.Duration(*body.ExpiresInDays * float64(24*time.Hour))
 		if lifetime <= 0 || lifetime > max {
@@ -221,6 +226,9 @@ func (handler *documentHandler) serveCreateToken(response http.ResponseWriter, r
 		ScopeJSON:    scopeJSON,
 		DocumentHash: documentHash,
 		ExpiresAt:    time.Now().Add(lifetime).UnixMilli(),
+	}
+	if body.Permanent {
+		record.ExpiresAt = 0
 	}
 	if err := handler.auth.dataStore.CreateToken(request.Context(), &record); err != nil {
 		writeJSONError(response, http.StatusInternalServerError, "create token")

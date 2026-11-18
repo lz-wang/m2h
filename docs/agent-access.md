@@ -57,6 +57,7 @@ list_documents()          → GET /api/files
 
 - 第一版不提供 MCP Server、Embedding、向量数据库或独立 RAG 服务。
 - Token 权限为只读（`document:read`、`search:read`），不能写入标注、不能管理 Token、不能调用登录接口。
-- Token 有过期时间（临时最长 24 小时，长期最长 365 天），撤销立即失效；明文只在创建时展示一次。
+- 临时 Token 最长有效 24 小时。长期 Token 可设置有效期或选择永久有效。撤销立即生效；明文只在创建时展示一次。
+- `POST /api/tokens` 的长期 Token 可使用 `permanent: true` 创建永久凭证，不能同时提供 `expiresInDays`；响应中 `expiresAt: 0` 表示永久有效。默认有效期仍为 180 天。
 - 临时 Token 仅支持单篇文档的 `document:read` 权限；旧的超范围临时 Token 不再可用。令牌列表只显示未过期且未撤销的 Token；过期超过 7 天的临时 Token 和撤销超过 7 天的 Token 会定期清理。
 - 反向代理部署下请使用对外地址；`Authorization` 头不要放进 URL 查询参数。

@@ -29,7 +29,7 @@ type TokenRecord struct {
 
 // Expired reports whether the token's lifetime is over.
 func (record TokenRecord) Expired() bool {
-	return record.ExpiresAt <= time.Now().UnixMilli()
+	return record.ExpiresAt != 0 && record.ExpiresAt <= time.Now().UnixMilli()
 }
 
 // Active reports whether the token currently authorizes anything.
@@ -66,7 +66,7 @@ func (store *Store) ListTokens(ctx context.Context, ownerID string) ([]TokenReco
 			COALESCE(document_hash, ''), created_at, expires_at,
 			COALESCE(last_used_at, 0), COALESCE(revoked_at, 0)
 		FROM api_tokens
-		WHERE owner_id = ? AND revoked_at IS NULL AND expires_at > ?
+		WHERE owner_id = ? AND revoked_at IS NULL AND (expires_at = 0 OR expires_at > ?)
 		ORDER BY created_at DESC, id`, ownerID, time.Now().UnixMilli())
 	if err != nil {
 		return nil, err
@@ -86,7 +86,7 @@ func (store *Store) ListTokens(ctx context.Context, ownerID string) ([]TokenReco
 // CleanupTokens removes expired temporary tokens and revoked tokens after retention.
 func (store *Store) CleanupTokens(ctx context.Context, before time.Time) error {
 	_, err := store.db.ExecContext(ctx, `DELETE FROM api_tokens
-		WHERE (kind = 'temporary' AND revoked_at IS NULL AND expires_at < ?) OR (revoked_at IS NOT NULL AND revoked_at < ?)`,
+		WHERE (kind = 'temporary' AND revoked_at IS NULL AND expires_at > 0 AND expires_at < ?) OR (revoked_at IS NOT NULL AND revoked_at < ?)`,
 		before.UnixMilli(), before.UnixMilli())
 	return err
 }
