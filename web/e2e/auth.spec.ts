@@ -412,15 +412,24 @@ test.describe("authenticated mode", () => {
     await separator.focus();
     await page.keyboard.press("ArrowUp");
     await expect(separator).toHaveAttribute("aria-valuenow", "45");
+    await expect(page.locator(".reader-toc-slot")).toHaveCSS(
+      "transition-duration",
+      "0s",
+    );
     const box = await separator.boundingBox();
     if (!box) throw new Error("missing separator geometry");
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
     await page.mouse.down();
-    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 80);
-    await page.mouse.up();
     expect(
-      Number(await separator.getAttribute("aria-valuenow")),
-    ).toBeGreaterThan(45);
+      await separator.evaluate((element) => element.hasPointerCapture(1)),
+    ).toBe(true);
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 80, {
+      steps: 5,
+    });
+    await page.mouse.up();
+    await expect
+      .poll(async () => Number(await separator.getAttribute("aria-valuenow")))
+      .toBeGreaterThan(45);
     await page.getByRole("button", { name: "收起标注面板" }).click();
     await expect(panel).toHaveCount(0);
   });

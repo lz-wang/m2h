@@ -587,6 +587,8 @@ body,
 .reader-rail[data-toc-open="true"][data-annotations-open="true"]
   .reader-toc-slot {
   flex: 0 0 var(--toc-share);
+  /* Keep the resize handle under the pointer as its height changes. */
+  transition: none;
 }
 .reader-rail-resize {
   flex: 0 0 6px;
