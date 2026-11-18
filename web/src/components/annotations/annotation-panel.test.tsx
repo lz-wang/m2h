@@ -93,6 +93,22 @@ describe("AnnotationPanel", () => {
     expect(screen.queryByRole("button", { name: "删除此标注" })).toBeNull();
   });
 
+  it("edits the author's comment from the list", async () => {
+    const onEditComment = vi.fn().mockResolvedValue(true);
+    renderPanel({ onEditComment });
+    await userEvent.click(screen.getByRole("button", { name: "编辑此评论" }));
+    const editor = screen.getByPlaceholderText("添加评论…");
+    await userEvent.clear(editor);
+    await userEvent.type(editor, "新评论");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() =>
+      expect(onEditComment).toHaveBeenCalledWith("a1", "新评论"),
+    );
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText("添加评论…")).toBeNull(),
+    );
+  });
+
   it("exports the whole set as Markdown and JSON via the clipboard", async () => {
     const copySpy = vi.spyOn(clipboard, "copyText").mockResolvedValue(true);
     renderPanel();

@@ -160,9 +160,18 @@ test.describe("authenticated mode", () => {
         .getByRole("toolbar", { name: "标注选中文本" })
         .waitFor({ timeout: 1_000 });
     }).toPass({ timeout: 15_000 });
+    const selectedText = await page.evaluate(() =>
+      window.getSelection()?.toString(),
+    );
+    await page.getByRole("button", { name: "评论" }).click();
+    await page.getByRole("button", { name: "取消" }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.getSelection()?.toString()))
+      .toBe(selectedText);
     await page.getByRole("button", { name: "评论" }).click();
     await page.getByPlaceholder("添加评论…").fill("需要补充备份方案");
     await page.getByRole("button", { name: "保存" }).click();
+    await expect(page.locator(".annotation-comment-marker")).toHaveCount(1);
 
     const point = await page.evaluate(() => {
       window.getSelection()?.removeAllRanges();
@@ -177,11 +186,31 @@ test.describe("authenticated mode", () => {
     await expect(async () => {
       await page.mouse.move(point.x + 2, point.y);
       await page.mouse.move(point.x, point.y);
-      await expect(page.getByRole("button", { name: "编辑评论" })).toBeVisible({
+      await expect(
+        page.getByRole("button", { name: "编辑", exact: true }),
+      ).toBeVisible({
         timeout: 500,
       });
     }).toPass({ timeout: 10_000 });
-    await page.getByRole("button", { name: "编辑评论" }).click();
+    await expect(page.locator(".annotation-comment-box")).toHaveCSS(
+      "min-height",
+      "56px",
+    );
+    const actions = page.locator(".annotation-hover-actions");
+    const positions = await actions.evaluate((element) => {
+      const buttons = [...element.querySelectorAll("button")];
+      return buttons.map((button) => ({
+        text: button.textContent,
+        left: button.getBoundingClientRect().left,
+      }));
+    });
+    expect(positions.map((button) => button.text?.trim())).toEqual([
+      "删除",
+      "编辑",
+      "关闭",
+    ]);
+    expect(positions[0].left).toBeLessThan(positions[1].left);
+    await page.getByRole("button", { name: "编辑", exact: true }).click();
     await page.getByPlaceholder("添加评论…").fill("已经补充备份方案");
     await page.getByRole("button", { name: "保存" }).click();
     await expect(page.locator(".annotation-hover-card")).toContainText(
@@ -192,6 +221,17 @@ test.describe("authenticated mode", () => {
     await expect(
       page.getByRole("complementary", { name: "标注面板" }),
     ).toContainText("已经补充备份方案");
+    await page.getByRole("button", { name: "编辑此评论" }).click();
+    await page.getByPlaceholder("添加评论…").fill("");
+    await page.getByRole("button", { name: "保存" }).click();
+    await expect(page.locator(".annotation-comment-marker")).toHaveCount(0);
+    await page.getByRole("button", { name: "编辑此评论" }).click();
+    await page.getByPlaceholder("添加评论…").fill("侧边栏已更新");
+    await page.getByRole("button", { name: "保存" }).click();
+    await expect(page.locator(".annotation-comment-marker")).toHaveCount(1);
+    await expect(
+      page.getByRole("complementary", { name: "标注面板" }),
+    ).toContainText("侧边栏已更新");
     await expect(
       page.getByRole("button", { name: "收起标注面板" }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -200,12 +240,12 @@ test.describe("authenticated mode", () => {
     await page.getByRole("button", { name: "打开标注面板" }).click();
     await expect(
       page.getByRole("complementary", { name: "标注面板" }),
-    ).toContainText("已经补充备份方案");
+    ).toContainText("侧边栏已更新");
 
     // Reload: the annotation lives in SQLite and comes back.
     await page.reload();
     await page.getByRole("button", { name: /打开标注面板/ }).click();
-    await expect(page.getByText("已经补充备份方案")).toBeVisible({
+    await expect(page.getByText("侧边栏已更新")).toBeVisible({
       timeout: 10_000,
     });
 
@@ -213,12 +253,33 @@ test.describe("authenticated mode", () => {
     await expect(async () => {
       await page.mouse.move(point.x + 2, point.y);
       await page.mouse.move(point.x, point.y);
-      await expect(page.getByRole("button", { name: "删除标注" })).toBeVisible({
+      await expect(
+        page.getByRole("button", { name: "删除", exact: true }),
+      ).toBeVisible({
         timeout: 500,
       });
     }).toPass({ timeout: 10_000 });
-    await page.getByRole("button", { name: "删除标注" }).click();
+    await page.getByRole("button", { name: "删除", exact: true }).click();
     await expect(page.getByText(/还没有标注/)).toBeVisible();
+  });
+
+  test("settings and width menus close after choosing an option", async ({
+    page,
+  }) => {
+    await login(page, "alice", "password-1");
+    await page.getByRole("button", { name: "设置" }).click();
+    const menu = page.getByRole("menu");
+    await expect(menu.getByText("显示主题", { exact: true })).toHaveCount(0);
+    await expect(menu.getByRole("menuitemradio")).toHaveText([
+      "系统主题",
+      "浅色主题",
+      "深色主题",
+    ]);
+    await menu.getByRole("menuitemradio", { name: "深色主题" }).click();
+    await expect(menu).toBeHidden();
+    await page.getByRole("button", { name: /文档宽度/ }).click();
+    await page.getByRole("menuitemradio", { name: "宽" }).click();
+    await expect(page.getByRole("menu")).toBeHidden();
   });
 
   test("token settings offer finite and permanent lifetimes", async ({

@@ -8,6 +8,7 @@ import {
   LoaderCircle,
   LocateFixed,
   MessageSquare,
+  Pencil,
   Trash2,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -22,6 +23,7 @@ import {
   exportSingleAnnotationMarkdown,
 } from "@/lib/annotation-export";
 import { copyText } from "@/lib/clipboard";
+import { AnnotationEditor } from "./annotation-editor";
 
 export type AnnotationAnchorStatus = "resolved" | "ambiguous" | "orphaned";
 
@@ -38,6 +40,7 @@ export interface AnnotationPanelProps {
   // Scrolls the body to the annotation's live position.
   onLocate(id: string): void;
   onDelete(id: string): void;
+  onEditComment?(id: string, comment: string): Promise<boolean>;
   // Starts the human re-anchor flow for one of the caller's unresolved
   // annotations: the reader switches to "select the new passage" mode.
   onReanchor?(id: string): void;
@@ -62,10 +65,13 @@ export function AnnotationPanel({
   document,
   onLocate,
   onDelete,
+  onEditComment,
   onReanchor,
   onCopyForAgent,
 }: AnnotationPanelProps) {
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [savingComment, setSavingComment] = useState(false);
   const [copied, setCopied] = useState(false);
   const [agentPending, setAgentPending] = useState(false);
   const [agentNotice, setAgentNotice] = useState<string | null>(null);
@@ -158,7 +164,22 @@ export function AnnotationPanel({
                   <blockquote className="border-border text-muted-foreground border-l-2 pl-2 text-xs leading-relaxed">
                     {item.selector.quote.exact}
                   </blockquote>
-                  {item.comment !== "" ? (
+                  {editingId === item.id && onEditComment ? (
+                    <AnnotationEditor
+                      initial={item.comment}
+                      autoFocus
+                      pending={savingComment}
+                      onCancel={() => setEditingId(null)}
+                      onSave={(comment) => {
+                        setSavingComment(true);
+                        void onEditComment(item.id, comment)
+                          .then((saved) => {
+                            if (saved) setEditingId(null);
+                          })
+                          .finally(() => setSavingComment(false));
+                      }}
+                    />
+                  ) : item.comment !== "" ? (
                     <p className="mt-1.5 whitespace-pre-wrap">{item.comment}</p>
                   ) : null}
                   <div className="text-muted-foreground mt-1.5 flex items-center gap-2 text-xs">
@@ -215,37 +236,50 @@ export function AnnotationPanel({
                       <ClipboardCopy aria-hidden="true" />
                     </Button>
                     {item.mine ? (
-                      confirming === item.id ? (
-                        <>
-                          <Button
-                            variant="destructive"
-                            size="xs"
-                            onClick={() => {
-                              onDelete(item.id);
-                              setConfirming(null);
-                            }}
-                          >
-                            确认删除
-                          </Button>
+                      <>
+                        {onEditComment ? (
                           <Button
                             variant="ghost"
-                            size="xs"
-                            onClick={() => setConfirming(null)}
+                            size="icon-xs"
+                            aria-label="编辑此评论"
+                            title="编辑此评论"
+                            onClick={() => setEditingId(item.id)}
                           >
-                            取消
+                            <Pencil aria-hidden="true" />
                           </Button>
-                        </>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="icon-xs"
-                          aria-label="删除此标注"
-                          title="删除此标注"
-                          onClick={() => setConfirming(item.id)}
-                        >
-                          <Trash2 aria-hidden="true" />
-                        </Button>
-                      )
+                        ) : null}
+                        {confirming === item.id ? (
+                          <>
+                            <Button
+                              variant="destructive"
+                              size="xs"
+                              onClick={() => {
+                                onDelete(item.id);
+                                setConfirming(null);
+                              }}
+                            >
+                              确认删除
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="xs"
+                              onClick={() => setConfirming(null)}
+                            >
+                              取消
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label="删除此标注"
+                            title="删除此标注"
+                            onClick={() => setConfirming(item.id)}
+                          >
+                            <Trash2 aria-hidden="true" />
+                          </Button>
+                        )}
+                      </>
                     ) : null}
                   </div>
                 </li>

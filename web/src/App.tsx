@@ -354,6 +354,7 @@ export function App({
   const [annotationSelectionVersion, setAnnotationSelectionVersion] =
     useState(0);
   const [tokenSettingsOpen, setTokenSettingsOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [tocShare, setTocShare] = useState(50);
   const [hoverAnnotation, setHoverAnnotation] = useState<{
     id: string;
@@ -376,6 +377,9 @@ export function App({
   const annotationIndexRef = useRef<TextIndex | null>(null);
   const annotationLayerRef = useRef<HighlightLayer | null>(null);
   const annotationPositionsRef = useRef<Map<string, TextPosition>>(new Map());
+  const [commentMarkers, setCommentMarkers] = useState<
+    Array<{ id: string; x: number; y: number }>
+  >([]);
   // The loaded document's content hash, read through a ref so the rebuild
   // callback keys on list changes only: an annotation whose stored hash
   // equals the loaded hash may trust its stored position, one from an
@@ -426,6 +430,43 @@ export function App({
   useEffect(() => {
     rebuildAnnotationLayer();
   }, [rebuildAnnotationLayer]);
+  useLayoutEffect(() => {
+    let frame = 0;
+    const update = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        const index = annotationIndexRef.current;
+        const markers = annotations.items.flatMap((item) => {
+          if (
+            !item.comment ||
+            !index ||
+            annotationStatuses[item.id] !== "resolved"
+          )
+            return [];
+          const position = annotationPositionsRef.current.get(item.id);
+          const rect = position
+            ? index.rangeFromSpan(position)?.getClientRects()[0]
+            : undefined;
+          return rect && rect.width > 0 && rect.height > 0
+            ? [{ id: item.id, x: rect.left, y: rect.top }]
+            : [];
+        });
+        setCommentMarkers(markers);
+      });
+    };
+    update();
+    window.addEventListener("scroll", update, true);
+    window.addEventListener("resize", update);
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    if (annotationBodyRef.current) observer?.observe(annotationBodyRef.current);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("scroll", update, true);
+      window.removeEventListener("resize", update);
+      observer?.disconnect();
+    };
+  }, [annotations.items, annotationStatuses]);
   useEffect(
     () => () => {
       annotationLayerRef.current?.release();
@@ -977,7 +1018,11 @@ export function App({
               {authIdentity !== null &&
               authIdentity !== undefined &&
               onLogout !== undefined ? (
-                <Menu.Root modal={false}>
+                <Menu.Root
+                  modal={false}
+                  open={settingsOpen}
+                  onOpenChange={setSettingsOpen}
+                >
                   <Tooltip>
                     <Menu.Trigger
                       render={
@@ -1003,11 +1048,8 @@ export function App({
                       sideOffset={6}
                       className="theme-menu-positioner"
                     >
-                      <Menu.Popup className="theme-menu-popup">
+                      <Menu.Popup className="theme-menu-popup settings-menu-popup">
                         <Menu.Group>
-                          <Menu.GroupLabel className="theme-menu-label">
-                            显示主题
-                          </Menu.GroupLabel>
                           <Menu.RadioGroup
                             value={preview.mode}
                             onValueChange={(value) => {
@@ -1024,9 +1066,14 @@ export function App({
                                 key={value}
                                 value={value}
                                 className="theme-menu-item"
+                                onClick={() => setSettingsOpen(false)}
                               >
                                 <Icon aria-hidden="true" />
-                                <span>{label}</span>
+                                <span>
+                                  {value === "auto"
+                                    ? "系统主题"
+                                    : `${label}主题`}
+                                </span>
                                 <Menu.RadioItemIndicator className="theme-menu-indicator">
                                   <Check aria-hidden="true" />
                                 </Menu.RadioItemIndicator>
@@ -1280,6 +1327,7 @@ export function App({
                     document={annotationExportDocument}
                     onLocate={locateAnnotation}
                     onDelete={(id) => void annotations.remove(id)}
+                    onEditComment={annotations.editComment}
                     onReanchor={startReanchor}
                     onCopyForAgent={tokensEnabled ? copyForAgent : undefined}
                   />
@@ -1287,6 +1335,26 @@ export function App({
               </div>
             </div>
           </div>
+          {commentMarkers.map((marker) => (
+            <span
+              key={marker.id}
+              className="annotation-comment-marker"
+              style={{ left: marker.x, top: marker.y }}
+              aria-hidden="true"
+            >
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M7.9 20.9A9 9 0 1 0 3.1 16L2 22Z" />
+                <path d="M8 10h8M8 14h5" />
+              </svg>
+            </span>
+          ))}
           {hoverAnnotation && hoveredItem ? (
             <>
               {/* biome-ignore lint/a11y/noStaticElementInteractions: Hover retains the contextual controls while moving the pointer. */}
@@ -1325,28 +1393,44 @@ export function App({
                   />
                 ) : (
                   <>
-                    <p>{hoveredItem.comment || "无评论"}</p>
-                    {hoveredItem.mine ? (
-                      <div className="flex gap-1">
+                    <div className="annotation-comment-box">
+                      {hoveredItem.comment || "无评论"}
+                    </div>
+                    <div className="annotation-hover-actions">
+                      {hoveredItem.mine ? (
                         <Button
                           size="xs"
                           variant="ghost"
-                          onClick={() => setEditingAnnotation(true)}
-                        >
-                          编辑评论
-                        </Button>
-                        <Button
-                          size="xs"
-                          variant="ghost"
+                          className="text-destructive hover:text-destructive"
                           onClick={() => {
                             void annotations.remove(hoveredItem.id);
                             setHoverAnnotation(null);
                           }}
                         >
-                          删除标注
+                          删除
+                        </Button>
+                      ) : (
+                        <span />
+                      )}
+                      <div className="flex gap-1">
+                        {hoveredItem.mine ? (
+                          <Button
+                            size="xs"
+                            variant="ghost"
+                            onClick={() => setEditingAnnotation(true)}
+                          >
+                            编辑
+                          </Button>
+                        ) : null}
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => setHoverAnnotation(null)}
+                        >
+                          关闭
                         </Button>
                       </div>
-                    ) : null}
+                    </div>
                   </>
                 )}
               </div>
@@ -1502,12 +1586,13 @@ function DocumentWidthMenu({
   width: DocumentWidth;
   onChange(width: DocumentWidth): void;
 }) {
+  const [open, setOpen] = useState(false);
   const current =
     documentWidths.find((item) => item.value === width) ?? documentWidths[0];
   const CurrentIcon = current.icon;
   return (
     // Non-modal: toolbar dropdowns must not trap focus or lock document scroll.
-    <Menu.Root modal={false}>
+    <Menu.Root modal={false} open={open} onOpenChange={setOpen}>
       <Tooltip>
         <Menu.Trigger
           render={
@@ -1554,6 +1639,7 @@ function DocumentWidthMenu({
                     key={value}
                     value={value}
                     className="theme-menu-item"
+                    onClick={() => setOpen(false)}
                   >
                     <Icon aria-hidden="true" />
                     <span>{label}</span>
@@ -1578,6 +1664,7 @@ function ThemeMenu({
   mode: Mode;
   onChange(mode: Mode): void;
 }) {
+  const [open, setOpen] = useState(false);
   const currentLabel = modes.find((item) => item.value === mode)?.label ?? mode;
   const CurrentIcon =
     modes.find((item) => item.value === mode)?.icon ?? SunMoon;
@@ -1590,7 +1677,7 @@ function ThemeMenu({
 
   return (
     // Non-modal: toolbar dropdowns must not trap focus or lock document scroll.
-    <Menu.Root modal={false}>
+    <Menu.Root modal={false} open={open} onOpenChange={setOpen}>
       <Tooltip>
         <Menu.Trigger
           render={
@@ -1626,6 +1713,7 @@ function ThemeMenu({
                     key={value}
                     value={value}
                     className="theme-menu-item"
+                    onClick={() => setOpen(false)}
                   >
                     <Icon aria-hidden="true" />
                     <span>{label}</span>

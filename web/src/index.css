@@ -489,6 +489,11 @@ body,
   transform-origin: var(--transform-origin);
 }
 
+.settings-menu-popup {
+  min-width: 11rem;
+  max-width: min(18rem, calc(100vw - 1rem));
+}
+
 .theme-menu-label {
   padding: 0.35rem 0.5rem;
   color: var(--muted-foreground);
@@ -598,7 +603,7 @@ body,
   z-index: 40;
   width: 290px;
   max-width: calc(100vw - 24px);
-  padding: 0.75rem;
+  padding: 0.5rem;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   background: var(--popover);
@@ -606,12 +611,38 @@ body,
   box-shadow: 0 8px 24px #0003;
   font-size: 0.875rem;
 }
-.annotation-hover-card p {
-  margin: 0 0 0.5rem;
+.annotation-comment-box {
+  min-height: 3.5rem;
+  padding: 0.375rem 0.5rem;
+  border: 1px solid var(--input);
+  border-radius: 0.5rem;
+  background: var(--background);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 10rem;
   overflow: auto;
+}
+.annotation-hover-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem;
+  padding-top: 0.375rem;
+}
+.annotation-comment-marker {
+  position: fixed;
+  z-index: 8;
+  transform: translateY(-75%);
+  pointer-events: none;
+  color: var(--primary);
+  background: var(--background);
+  border-radius: 50%;
+  line-height: 0;
+}
+.annotation-comment-marker svg {
+  width: 0.875rem;
+  height: 0.875rem;
+  stroke-width: 2;
 }
 .toolbar-control[aria-pressed="true"] {
   background: var(--accent);
