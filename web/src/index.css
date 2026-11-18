@@ -541,6 +541,83 @@ body,
   flex: 1;
 }
 
+.reader-rail-slot {
+  width: 0;
+  flex: 0 0 0;
+}
+.reader-rail-slot[data-open="true"] {
+  width: var(--reader-toc-width);
+  flex-basis: var(--reader-toc-width);
+}
+.reader-rail {
+  position: fixed;
+  top: 3rem;
+  right: 0;
+  z-index: 9;
+  width: var(--reader-toc-width);
+  height: calc(100svh - 3rem);
+  display: flex;
+  flex-direction: column;
+  background: var(--background);
+  box-shadow: inset 1px 0 var(--border);
+}
+.reader-rail-slot[data-open="false"] .reader-rail {
+  visibility: hidden;
+}
+.reader-rail .reader-toc-slot {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+}
+.reader-rail .reader-toc-slot[data-state="collapsed"] {
+  display: none;
+}
+.reader-rail .reader-toc {
+  position: static;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  transform: none;
+}
+.reader-rail[data-toc-open="true"][data-annotations-open="true"]
+  .reader-toc-slot {
+  flex: 0 0 var(--toc-share);
+}
+.reader-rail-resize {
+  flex: 0 0 6px;
+  cursor: row-resize;
+  background: var(--border);
+  touch-action: none;
+}
+.reader-rail-resize:hover,
+.reader-rail-resize:focus-visible {
+  background: var(--primary);
+}
+.annotation-hover-card {
+  position: fixed;
+  z-index: 40;
+  width: 290px;
+  max-width: calc(100vw - 24px);
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  background: var(--popover);
+  color: var(--popover-foreground);
+  box-shadow: 0 8px 24px #0003;
+  font-size: 0.875rem;
+}
+.annotation-hover-card p {
+  margin: 0 0 0.5rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 10rem;
+  overflow: auto;
+}
+.toolbar-control[aria-pressed="true"] {
+  background: var(--accent);
+  color: var(--accent-foreground);
+}
+
 /*
  * Floating reader navigation (reader-navigation.tsx): a stacked jump pair in
  * the reader's bottom-right corner. The plate rides above normal content but
@@ -1812,6 +1889,16 @@ body,
  * (TableOfContentsSheet), which opens the outline on demand.
  */
 @media (max-width: 1199px) {
+  .reader-rail-slot[data-open="true"] {
+    width: 0;
+    flex-basis: 0;
+  }
+  .reader-rail[data-annotations-open="false"] {
+    display: none;
+  }
+  .reader-rail-resize {
+    display: none;
+  }
   /* The whole two-layer rail goes: hiding the slot also drops its fixed
    * descendant, so the canvas reclaims the full width. */
   .reader-toc-slot {
@@ -1830,6 +1917,13 @@ body,
 
   .reader-toc-sheet-trigger {
     display: inline-flex;
+  }
+}
+
+@media (max-width: 767px) {
+  .reader-rail {
+    width: min(85vw, 20rem);
+    border: 0;
   }
 }
 

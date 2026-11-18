@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as clipboard from "@/lib/clipboard";
 import { TokenSettings } from "./token-settings";
@@ -37,7 +38,18 @@ beforeEach(() => {
 });
 
 function openDialog() {
-  render(<TokenSettings />);
+  function Harness() {
+    const [open, setOpen] = useState(false);
+    return (
+      <>
+        <button type="button" onClick={() => setOpen(true)}>
+          API 令牌设置
+        </button>
+        <TokenSettings open={open} onOpenChange={setOpen} />
+      </>
+    );
+  }
+  render(<Harness />);
   return userEvent.click(screen.getByRole("button", { name: "API 令牌设置" }));
 }
 
@@ -335,9 +347,20 @@ describe("TokenSettings in the app toolbar", () => {
       });
     });
     vi.stubGlobal("fetch", fetchCalls);
-    render(<App tokensAvailable />);
+    render(
+      <App
+        tokensAvailable
+        authIdentity={{
+          username: "alice",
+          displayName: "alice",
+          provider: "local",
+        }}
+        onLogout={() => {}}
+      />,
+    );
+    await userEvent.click(await screen.findByRole("button", { name: "设置" }));
     expect(
-      await screen.findByRole("button", { name: "API 令牌设置" }),
+      await screen.findByRole("menuitem", { name: "凭据管理" }),
     ).toBeTruthy();
     // And never without the capability.
     vi.stubGlobal(

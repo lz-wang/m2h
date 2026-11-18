@@ -1,11 +1,4 @@
-import {
-  Check,
-  ClipboardCopy,
-  KeyRound,
-  LoaderCircle,
-  Plus,
-  Trash2,
-} from "lucide-react";
+import { Check, ClipboardCopy, LoaderCircle, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { createToken, listTokens, revokeToken, type TokenItem } from "@/api";
@@ -15,7 +8,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { appPath } from "@/lib/base-path";
@@ -48,13 +40,18 @@ interface RootOption {
 // last-used time, revoke. Scope edits are deliberately absent — a token
 // whose reach changed would need re-issuing; revocation plus a new token
 // is the honest flow.
-export function TokenSettings() {
-  const [open, setOpen] = useState(false);
+export function TokenSettings({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange(open: boolean): void;
+}) {
   const [tokens, setTokens] = useState<TokenItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [expiresInDays, setExpiresInDays] = useState("180");
+  const [expiresInDays, setExpiresInDays] = useState("30");
   const [creating, setCreating] = useState(false);
   const [freshSecret, setFreshSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -170,7 +167,7 @@ export function TokenSettings() {
   // Closing the dialog drops the secret: the one-time display is exactly
   // that, and a stale secret must never reappear on reopen.
   const handleOpenChange = (next: boolean) => {
-    setOpen(next);
+    onOpenChange(next);
     if (!next) {
       setFreshSecret(null);
       setCopied(false);
@@ -195,7 +192,9 @@ export function TokenSettings() {
       const created = await createToken({
         kind: "persistent",
         name: trimmed,
-        expiresInDays: Number.isFinite(days) ? days : undefined,
+        ...(expiresInDays === "permanent"
+          ? { permanent: true }
+          : { expiresInDays: days }),
         scope: {
           permissions: ["document:read", "search:read"],
           resource:
@@ -228,19 +227,7 @@ export function TokenSettings() {
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogTrigger
-        render={
-          <Button
-            variant="ghost"
-            size="icon"
-            className="toolbar-control"
-            aria-label="API 令牌设置"
-          >
-            <KeyRound aria-hidden="true" />
-          </Button>
-        }
-      />
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="gap-4 overflow-y-auto p-5 sm:max-w-lg">
         <div className="flex flex-col gap-1.5">
           <DialogTitle>API 令牌</DialogTitle>
           <DialogDescription>
@@ -289,14 +276,24 @@ export function TokenSettings() {
                 placeholder="令牌名称（如 llm-agent）"
                 onChange={(event) => setName(event.target.value)}
               />
-              <Input
+              <select
                 value={expiresInDays}
-                aria-label="有效天数"
-                placeholder="180"
-                className="w-24"
-                inputMode="decimal"
+                aria-label="有效期"
+                className="border-border bg-background h-9 rounded-md border px-2 text-sm"
                 onChange={(event) => setExpiresInDays(event.target.value)}
-              />
+              >
+                <option value={String(10 / 1440)}>10 分钟</option>
+                <option value={String(30 / 1440)}>30 分钟</option>
+                <option value={String(1 / 24)}>1 小时</option>
+                <option value={String(6 / 24)}>6 小时</option>
+                <option value={String(12 / 24)}>12 小时</option>
+                <option value="1">24 小时</option>
+                <option value="3">3 天</option>
+                <option value="7">7 天</option>
+                <option value="30">30 天</option>
+                <option value="90">90 天</option>
+                <option value="permanent">永久</option>
+              </select>
               <Button
                 size="sm"
                 disabled={
@@ -399,10 +396,10 @@ export function TokenSettings() {
             </div>
             <p className="text-muted-foreground text-xs">
               {scopeType === "all_published"
-                ? "新令牌可读取全部已发布文档并使用搜索（有效期最长 365 天）。"
+                ? "新令牌可读取全部已发布文档并使用搜索。"
                 : scopeType === "root"
-                  ? "新令牌只能读取所选文档根目录下的文档（有效期最长 365 天）。"
-                  : "新令牌只能读取所选的单篇文档（有效期最长 365 天）。"}
+                  ? "新令牌只能读取所选文档根目录下的文档。"
+                  : "新令牌只能读取所选的单篇文档。"}
             </p>
           </div>
 
@@ -460,8 +457,10 @@ export function TokenSettings() {
                   </div>
                   <div className="text-muted-foreground mt-1 text-xs">
                     {describeScope(token)} ·{" "}
-                    {token.kind === "temporary" ? "临时" : "长期"} · 到期{" "}
-                    {new Date(token.expiresAt).toLocaleDateString()}
+                    {token.kind === "temporary" ? "临时" : "长期"} ·{" "}
+                    {token.expiresAt === 0
+                      ? "永久"
+                      : `到期 ${new Date(token.expiresAt).toLocaleString()}`}
                     {token.lastUsedAt > 0
                       ? ` · 最近使用 ${new Date(token.lastUsedAt).toLocaleString()}`
                       : " · 从未使用"}

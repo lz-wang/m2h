@@ -9,19 +9,11 @@ import {
   LocateFixed,
   MessageSquare,
   Trash2,
-  X,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AnnotationItem } from "@/api";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { useIsMobile } from "@/hooks/use-mobile";
 import {
   type ExportAnnotation,
   type ExportDocument,
@@ -41,6 +33,7 @@ export interface AnnotationPanelProps {
   loading: boolean;
   error: string | null;
   selectedId: string | null;
+  selectionVersion?: number;
   document: ExportDocument | null;
   // Scrolls the body to the annotation's live position.
   onLocate(id: string): void;
@@ -60,23 +53,40 @@ export interface AnnotationPanelProps {
 // with a badge instead of hiding entries — review is a shared view.
 export function AnnotationPanel({
   open,
-  onOpenChange,
   items,
   statuses,
   loading,
   error,
   selectedId,
+  selectionVersion,
   document,
   onLocate,
   onDelete,
   onReanchor,
   onCopyForAgent,
 }: AnnotationPanelProps) {
-  const isMobile = useIsMobile();
   const [confirming, setConfirming] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [agentPending, setAgentPending] = useState(false);
   const [agentNotice, setAgentNotice] = useState<string | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    // A second click on the same highlight must scroll its row again.
+    void selectionVersion;
+    if (!open || selectedId === null) return;
+    const panel = panelRef.current;
+    const row = panel?.querySelector<HTMLElement>(
+      `[data-annotation-id="${CSS.escape(selectedId)}"]`,
+    );
+    const viewport = row?.closest<HTMLElement>(
+      '[data-slot="scroll-area-viewport"]',
+    );
+    if (row && viewport)
+      viewport.scrollTop +=
+        row.getBoundingClientRect().top -
+        viewport.getBoundingClientRect().top -
+        12;
+  }, [open, selectedId, selectionVersion]);
 
   const asExport = (item: AnnotationItem): ExportAnnotation => ({
     id: item.id,
@@ -140,6 +150,7 @@ export function AnnotationPanel({
               return (
                 <li
                   key={item.id}
+                  data-annotation-id={item.id}
                   className={`border-border bg-card rounded-lg border p-2.5 text-sm transition-colors ${
                     selectedId === item.id ? "border-primary/60" : ""
                   }`}
@@ -308,40 +319,17 @@ export function AnnotationPanel({
         >
           <FileJson aria-hidden="true" />
         </Button>
-        {isMobile ? null : (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="关闭标注面板"
-            title="关闭标注面板"
-            onClick={() => onOpenChange(false)}
-          >
-            <X aria-hidden="true" />
-          </Button>
-        )}
       </div>
     </div>
   );
-
-  if (isMobile) {
-    return (
-      <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent side="right" className="w-[85vw] gap-3 p-4 sm:max-w-md">
-          <SheetHeader>
-            <SheetTitle>{header}</SheetTitle>
-          </SheetHeader>
-          {list}
-        </SheetContent>
-      </Sheet>
-    );
-  }
 
   if (!open) {
     return null;
   }
   return (
     <aside
-      className="border-border bg-background/95 reader-annotations flex h-full w-72 shrink-0 flex-col gap-3 border-l p-3"
+      ref={panelRef}
+      className="border-border bg-background reader-annotations flex min-h-0 w-full flex-1 flex-col gap-3 p-3"
       aria-label="标注面板"
     >
       {header}

@@ -7,6 +7,7 @@ import {
   Funnel,
   ImageOff,
   Inbox,
+  KeyRound,
   LoaderCircle,
   LogOut,
   Maximize2,
@@ -17,6 +18,7 @@ import {
   Sun,
   SunMoon,
   TriangleAlert,
+  UserRoundCog,
 } from "lucide-react";
 import type {
   CSSProperties,
@@ -43,6 +45,7 @@ import {
   type SearchResult,
   type TocItem,
 } from "./api";
+import { AnnotationEditor } from "./components/annotations/annotation-editor";
 import { AnnotationPanel } from "./components/annotations/annotation-panel";
 import { SelectionToolbar } from "./components/annotations/selection-toolbar";
 import { DocumentLightbox } from "./components/document-lightbox";
@@ -348,6 +351,17 @@ export function App({
   }, [annotationsEnabled, preview.document]);
   const annotations = useAnnotations(annotationsEnabled, annotationIdentity);
   const [annotationsOpen, setAnnotationsOpen] = useState(false);
+  const [annotationSelectionVersion, setAnnotationSelectionVersion] =
+    useState(0);
+  const [tokenSettingsOpen, setTokenSettingsOpen] = useState(false);
+  const [tocShare, setTocShare] = useState(50);
+  const [hoverAnnotation, setHoverAnnotation] = useState<{
+    id: string;
+    x: number;
+    y: number;
+  } | null>(null);
+  const [editingAnnotation, setEditingAnnotation] = useState(false);
+  const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The human re-anchor flow: the annotation awaiting a new passage, or
   // null. While pending, the selection toolbar serves the re-association
   // instead of creating new annotations.
@@ -425,6 +439,28 @@ export function App({
       rebuildAnnotationLayer();
     },
     [rebuildAnnotationLayer],
+  );
+  const annotationAt = (x: number, y: number): string | null => {
+    const index = annotationIndexRef.current;
+    if (!index) return null;
+    for (const [id, position] of annotationPositionsRef.current) {
+      const range = index.rangeFromSpan(position);
+      if (
+        range &&
+        Array.from(range.getClientRects()).some(
+          (rect) =>
+            x >= rect.left &&
+            x <= rect.right &&
+            y >= rect.top &&
+            y <= rect.bottom,
+        )
+      )
+        return id;
+    }
+    return null;
+  };
+  const hoveredItem = annotations.items.find(
+    (item) => item.id === hoverAnnotation?.id,
   );
   const locateAnnotation = useCallback(
     (id: string) => {
@@ -938,30 +974,95 @@ export function App({
                 width={preview.width}
                 onChange={preview.setWidth}
               />
-              <ThemeMenu mode={preview.mode} onChange={preview.setMode} />
               {authIdentity !== null &&
               authIdentity !== undefined &&
               onLogout !== undefined ? (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="toolbar-control"
-                        aria-label={`退出登录（${authIdentity.displayName}）`}
-                        onClick={() => void onLogout()}
-                      >
-                        <LogOut aria-hidden="true" />
-                      </Button>
-                    }
-                  />
-                  <TooltipContent side="bottom">
-                    退出登录（{authIdentity.displayName}）
-                  </TooltipContent>
-                </Tooltip>
+                <Menu.Root modal={false}>
+                  <Tooltip>
+                    <Menu.Trigger
+                      render={
+                        <TooltipTrigger
+                          render={
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="toolbar-control"
+                              aria-label="设置"
+                            />
+                          }
+                        />
+                      }
+                    >
+                      <UserRoundCog aria-hidden="true" />
+                    </Menu.Trigger>
+                    <TooltipContent side="bottom">设置</TooltipContent>
+                  </Tooltip>
+                  <Menu.Portal>
+                    <Menu.Positioner
+                      align="end"
+                      sideOffset={6}
+                      className="theme-menu-positioner"
+                    >
+                      <Menu.Popup className="theme-menu-popup">
+                        <Menu.Group>
+                          <Menu.GroupLabel className="theme-menu-label">
+                            显示主题
+                          </Menu.GroupLabel>
+                          <Menu.RadioGroup
+                            value={preview.mode}
+                            onValueChange={(value) => {
+                              if (
+                                value === "light" ||
+                                value === "dark" ||
+                                value === "auto"
+                              )
+                                preview.setMode(value);
+                            }}
+                          >
+                            {modes.map(({ value, label, icon: Icon }) => (
+                              <Menu.RadioItem
+                                key={value}
+                                value={value}
+                                className="theme-menu-item"
+                              >
+                                <Icon aria-hidden="true" />
+                                <span>{label}</span>
+                                <Menu.RadioItemIndicator className="theme-menu-indicator">
+                                  <Check aria-hidden="true" />
+                                </Menu.RadioItemIndicator>
+                              </Menu.RadioItem>
+                            ))}
+                          </Menu.RadioGroup>
+                        </Menu.Group>
+                        {tokensEnabled ? (
+                          <Menu.Item
+                            className="theme-menu-item"
+                            onClick={() => setTokenSettingsOpen(true)}
+                          >
+                            <KeyRound aria-hidden="true" />
+                            凭据管理
+                          </Menu.Item>
+                        ) : null}
+                        <Menu.Item
+                          className="theme-menu-item"
+                          onClick={() => void onLogout()}
+                        >
+                          <LogOut aria-hidden="true" />
+                          退出登录（{authIdentity.displayName}）
+                        </Menu.Item>
+                      </Menu.Popup>
+                    </Menu.Positioner>
+                  </Menu.Portal>
+                </Menu.Root>
+              ) : (
+                <ThemeMenu mode={preview.mode} onChange={preview.setMode} />
+              )}
+              {tokensEnabled ? (
+                <TokenSettings
+                  open={tokenSettingsOpen}
+                  onOpenChange={setTokenSettingsOpen}
+                />
               ) : null}
-              {tokensEnabled ? <TokenSettings /> : null}
               {annotationsEnabled ? (
                 <Tooltip>
                   <TooltipTrigger
@@ -974,7 +1075,7 @@ export function App({
                         aria-label={
                           annotationsOpen ? "收起标注面板" : "打开标注面板"
                         }
-                        onClick={() => setAnnotationsOpen((open) => !open)}
+                        onClick={() => setAnnotationsOpen(!annotationsOpen)}
                       >
                         <MessageSquare aria-hidden="true" />
                       </Button>
@@ -1007,7 +1108,49 @@ export function App({
             </div>
           </header>
 
-          <div className="reader-main" ref={readerMainRef}>
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: Pointer tracking reads text highlight geometry; existing text remains selectable. */}
+          <div
+            className="reader-main"
+            ref={readerMainRef}
+            onMouseMove={(event) => {
+              if (
+                editingAnnotation ||
+                !(event.target instanceof Node) ||
+                !annotationBodyRef.current?.contains(event.target)
+              )
+                return;
+              const id = annotationAt(event.clientX, event.clientY);
+              if (id) {
+                if (hoverTimer.current) {
+                  clearTimeout(hoverTimer.current);
+                  hoverTimer.current = null;
+                }
+                setHoverAnnotation((current) =>
+                  current?.id === id
+                    ? current
+                    : { id, x: event.clientX, y: event.clientY },
+                );
+              } else if (!hoverTimer.current)
+                hoverTimer.current = setTimeout(() => {
+                  setHoverAnnotation(null);
+                  hoverTimer.current = null;
+                }, 250);
+            }}
+            onClickCapture={(event) => {
+              if (
+                !(event.target instanceof Node) ||
+                !annotationBodyRef.current?.contains(event.target) ||
+                window.getSelection()?.toString()
+              )
+                return;
+              const id = annotationAt(event.clientX, event.clientY);
+              if (id) {
+                setAnnotationsOpen(true);
+                annotations.select(id);
+                setAnnotationSelectionVersion((value) => value + 1);
+              }
+            }}
+          >
             <div className={`reader-canvas reader-canvas-${preview.width}`}>
               {preview.visualError !== null ? (
                 <div className="asset-warning" role="status">
@@ -1041,33 +1184,174 @@ export function App({
              * (only the sheet handles narrow screens); `visible` drives its
              * expand/collapse animation, mirroring the sidebar's persistent
              * gap + container pair instead of mounting and unmounting. */}
-            {tocItems.length > 0 ? (
-              <TableOfContentsPanel
-                visible={preview.toc}
-                items={tocItems}
-                activeID={activeTocID}
-                onNavigate={(id) =>
-                  navigateToHeading(id, { behavior: "smooth", updateURL: true })
-                }
-              />
-            ) : null}
-            {annotationsEnabled ? (
-              <AnnotationPanel
-                open={annotationsOpen}
-                onOpenChange={setAnnotationsOpen}
-                items={annotations.items}
-                statuses={annotationStatuses}
-                loading={annotations.loading}
-                error={annotations.error}
-                selectedId={annotations.selectedId}
-                document={annotationExportDocument}
-                onLocate={locateAnnotation}
-                onDelete={(id) => void annotations.remove(id)}
-                onReanchor={startReanchor}
-                onCopyForAgent={tokensEnabled ? copyForAgent : undefined}
-              />
-            ) : null}
+            <div
+              className="reader-rail-slot"
+              data-open={
+                (preview.toc && tocItems.length > 0) || annotationsOpen
+              }
+            >
+              <div
+                className="reader-rail"
+                style={{ "--toc-share": `${tocShare}%` } as CSSProperties}
+                data-toc-open={preview.toc && tocItems.length > 0}
+                data-annotations-open={annotationsOpen}
+              >
+                {tocItems.length > 0 ? (
+                  <TableOfContentsPanel
+                    visible={preview.toc}
+                    items={tocItems}
+                    activeID={activeTocID}
+                    onNavigate={(id) =>
+                      navigateToHeading(id, {
+                        behavior: "smooth",
+                        updateURL: true,
+                      })
+                    }
+                  />
+                ) : null}
+                {preview.toc && tocItems.length > 0 && annotationsOpen ? (
+                  <>
+                    {/* biome-ignore lint/a11y/useSemanticElements: This focusable separator supports pointer and keyboard resizing. */}
+                    <div
+                      role="separator"
+                      aria-label="调整目录与标注高度"
+                      aria-orientation="horizontal"
+                      aria-valuenow={tocShare}
+                      aria-valuemin={20}
+                      aria-valuemax={80}
+                      tabIndex={0}
+                      className="reader-rail-resize"
+                      onPointerDown={(event) =>
+                        event.currentTarget.setPointerCapture(event.pointerId)
+                      }
+                      onPointerMove={(event) => {
+                        if (
+                          !event.currentTarget.hasPointerCapture(
+                            event.pointerId,
+                          )
+                        )
+                          return;
+                        const rect =
+                          event.currentTarget.parentElement?.getBoundingClientRect();
+                        if (rect)
+                          setTocShare(
+                            Math.max(
+                              20,
+                              Math.min(
+                                80,
+                                Math.round(
+                                  ((event.clientY - rect.top) / rect.height) *
+                                    100,
+                                ),
+                              ),
+                            ),
+                          );
+                      }}
+                      onKeyDown={(event) => {
+                        if (
+                          event.key === "ArrowUp" ||
+                          event.key === "ArrowDown"
+                        ) {
+                          event.preventDefault();
+                          setTocShare((value) =>
+                            Math.max(
+                              20,
+                              Math.min(
+                                80,
+                                value + (event.key === "ArrowUp" ? -5 : 5),
+                              ),
+                            ),
+                          );
+                        }
+                      }}
+                    />
+                  </>
+                ) : null}
+                {annotationsEnabled ? (
+                  <AnnotationPanel
+                    open={annotationsOpen}
+                    onOpenChange={setAnnotationsOpen}
+                    items={annotations.items}
+                    statuses={annotationStatuses}
+                    loading={annotations.loading}
+                    error={annotations.error}
+                    selectedId={annotations.selectedId}
+                    selectionVersion={annotationSelectionVersion}
+                    document={annotationExportDocument}
+                    onLocate={locateAnnotation}
+                    onDelete={(id) => void annotations.remove(id)}
+                    onReanchor={startReanchor}
+                    onCopyForAgent={tokensEnabled ? copyForAgent : undefined}
+                  />
+                ) : null}
+              </div>
+            </div>
           </div>
+          {hoverAnnotation && hoveredItem ? (
+            <>
+              {/* biome-ignore lint/a11y/noStaticElementInteractions: Hover retains the contextual controls while moving the pointer. */}
+              <div
+                className="annotation-hover-card"
+                style={{
+                  left: Math.min(hoverAnnotation.x, window.innerWidth - 310),
+                  top: Math.min(
+                    hoverAnnotation.y + 16,
+                    window.innerHeight - 170,
+                  ),
+                }}
+                onMouseEnter={() => {
+                  if (hoverTimer.current) {
+                    clearTimeout(hoverTimer.current);
+                    hoverTimer.current = null;
+                  }
+                }}
+                onMouseLeave={() => {
+                  if (!editingAnnotation) setHoverAnnotation(null);
+                }}
+              >
+                {editingAnnotation ? (
+                  <AnnotationEditor
+                    initial={hoveredItem.comment}
+                    autoFocus
+                    pending={false}
+                    onCancel={() => setEditingAnnotation(false)}
+                    onSave={(comment) => {
+                      void annotations
+                        .editComment(hoveredItem.id, comment)
+                        .then((ok) => {
+                          if (ok) setEditingAnnotation(false);
+                        });
+                    }}
+                  />
+                ) : (
+                  <>
+                    <p>{hoveredItem.comment || "无评论"}</p>
+                    {hoveredItem.mine ? (
+                      <div className="flex gap-1">
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => setEditingAnnotation(true)}
+                        >
+                          编辑评论
+                        </Button>
+                        <Button
+                          size="xs"
+                          variant="ghost"
+                          onClick={() => {
+                            void annotations.remove(hoveredItem.id);
+                            setHoverAnnotation(null);
+                          }}
+                        >
+                          删除标注
+                        </Button>
+                      </div>
+                    ) : null}
+                  </>
+                )}
+              </div>
+            </>
+          ) : null}
           {annotationsEnabled ? (
             <>
               {reanchorPending !== null ? (
@@ -1098,7 +1382,7 @@ export function App({
           {/* Floating edge jumps for the window-scrolled reader; one instance
            * for both single-file and directory previews. When the TOC rail is
            * up, the buttons shift left of it (see .reader-navigation CSS). */}
-          <ReaderNavigation tocVisible={tocVisible} />
+          <ReaderNavigation tocVisible={tocVisible || annotationsOpen} />
           {copyStatus !== null ? (
             <div className="copy-status" role="status" aria-live="polite">
               {copyStatus}

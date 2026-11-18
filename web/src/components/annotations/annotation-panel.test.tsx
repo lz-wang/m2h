@@ -114,11 +114,10 @@ describe("AnnotationPanel", () => {
     copySpy.mockRestore();
   });
 
-  it("shows the empty state and closes from the header", async () => {
-    const { onOpenChange } = renderPanel({ items: [], document: null });
+  it("shows the empty state without a header close button", () => {
+    renderPanel({ items: [], document: null });
     expect(screen.getByText(/还没有标注/)).toBeTruthy();
-    await userEvent.click(screen.getByRole("button", { name: "关闭标注面板" }));
-    expect(onOpenChange).toHaveBeenCalledWith(false);
+    expect(screen.queryByRole("button", { name: "关闭标注面板" })).toBeNull();
   });
 
   it("renders nothing when closed on desktop", () => {

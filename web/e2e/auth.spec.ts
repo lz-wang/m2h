@@ -108,11 +108,11 @@ test.describe("authenticated mode", () => {
 
   test("login opens the reader and survives reload", async ({ page }) => {
     await login(page, "alice", "password-1");
-    await expect(page.getByRole("button", { name: /退出登录/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "设置" })).toBeVisible();
 
     await page.reload();
     // The session cookie restored the reader — no login page.
-    await expect(page.getByRole("button", { name: /退出登录/ })).toBeVisible({
+    await expect(page.getByRole("button", { name: "设置" })).toBeVisible({
       timeout: 10_000,
     });
     const raw = await page.request.get(`${baseURL}/raw/README.md`);
@@ -121,7 +121,8 @@ test.describe("authenticated mode", () => {
 
   test("logout closes the reader", async ({ page }) => {
     await login(page, "alice", "password-1");
-    await page.getByRole("button", { name: /退出登录/ }).click();
+    await page.getByRole("button", { name: "设置" }).click();
+    await page.getByRole("menuitem", { name: /退出登录/ }).click();
     await expect(page.getByRole("heading", { name: "登录 m2h" })).toBeVisible();
     const raw = await page.request.get(`${baseURL}/raw/README.md`);
     expect(raw.status()).toBe(401);
@@ -163,21 +164,132 @@ test.describe("authenticated mode", () => {
     await page.getByPlaceholder("添加评论…").fill("需要补充备份方案");
     await page.getByRole("button", { name: "保存" }).click();
 
-    await page.getByRole("button", { name: /打开标注面板/ }).click();
-    await expect(page.getByText("需要补充备份方案")).toBeVisible();
+    const point = await page.evaluate(() => {
+      window.getSelection()?.removeAllRanges();
+      const text = document.querySelector("article p")?.firstChild;
+      if (!text) throw new Error("missing annotated text");
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, Math.min(4, text.textContent?.length ?? 0));
+      const rect = range.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    await expect(async () => {
+      await page.mouse.move(point.x + 2, point.y);
+      await page.mouse.move(point.x, point.y);
+      await expect(page.getByRole("button", { name: "编辑评论" })).toBeVisible({
+        timeout: 500,
+      });
+    }).toPass({ timeout: 10_000 });
+    await page.getByRole("button", { name: "编辑评论" }).click();
+    await page.getByPlaceholder("添加评论…").fill("已经补充备份方案");
+    await page.getByRole("button", { name: "保存" }).click();
+    await expect(page.locator(".annotation-hover-card")).toContainText(
+      "已经补充备份方案",
+    );
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.click(point.x, point.y);
+    await expect(
+      page.getByRole("complementary", { name: "标注面板" }),
+    ).toContainText("已经补充备份方案");
+    await expect(
+      page.getByRole("button", { name: "收起标注面板" }),
+    ).toHaveAttribute("aria-pressed", "true");
+
+    await page.getByRole("button", { name: "收起标注面板" }).click();
+    await page.getByRole("button", { name: "打开标注面板" }).click();
+    await expect(
+      page.getByRole("complementary", { name: "标注面板" }),
+    ).toContainText("已经补充备份方案");
 
     // Reload: the annotation lives in SQLite and comes back.
     await page.reload();
     await page.getByRole("button", { name: /打开标注面板/ }).click();
-    await expect(page.getByText("需要补充备份方案")).toBeVisible({
+    await expect(page.getByText("已经补充备份方案")).toBeVisible({
       timeout: 10_000,
     });
 
-    // The author deletes it; other users' delete controls never appear
-    // for bob.
-    await page.getByRole("button", { name: "删除此标注" }).click();
-    await page.getByRole("button", { name: "确认删除" }).click();
+    // The author can delete from the in-text hover card.
+    await expect(async () => {
+      await page.mouse.move(point.x + 2, point.y);
+      await page.mouse.move(point.x, point.y);
+      await expect(page.getByRole("button", { name: "删除标注" })).toBeVisible({
+        timeout: 500,
+      });
+    }).toPass({ timeout: 10_000 });
+    await page.getByRole("button", { name: "删除标注" }).click();
     await expect(page.getByText(/还没有标注/)).toBeVisible();
+  });
+
+  test("token settings offer finite and permanent lifetimes", async ({
+    page,
+  }) => {
+    await login(page, "alice", "password-1");
+    await page.getByRole("button", { name: "设置" }).click();
+    await page.getByRole("menuitem", { name: "凭据管理" }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByLabel("有效期").locator("option")).toHaveCount(11);
+    await dialog.getByLabel("令牌名称").fill("permanent-e2e");
+    await dialog.getByLabel("有效期").selectOption("permanent");
+    await dialog.getByRole("button", { name: "创建" }).click();
+    await expect(dialog.getByText("permanent-e2e")).toBeVisible();
+    await expect(dialog.getByText(/永久/).last()).toBeVisible();
+    await dialog.getByRole("button", { name: "撤销 permanent-e2e" }).click();
+    await dialog.getByRole("button", { name: "确认撤销" }).click();
+  });
+
+  test("outline and annotations share a fixed, resizable rail", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page, "alice", "password-1");
+    await page.goto(`${baseURL}/doc/toc-scroll.md`);
+    await expect(
+      page.getByRole("navigation", { name: "文档目录" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "打开标注面板" }).click();
+    const panel = page.getByRole("complementary", { name: "标注面板" });
+    const separator = page.getByRole("separator", {
+      name: "调整目录与标注高度",
+    });
+    await expect(panel).toBeVisible();
+    await expect(separator).toBeVisible();
+    const top = await panel.evaluate(
+      (element) => element.getBoundingClientRect().top,
+    );
+    await page.evaluate(() => window.scrollTo(0, 600));
+    expect(
+      await panel.evaluate((element) => element.getBoundingClientRect().top),
+    ).toBe(top);
+    await separator.focus();
+    await page.keyboard.press("ArrowUp");
+    await expect(separator).toHaveAttribute("aria-valuenow", "45");
+    const box = await separator.boundingBox();
+    if (!box) throw new Error("missing separator geometry");
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 80);
+    await page.mouse.up();
+    expect(
+      Number(await separator.getAttribute("aria-valuenow")),
+    ).toBeGreaterThan(45);
+    await page.getByRole("button", { name: "收起标注面板" }).click();
+    await expect(panel).toHaveCount(0);
+  });
+
+  test("annotation toggle also closes the mobile panel", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await login(page, "alice", "password-1");
+    await page.goto(`${baseURL}/doc/README.md`);
+    await page.getByRole("button", { name: "打开标注面板" }).click();
+    await expect(
+      page.getByRole("complementary", { name: "标注面板" }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "收起标注面板" }).click();
+    await expect(
+      page.getByRole("button", { name: "打开标注面板" }),
+    ).toBeVisible();
   });
 
   test("bearer tokens search and read within their scope", async ({
