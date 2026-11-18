@@ -460,6 +460,17 @@ export async function deleteAnnotation(id: string): Promise<void> {
   await requestMutation(appPath(`/api/annotations/${id}`), "DELETE");
 }
 
+export async function updateAnnotationComment(
+  id: string,
+  comment: string,
+): Promise<AnnotationItem> {
+  return parseAnnotationItem(
+    await requestMutation(appPath(`/api/annotations/${id}/comment`), "PATCH", {
+      comment,
+    }),
+  );
+}
+
 // reanchorAnnotation confirms a new selector for an annotation the caller
 // owns, after the document moved under it. The document hash states the
 // version the new selection was made on; a 409 means the document moved
@@ -564,6 +575,7 @@ export interface CreateTokenInput {
   kind: "temporary" | "persistent";
   name: string;
   expiresInDays?: number;
+  permanent?: boolean;
   scope: TokenScopeData;
   documentHash?: string;
 }

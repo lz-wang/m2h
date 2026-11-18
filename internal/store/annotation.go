@@ -132,6 +132,22 @@ func (store *Store) UpdateAnnotationSelector(ctx context.Context, id, authorID s
 	return nil
 }
 
+// UpdateAnnotationComment updates the author's comment.
+func (store *Store) UpdateAnnotationComment(ctx context.Context, id, authorID, comment string) error {
+	result, err := store.db.ExecContext(ctx, `UPDATE annotations SET comment = ?, updated_at = ? WHERE id = ? AND author_id = ?`, comment, time.Now().UnixMilli(), id, authorID)
+	if err != nil {
+		return err
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return ErrAnnotationNotFound
+	}
+	return nil
+}
+
 func nullString(value string) any {
 	if value == "" {
 		return nil

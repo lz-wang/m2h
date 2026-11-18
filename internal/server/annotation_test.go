@@ -2,9 +2,13 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -137,6 +141,103 @@ func TestAnnotationCreateListDeleteLifecycle(t *testing.T) {
 	}
 	if remaining := list(fixture.alice); len(remaining) != 0 {
 		t.Fatalf("annotation survived delete: %+v", remaining)
+	}
+}
+
+func TestAnnotationCommentEditingAuthorization(t *testing.T) {
+	fixture := newAnnotationFixture(t)
+	created := fixture.createAnnotation(t, fixture.alice, "原评论")
+	var entry annotationResponse
+	if err := json.NewDecoder(created.Body).Decode(&entry); err != nil {
+		t.Fatal(err)
+	}
+	created.Body.Close()
+	for _, test := range []struct {
+		name    string
+		session *http.Cookie
+		want    int
+	}{{"other author", fixture.bob, http.StatusForbidden}, {"author", fixture.alice, http.StatusOK}} {
+		t.Run(test.name, func(t *testing.T) {
+			request, _ := http.NewRequest(http.MethodPatch, fixture.server.URL+"/api/annotations/"+entry.ID+"/comment", strings.NewReader(`{"comment":"新评论"}`))
+			request.Header.Set("Origin", fixture.server.URL)
+			request.AddCookie(test.session)
+			response := fixture.do(request)
+			defer response.Body.Close()
+			if response.StatusCode != test.want {
+				t.Fatalf("status = %d", response.StatusCode)
+			}
+		})
+	}
+	updated, err := fixture.stack.dataStore.GetAnnotation(context.Background(), entry.ID)
+	if err != nil || updated.Comment != "新评论" {
+		t.Fatalf("updated = %+v, %v", updated, err)
+	}
+}
+
+func TestAnnotationCommentEditingValidation(t *testing.T) {
+	fixture := newAnnotationFixture(t)
+	created := fixture.createAnnotation(t, fixture.alice, "原评论")
+	var entry annotationResponse
+	if err := json.NewDecoder(created.Body).Decode(&entry); err != nil {
+		t.Fatal(err)
+	}
+	created.Body.Close()
+	for _, test := range []struct {
+		name, id, method, body string
+		want                   int
+	}{
+		{"invalid JSON", entry.ID, http.MethodPatch, "{", http.StatusBadRequest},
+		{"long comment", entry.ID, http.MethodPatch, `{"comment":"` + strings.Repeat("x", 10001) + `"}`, http.StatusBadRequest},
+		{"missing", "missing", http.MethodPatch, `{"comment":"x"}`, http.StatusNotFound},
+		{"wrong method", entry.ID, http.MethodPost, `{"comment":"x"}`, http.StatusMethodNotAllowed},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request, _ := http.NewRequest(test.method, fixture.server.URL+"/api/annotations/"+test.id+"/comment", strings.NewReader(test.body))
+			request.Header.Set("Origin", fixture.server.URL)
+			request.AddCookie(fixture.alice)
+			response := fixture.do(request)
+			defer response.Body.Close()
+			if response.StatusCode != test.want {
+				t.Fatalf("status = %d, want %d", response.StatusCode, test.want)
+			}
+		})
+	}
+}
+
+func TestAnnotationCommentEditingUnavailableDocument(t *testing.T) {
+	fixture := newAnnotationFixture(t)
+	created := fixture.createAnnotation(t, fixture.alice, "原评论")
+	var entry annotationResponse
+	if err := json.NewDecoder(created.Body).Decode(&entry); err != nil {
+		t.Fatal(err)
+	}
+	created.Body.Close()
+	if err := os.Remove(filepath.Join(fixture.docsDir, "guide.md")); err != nil {
+		t.Fatal(err)
+	}
+	request, _ := http.NewRequest(http.MethodPatch, fixture.server.URL+"/api/annotations/"+entry.ID+"/comment", strings.NewReader(`{"comment":"new"}`))
+	request.Header.Set("Origin", fixture.server.URL)
+	request.AddCookie(fixture.alice)
+	response := fixture.do(request)
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusNotFound {
+		t.Fatalf("status = %d", response.StatusCode)
+	}
+}
+
+func TestAnnotationCommentRequiresStoreAndSession(t *testing.T) {
+	handler := &documentHandler{}
+	request := httptest.NewRequest(http.MethodPatch, "/api/annotations/a/comment", strings.NewReader(`{"comment":"x"}`))
+	response := httptest.NewRecorder()
+	handler.serveUpdateAnnotationComment(response, request, "a")
+	if response.Code != http.StatusForbidden {
+		t.Fatalf("anonymous = %d", response.Code)
+	}
+	request = requestWithPrincipal(request, &principal{ID: "local:alice", Via: principalViaSession})
+	response = httptest.NewRecorder()
+	handler.serveUpdateAnnotationComment(response, request, "a")
+	if response.Code != http.StatusServiceUnavailable {
+		t.Fatalf("no store = %d", response.Code)
 	}
 }
 

@@ -74,6 +74,28 @@ func TestAnnotationRoundTrip(t *testing.T) {
 	}
 }
 
+func TestUpdateAnnotationComment(t *testing.T) {
+	dataStore, rootID := openAnnotated(t)
+	ctx := context.Background()
+	entry := sampleAnnotation(rootID, "原评论")
+	if err := dataStore.CreateAnnotation(ctx, &entry); err != nil {
+		t.Fatal(err)
+	}
+	if err := dataStore.UpdateAnnotationComment(ctx, entry.ID, "local:bob", "无权修改"); !errors.Is(err, ErrAnnotationNotFound) {
+		t.Fatalf("foreign edit: %v", err)
+	}
+	if err := dataStore.UpdateAnnotationComment(ctx, entry.ID, entry.AuthorID, "更新评论"); err != nil {
+		t.Fatal(err)
+	}
+	updated, err := dataStore.GetAnnotation(ctx, entry.ID)
+	if err != nil || updated.Comment != "更新评论" {
+		t.Fatalf("updated = %+v, %v", updated, err)
+	}
+	if err := dataStore.UpdateAnnotationComment(ctx, "missing", entry.AuthorID, "x"); !errors.Is(err, ErrAnnotationNotFound) {
+		t.Fatalf("missing edit: %v", err)
+	}
+}
+
 func TestAnnotationListOrdersOldestFirst(t *testing.T) {
 	dataStore, rootID := openAnnotated(t)
 	ctx := context.Background()

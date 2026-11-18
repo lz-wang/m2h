@@ -9,6 +9,7 @@ import {
   deleteAnnotation,
   listAnnotations,
   reanchorAnnotation,
+  updateAnnotationComment,
 } from "../api";
 
 // AnnotationState is the per-document annotation view: items are the
@@ -35,6 +36,7 @@ export interface UseAnnotationsResult extends AnnotationState {
   remove: (id: string) => Promise<void>;
   // Persists a human-confirmed re-anchor (new selector) for one item.
   reanchor: (id: string, selector: AnnotationSelectorData) => Promise<boolean>;
+  editComment: (id: string, comment: string) => Promise<boolean>;
   select: (id: string | null) => void;
   clearError: () => void;
 }
@@ -244,6 +246,38 @@ export function useAnnotations(
     setState((current) => ({ ...current, selectedId: id }));
   }, []);
 
+  const editComment = useCallback(
+    async (id: string, comment: string): Promise<boolean> => {
+      const writtenFor = identityRef.current;
+      if (writtenFor === null) return false;
+      try {
+        const updated = await updateAnnotationComment(id, comment);
+        if (sameDocument(identityRef.current, writtenFor)) {
+          if (
+            pendingWrites.current &&
+            sameDocument(pendingWrites.current.identity, writtenFor)
+          )
+            pendingWrites.current.changes.set(id, updated);
+          setState((current) => ({
+            ...current,
+            items: current.items.map((item) =>
+              item.id === id ? updated : item,
+            ),
+          }));
+        }
+        return true;
+      } catch (error) {
+        if (sameDocument(identityRef.current, writtenFor))
+          setState((current) => ({
+            ...current,
+            error: errorMessage(error, "更新评论失败"),
+          }));
+        return false;
+      }
+    },
+    [],
+  );
+
   const clearError = useCallback(() => {
     setState((current) => ({ ...current, error: null }));
   }, []);
@@ -254,6 +288,7 @@ export function useAnnotations(
     create,
     remove,
     reanchor,
+    editComment,
     select,
     clearError,
   };

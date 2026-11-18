@@ -327,6 +327,15 @@ func (handler *documentHandler) serveDeleteAnnotation(response http.ResponseWrit
 // /api/annotations/{id}/anchor (phase 4's human re-anchoring).
 func (handler *documentHandler) serveAnnotationItem(response http.ResponseWriter, request *http.Request) {
 	remainder := strings.TrimPrefix(request.URL.Path, "/api/annotations/")
+	if id, ok := strings.CutSuffix(remainder, "/comment"); ok && id != "" && !strings.Contains(id, "/") {
+		if request.Method != http.MethodPatch {
+			response.Header().Set("Allow", http.MethodPatch)
+			writeJSONError(response, http.StatusMethodNotAllowed, "method not allowed")
+			return
+		}
+		handler.serveUpdateAnnotationComment(response, request, id)
+		return
+	}
 	if id, ok := strings.CutSuffix(remainder, "/anchor"); ok && id != "" {
 		if request.Method != http.MethodPatch {
 			response.Header().Set("Allow", http.MethodPatch)
@@ -337,6 +346,62 @@ func (handler *documentHandler) serveAnnotationItem(response http.ResponseWriter
 		return
 	}
 	handler.serveDeleteAnnotation(response, request)
+}
+
+func (handler *documentHandler) serveUpdateAnnotationComment(response http.ResponseWriter, request *http.Request, id string) {
+	identity := principalFromRequest(request)
+	if identity == nil || identity.Via != principalViaSession {
+		writeJSONError(response, http.StatusForbidden, "annotation editing requires a browser session")
+		return
+	}
+	dataStore := handler.annotationStore()
+	if dataStore == nil {
+		writeJSONError(response, http.StatusServiceUnavailable, "annotations are not available")
+		return
+	}
+	request.Body = http.MaxBytesReader(response, request.Body, 64<<10)
+	var body struct {
+		Comment string `json:"comment"`
+	}
+	if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
+		writeJSONError(response, http.StatusBadRequest, "invalid annotation request")
+		return
+	}
+	if err := annotation.ValidateComment(body.Comment); err != nil {
+		writeJSONError(response, http.StatusBadRequest, err.Error())
+		return
+	}
+	entry, err := dataStore.GetAnnotation(request.Context(), id)
+	if err != nil {
+		if errors.Is(err, store.ErrAnnotationNotFound) {
+			writeJSONError(response, http.StatusNotFound, "annotation not found")
+		} else {
+			writeJSONError(response, http.StatusInternalServerError, "load annotation")
+		}
+		return
+	}
+	if _, _, err := handler.resolveAnnotationDocument(documentRefRequest{RootID: entry.RootID, Path: entry.DocumentPath}); err != nil {
+		writeJSONError(response, http.StatusNotFound, "annotation not found")
+		return
+	}
+	if entry.AuthorID != identity.ID {
+		writeJSONError(response, http.StatusForbidden, "only the author can edit this annotation")
+		return
+	}
+	if err := dataStore.UpdateAnnotationComment(request.Context(), id, identity.ID, body.Comment); err != nil {
+		if errors.Is(err, store.ErrAnnotationNotFound) {
+			writeJSONError(response, http.StatusNotFound, "annotation not found")
+		} else {
+			writeJSONError(response, http.StatusInternalServerError, "update annotation")
+		}
+		return
+	}
+	entry, err = dataStore.GetAnnotation(request.Context(), id)
+	if err != nil {
+		writeJSONError(response, http.StatusInternalServerError, "load annotation")
+		return
+	}
+	writeJSON(response, http.StatusOK, annotationResponseFrom(entry, identity.ID))
 }
 
 // serveReanchorAnnotation answers PATCH /api/annotations/{id}/anchor: the
