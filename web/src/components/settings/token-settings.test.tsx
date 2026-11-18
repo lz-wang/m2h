@@ -26,7 +26,7 @@ function tokenPayload(
       resource: { type: "all_published" },
     },
     createdAt: 1,
-    expiresAt: 2,
+    expiresAt: 0,
     lastUsedAt: 0,
     ...overrides,
   };
@@ -61,7 +61,34 @@ describe("TokenSettings", () => {
     await openDialog();
     await waitFor(() => expect(screen.getByText("llm-agent")).toBeTruthy());
     expect(screen.getAllByText(/全部已发布文档/).length).toBeGreaterThan(0);
-    expect(screen.getByText(/最近使用/)).toBeTruthy();
+    expect(screen.getByRole("columnheader", { name: "上次使用" })).toBeTruthy();
+  });
+
+  it("filters expired tokens and sorts table columns", async () => {
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({
+        tokens: [
+          tokenPayload({
+            id: "a",
+            name: "Alpha",
+            expiresAt: Date.now() + 60000,
+          }),
+          tokenPayload({ id: "b", name: "Beta", expiresAt: 0 }),
+          tokenPayload({ id: "c", name: "Expired", expiresAt: 1 }),
+        ],
+      }),
+    );
+    await openDialog();
+    await screen.findByText("Alpha");
+    expect(screen.queryByText("Expired")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "令牌名称" }));
+    const rows = screen.getAllByRole("row");
+    expect(rows[1]?.textContent).toContain("Beta");
+    expect(
+      screen
+        .getByRole("columnheader", { name: "令牌名称" })
+        .getAttribute("aria-sort"),
+    ).toBe("descending");
   });
 
   it("creates a token and shows the secret exactly once", async () => {
@@ -71,7 +98,7 @@ describe("TokenSettings", () => {
         jsonResponse(tokenPayload({ id: "t2", secret: "m2h_secret_once" })),
       );
     await openDialog();
-    await waitFor(() => expect(screen.getByText(/还没有令牌/)).toBeTruthy());
+    await userEvent.click(await screen.findByRole("button", { name: "新建" }));
 
     await userEvent.type(screen.getByLabelText("令牌名称"), "agent");
     await userEvent.click(screen.getByRole("button", { name: "创建" }));
@@ -112,6 +139,7 @@ describe("TokenSettings", () => {
         jsonResponse(tokenPayload({ secret: "m2h_copy_me" })),
       );
     await openDialog();
+    await userEvent.click(await screen.findByRole("button", { name: "新建" }));
     await userEvent.type(screen.getByLabelText("令牌名称"), "x");
     await userEvent.click(screen.getByRole("button", { name: "创建" }));
     await userEvent.click(
@@ -121,17 +149,18 @@ describe("TokenSettings", () => {
     copySpy.mockRestore();
   });
 
-  it("refuses to create without a name", async () => {
-    fetchMock.mockResolvedValueOnce(jsonResponse({ tokens: [] }));
+  it("generates a name and uses the default scope and duration", async () => {
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ tokens: [] }))
+      .mockResolvedValueOnce(jsonResponse(tokenPayload({ secret: "secret" })));
     await openDialog();
-    await waitFor(() => expect(screen.getByText(/还没有令牌/)).toBeTruthy());
-    expect(screen.getByRole("button", { name: "创建" })).toBeTruthy();
-    // The button is disabled while the name is empty; fetch untouched.
-    const button = screen.getByRole("button", {
-      name: "创建",
-    }) as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    await userEvent.click(await screen.findByRole("button", { name: "新建" }));
+    await userEvent.click(screen.getByRole("button", { name: "创建" }));
+    await screen.findByText("secret");
+    const body = JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body));
+    expect(body.name).toMatch(/^[a-f0-9]{7}$/);
+    expect(body.expiresInDays).toBe(30 / 1440);
+    expect(body.scope.resource.type).toBe("all_published");
   });
 
   it("drops the fresh secret when the dialog closes and reopens", async () => {
@@ -142,7 +171,7 @@ describe("TokenSettings", () => {
       )
       .mockResolvedValueOnce(jsonResponse({ tokens: [] }));
     await openDialog();
-    await waitFor(() => expect(screen.getByText(/还没有令牌/)).toBeTruthy());
+    await userEvent.click(await screen.findByRole("button", { name: "新建" }));
     await userEvent.type(screen.getByLabelText("令牌名称"), "agent");
     await userEvent.click(screen.getByRole("button", { name: "创建" }));
     expect(await screen.findByText("m2h_ephemeral")).toBeTruthy();
@@ -150,8 +179,7 @@ describe("TokenSettings", () => {
     // Close the dialog (Escape), reopen it: the secret must not reappear.
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByText("m2h_ephemeral")).toBeNull());
-    await userEvent.click(screen.getByRole("button", { name: "API 令牌设置" }));
-    await waitFor(() => expect(screen.getByText(/还没有令牌/)).toBeTruthy());
+    await userEvent.click(screen.getByRole("button", { name: "新建" }));
     expect(screen.queryByText("m2h_ephemeral")).toBeNull();
     expect(screen.queryByText(/仅显示这一次/)).toBeNull();
   });
@@ -197,7 +225,7 @@ describe("TokenSettings", () => {
         return jsonResponse({ tokens: [] });
       });
     await openDialog();
-    await waitFor(() => expect(screen.getByText(/还没有令牌/)).toBeTruthy());
+    await userEvent.click(await screen.findByRole("button", { name: "新建" }));
 
     await userEvent.selectOptions(
       screen.getByLabelText("访问范围"),
@@ -252,7 +280,7 @@ describe("TokenSettings", () => {
         return jsonResponse({ tokens: [] });
       });
     await openDialog();
-    await waitFor(() => expect(screen.getByText(/还没有令牌/)).toBeTruthy());
+    await userEvent.click(await screen.findByRole("button", { name: "新建" }));
 
     await userEvent.selectOptions(
       screen.getByLabelText("访问范围"),
@@ -298,7 +326,7 @@ describe("TokenSettings", () => {
         return jsonResponse({ tokens: [] });
       });
     await openDialog();
-    await waitFor(() => expect(screen.getByText(/还没有令牌/)).toBeTruthy());
+    await userEvent.click(await screen.findByRole("button", { name: "新建" }));
 
     await userEvent.selectOptions(
       screen.getByLabelText("访问范围"),

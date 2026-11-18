@@ -1,14 +1,18 @@
-import { Check, ClipboardCopy, LoaderCircle, Plus, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Check,
+  ClipboardCopy,
+  LoaderCircle,
+  Plus,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { createToken, listTokens, revokeToken, type TokenItem } from "@/api";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { appPath } from "@/lib/base-path";
 import { copyText } from "@/lib/clipboard";
@@ -48,10 +52,30 @@ export function TokenSettings({
   onOpenChange(open: boolean): void;
 }) {
   const [tokens, setTokens] = useState<TokenItem[]>([]);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!open) return;
+    const nextExpiry = Math.min(
+      ...tokens
+        .map((token) => token.expiresAt)
+        .filter((expiry) => expiry > now),
+    );
+    if (!Number.isFinite(nextExpiry)) return;
+    const timer = window.setTimeout(
+      () => setNow(Date.now()),
+      Math.min(nextExpiry - now + 1, 2_147_483_647),
+    );
+    return () => window.clearTimeout(timer);
+  }, [open, tokens, now]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
-  const [expiresInDays, setExpiresInDays] = useState("30");
+  const [expiresInDays, setExpiresInDays] = useState(String(30 / 1440));
+  const [createOpen, setCreateOpen] = useState(false);
+  const [sort, setSort] = useState<{
+    key: "name" | "scope" | "expiresAt" | "lastUsedAt";
+    ascending: boolean;
+  }>({ key: "name", ascending: true });
   const [creating, setCreating] = useState(false);
   const [freshSecret, setFreshSecret] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -168,15 +192,17 @@ export function TokenSettings({
   // that, and a stale secret must never reappear on reopen.
   const handleOpenChange = (next: boolean) => {
     onOpenChange(next);
+    if (next) setNow(Date.now());
     if (!next) {
       setFreshSecret(null);
+      setCreateOpen(false);
       setCopied(false);
     }
   };
 
   const create = async () => {
     const trimmed = name.trim();
-    if (trimmed === "" || creating) {
+    if (creating) {
       return;
     }
     if (scopeType !== "all_published" && rootId === "") {
@@ -191,7 +217,13 @@ export function TokenSettings({
       const days = Number.parseFloat(expiresInDays);
       const created = await createToken({
         kind: "persistent",
-        name: trimmed,
+        name:
+          trimmed ||
+          Array.from(crypto.getRandomValues(new Uint8Array(4)), (byte) =>
+            byte.toString(16).padStart(2, "0"),
+          )
+            .join("")
+            .slice(0, 7),
         ...(expiresInDays === "permanent"
           ? { permanent: true }
           : { expiresInDays: days }),
@@ -225,251 +257,351 @@ export function TokenSettings({
     }
   };
 
+  const visibleTokens = tokens
+    .filter((token) => token.expiresAt === 0 || token.expiresAt > now)
+    .sort((a, b) => {
+      const value = (token: TokenItem) =>
+        sort.key === "scope" ? describeScope(token) : token[sort.key];
+      const left = value(a);
+      const right = value(b);
+      const comparison =
+        typeof left === "number" && typeof right === "number"
+          ? sort.key === "expiresAt"
+            ? (left || Infinity) - (right || Infinity)
+            : left - right
+          : String(left).localeCompare(String(right), "zh-CN");
+      return (
+        (Number.isNaN(comparison) ? 0 : comparison) * (sort.ascending ? 1 : -1)
+      );
+    });
+  const headers = [
+    ["name", "令牌名称"],
+    ["scope", "访问范围"],
+    ["expiresAt", "到期时间"],
+    ["lastUsedAt", "上次使用"],
+  ] as const;
+
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="gap-4 overflow-y-auto p-5 sm:max-w-lg">
-        <div className="flex flex-col gap-1.5">
+      <DialogContent
+        showCloseButton={false}
+        aria-describedby={undefined}
+        className="h-[80dvh] max-h-[80dvh] w-[calc(100vw-24px)] p-5 sm:max-w-5xl"
+      >
+        <div className="flex items-center justify-between gap-4 border-b pb-4">
           <DialogTitle>API 令牌</DialogTitle>
-          <DialogDescription>
-            为 Agent 或脚本签发只读访问凭证；明文仅创建时显示一次。
-          </DialogDescription>
+          <Button
+            size="sm"
+            onClick={() => {
+              setName("");
+              setExpiresInDays(String(30 / 1440));
+              setScopeType("all_published");
+              setDocumentPath("");
+              setFreshSecret(null);
+              setError(null);
+              setCreateOpen(true);
+            }}
+          >
+            <Plus aria-hidden="true" />
+            新建
+          </Button>
         </div>
-        <div className="flex flex-col gap-4">
-          {freshSecret !== null ? (
-            <div className="bg-muted/50 rounded-lg border p-3">
-              <p className="mb-2 text-sm font-medium">
-                令牌已创建，明文仅显示这一次：
-              </p>
-              <div className="flex items-center gap-2">
-                <code className="min-w-0 flex-1 overflow-x-auto rounded bg-background px-2 py-1 text-xs whitespace-nowrap">
-                  {freshSecret}
-                </code>
-                <Button
-                  variant="outline"
-                  size="icon-xs"
-                  aria-label="复制令牌"
-                  onClick={() => {
-                    void copyText(freshSecret).then((ok) => {
-                      setCopied(ok);
-                      window.setTimeout(() => setCopied(false), 1500);
-                    });
-                  }}
-                >
-                  {copied ? (
-                    <Check aria-hidden="true" />
-                  ) : (
-                    <ClipboardCopy aria-hidden="true" />
-                  )}
-                </Button>
-              </div>
-              <p className="text-muted-foreground mt-2 text-xs">
-                关闭后无法再次查看；丢失请撤销并重新创建。
-              </p>
-            </div>
-          ) : null}
-
-          <div className="flex flex-col gap-2">
-            <div className="flex items-center gap-2">
-              <Input
-                value={name}
-                aria-label="令牌名称"
-                placeholder="令牌名称（如 llm-agent）"
-                onChange={(event) => setName(event.target.value)}
-              />
-              <select
-                value={expiresInDays}
-                aria-label="有效期"
-                className="border-border bg-background h-9 rounded-md border px-2 text-sm"
-                onChange={(event) => setExpiresInDays(event.target.value)}
-              >
-                <option value={String(10 / 1440)}>10 分钟</option>
-                <option value={String(30 / 1440)}>30 分钟</option>
-                <option value={String(1 / 24)}>1 小时</option>
-                <option value={String(6 / 24)}>6 小时</option>
-                <option value={String(12 / 24)}>12 小时</option>
-                <option value="1">24 小时</option>
-                <option value="3">3 天</option>
-                <option value="7">7 天</option>
-                <option value="30">30 天</option>
-                <option value="90">90 天</option>
-                <option value="permanent">永久</option>
-              </select>
-              <Button
-                size="sm"
-                disabled={
-                  creating ||
-                  name.trim() === "" ||
-                  (scopeType !== "all_published" && rootId === "") ||
-                  (scopeType === "document" && documentPath === "")
-                }
-                onClick={() => void create()}
-              >
-                {creating ? (
-                  <LoaderCircle aria-hidden="true" className="animate-spin" />
-                ) : (
-                  <Plus aria-hidden="true" />
-                )}
-                创建
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <label
-                htmlFor="token-scope-type"
-                className="text-muted-foreground text-xs"
-              >
-                访问范围
-              </label>
-              <select
-                id="token-scope-type"
-                aria-label="访问范围"
-                className="border-border bg-background h-8 rounded-md border px-2 text-xs"
-                value={
-                  scopeType === "all_published"
-                    ? "全部已发布文档"
-                    : scopeType === "root"
-                      ? "指定文档根目录"
-                      : "指定单篇文档"
-                }
-                onChange={(event) => {
-                  const next = event.target.value;
-                  setScopeType(
-                    next === "指定文档根目录"
-                      ? "root"
-                      : next === "指定单篇文档"
-                        ? "document"
-                        : "all_published",
-                  );
-                }}
-              >
-                <option value="全部已发布文档">全部已发布文档</option>
-                <option value="指定文档根目录">指定文档根目录</option>
-                <option value="指定单篇文档">指定单篇文档</option>
-              </select>
-              {scopeType !== "all_published" ? (
-                rootsError !== null ? (
-                  <span className="text-destructive inline-flex items-center gap-1 text-xs">
-                    {rootsError}
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      aria-label="重试加载文档列表"
-                      onClick={() => setRoots(null)}
-                    >
-                      重试
-                    </Button>
-                  </span>
-                ) : (
-                  <select
-                    aria-label="文档根目录"
-                    className="border-border bg-background h-8 max-w-36 rounded-md border px-2 text-xs"
-                    value={rootId}
-                    onChange={(event) => {
-                      setRootId(event.target.value);
-                      setDocumentPath("");
-                    }}
-                  >
-                    {(roots ?? []).map((option) => (
-                      <option key={option.id} value={option.id}>
-                        {option.name}
-                      </option>
-                    ))}
-                  </select>
-                )
-              ) : null}
-              {scopeType === "document" && selectedRoot ? (
-                <select
-                  aria-label="文档路径"
-                  className="border-border bg-background h-8 max-w-44 rounded-md border px-2 text-xs"
-                  value={documentPath}
-                  onChange={(event) => setDocumentPath(event.target.value)}
-                >
-                  <option value="" disabled>
-                    选择文档…
-                  </option>
-                  {selectedRoot.paths.map((path) => (
-                    <option key={path} value={path}>
-                      {path}
-                    </option>
-                  ))}
-                </select>
-              ) : null}
-            </div>
-            <p className="text-muted-foreground text-xs">
-              {scopeType === "all_published"
-                ? "新令牌可读取全部已发布文档并使用搜索。"
-                : scopeType === "root"
-                  ? "新令牌只能读取所选文档根目录下的文档。"
-                  : "新令牌只能读取所选的单篇文档。"}
-            </p>
-          </div>
-
-          {error !== null ? (
-            <p className="text-destructive text-sm" role="alert">
-              {error}
-            </p>
-          ) : null}
-
+        {error !== null && !createOpen ? (
+          <p className="text-destructive text-sm" role="alert">
+            {error}
+          </p>
+        ) : null}
+        <div className="min-h-0 flex-1 overflow-auto">
           {loading ? (
-            <p className="text-muted-foreground text-sm">正在加载令牌…</p>
-          ) : tokens.length === 0 ? (
-            <p className="text-muted-foreground py-4 text-center text-sm">
+            <p className="text-muted-foreground py-6 text-sm">正在加载令牌…</p>
+          ) : visibleTokens.length === 0 ? (
+            <p className="text-muted-foreground py-10 text-center text-sm">
               还没有令牌。
             </p>
           ) : (
-            <ul className="flex max-h-64 flex-col gap-2 overflow-y-auto">
-              {tokens.map((token) => (
-                <li
-                  key={token.id}
-                  className="border-border rounded-lg border p-2.5 text-sm"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="font-medium">{token.name}</span>
-                    {confirming === token.id ? (
-                      <span className="flex items-center gap-1">
+            <table className="w-full min-w-[700px] text-left text-sm">
+              <thead className="bg-popover sticky top-0 text-muted-foreground">
+                <tr>
+                  {headers.map(([key, label]) => (
+                    <th
+                      key={key}
+                      scope="col"
+                      aria-sort={
+                        sort.key === key
+                          ? sort.ascending
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                      }
+                      className="border-b px-3 py-3 font-medium"
+                    >
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 hover:text-foreground"
+                        onClick={() =>
+                          setSort((current) => ({
+                            key,
+                            ascending:
+                              current.key === key ? !current.ascending : true,
+                          }))
+                        }
+                      >
+                        {label}
+                        {sort.key === key ? (
+                          sort.ascending ? (
+                            <ArrowUp className="size-3.5" />
+                          ) : (
+                            <ArrowDown className="size-3.5" />
+                          )
+                        ) : (
+                          <ArrowUpDown className="size-3.5" />
+                        )}
+                      </button>
+                    </th>
+                  ))}
+                  <th scope="col" className="border-b px-3 py-3 font-medium">
+                    操作
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleTokens.map((token) => (
+                  <tr
+                    key={token.id}
+                    className="border-b last:border-0 hover:bg-muted/40"
+                  >
+                    <td className="px-3 py-3 font-medium">{token.name}</td>
+                    <td className="px-3 py-3">{describeScope(token)}</td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {token.expiresAt === 0
+                        ? "永久"
+                        : new Date(token.expiresAt).toLocaleString()}
+                    </td>
+                    <td className="px-3 py-3 whitespace-nowrap">
+                      {token.lastUsedAt > 0
+                        ? new Date(token.lastUsedAt).toLocaleString()
+                        : "从未使用"}
+                    </td>
+                    <td className="px-3 py-3">
+                      {confirming === token.id ? (
+                        <span className="flex items-center gap-1">
+                          <Button
+                            variant="destructive"
+                            size="xs"
+                            onClick={() => {
+                              void revoke(token.id);
+                              setConfirming(null);
+                            }}
+                          >
+                            确认撤销
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="xs"
+                            onClick={() => setConfirming(null)}
+                          >
+                            取消
+                          </Button>
+                        </span>
+                      ) : (
                         <Button
-                          variant="destructive"
-                          size="xs"
-                          onClick={() => {
-                            void revoke(token.id);
-                            setConfirming(null);
-                          }}
+                          variant="ghost"
+                          size="icon-xs"
+                          aria-label={`撤销 ${token.name}`}
+                          onClick={() => setConfirming(token.id)}
                         >
-                          确认撤销
+                          <Trash2 aria-hidden="true" />
                         </Button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        <Dialog
+          open={createOpen}
+          onOpenChange={(next) => {
+            setCreateOpen(next);
+            if (!next) {
+              setFreshSecret(null);
+              setCopied(false);
+            }
+          }}
+        >
+          <DialogContent
+            aria-describedby={undefined}
+            className="gap-4 p-5 sm:max-w-lg"
+          >
+            <DialogTitle>新建 API 令牌</DialogTitle>
+            {freshSecret !== null ? (
+              <div className="bg-muted/50 rounded-lg border p-3">
+                <p className="mb-2 text-sm font-medium">
+                  令牌已创建，明文仅显示这一次：
+                </p>
+                <div className="flex items-center gap-2">
+                  <code className="min-w-0 flex-1 overflow-x-auto rounded bg-background px-2 py-1 text-xs whitespace-nowrap">
+                    {freshSecret}
+                  </code>
+                  <Button
+                    variant="outline"
+                    size="icon-xs"
+                    aria-label="复制令牌"
+                    onClick={() => {
+                      void copyText(freshSecret).then((ok) => {
+                        setCopied(ok);
+                        window.setTimeout(() => setCopied(false), 1500);
+                      });
+                    }}
+                  >
+                    {copied ? (
+                      <Check aria-hidden="true" />
+                    ) : (
+                      <ClipboardCopy aria-hidden="true" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <label
+                  htmlFor="token-name"
+                  className="flex flex-col gap-1.5 text-sm"
+                >
+                  令牌名称（可选）
+                  <Input
+                    value={name}
+                    id="token-name"
+                    aria-label="令牌名称"
+                    placeholder="留空自动生成"
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </label>
+                <label className="flex flex-col gap-1.5 text-sm">
+                  有效期
+                  <select
+                    value={expiresInDays}
+                    aria-label="有效期"
+                    className="border-border bg-background h-9 rounded-md border px-2 text-sm"
+                    onChange={(event) => setExpiresInDays(event.target.value)}
+                  >
+                    <option value={String(10 / 1440)}>10 分钟</option>
+                    <option value={String(30 / 1440)}>30 分钟</option>
+                    <option value={String(1 / 24)}>1 小时</option>
+                    <option value={String(6 / 24)}>6 小时</option>
+                    <option value={String(12 / 24)}>12 小时</option>
+                    <option value="1">24 小时</option>
+                    <option value="3">3 天</option>
+                    <option value="7">7 天</option>
+                    <option value="30">30 天</option>
+                    <option value="90">90 天</option>
+                    <option value="permanent">永久</option>
+                  </select>
+                </label>
+                <div className="flex flex-col gap-1.5 text-sm">
+                  <label htmlFor="token-scope-type">访问范围</label>
+                  <select
+                    id="token-scope-type"
+                    aria-label="访问范围"
+                    className="border-border bg-background h-8 rounded-md border px-2 text-xs"
+                    value={
+                      scopeType === "all_published"
+                        ? "全部已发布文档"
+                        : scopeType === "root"
+                          ? "指定文档根目录"
+                          : "指定单篇文档"
+                    }
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setScopeType(
+                        next === "指定文档根目录"
+                          ? "root"
+                          : next === "指定单篇文档"
+                            ? "document"
+                            : "all_published",
+                      );
+                    }}
+                  >
+                    <option value="全部已发布文档">全部已发布文档</option>
+                    <option value="指定文档根目录">指定文档根目录</option>
+                    <option value="指定单篇文档">指定单篇文档</option>
+                  </select>
+                  {scopeType !== "all_published" ? (
+                    rootsError !== null ? (
+                      <span className="text-destructive inline-flex items-center gap-1 text-xs">
+                        {rootsError}
                         <Button
                           variant="ghost"
                           size="xs"
-                          onClick={() => setConfirming(null)}
+                          aria-label="重试加载文档列表"
+                          onClick={() => setRoots(null)}
                         >
-                          取消
+                          重试
                         </Button>
                       </span>
                     ) : (
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={`撤销 ${token.name}`}
-                        onClick={() => setConfirming(token.id)}
+                      <select
+                        aria-label="文档根目录"
+                        className="border-border bg-background h-8 max-w-36 rounded-md border px-2 text-xs"
+                        value={rootId}
+                        onChange={(event) => {
+                          setRootId(event.target.value);
+                          setDocumentPath("");
+                        }}
                       >
-                        <Trash2 aria-hidden="true" />
-                      </Button>
-                    )}
-                  </div>
-                  <div className="text-muted-foreground mt-1 text-xs">
-                    {describeScope(token)} ·{" "}
-                    {token.kind === "temporary" ? "临时" : "长期"} ·{" "}
-                    {token.expiresAt === 0
-                      ? "永久"
-                      : `到期 ${new Date(token.expiresAt).toLocaleString()}`}
-                    {token.lastUsedAt > 0
-                      ? ` · 最近使用 ${new Date(token.lastUsedAt).toLocaleString()}`
-                      : " · 从未使用"}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+                        {(roots ?? []).map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.name}
+                          </option>
+                        ))}
+                      </select>
+                    )
+                  ) : null}
+                  {scopeType === "document" && selectedRoot ? (
+                    <select
+                      aria-label="文档路径"
+                      className="border-border bg-background h-8 max-w-44 rounded-md border px-2 text-xs"
+                      value={documentPath}
+                      onChange={(event) => setDocumentPath(event.target.value)}
+                    >
+                      <option value="" disabled>
+                        选择文档…
+                      </option>
+                      {selectedRoot.paths.map((path) => (
+                        <option key={path} value={path}>
+                          {path}
+                        </option>
+                      ))}
+                    </select>
+                  ) : null}
+                </div>
+                <Button
+                  className="self-end"
+                  size="sm"
+                  disabled={
+                    creating ||
+                    (scopeType !== "all_published" && rootId === "") ||
+                    (scopeType === "document" && documentPath === "")
+                  }
+                  onClick={() => void create()}
+                >
+                  {creating ? (
+                    <LoaderCircle aria-hidden="true" className="animate-spin" />
+                  ) : (
+                    <Plus aria-hidden="true" />
+                  )}
+                  创建
+                </Button>
+              </div>
+            )}
+            {error !== null ? (
+              <p className="text-destructive text-sm" role="alert">
+                {error}
+              </p>
+            ) : null}
+          </DialogContent>
+        </Dialog>
       </DialogContent>
     </Dialog>
   );

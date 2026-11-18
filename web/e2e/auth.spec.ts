@@ -374,12 +374,18 @@ test.describe("authenticated mode", () => {
     await login(page, "alice", "password-1");
     await page.getByRole("button", { name: "设置" }).click();
     await page.getByRole("menuitem", { name: "凭据管理" }).click();
-    const dialog = page.getByRole("dialog");
+    const dialog = page.getByRole("dialog", { name: "API 令牌", exact: true });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByLabel("有效期").locator("option")).toHaveCount(11);
-    await dialog.getByLabel("令牌名称").fill("permanent-e2e");
-    await dialog.getByLabel("有效期").selectOption("permanent");
-    await dialog.getByRole("button", { name: "创建" }).click();
+    await dialog.getByRole("button", { name: "新建" }).click();
+    const createDialog = page.getByRole("dialog", { name: "新建 API 令牌" });
+    await expect(
+      createDialog.getByLabel("有效期").locator("option"),
+    ).toHaveCount(11);
+    await createDialog.getByLabel("令牌名称").fill("permanent-e2e");
+    await createDialog.getByLabel("有效期").selectOption("permanent");
+    await createDialog.getByRole("button", { name: "创建" }).click();
+    await expect(createDialog.getByText(/令牌已创建/)).toBeVisible();
+    await createDialog.getByRole("button", { name: "关闭" }).click();
     await expect(dialog.getByText("permanent-e2e")).toBeVisible();
     await expect(dialog.getByText(/永久/).last()).toBeVisible();
     await dialog.getByRole("button", { name: "撤销 permanent-e2e" }).click();
