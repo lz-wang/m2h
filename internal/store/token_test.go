@@ -268,10 +268,15 @@ func TestTokenCleanupRetention(t *testing.T) {
 	recent := tokenFixture("local:alice", -time.Hour)
 	recent.record.Kind = string(auth.TokenTemporary)
 	active := tokenFixture("local:alice", time.Hour)
-	for _, entry := range []*storeTokenFixture{&old, &recent, &active} {
+	revoked := tokenFixture("local:alice", -8*24*time.Hour)
+	revoked.record.Kind = string(auth.TokenTemporary)
+	for _, entry := range []*storeTokenFixture{&old, &recent, &active, &revoked} {
 		if err := dataStore.CreateToken(ctx, &entry.record); err != nil {
 			t.Fatal(err)
 		}
+	}
+	if _, err := dataStore.RevokeToken(ctx, revoked.record.ID, "local:alice"); err != nil {
+		t.Fatal(err)
 	}
 	listed, err := dataStore.ListTokens(ctx, "local:alice")
 	if err != nil || len(listed) != 1 || listed[0].ID != active.record.ID {
@@ -281,7 +286,7 @@ func TestTokenCleanupRetention(t *testing.T) {
 		t.Fatal(err)
 	}
 	var count int
-	if err := dataStore.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM api_tokens").Scan(&count); err != nil || count != 2 {
+	if err := dataStore.DB().QueryRowContext(ctx, "SELECT COUNT(*) FROM api_tokens").Scan(&count); err != nil || count != 3 {
 		t.Fatalf("remaining = %d, %v", count, err)
 	}
 }

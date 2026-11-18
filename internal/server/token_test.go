@@ -63,6 +63,30 @@ func TestTokenContentMatchesResponseBytes(t *testing.T) {
 	}
 }
 
+func TestBoundTokenChecksServedBytesOnEachRoute(t *testing.T) {
+	workspace := multiRootFixture(t)
+	handler := &documentHandler{workspace: workspace}
+	for _, test := range []struct {
+		name  string
+		path  string
+		serve http.HandlerFunc
+	}{
+		{"raw", "/raw/r0/README.md", handler.serveRawMarkdown},
+		{"document", "/api/document?path=r0/README.md", handler.serveDocument},
+		{"metadata", "/api/file-metadata?path=r0/README.md", handler.serveFileMetadata},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodGet, test.path, nil)
+			request = request.WithContext(context.WithValue(request.Context(), tokenRecordContextKey{}, store.TokenRecord{DocumentHash: "sha256:stale"}))
+			response := httptest.NewRecorder()
+			test.serve(response, request)
+			if response.Code != http.StatusConflict || !bytes.Contains(response.Body.Bytes(), []byte("document_changed")) {
+				t.Fatalf("status = %d, body = %s", response.Code, response.Body.String())
+			}
+		})
+	}
+}
+
 // tokenFixtureServer extends the authenticated fixture with token helpers.
 type tokenFixture struct {
 	*authedTestServer

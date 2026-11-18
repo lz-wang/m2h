@@ -86,7 +86,7 @@ func (store *Store) ListTokens(ctx context.Context, ownerID string) ([]TokenReco
 // CleanupTokens removes expired temporary tokens and revoked tokens after retention.
 func (store *Store) CleanupTokens(ctx context.Context, before time.Time) error {
 	_, err := store.db.ExecContext(ctx, `DELETE FROM api_tokens
-		WHERE (kind = 'temporary' AND expires_at < ?) OR (revoked_at IS NOT NULL AND revoked_at < ?)`,
+		WHERE (kind = 'temporary' AND revoked_at IS NULL AND expires_at < ?) OR (revoked_at IS NOT NULL AND revoked_at < ?)`,
 		before.UnixMilli(), before.UnixMilli())
 	return err
 }

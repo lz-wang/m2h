@@ -56,9 +56,8 @@ type authStack struct {
 	// persist through it.
 	dataStore *store.Store
 	// publicOrigin is the configured external origin (M2H_PUBLIC_URL
-	// without a path), or "" when unconfigured. Same-origin checks accept
-	// it in addition to the request's own Host, so deployments behind a
-	// proxy with rewritten Host headers keep working.
+	// without a path), or "" when unconfigured. When set, it is the only
+	// accepted origin for state-changing requests.
 	publicOrigin string
 }
 
@@ -338,8 +337,8 @@ func (handler *documentHandler) serveConfig(response http.ResponseWriter, reques
 // sameOrigin enforces the CSRF baseline for credential-bearing state
 // changes: the Origin header (or the Referer's origin when Origin is
 // absent, as with some same-origin form posts) must match the request's
-// own host or the configured public origin. Browsers always send one of
-// the two on cross-site POSTs; a mismatch is a forged request.
+// direct origin, or the configured public origin when set. Browsers send
+// one of the two on cross-site POSTs; a mismatch is a forged request.
 func (handler *documentHandler) sameOrigin(request *http.Request) bool {
 	if origin := strings.TrimSpace(request.Header.Get("Origin")); origin != "" {
 		return handler.originAllowed(request, origin)
