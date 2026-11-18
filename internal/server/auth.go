@@ -46,6 +46,7 @@ type authStack struct {
 	sessions      *scs.SessionManager
 	sessionStore  *auth.SQLiteSessionStore
 	limiter       *auth.LoginLimiter
+	loginGate     *loginGate
 	// authorizer re-validates previously issued credentials — sessions
 	// and API tokens — against the current configuration on every
 	// request, so removing an account retires its outstanding
@@ -114,6 +115,7 @@ func buildAuthStack(config *auth.Config, dataStore *store.Store, basePath string
 		sessions:      sessions,
 		sessionStore:  sessionStore,
 		limiter:       auth.NewLoginLimiter(loginFailureMax, loginFailureWindow),
+		loginGate:     newLoginGate(),
 		authorizer:    authorizer,
 		dataStore:     dataStore,
 	}
@@ -230,6 +232,11 @@ func (handler *documentHandler) serveLogin(response http.ResponseWriter, request
 		writeJSONError(response, http.StatusTooManyRequests, "too many failed attempts")
 		return
 	}
+	if !stack.loginGate.acquire() {
+		writeJSONError(response, http.StatusTooManyRequests, "too many login attempts")
+		return
+	}
+	defer stack.loginGate.release()
 
 	identity, err := stack.authenticator.Authenticate(request.Context(), credentials.Username, credentials.Password)
 	if err != nil {
@@ -349,17 +356,14 @@ func (handler *documentHandler) sameOrigin(request *http.Request) bool {
 }
 
 func (handler *documentHandler) originAllowed(request *http.Request, origin string) bool {
-	if handler.auth != nil && handler.auth.publicOrigin != "" && origin == handler.auth.publicOrigin {
-		return true
+	if handler.auth != nil && handler.auth.publicOrigin != "" {
+		return strings.EqualFold(origin, handler.auth.publicOrigin)
 	}
-	_, host, ok := strings.Cut(origin, "://")
-	if !ok || host == "" {
-		return false
+	scheme := "http"
+	if request.TLS != nil {
+		scheme = "https"
 	}
-	// Behind a reverse proxy the browser's origin port may differ from the
-	// internal one only when the proxy rewrites Host; trust the Host
-	// header as received.
-	return strings.EqualFold(host, request.Host)
+	return strings.EqualFold(origin, scheme+"://"+request.Host)
 }
 
 // checkDataDirBoundary refuses a data directory that overlaps any served

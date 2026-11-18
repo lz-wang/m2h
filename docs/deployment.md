@@ -342,7 +342,7 @@ M2H_LDAP_ALLOWED_USERS='alice,bob' \
 | `--data-dir` / `M2H_DATA_DIR` | SQLite 数据目录（默认为各操作系统用户数据目录下的 `m2h`）；不得位于任何发布的文档目录内 |
 | `M2H_LOCAL_USERS_JSON` | 本地账号表，JSON 对象；值支持 `$argon2id$…` PHC 哈希 |
 | `M2H_LDAP_*` | LDAP 连接、服务账号、检索基准/过滤器与白名单；过滤器中的 `%s` 会经 `ldap.EscapeFilter` 转义 |
-| `M2H_PUBLIC_URL` | 对外完整 URL（如 `https://docs.example.com/docs`）；为 https 时会话 Cookie 附加 `Secure`。m2h 不信任 `X-Forwarded-Proto` |
+| `M2H_PUBLIC_URL` | 对外完整 URL（如 `https://docs.example.com/docs`）；为 https 时会话 Cookie 附加 `Secure`。反向代理部署须设置此项，状态变更请求的 Origin 必须匹配其协议、主机和端口。m2h 不信任 `X-Forwarded-Proto` |
 
 ### 会话与数据
 
@@ -350,6 +350,7 @@ M2H_LDAP_ALLOWED_USERS='alice,bob' \
 - 标注、会话与 Token 全部存在数据目录的 `m2h.db`（纯 Go SQLite 驱动，权限 0600）。数据库运行在 WAL 模式，**运行期间直接复制该文件不是一致性备份**——尚未合并进主文件的写入可能丢失。停机时复制文件即可；运行中备份使用 `sqlite3 <data-dir>/m2h.db "VACUUM INTO '<backup-path>/m2h.db'"`（或 SQLite Online Backup，`sqlite3 … ".backup '<backup-path>/m2h.db'"`）生成一致性快照，恢复时把快照放回数据目录重启即可。Schema 由版本号管理，旧库自动迁移，比程序新的库拒绝打开。
 - 切换 Local/LDAP 后，旧模式签发的会话与 Token 失效。从 `M2H_LOCAL_USERS_JSON` 删除账号或从 `M2H_LDAP_ALLOWED_USERS` 移除用户后，重启服务以加载新配置。该账号的会话与 Token 在下一次请求时失效。
 - LDAP 已有凭证只检查本地白名单，不检查目录中的禁用状态。禁用目录账号时，也须从白名单移除该用户并重启服务。同名账号重新加入配置后，未撤销且未过期的旧 Token 可能再次生效。移除账号前，应先在设置中撤销其所有 Token；不要依赖同名账号重建来撤销凭证。
+- 登录验证最多同时执行 4 次，整个服务每分钟最多接受 60 次验证；超出时返回 429。反向代理还应限制登录请求速率，以减少网络和服务负载。
 - 不要同时启用反向代理层的外置登录（如 Tinyauth）与 m2h 内置认证——两道登录会互相干扰；二选一。
 
 ### Agent 与 API Token
