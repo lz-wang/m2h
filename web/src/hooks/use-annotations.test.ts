@@ -270,6 +270,37 @@ describe("useAnnotations", () => {
     expect(result.current.items.map((entry) => entry.id)).toEqual(["applied"]);
   });
 
+  it("does not duplicate a creation already returned by a reload", async () => {
+    let resolveCreate: (value: Response) => void = () => {};
+    fetchMock
+      .mockResolvedValueOnce(jsonResponse({ annotations: [] }))
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((resolve) => {
+            resolveCreate = resolve;
+          }),
+      )
+      .mockResolvedValueOnce(jsonResponse({ annotations: [] }))
+      .mockResolvedValueOnce(jsonResponse({ annotations: [item()] }));
+    const { result, rerender } = renderHook(
+      ({ identity: current }) => useAnnotations(true, current),
+      { initialProps: { identity } },
+    );
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    let pending: Promise<boolean> | undefined;
+    act(() => {
+      pending = result.current.create(item().selector, "评论");
+    });
+    rerender({ identity: { ...identity, path: "other.md" } });
+    rerender({ identity: { ...identity } });
+    await waitFor(() => expect(result.current.items).toHaveLength(1));
+    await act(async () => {
+      resolveCreate(jsonResponse(item()));
+      await pending;
+    });
+    expect(result.current.items.map((entry) => entry.id)).toEqual(["a1"]);
+  });
+
   it("a failed remove after a document switch does not surface on the new document", async () => {
     let rejectRemove: (reason?: unknown) => void = () => {};
     fetchMock

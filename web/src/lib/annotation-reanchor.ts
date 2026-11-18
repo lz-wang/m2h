@@ -86,15 +86,12 @@ export function reanchor(
   // Step 5: a winner that no stored context confirms may not resolve on
   // string equality alone — the quote surviving an edit that rewrote its
   // surroundings is exactly the silent mis-association the correctness
-  // principle forbids. The heading region is independent evidence and may
-  // rescue the match; anything else goes to a human.
+  // principle forbids. A heading alone cannot confirm the passage.
   if (
     unique &&
     winner !== null &&
     contextual.length === 0 &&
-    (selector.quote.prefix !== "" || selector.quote.suffix !== "") &&
-    (selector.headingId === undefined ||
-      headingAt(index, winner) !== selector.headingId)
+    (selector.quote.prefix !== "" || selector.quote.suffix !== "")
   ) {
     return { status: "ambiguous", position: null, refreshed: null };
   }

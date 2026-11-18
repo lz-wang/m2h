@@ -317,6 +317,10 @@ func (handler *documentHandler) serveDocument(response http.ResponseWriter, requ
 		writeJSONError(response, resolveVisibleStatus(err), "document not found")
 		return
 	}
+	if !tokenContentMatches(request, contents) {
+		writeJSONError(response, http.StatusConflict, "document_changed")
+		return
+	}
 	body, frontMatter, err := markdown.ParseFrontMatter(contents)
 	if err != nil {
 		writeJSONError(
@@ -388,6 +392,10 @@ func (handler *documentHandler) serveFileMetadata(response http.ResponseWriter, 
 	contents, err := os.ReadFile(target)
 	if err != nil {
 		writeJSONError(response, resolveVisibleStatus(err), "document not found")
+		return
+	}
+	if !tokenContentMatches(request, contents) {
+		writeJSONError(response, http.StatusConflict, "document_changed")
 		return
 	}
 	metadata, err := fileDisplayMetadata(contents, relative)
@@ -512,6 +520,10 @@ func (handler *documentHandler) serveRawMarkdown(response http.ResponseWriter, r
 	contents, err := os.ReadFile(target)
 	if err != nil {
 		http.NotFound(response, request)
+		return
+	}
+	if !tokenContentMatches(request, contents) {
+		writeJSONError(response, http.StatusConflict, "document_changed")
 		return
 	}
 	response.Header().Set("Content-Type", "text/markdown; charset=utf-8")

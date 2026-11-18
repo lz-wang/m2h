@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -503,3 +505,13 @@ func (handler *documentHandler) scopeOfRequestToken(request *http.Request) (auth
 // tokenRecordContextKey carries the validated token record from the
 // authorization middleware to scope-aware handlers.
 type tokenRecordContextKey struct{}
+
+// tokenContentMatches checks the bytes that the handler will actually serve.
+func tokenContentMatches(request *http.Request, contents []byte) bool {
+	record, ok := request.Context().Value(tokenRecordContextKey{}).(store.TokenRecord)
+	if !ok || record.DocumentHash == "" {
+		return true
+	}
+	digest := sha256.Sum256(contents)
+	return record.DocumentHash == "sha256:"+hex.EncodeToString(digest[:])
+}

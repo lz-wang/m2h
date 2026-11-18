@@ -128,7 +128,9 @@ export function useAnnotations(
         if (sameDocument(identityRef.current, writtenFor)) {
           setState((current) => ({
             ...current,
-            items: [...current.items, created],
+            items: current.items.some((item) => item.id === created.id)
+              ? current.items
+              : [...current.items, created],
           }));
         }
         return true;

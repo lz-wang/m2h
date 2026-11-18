@@ -172,6 +172,15 @@ describe("reanchor", () => {
     expect(result.position).toBeNull();
   });
 
+  it("does not use the same heading as a substitute for changed context", () => {
+    const root = mountBody('<h2 id="a">章节</h2><p>原文 目标句 原文</p>');
+    const before = new TextIndex(root);
+    const start = before.findAll("目标句")[0] ?? 0;
+    const selector = selectorFor(before, start, start + 3, "a");
+    root.innerHTML = '<h2 id="a">章节</h2><p>全新 目标句 内容</p>';
+    expect(reanchor(new TextIndex(root), selector).status).toBe("ambiguous");
+  });
+
   it("reports ambiguous after a change when duplicates share context", () => {
     const root = mountBody("<p>重复</p><p>重复</p>");
     const index = new TextIndex(root);

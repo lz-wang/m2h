@@ -3,6 +3,8 @@ package server
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -13,6 +15,17 @@ import (
 	"github.com/lz-wang/m2h/internal/files"
 	"github.com/lz-wang/m2h/internal/store"
 )
+
+func TestTokenContentMatchesResponseBytes(t *testing.T) {
+	request, _ := http.NewRequest(http.MethodGet, "/raw/guide.md", nil)
+	contents := []byte("original")
+	digest := sha256.Sum256(contents)
+	record := store.TokenRecord{DocumentHash: "sha256:" + hex.EncodeToString(digest[:])}
+	request = request.WithContext(context.WithValue(request.Context(), tokenRecordContextKey{}, record))
+	if !tokenContentMatches(request, contents) || tokenContentMatches(request, []byte("changed")) {
+		t.Fatal("content-bound token did not check the response bytes")
+	}
+}
 
 // tokenFixtureServer extends the authenticated fixture with token helpers.
 type tokenFixture struct {
