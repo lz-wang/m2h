@@ -99,6 +99,21 @@ describe("SelectionToolbar", () => {
     expect(onAnnotate.mock.calls[0]?.[1]).toBe("需要补充备份");
   });
 
+  it("restores the original selection when comment editing is canceled", async () => {
+    render(
+      <SelectionToolbar
+        bodyRef={{ current: body }}
+        indexRef={{ current: index }}
+        onAnnotate={vi.fn()}
+      />,
+    );
+    select(2, 11);
+    await userEvent.click(await screen.findByRole("button", { name: "评论" }));
+    await userEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(document.getSelection()?.toString()).toBe("使用 SQLite");
+    expect(screen.getByRole("button", { name: "评论" })).toBeTruthy();
+  });
+
   it("keeps the toolbar with a failure notice when saving fails", async () => {
     const onAnnotate =
       vi.fn<(selector: unknown, comment: string) => Promise<boolean>>();

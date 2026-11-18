@@ -251,6 +251,17 @@ export function SelectionToolbar({
           autoFocus
           pending={saving}
           onCancel={() => {
+            const range = rangeRef.current;
+            if (
+              range !== null &&
+              bodyRef.current?.contains(range.commonAncestorContainer)
+            ) {
+              if (document.activeElement instanceof HTMLElement)
+                document.activeElement.blur();
+              const selection = document.getSelection();
+              selection?.removeAllRanges();
+              selection?.addRange(range);
+            }
             setCommenting(false);
             setFailure(null);
           }}
