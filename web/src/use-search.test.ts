@@ -26,6 +26,7 @@ function createAPIMock(): {
   const calls: Array<{ query: string; signal: AbortSignal }> = [];
   const api: PreviewAPI = {
     listFiles: vi.fn(),
+    getRecent: vi.fn().mockResolvedValue({ created: [], updated: [] }),
     getDocument: vi.fn(),
     getMarkdown: vi.fn(),
     getFileMetadata: vi.fn(),

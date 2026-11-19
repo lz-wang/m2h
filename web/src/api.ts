@@ -45,6 +45,18 @@ export interface FileListResponse {
   version: string;
 }
 
+export interface RecentDocument {
+  path: string;
+  title: string;
+  date: string;
+  dateSource: "frontmatter" | "mtime";
+}
+
+export interface RecentResponse {
+  created: RecentDocument[];
+  updated: RecentDocument[];
+}
+
 export interface FrontMatterEntry {
   key: string;
   value: string;
@@ -115,6 +127,7 @@ export interface SearchResponse {
 
 export interface PreviewAPI {
   listFiles(signal?: AbortSignal): Promise<FileListResponse>;
+  getRecent(signal?: AbortSignal): Promise<RecentResponse>;
   getDocument(path: string, signal?: AbortSignal): Promise<DocumentResponse>;
   // Fetches one document's sidebar display metadata (title, description)
   // from /api/file-metadata on demand. Callers dedupe; the endpoint reads
@@ -592,6 +605,26 @@ export async function revokeToken(id: string): Promise<void> {
   await requestMutation(appPath(`/api/tokens/${id}`), "DELETE");
 }
 
+function parseRecentDocument(value: unknown): RecentDocument {
+  if (
+    !isRecord(value) ||
+    typeof value.path !== "string" ||
+    value.path === "" ||
+    typeof value.title !== "string" ||
+    typeof value.date !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value.date) ||
+    (value.dateSource !== "frontmatter" && value.dateSource !== "mtime")
+  ) {
+    throw new Error("最近文档响应格式无效");
+  }
+  return {
+    path: value.path,
+    title: value.title,
+    date: value.date,
+    dateSource: value.dateSource,
+  };
+}
+
 function parseFileList(payload: unknown): FileListResponse {
   if (
     !isRecord(payload) ||
@@ -825,6 +858,20 @@ function parseSearchResponse(payload: unknown): SearchResponse {
 export const browserAPI: PreviewAPI = {
   async listFiles(signal) {
     return parseFileList(await requestJSON(appPath("/api/files"), signal));
+  },
+  async getRecent(signal) {
+    const payload = await requestJSON(appPath("/api/recent"), signal);
+    if (
+      !isRecord(payload) ||
+      !Array.isArray(payload.created) ||
+      !Array.isArray(payload.updated)
+    ) {
+      throw new Error("最近文档响应格式无效");
+    }
+    return {
+      created: payload.created.map(parseRecentDocument),
+      updated: payload.updated.map(parseRecentDocument),
+    };
   },
   async getDocument(path, signal) {
     const query = new URLSearchParams({ path });

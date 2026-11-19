@@ -30,6 +30,7 @@ function rootWith(files: FileSummary[]): RootSummary[] {
 function createAPI() {
   return {
     listFiles: vi.fn<PreviewAPI["listFiles"]>(),
+    getRecent: vi.fn().mockResolvedValue({ created: [], updated: [] }),
     getDocument: vi.fn<PreviewAPI["getDocument"]>(),
     getMarkdown: vi.fn<PreviewAPI["getMarkdown"]>(),
     getFileMetadata: vi.fn<PreviewAPI["getFileMetadata"]>(),

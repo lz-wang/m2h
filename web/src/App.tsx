@@ -5,6 +5,7 @@ import {
   FileQuestion,
   FileText,
   Funnel,
+  House,
   ImageOff,
   Inbox,
   KeyRound,
@@ -41,6 +42,7 @@ import {
 import {
   type AnnotationSelectorData,
   type AuthIdentity,
+  browserAPI,
   createToken,
   type FrontMatter,
   type PreviewAPI,
@@ -58,6 +60,7 @@ import { SelectionToolbar } from "./components/annotations/selection-toolbar";
 import { DocumentLightbox } from "./components/document-lightbox";
 import { DocumentTree } from "./components/document-tree";
 import { FrontMatterPanel, FrontMatterSummary } from "./components/frontmatter";
+import { HomePage } from "./components/home-page";
 import { ReaderFooter } from "./components/reader-footer";
 import { ReaderNavigation } from "./components/reader-navigation";
 import { SearchDialog } from "./components/search-dialog";
@@ -1076,6 +1079,27 @@ export function App({
                 </TooltipContent>
               </Tooltip>
             ) : null}
+            {navigationAvailable && preview.roots.length > 0 ? (
+              <Tooltip>
+                <TooltipTrigger
+                  render={
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="toolbar-control aria-[current=page]:bg-muted"
+                      aria-label="文档首页"
+                      aria-current={
+                        preview.phase === "home" ? "page" : undefined
+                      }
+                      onClick={preview.goHome}
+                    >
+                      <House aria-hidden="true" />
+                    </Button>
+                  }
+                />
+                <TooltipContent side="bottom">文档首页</TooltipContent>
+              </Tooltip>
+            ) : null}
             <DocumentTitle
               title={
                 preview.phase === "home"
@@ -1207,11 +1231,13 @@ export function App({
                   </TooltipContent>
                 </Tooltip>
               ) : null}
-              <TOCToggle
-                enabled={preview.toc}
-                available={tocItems.length > 0}
-                onChange={preview.setTOC}
-              />
+              {preview.phase !== "home" ? (
+                <TOCToggle
+                  enabled={preview.toc}
+                  available={tocItems.length > 0}
+                  onChange={preview.setTOC}
+                />
+              ) : null}
               {/* Narrow screens hide the rail and its toggle above; the sheet
                * trigger takes over as the transient outline UI there. */}
               {tocItems.length > 0 ? (
@@ -1279,21 +1305,31 @@ export function App({
                   <span>{preview.visualError}</span>
                 </div>
               ) : null}
-              <PreviewContent
-                phase={preview.phase}
-                error={preview.error}
-                html={preview.document?.html ?? null}
-                frontmatter={preview.document?.frontmatter ?? null}
-                resolvedMode={preview.resolvedMode}
-                onRetry={() => void preview.retry()}
-                onClick={handleMarkdownClick}
-                onKeyDown={handleMarkdownKeyDown}
-                onErrorCapture={handleAssetError}
-                onVisualError={preview.reportVisualError}
-                onBodyReady={
-                  annotationsEnabled ? handleAnnotationBodyReady : undefined
-                }
-              />
+              {preview.phase === "home" ? (
+                <HomePage
+                  getRecent={(api ?? browserAPI).getRecent}
+                  fileCount={preview.files.length}
+                  roots={preview.roots}
+                  options={preview}
+                  onSelect={(path) => void preview.select(path)}
+                />
+              ) : (
+                <PreviewContent
+                  phase={preview.phase}
+                  error={preview.error}
+                  html={preview.document?.html ?? null}
+                  frontmatter={preview.document?.frontmatter ?? null}
+                  resolvedMode={preview.resolvedMode}
+                  onRetry={() => void preview.retry()}
+                  onClick={handleMarkdownClick}
+                  onKeyDown={handleMarkdownKeyDown}
+                  onErrorCapture={handleAssetError}
+                  onVisualError={preview.reportVisualError}
+                  onBodyReady={
+                    annotationsEnabled ? handleAnnotationBodyReady : undefined
+                  }
+                />
+              )}
               {/* The attribution belongs to a successfully opened document
                * page, not the app shell: loading, home, not-found and
                * error states stay footer-less. */}
@@ -1554,7 +1590,9 @@ export function App({
           {/* Floating edge jumps for the window-scrolled reader; one instance
            * for both single-file and directory previews. When the TOC rail is
            * up, the buttons shift left of it (see .reader-navigation CSS). */}
-          <ReaderNavigation tocVisible={tocVisible || annotationsOpen} />
+          {preview.phase !== "home" || !isMobileViewport ? (
+            <ReaderNavigation tocVisible={tocVisible || annotationsOpen} />
+          ) : null}
           {copyStatus !== null ? (
             <div className="copy-status" role="status" aria-live="polite">
               {copyStatus}
@@ -2083,13 +2121,6 @@ function PreviewContent({
       <section className="state-panel" aria-live="polite" aria-busy="true">
         <LoaderCircle className="is-spinning" aria-hidden="true" />
         <p>{phase === "loading-files" ? "正在加载文件" : "正在加载文档"}</p>
-      </section>
-    );
-  }
-  if (phase === "home") {
-    return (
-      <section className="state-panel">
-        <h1>文档首页</h1>
       </section>
     );
   }

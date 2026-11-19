@@ -63,6 +63,7 @@ beforeEach(() => {
 function createAPI(overrides: Partial<PreviewAPI> = {}): PreviewAPI {
   return {
     listFiles: vi.fn().mockResolvedValue(initialFiles),
+    getRecent: vi.fn().mockResolvedValue({ created: [], updated: [] }),
     getDocument: vi.fn().mockImplementation(async (path: string) => {
       const file = initialFiles.roots[0]?.files.find(
         (candidate) => candidate.path === path,
