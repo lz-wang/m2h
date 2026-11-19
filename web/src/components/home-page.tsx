@@ -60,7 +60,10 @@ export function HomePage({
   const latestDate = lists?.updated[0]?.date;
 
   return (
-    <article className="document-home" aria-label="文档首页">
+    <article className="document-home" aria-labelledby="document-home-title">
+      <h1 id="document-home-title" className="sr-only">
+        文档首页
+      </h1>
       <div className="document-home-layout">
         <dl className="document-home-overview">
           <div>
@@ -88,7 +91,7 @@ export function HomePage({
           <div>
             <dt>
               <Folder aria-hidden="true" />
-              目录根
+              文档源
             </dt>
             <dd>{roots.length.toLocaleString()}</dd>
           </div>

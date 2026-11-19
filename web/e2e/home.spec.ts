@@ -91,7 +91,9 @@ test("keeps outline controls on document pages and preserves their preference", 
   await expect(page).toHaveURL(/\/\?toc=false$/);
   const home = page.getByRole("article", { name: "文档首页" });
   await expect(home.getByRole("region", { name: "最新创建" })).toBeVisible();
-  await expect(home.getByRole("heading", { name: "文档首页" })).toHaveCount(0);
+  await expect(
+    home.getByRole("heading", { name: "文档首页", level: 1 }),
+  ).toHaveCSS("position", "absolute");
   await expect(page.getByRole("navigation", { name: "首页导航" })).toHaveCount(
     0,
   );
@@ -120,6 +122,7 @@ test("aligns overview icons, labels and values on desktop", async ({
   const overview = page.locator(".document-home-layout > :first-child");
   await expect(overview).toHaveClass("document-home-overview");
   await expect(overview.locator("dd time")).toBeVisible();
+  await expect(overview.getByText("文档源", { exact: true })).toBeVisible();
 
   const offsets = await overview
     .locator(":scope > div")
