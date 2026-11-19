@@ -14,6 +14,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/lz-wang/m2h/internal/auth"
 	"github.com/lz-wang/m2h/internal/markdown"
 	"github.com/lz-wang/m2h/internal/store"
 )
@@ -55,12 +56,17 @@ func (handler *documentHandler) serveRecent(w http.ResponseWriter, r *http.Reque
 	}
 	result := recentResponse{Created: []recentDocument{}, Updated: []recentDocument{}}
 	record, _ := r.Context().Value(tokenRecordContextKey{}).(store.TokenRecord)
+	scope, scoped := handler.scopeOfRequestToken(r)
 	var err error
-	if record.DocumentHash != "" {
-		// Version-bound tokens must derive metadata from the exact bytes that
-		// match their hash, even when file timestamps and sizes are unchanged.
-		err = handler.recentVersion(r, &result)
-	} else {
+	switch {
+	case scoped && scope.Resource.Type == auth.ResourceDocument:
+		var version *http.Request
+		if record.DocumentHash != "" {
+			// Derive metadata from the exact bytes that match the token.
+			version = r
+		}
+		err = handler.recentScopedDocument(scope.Resource.RootID, scope.Resource.Path, version, &result)
+	case record.DocumentHash == "":
 		err = handler.recentLists(r, &result)
 	}
 	if r.Context().Err() != nil {
@@ -73,24 +79,18 @@ func (handler *documentHandler) serveRecent(w http.ResponseWriter, r *http.Reque
 	writeJSON(w, http.StatusOK, result)
 }
 
-func (handler *documentHandler) recentVersion(r *http.Request, result *recentResponse) error {
-	scope, ok := handler.scopeOfRequestToken(r)
-	if !ok {
+func (handler *documentHandler) recentScopedDocument(rootID, relative string, version *http.Request, result *recentResponse) error {
+	root, found := handler.workspace.rootByIdentity(rootID)
+	if !found {
 		return nil
 	}
-	for _, root := range handler.workspace.roots {
-		if root.identity != scope.Resource.RootID {
-			continue
-		}
-		virtual := handler.workspace.publicPath(root.id, scope.Resource.Path)
-		metadata, ok, err := handler.loadRecent(virtual, recentMetadata{}, r)
-		if ok {
-			result.Created = append(result.Created, metadata.created)
-			result.Updated = append(result.Updated, metadata.updated)
-		}
-		return err
+	virtual := handler.workspace.publicPath(root.id, relative)
+	metadata, ok, err := handler.loadRecent(virtual, recentMetadata{}, version)
+	if ok {
+		result.Created = append(result.Created, metadata.created)
+		result.Updated = append(result.Updated, metadata.updated)
 	}
-	return nil
+	return err
 }
 
 func (handler *documentHandler) recentLists(r *http.Request, result *recentResponse) error {

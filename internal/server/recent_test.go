@@ -19,7 +19,9 @@ import (
 	"testing/iotest"
 	"time"
 
+	"github.com/lz-wang/m2h/internal/auth"
 	"github.com/lz-wang/m2h/internal/files"
+	"github.com/lz-wang/m2h/internal/store"
 )
 
 func recentFrom(t *testing.T, handler http.Handler, target string) recentResponse {
@@ -276,7 +278,46 @@ func TestRecentPrefersReadingOnlyTheHeader(t *testing.T) {
 	}
 }
 
-func TestRecentTokensFilterBeforeTruncation(t *testing.T) {
+func TestRecentDocumentTokenSkipsWorkspaceDiscovery(t *testing.T) {
+	workspace := multiRootFixture(t)
+	workspace.roots[0].identity = "first"
+	workspace.roots[1].identity = "second"
+	handler := &documentHandler{
+		workspace: workspace,
+		discover: func(context.Context, rootScope) (files.Discovery, error) {
+			t.Error("document-scoped recent request must not discover the workspace")
+			return files.Discovery{}, errors.New("unexpected workspace discovery")
+		},
+	}
+
+	scope := auth.TokenScope{Permissions: []string{auth.PermissionDocumentRead}}
+	scope.Resource.Type = auth.ResourceDocument
+	scope.Resource.RootID = "second"
+	scope.Resource.Path = "README.md"
+	encoded, err := auth.MarshalScope(scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodGet, "/api/recent", nil)
+	record := store.TokenRecord{ScopeJSON: encoded}
+	request = request.WithContext(context.WithValue(request.Context(), tokenRecordContextKey{}, record))
+	request = requestWithPrincipal(request, &principal{Via: principalViaToken})
+	response := httptest.NewRecorder()
+	handler.serveRecent(response, request)
+
+	var got recentResponse
+	decodeJSON(t, response, &got)
+	for _, list := range [][]recentDocument{got.Created, got.Updated} {
+		if response.Code != http.StatusOK || len(list) != 1 || list[0].Path != "r1/README.md" {
+			t.Fatalf("expected only the scoped virtual document: %d %+v", response.Code, got)
+		}
+	}
+	if handler.recent.files != nil {
+		t.Fatal("document-scoped request populated the shared cache")
+	}
+}
+
+func TestRecentTokenPermissionsAndVersionBinding(t *testing.T) {
 	fixture := newTokenFixture(t)
 	alice := fixture.loginAs(t, "alice", "password-1")
 	for index := range 12 {
