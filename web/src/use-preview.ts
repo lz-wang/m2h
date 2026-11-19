@@ -62,6 +62,7 @@ export interface PreviewState {
   // what the reader shows.
   filesLoading: boolean;
   filesError: string | null;
+  homeRevision: number;
   // Display metadata cache keyed by the virtual document path. Entries land
   // as the reader points at sidebar files (deduplicated, one request per
   // path) and are dropped whenever the file list reloads, so a refresh never
@@ -116,6 +117,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     initialRoute.current.path !== null ? "loading-document" : "loading-files",
   );
   const [filesLoading, setFilesLoading] = useState(true);
+  const [homeRevision, setHomeRevision] = useState(0);
   const [filesError, setFilesError] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<ReadonlyMap<string, FileMetadata>>(
     () => new Map(),
@@ -257,6 +259,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         setKind(loaded.kind);
         setVersion(loaded.version);
         setFilesLoading(false);
+        setHomeRevision((revision) => revision + 1);
         setPhase((current) =>
           current === "home" || current === "empty"
             ? flattened.length === 0
@@ -546,6 +549,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     phase,
     filesLoading,
     filesError,
+    homeRevision,
     metadata,
     loadFileMetadata,
     error,

@@ -1,4 +1,12 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
@@ -8,6 +16,7 @@ import {
   type PreviewAPI,
   type RootSummary,
 } from "./api";
+import { HomePage } from "./components/home-page";
 import { usePreview } from "./use-preview";
 
 // A caller-controlled promise: tests decide exactly when (and whether) a
@@ -30,7 +39,9 @@ function rootWith(files: FileSummary[]): RootSummary[] {
 function createAPI() {
   return {
     listFiles: vi.fn<PreviewAPI["listFiles"]>(),
-    getRecent: vi.fn().mockResolvedValue({ created: [], updated: [] }),
+    getRecent: vi
+      .fn<PreviewAPI["getRecent"]>()
+      .mockResolvedValue({ created: [], updated: [] }),
     getDocument: vi.fn<PreviewAPI["getDocument"]>(),
     getMarkdown: vi.fn<PreviewAPI["getMarkdown"]>(),
     getFileMetadata: vi.fn<PreviewAPI["getFileMetadata"]>(),
@@ -99,6 +110,79 @@ describe("usePreview decoupled loading", () => {
     expect(result.current.files).toHaveLength(2);
     expect(api.getDocument).not.toHaveBeenCalled();
     expect(window.location.pathname).toBe("/");
+  });
+
+  it("refreshes both recent lists when the home file listing reloads", async () => {
+    const api = createAPI();
+    const files = [{ path: "README.md", name: "README.md" }];
+    api.listFiles.mockResolvedValue({
+      kind: "directory",
+      version: "test",
+      roots: rootWith(files),
+    });
+    const entry = {
+      path: "README.md",
+      title: "Old title",
+      date: "2026-11-19",
+      dateSource: "frontmatter",
+    } as const;
+    const stale = deferred<Awaited<ReturnType<PreviewAPI["getRecent"]>>>();
+    const latest = { ...entry, title: "New title", date: "2026-11-20" };
+    api.getRecent
+      .mockResolvedValueOnce({ created: [entry], updated: [entry] })
+      .mockReturnValueOnce(stale.promise)
+      .mockResolvedValueOnce({ created: [latest], updated: [latest] });
+
+    function PreviewHarness() {
+      const preview = usePreview(api);
+      return preview.phase === "home" ? (
+        <>
+          <button type="button" onClick={() => void preview.refresh()}>
+            Refresh
+          </button>
+          <HomePage
+            getRecent={api.getRecent}
+            revision={preview.homeRevision}
+            fileCount={preview.files.length}
+            roots={preview.roots}
+            options={preview}
+            onSelect={preview.select}
+          />
+        </>
+      ) : null;
+    }
+
+    render(<PreviewHarness />);
+    const created = within(
+      await screen.findByRole("region", { name: "最新创建" }),
+    );
+    expect(created.getByRole("link", { name: /Old title/ })).toBeTruthy();
+    const refresh = screen.getByRole("button", { name: "Refresh" });
+    api.listFiles.mockResolvedValue({
+      kind: "directory",
+      version: "test",
+      roots: rootWith([...files, { path: "new.md", name: "new.md" }]),
+    });
+    fireEvent.click(refresh);
+    await waitFor(() => expect(api.getRecent).toHaveBeenCalledTimes(2));
+    fireEvent.click(refresh);
+    const updated = within(
+      await screen.findByRole("region", { name: "最近更新" }),
+    );
+    expect(updated.getByRole("link", { name: /New title/ })).toBeTruthy();
+    expect(
+      within(screen.getByRole("region", { name: "最新创建" })).getByRole(
+        "link",
+        { name: /New title/ },
+      ),
+    ).toBeTruthy();
+    expect(screen.getByText("2")).toBeTruthy();
+    expect(api.getRecent).toHaveBeenCalledTimes(3);
+    expect(api.getRecent.mock.calls[1]?.[0]?.aborted).toBe(true);
+    await act(async () =>
+      stale.resolve({ created: [entry], updated: [entry] }),
+    );
+    expect(screen.queryByRole("link", { name: /Old title/ })).toBeNull();
   });
 
   it("aborts an open document request when returning home", async () => {

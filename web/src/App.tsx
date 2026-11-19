@@ -1307,6 +1307,7 @@ export function App({
               {preview.phase === "home" ? (
                 <HomePage
                   getRecent={(api ?? browserAPI).getRecent}
+                  revision={preview.homeRevision}
                   fileCount={preview.files.length}
                   roots={preview.roots}
                   options={preview}

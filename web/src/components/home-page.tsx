@@ -18,6 +18,7 @@ const sections = [
 
 interface HomePageProps {
   getRecent: PreviewAPI["getRecent"];
+  revision: number;
   fileCount: number;
   roots: RootSummary[];
   options: ViewOptions;
@@ -26,31 +27,36 @@ interface HomePageProps {
 
 export function HomePage({
   getRecent,
+  revision,
   fileCount,
   roots,
   options,
   onSelect,
 }: HomePageProps) {
-  const [recent, setRecent] = useState<RecentResponse | "loading" | "error">(
-    "loading",
-  );
-  const loading = recent === "loading";
+  const [result, setResult] = useState<{
+    revision: number;
+    recent: RecentResponse | "error";
+  } | null>(null);
+  const recent = result?.revision === revision ? result.recent : null;
+  const loading = recent === null;
 
   useEffect(() => {
     if (!loading) return;
     const controller = new AbortController();
     void getRecent(controller.signal).then(
       (response) => {
-        if (!controller.signal.aborted) setRecent(response);
+        if (!controller.signal.aborted)
+          setResult({ revision, recent: response });
       },
       () => {
-        if (!controller.signal.aborted) setRecent("error");
+        if (!controller.signal.aborted)
+          setResult({ revision, recent: "error" });
       },
     );
     return () => controller.abort();
-  }, [getRecent, loading]);
+  }, [getRecent, loading, revision]);
 
-  const lists = typeof recent === "object" ? recent : null;
+  const lists = recent === "error" ? null : recent;
   const latestDate = lists?.updated[0]?.date;
 
   return (
@@ -97,7 +103,7 @@ export function HomePage({
         {recent === "error" ? (
           <div className="document-home-status" role="alert">
             无法读取最近文档。
-            <Button variant="outline" onClick={() => setRecent("loading")}>
+            <Button variant="outline" onClick={() => setResult(null)}>
               重试
             </Button>
           </div>
