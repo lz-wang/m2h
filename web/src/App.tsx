@@ -78,7 +78,6 @@ import {
   SidebarContent,
   SidebarGroup,
   SidebarGroupContent,
-  SidebarGroupLabel,
   SidebarHeader,
   SidebarInset,
   SidebarProvider,
@@ -958,7 +957,7 @@ export function App({
       >
         {navigationAvailable ? (
           <Sidebar collapsible="offcanvas" resizing={sidebarResizing}>
-            <SidebarHeader>
+            <SidebarHeader className="pb-0">
               <div className="sidebar-search">
                 <Funnel aria-hidden="true" />
                 <Input
@@ -968,6 +967,36 @@ export function App({
                   placeholder={`筛选文件名或路径（${searchShortcutHint}全文搜索）`}
                   onChange={(event) => setFileFilterQuery(event.target.value)}
                 />
+              </div>
+              <div className="flex h-8 shrink-0 items-center justify-between pr-2">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="文档首页"
+                        aria-current={
+                          preview.phase === "home" ? "page" : undefined
+                        }
+                        className="aria-[current=page]:bg-muted"
+                        onClick={() => {
+                          preview.goHome();
+                          setSidebarMobileOpen(false);
+                        }}
+                      >
+                        <House aria-hidden="true" />
+                      </Button>
+                    }
+                  />
+                  <TooltipContent side="bottom">文档首页</TooltipContent>
+                </Tooltip>
+                <span className="text-xs tabular-nums text-sidebar-foreground/60">
+                  <span aria-hidden="true">{filteredCount}</span>
+                  <span className="sr-only">
+                    {filteredCount} 个 Markdown 文件
+                  </span>
+                </span>
               </div>
             </SidebarHeader>
             {/* SidebarContent keeps overflow-clip on desktop so it never
@@ -992,15 +1021,6 @@ export function App({
                 }}
               >
                 <SidebarGroup>
-                  <SidebarGroupLabel className="justify-between">
-                    <span>Files</span>
-                    <span className="text-xs tabular-nums text-sidebar-foreground/60">
-                      <span aria-hidden="true">{filteredCount}</span>
-                      <span className="sr-only">
-                        {filteredCount} 个 Markdown 文件
-                      </span>
-                    </span>
-                  </SidebarGroupLabel>
                   <SidebarGroupContent>
                     {filteredCount > 0 ? (
                       multiRoot ? (
@@ -1077,27 +1097,6 @@ export function App({
                 <TooltipContent side="bottom">
                   {sidebarOpen ? "收起文件导航" : "展开文件导航"}
                 </TooltipContent>
-              </Tooltip>
-            ) : null}
-            {navigationAvailable && preview.roots.length > 0 ? (
-              <Tooltip>
-                <TooltipTrigger
-                  render={
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="toolbar-control aria-[current=page]:bg-muted"
-                      aria-label="文档首页"
-                      aria-current={
-                        preview.phase === "home" ? "page" : undefined
-                      }
-                      onClick={preview.goHome}
-                    >
-                      <House aria-hidden="true" />
-                    </Button>
-                  }
-                />
-                <TooltipContent side="bottom">文档首页</TooltipContent>
               </Tooltip>
             ) : null}
             <DocumentTitle

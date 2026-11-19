@@ -84,7 +84,7 @@ describe("App directory preview", () => {
     const api = createAPI();
     render(<App api={api} />);
 
-    await screen.findByRole("heading", { level: 1, name: "文档首页" });
+    await screen.findByRole("article", { name: "文档首页" });
     expect(api.listFiles).toHaveBeenCalledTimes(1);
     expect(api.getDocument).not.toHaveBeenCalled();
     expect(window.location.pathname).toBe("/");
@@ -275,7 +275,7 @@ describe("App directory preview", () => {
     });
     render(<App api={api} />);
 
-    await screen.findByRole("heading", { level: 1, name: "文档首页" });
+    await screen.findByRole("article", { name: "文档首页" });
     expect(api.getDocument).not.toHaveBeenCalled();
     expect(window.location.pathname).toBe("/");
     expect(
@@ -314,7 +314,7 @@ describe("App directory preview", () => {
     });
     render(<App api={api} />);
 
-    await screen.findByRole("heading", { level: 1, name: "文档首页" });
+    await screen.findByRole("article", { name: "文档首页" });
     expect(api.getDocument).not.toHaveBeenCalled();
     expect(window.location.pathname).toBe("/");
   });

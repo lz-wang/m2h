@@ -9,9 +9,6 @@
 }
 
 .document-home-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  gap: clamp(2rem, 4vw, 4.5rem);
   margin-inline: auto;
   max-width: 61rem;
 }
@@ -24,37 +21,10 @@
   max-width: none;
 }
 
-.document-home-header {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-}
-
-.document-home-header > svg {
-  width: 1.875rem;
-  height: 1.875rem;
-  flex-shrink: 0;
-  margin-top: 0.3rem;
-  color: var(--home-link);
-}
-
-.document-home h1 {
-  margin: 0;
-  font-size: clamp(1.85rem, 3vw, 2.25rem);
-  font-weight: 700;
-  line-height: 1.15;
-}
-
-.document-home-header p {
-  margin-top: 0.5rem;
-  color: var(--muted-foreground);
-}
-
 .document-home-overview {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   padding-block: 0.875rem;
-  margin-top: 1.25rem;
   border: 1px solid var(--border);
   border-radius: 0.75rem;
   font-size: 0.875rem;
@@ -63,7 +33,7 @@
 .document-home-overview > div {
   display: flex;
   justify-content: center;
-  align-items: baseline;
+  align-items: center;
   flex-wrap: wrap;
   gap: 0.25rem 0.625rem;
   padding-inline: 0.75rem;
@@ -79,7 +49,7 @@
   gap: 0.5rem;
 }
 
-.document-home-overview dt > svg,
+.document-home-overview :where(dt) > svg,
 .recent-document-title > svg {
   flex-shrink: 0;
   width: 1rem;
@@ -94,11 +64,6 @@
 
 .document-home-section {
   margin-top: 1.75rem;
-}
-
-.document-home h1,
-.document-home h2 {
-  scroll-margin-top: 4rem;
 }
 
 .document-home h2 {
@@ -194,41 +159,6 @@
 .document-home-status > svg {
   width: 1rem;
   height: 1rem;
-}
-
-.document-home-outline {
-  position: sticky;
-  top: 4rem;
-  display: none;
-  align-self: start;
-  font-size: 0.8125rem;
-}
-
-.document-home-outline > span {
-  font-weight: 600;
-  margin-bottom: 0.125rem;
-}
-
-.document-home-outline > button {
-  color: var(--muted-foreground);
-  text-align: start;
-  cursor: pointer;
-}
-
-.document-home-outline > button:hover,
-.document-home-outline > button:focus-visible {
-  color: var(--home-link);
-}
-
-@container document-home (min-width: 52rem) {
-  .document-home-layout:has(.document-home-outline) {
-    grid-template-columns: minmax(0, 1fr) 8.5rem;
-  }
-
-  .document-home-outline {
-    display: grid;
-    gap: 0.625rem;
-  }
 }
 
 @container document-home (max-width: 34rem) {

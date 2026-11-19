@@ -519,9 +519,7 @@ test.describe("authenticated mode", () => {
     await expect(panel).toBeVisible();
     await page.getByRole("button", { name: "文档首页" }).click();
 
-    await expect(
-      page.getByRole("heading", { level: 1, name: "文档首页" }),
-    ).toBeVisible();
+    await expect(page.getByRole("article", { name: "文档首页" })).toBeVisible();
     await expect(page.locator(".markdown-body")).toHaveCount(0);
     await expect(outline).toHaveCount(0);
     await expect(panel).toHaveCount(0);

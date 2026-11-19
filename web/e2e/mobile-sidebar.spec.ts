@@ -35,6 +35,15 @@ test("opens the mobile sidebar focused on the sheet, not the filter input", asyn
     .toBe(true);
 });
 
+test("opens home and closes the mobile sidebar on tap", async ({ page }) => {
+  await openColdMobileSidebar(page);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: "文档首页" }).tap();
+
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("article", { name: "文档首页" })).toBeVisible();
+});
+
 test("scrolls the mobile sidebar on the first untouched swipe from a directory row", async ({
   page,
   browserName,

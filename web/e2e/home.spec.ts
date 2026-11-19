@@ -9,10 +9,10 @@ test("directory home opens document links and survives history navigation and re
   });
 
   await page.goto("/");
-  const title = page.getByRole("heading", { level: 1, name: "文档首页" });
+  const home = page.getByRole("article", { name: "文档首页" });
   const created = page.getByRole("region", { name: "最新创建" });
   const updated = page.getByRole("region", { name: "最近更新" });
-  await expect(title).toBeVisible();
+  await expect(home).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
   await expect(created.getByRole("link")).toHaveCount(10);
   await expect(updated.getByRole("link")).toHaveCount(10);
@@ -27,7 +27,7 @@ test("directory home opens document links and survives history navigation and re
   await expect(page.locator(".markdown-body")).toBeVisible();
 
   await page.goBack();
-  await expect(title).toBeVisible();
+  await expect(home).toBeVisible();
   await expect(updated.getByRole("link")).toHaveCount(10);
   await expect(page.locator(".markdown-body")).toHaveCount(0);
   await page.goForward();
@@ -50,6 +50,69 @@ test("directory home opens document links and survives history navigation and re
   expect(requests.slice(beforeDeepLink)).not.toContain("/api/recent");
 });
 
+test("sidebar home stays clickable while the file tree scrolls", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1280, height: 480 });
+  await page.goto("/doc/README.md");
+  await expect(page.locator(".markdown-body")).toBeVisible();
+
+  const sidebarHeader = page.locator('[data-slot="sidebar-header"]');
+  const home = sidebarHeader.getByRole("button", { name: "文档首页" });
+  const treeViewport = page.locator(
+    ".tree-scroll [data-slot='scroll-area-viewport']",
+  );
+  await expect(home).toBeVisible();
+  await expect(
+    page.locator(".reader-toolbar").getByRole("button", { name: "文档首页" }),
+  ).toHaveCount(0);
+  const initial = await home.boundingBox();
+  await treeViewport.hover();
+  await page.mouse.wheel(0, 640);
+  await expect
+    .poll(() => treeViewport.evaluate((viewport) => viewport.scrollTop))
+    .toBeGreaterThan(0);
+  expect(await home.boundingBox()).toEqual(initial);
+  await home.click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(home).toHaveAttribute("aria-current", "page");
+});
+
+test("aligns overview icons, labels and values on desktop", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/?mode=dark");
+  await expect(page.getByRole("navigation", { name: "首页导航" })).toHaveCount(
+    0,
+  );
+  await expect(
+    page.getByRole("searchbox", { name: "按文件名或路径筛选文件" }),
+  ).toBeVisible();
+  const overview = page.locator(".document-home-layout > :first-child");
+  await expect(overview).toHaveClass("document-home-overview");
+  await expect(overview.locator("dd time")).toBeVisible();
+
+  const offsets = await overview
+    .locator(":scope > div")
+    .evaluateAll((metrics) =>
+      metrics.map((metric) => {
+        const centers = Array.from(
+          metric.querySelectorAll("dt, dd, dt svg"),
+          (element) => {
+            const { y, height } = element.getBoundingClientRect();
+            return y + height / 2;
+          },
+        );
+        return Math.max(...centers) - Math.min(...centers);
+      }),
+    );
+  expect(offsets).toHaveLength(3);
+  for (const offset of offsets) {
+    expect(offset).toBeLessThanOrEqual(0.5);
+  }
+});
+
 test("home lists remain readable on a narrow dark viewport", async ({
   page,
 }) => {
@@ -58,7 +121,15 @@ test("home lists remain readable on a narrow dark viewport", async ({
   await expect(page.locator("html")).toHaveClass(/dark/);
   const created = page.getByRole("region", { name: "最新创建" });
   await expect(created.getByRole("link")).toHaveCount(10);
-  await expect(page.getByRole("navigation", { name: "首页导航" })).toBeHidden();
+  const labels = page.locator(".document-home-overview dt");
+  const values = page.locator(".document-home-overview dd");
+  for (let index = 0; index < 3; index += 1) {
+    const label = await labels.nth(index).boundingBox();
+    const value = await values.nth(index).boundingBox();
+    if (!label || !value) throw new Error("missing overview metric");
+    expect(value.y).toBeGreaterThanOrEqual(label.y + label.height);
+    expect(value.x).toBeCloseTo(label.x, 1);
+  }
   const first = created.getByRole("link").first();
   await expect(first).toHaveCSS("grid-template-columns", /^\S+ \S+$/);
   expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBe(
