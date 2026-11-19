@@ -124,7 +124,6 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   );
   const [error, setError] = useState<string | null>(null);
   const [visualError, setVisualError] = useState<string | null>(null);
-  const filesRef = useRef<FileSummary[]>([]);
   const rootsRef = useRef<RootSummary[]>([]);
   const kindRef = useRef<PreviewKind | null>(null);
   const selectedPathRef = useRef<string | null>(null);
@@ -204,26 +203,6 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     [api, writeRoute],
   );
 
-  const settleWithoutDocument = useCallback(
-    (action: HistoryAction) => {
-      documentController.current?.abort();
-      selectedPathRef.current = null;
-      setSelectedPath(null);
-      setDocumentResponse(null);
-      setError(null);
-      setVisualError(null);
-      setPhase(
-        kindRef.current === null
-          ? "loading-files"
-          : filesRef.current.length === 0
-            ? "empty"
-            : "home",
-      );
-      writeRoute(null, action);
-    },
-    [writeRoute],
-  );
-
   // The sidebar's own fetch: request the file list and update only
   // file-tree state. It never touches the reader's phase — a slow or failing
   // listing must not hold the document hostage (or evict it once shown).
@@ -251,7 +230,6 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         // prefixes each root's files with the root id, a single root keeps
         // bare relative paths (see model.ts rootFiles).
         const flattened = rootFiles(loaded.roots);
-        filesRef.current = flattened;
         rootsRef.current = loaded.roots;
         kindRef.current = loaded.kind;
         setFiles(flattened);
@@ -260,13 +238,6 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         setVersion(loaded.version);
         setFilesLoading(false);
         setHomeRevision((revision) => revision + 1);
-        setPhase((current) =>
-          current === "home" || current === "empty"
-            ? flattened.length === 0
-              ? "empty"
-              : "home"
-            : current,
-        );
         return loaded;
       } catch (reason: unknown) {
         if (controller.signal.aborted || isAbortError(reason)) {
@@ -322,37 +293,54 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     [api],
   );
 
-  // The root needs the listing to distinguish directory, single-file and
-  // empty workspaces. A selection made during that fetch takes precedence.
-  const loadWorkspaceDefault = useCallback(async () => {
-    const listing = fetchFileList();
-    const controller = listController.current;
-    const loaded = await listing;
-    if (controller?.signal.aborted || selectedPathRef.current !== null) {
-      return;
-    }
-    if (loaded === null) {
-      setError(filesErrorMessage);
-      setPhase("error");
-      return;
-    }
-    const target = autoOpenDocument(loaded.roots, loaded.kind);
-    if (target === null) {
-      settleWithoutDocument("replace");
-      return;
-    }
-    await loadDocument(target, "replace");
-  }, [fetchFileList, loadDocument, settleWithoutDocument]);
+  // Entering the root waits for the fresh listing before HomePage mounts
+  // and requests recent metadata. An in-place refresh keeps HomePage
+  // mounted and uses homeRevision to request the next set of records.
+  const loadWorkspaceDefault = useCallback(
+    async (navigation?: "push" | "replace") => {
+      if (navigation !== undefined) {
+        documentController.current?.abort();
+        selectedPathRef.current = null;
+        setSelectedPath(null);
+        setDocumentResponse(null);
+        setError(null);
+        setVisualError(null);
+        setPhase("loading-files");
+        writeRoute(null, navigation);
+      }
+
+      const listing = fetchFileList();
+      const controller = listController.current;
+      const loaded = await listing;
+      if (controller?.signal.aborted || selectedPathRef.current !== null) {
+        return;
+      }
+      if (loaded === null) {
+        setError(filesErrorMessage);
+        setPhase("error");
+        return;
+      }
+      const target = autoOpenDocument(loaded.roots, loaded.kind);
+      if (target !== null) {
+        await loadDocument(target, "replace");
+        return;
+      }
+      setError(null);
+      setVisualError(null);
+      setPhase(
+        loaded.roots.some((root) => root.files.length > 0) ? "home" : "empty",
+      );
+      writeRoute(null, "replace");
+    },
+    [fetchFileList, loadDocument, writeRoute],
+  );
 
   const goHome = useCallback(() => {
     if (kindRef.current === "single" || selectedPathRef.current === null) {
       return;
     }
-    settleWithoutDocument("push");
-    if (kindRef.current === null) {
-      void loadWorkspaceDefault();
-    }
-  }, [loadWorkspaceDefault, settleWithoutDocument]);
+    void loadWorkspaceDefault("push");
+  }, [loadWorkspaceDefault]);
 
   useEffect(() => {
     const route = initialRoute.current;
@@ -387,10 +375,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         route.path ??
         (kind === null ? null : autoOpenDocument(rootsRef.current, kind));
       if (target === null) {
-        settleWithoutDocument("replace");
-        if (kind === null) {
-          void loadWorkspaceDefault();
-        }
+        void loadWorkspaceDefault("replace");
         return;
       }
       const targetHash = target === route.path ? route.hash : "";
@@ -411,7 +396,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [loadDocument, loadWorkspaceDefault, settleWithoutDocument]);
+  }, [loadDocument, loadWorkspaceDefault]);
 
   useEffect(() => {
     const media =

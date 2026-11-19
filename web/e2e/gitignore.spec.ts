@@ -75,6 +75,42 @@ test.afterAll(() => {
   }
 });
 
+test("returning home reloads the file tree and recent lists once", async ({
+  page,
+}) => {
+  writeRules("");
+  await page.goto("/doc/visible.md");
+  const tree = page.locator('[aria-label^="Markdown 文件树"]');
+  await expect(tree.getByText("visible.md")).toBeVisible();
+
+  const added = path.join(root, "added-while-reading.md");
+  writeFileSync(added, "# Added while reading\n");
+  const requests: string[] = [];
+  page.on("request", (request) => {
+    const pathname = new URL(request.url()).pathname;
+    if (pathname === "/api/files" || pathname === "/api/recent") {
+      requests.push(pathname);
+    }
+  });
+
+  try {
+    await expect(tree.getByText("added-while-reading.md")).toHaveCount(0);
+    await page.getByRole("button", { name: "文档首页" }).click();
+    await expect(tree.getByText("added-while-reading.md")).toBeVisible();
+    await expect(page.getByText("3 个 Markdown 文件")).toBeAttached();
+    for (const name of ["最新创建", "最近更新"]) {
+      await expect(
+        page
+          .getByRole("region", { name })
+          .getByRole("link", { name: /Added while reading/ }),
+      ).toBeVisible();
+    }
+    expect(requests).toEqual(["/api/files", "/api/recent"]);
+  } finally {
+    rmSync(added, { force: true });
+  }
+});
+
 test("rewriting the rules updates the next API answer at once", async () => {
   writeRules("");
   expect(await listedFiles()).toEqual(["hidden.md", "visible.md"]);
