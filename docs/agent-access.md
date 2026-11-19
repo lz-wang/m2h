@@ -5,7 +5,7 @@ tags:
   - agent
   - api
 create_date: 2026-11-18
-update_date: 2026-11-18
+update_date: 2026-11-20
 ---
 
 # Agent 知识库接入
@@ -61,3 +61,12 @@ list_documents()          → GET /api/files
 - `POST /api/tokens` 的长期 Token 可使用 `permanent: true` 创建永久凭证，不能同时提供 `expiresInDays`；响应中 `expiresAt: 0` 表示永久有效。默认有效期仍为 180 天。
 - 临时 Token 仅支持单篇文档的 `document:read` 权限；旧的超范围临时 Token 不再可用。令牌列表只显示未过期且未撤销的 Token；过期超过 7 天的临时 Token 和撤销超过 7 天的 Token 会定期清理。
 - 反向代理部署下请使用对外地址；`Authorization` 头不要放进 URL 查询参数。
+
+
+## 按文档日期浏览
+
+`GET /api/recent` 返回 `created` 和 `updated` 两组结果，各最多 10 条。每条包含 `path`、`title`、`date` 和 `dateSource`。多根工作区的 `path` 带 `r0/` 等根前缀。认证模式下，API 令牌须有 `document:read` 权限，结果仅包含其范围内可读取的文档。
+
+日期为 `YYYY-MM-DD`。有效 Frontmatter 日期的 `dateSource` 为 `frontmatter`。使用文件修改日期时为 `mtime`，此时创建日期为估算值。同一天的条目按文件修改时间倒序排列，再按路径升序排列。
+
+服务按需构建元数据缓存，其有效期为 30 秒。新增和编辑的文档可能要等缓存刷新后才出现。缓存通过文件路径、目标路径、大小和修改时间判定文件是否变化。原地改写时若保留大小和修改时间，缓存可能继续显示旧元数据。

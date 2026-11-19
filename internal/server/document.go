@@ -125,6 +125,7 @@ type documentHandler struct {
 
 	discover func(context.Context, rootScope) (files.Discovery, error)
 	search   *searchIndex
+	recent   recentCache
 
 	// runContext scopes background work that must outlive any single HTTP
 	// request — the search index's refreshes. Nil means context.Background();
@@ -217,6 +218,7 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 		mux.HandleFunc("/api/tokens/", handler.serveTokenItem)
 	}
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
+	mux.HandleFunc("/api/recent", requireGET(handler.serveRecent))
 	mux.HandleFunc("/api/document", requireGET(handler.serveDocument))
 	mux.HandleFunc("/api/file-metadata", requireGET(handler.serveFileMetadata))
 	mux.HandleFunc("/api/search", requireGET(handler.serveSearch))

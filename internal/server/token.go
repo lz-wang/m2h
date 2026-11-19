@@ -375,12 +375,12 @@ func (handler *documentHandler) enforceTokenScope(
 		// Scoped tokens search too — serveSearch filters matches inside
 		// the scan loop, never after truncating the result page.
 		return nil
-	case path == "/api/files":
+	case path == "/api/files", path == "/api/recent":
 		if !scope.Allows(auth.PermissionDocumentRead) {
 			writeJSONError(response, http.StatusForbidden, "token scope does not permit document listing")
 			return errHandled
 		}
-		// Scoped tokens list too — serveFiles filters by the same scope.
+		// Both listing handlers filter by the same document scope.
 		return nil
 	case path == "/api/document", path == "/api/file-metadata", path == "/raw/", strings.HasPrefix(path, "/raw/"):
 		return handler.enforceTokenDocumentScope(response, request, path, scope, record)
