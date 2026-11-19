@@ -101,6 +101,37 @@ describe("usePreview decoupled loading", () => {
     expect(window.location.pathname).toBe("/");
   });
 
+  it("aborts an open document request when returning home", async () => {
+    window.history.replaceState(null, "", "/?mode=dark&width=wide&toc=false");
+    const api = createAPI();
+    api.listFiles.mockResolvedValue({
+      kind: "directory",
+      version: "test",
+      roots: rootWith([{ path: "README.md", name: "README.md" }]),
+    });
+    const pending = deferred<Awaited<ReturnType<PreviewAPI["getDocument"]>>>();
+    api.getDocument.mockReturnValue(pending.promise);
+    const { result } = renderHook(() => usePreview(api));
+
+    await waitFor(() => expect(result.current.phase).toBe("home"));
+    act(() => {
+      void result.current.select("README.md", "#heading");
+    });
+    const signal = api.getDocument.mock.calls[0]?.[1];
+    expect(result.current.phase).toBe("loading-document");
+    act(() => result.current.goHome());
+
+    expect(signal?.aborted).toBe(true);
+    expect(
+      window.location.pathname + window.location.search + window.location.hash,
+    ).toBe("/?mode=dark&width=wide&toc=false");
+
+    await act(async () => pending.resolve(documentResponse("README.md")));
+    expect(result.current.phase).toBe("home");
+    expect(result.current.document).toBeNull();
+    expect(result.current.selectedPath).toBeNull();
+  });
+
   it("refresh fetches the file list and the open document concurrently", async () => {
     window.history.replaceState(null, "", "/doc/README.md");
     const api = createAPI();

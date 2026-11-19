@@ -94,6 +94,47 @@ describe("App directory preview", () => {
     ).toBeTruthy();
   });
 
+  it("retries recent metadata and opens a document from either list", async () => {
+    window.history.replaceState(null, "", "/");
+    const user = userEvent.setup();
+    const estimate = {
+      path: "guides/setup.md",
+      title: "Setup guide",
+      date: "2026-11-19",
+      dateSource: "mtime",
+    } as const;
+    const api = createAPI({
+      getRecent: vi
+        .fn<PreviewAPI["getRecent"]>()
+        .mockRejectedValueOnce(new Error("offline"))
+        .mockResolvedValue({ created: [estimate], updated: [estimate] }),
+    });
+    render(<App api={api} />);
+    await screen.findByText("无法读取最近文档。");
+    await user.click(screen.getByRole("button", { name: "重试" }));
+
+    const created = within(
+      await screen.findByRole("region", { name: "最新创建" }),
+    );
+    const updated = within(screen.getByRole("region", { name: "最近更新" }));
+    expect(created.getByText("估算")).toBeTruthy();
+    expect(updated.queryByText("估算")).toBeNull();
+    expect(created.getByText("guides")).toBeTruthy();
+    const link = updated.getByRole("link", { name: /Setup guide/ });
+    expect(link.getAttribute("href")).toBe("/doc/guides/setup.md");
+    // A modified click remains a native link action, without changing this tab.
+    fireEvent.click(link, { metaKey: true });
+    expect(api.getDocument).not.toHaveBeenCalled();
+    await user.click(link);
+    await screen.findByText("Body for guides/setup.md");
+    expect(api.getRecent).toHaveBeenCalledTimes(2);
+
+    await user.click(screen.getByRole("button", { name: "文档首页" }));
+    await screen.findByRole("region", { name: "最新创建" });
+    expect(api.getRecent).toHaveBeenCalledTimes(3);
+    expect(screen.queryByText("Body for guides/setup.md")).toBeNull();
+  });
+
   it("never auto-opens a document when the address names one explicitly", async () => {
     const api = createAPI();
     render(<App api={api} />);
@@ -123,6 +164,7 @@ describe("App directory preview", () => {
     expect(window.location.pathname + window.location.search).toBe(
       "/doc/README.md",
     );
+    expect(api.getRecent).not.toHaveBeenCalled();
     expect(document.title).toBe("README");
     expect(document.documentElement.dataset.mode).toBe("auto");
     expect(
@@ -365,6 +407,8 @@ describe("App directory preview", () => {
     expect(
       screen.queryByRole("searchbox", { name: "按文件名或路径筛选文件" }),
     ).toBeNull();
+    expect(api.getRecent).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "文档首页" })).toBeNull();
     // Shared toolbar controls remain available in single-file mode.
     expect(screen.getByRole("button", { name: "文档宽度：标准" })).toBeTruthy();
     expect(

@@ -445,11 +445,17 @@ test.describe("authenticated mode", () => {
     });
     expect(closing).toEqual({ hasResult: true, hasForm: false });
     await expect(createDialog).toBeHidden();
-    await expect(dialog.getByText("permanent-e2e")).toBeVisible();
-    await expect(dialog.getByText("单篇文档（README.md）")).toBeVisible();
-    await expect(dialog.getByText(/永久/).last()).toBeVisible();
-    await dialog.getByRole("button", { name: "删除 permanent-e2e" }).click();
-    await expect(dialog.getByText("permanent-e2e")).toHaveCount(0);
+    const tokenRow = dialog.getByRole("row").filter({
+      has: page.getByRole("cell", { name: "permanent-e2e", exact: true }),
+    });
+    await expect(
+      tokenRow.getByRole("cell", { name: "单篇文档（README.md）" }),
+    ).toBeVisible();
+    await expect(
+      tokenRow.getByRole("cell", { name: "永久", exact: true }),
+    ).toBeVisible();
+    await tokenRow.getByRole("button", { name: "删除 permanent-e2e" }).click();
+    await expect(tokenRow).toHaveCount(0);
   });
 
   test("outline and annotations share a fixed, resizable rail", async ({
@@ -498,6 +504,34 @@ test.describe("authenticated mode", () => {
       .toBeGreaterThan(45);
     await page.getByRole("button", { name: "收起标注面板" }).click();
     await expect(panel).toHaveCount(0);
+  });
+
+  test("returning home clears the document outline and annotation panel", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page, "alice", "password-1");
+    await page.goto(`${baseURL}/doc/toc-scroll.md`);
+    const outline = page.getByRole("navigation", { name: "文档目录" });
+    const panel = page.getByRole("complementary", { name: "标注面板" });
+    await expect(outline).toBeVisible();
+    await page.getByRole("button", { name: "打开标注面板" }).click();
+    await expect(panel).toBeVisible();
+    await page.getByRole("button", { name: "文档首页" }).click();
+
+    await expect(
+      page.getByRole("heading", { level: 1, name: "文档首页" }),
+    ).toBeVisible();
+    await expect(page.locator(".markdown-body")).toHaveCount(0);
+    await expect(outline).toHaveCount(0);
+    await expect(panel).toHaveCount(0);
+    await expect(page.getByRole("button", { name: /标注面板/ })).toHaveCount(0);
+    await page.goBack();
+    await expect(outline).toBeVisible();
+    await expect(panel).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "打开标注面板" }),
+    ).toBeVisible();
   });
 
   test("annotation toggle also closes the mobile panel", async ({ page }) => {

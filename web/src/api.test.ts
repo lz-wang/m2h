@@ -95,6 +95,48 @@ describe("browser API", () => {
     );
   });
 
+  it("reads recent document lists", async () => {
+    const entry = {
+      path: "r1/notes/guide.md",
+      title: "Guide",
+      date: "2026-11-18",
+      dateSource: "frontmatter",
+    };
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ created: [entry], updated: [] }),
+    );
+    const { signal } = new AbortController();
+    await expect(browserAPI.getRecent(signal)).resolves.toEqual({
+      created: [entry],
+      updated: [],
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/recent",
+      expect.objectContaining({ signal }),
+    );
+  });
+
+  it.each([
+    { created: [], updated: null },
+    {
+      created: [
+        { path: "a.md", title: "A", date: "yesterday", dateSource: "mtime" },
+      ],
+      updated: [],
+    },
+    {
+      created: [
+        { path: "a.md", title: "A", date: "2026-11-18", dateSource: "date" },
+      ],
+      updated: [],
+    },
+  ])("rejects invalid recent metadata %#", async (response) => {
+    fetchMock.mockResolvedValueOnce(Response.json(response));
+    await expect(browserAPI.getRecent()).rejects.toThrow(
+      "最近文档响应格式无效",
+    );
+  });
+
   it("normalizes the preview kind", async () => {
     fetchMock.mockResolvedValueOnce(
       new Response(

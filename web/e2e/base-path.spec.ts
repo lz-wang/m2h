@@ -147,6 +147,30 @@ flowchart LR
         }
       });
 
+      test("home lists both roots and opens prefixed document links", async ({
+        page,
+      }) => {
+        const home = `${origin}${base}/`;
+        await page.goto(home);
+        await expect(page).toHaveURL(home);
+        const created = page.getByRole("region", { name: "最新创建" });
+        await expect(
+          created.getByRole("link", { name: /Base Home/ }),
+        ).toHaveAttribute("href", `${base}/doc/r0/README.md`);
+        await expect(
+          created.getByRole("link", { name: /Other Root/ }),
+        ).toHaveAttribute("href", `${base}/doc/r1/README.md`);
+        await created.getByRole("link", { name: /Other Root/ }).click();
+        await expect(page.locator(".markdown-body h1")).toHaveText(
+          "Other Root",
+        );
+        await page.getByRole("button", { name: "文档首页" }).click();
+        await expect(page).toHaveURL(home);
+        await expect(
+          created.getByRole("link", { name: /Other Root/ }),
+        ).toBeVisible();
+      });
+
       test("deep links, navigation, search, rich resources and boundaries preserve the prefix", async ({
         page,
         context,
