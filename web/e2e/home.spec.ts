@@ -78,6 +78,34 @@ test("sidebar home stays clickable while the file tree scrolls", async ({
   await expect(home).toHaveAttribute("aria-current", "page");
 });
 
+test("keeps outline controls on document pages and preserves their preference", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/doc/toc-scroll.md");
+  const outline = page.getByRole("navigation", { name: "文档目录" });
+  await expect(outline).toBeVisible();
+  await page.getByRole("button", { name: "隐藏文档目录" }).click();
+
+  await page.getByRole("button", { name: "文档首页" }).click();
+  await expect(page).toHaveURL(/\/\?toc=false$/);
+  const home = page.getByRole("article", { name: "文档首页" });
+  await expect(home.getByRole("region", { name: "最新创建" })).toBeVisible();
+  await expect(home.getByRole("heading", { name: "文档首页" })).toHaveCount(0);
+  await expect(page.getByRole("navigation", { name: "首页导航" })).toHaveCount(
+    0,
+  );
+  await expect(page.locator(".reader-toc-toggle")).toHaveCount(0);
+
+  await page.goBack();
+  await expect(
+    page.getByRole("button", { name: "显示文档目录" }),
+  ).toBeVisible();
+  await expect(outline).toBeHidden();
+  await page.getByRole("button", { name: "显示文档目录" }).click();
+  await expect(outline).toBeVisible();
+});
+
 test("aligns overview icons, labels and values on desktop", async ({
   page,
 }) => {
