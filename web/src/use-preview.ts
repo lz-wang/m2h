@@ -31,7 +31,7 @@ import {
 export type PreviewPhase =
   | "loading-files"
   | "loading-document"
-  | "unselected"
+  | "home"
   | "ready"
   | "empty"
   | "not-found"
@@ -71,6 +71,7 @@ export interface PreviewState {
   error: string | null;
   visualError: string | null;
   refresh(): Promise<void>;
+  goHome(): void;
   select(path: string, hash?: string): Promise<void>;
   // Fetches the open document's original Markdown source on demand (the
   // share menu's full-text copy); null when nothing is open.
@@ -123,7 +124,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   const [visualError, setVisualError] = useState<string | null>(null);
   const filesRef = useRef<FileSummary[]>([]);
   const rootsRef = useRef<RootSummary[]>([]);
-  const kindRef = useRef<PreviewKind>("directory");
+  const kindRef = useRef<PreviewKind | null>(null);
   const selectedPathRef = useRef<string | null>(null);
   const modeRef = useRef<Mode>(initialRoute.current.mode);
   const widthRef = useRef<DocumentWidth>(initialRoute.current.width);
@@ -201,16 +202,25 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     [api, writeRoute],
   );
 
-  // Leaving every document closed converges here: the URL returns to the
-  // workspace root and the phase distinguishes "nothing to select" (empty)
-  // from "documents exist, none chosen yet" (unselected).
-  const settleWithoutDocument = useCallback(() => {
-    selectedPathRef.current = null;
-    setSelectedPath(null);
-    setDocumentResponse(null);
-    setPhase(filesRef.current.length === 0 ? "empty" : "unselected");
-    writeRoute(null, "replace");
-  }, [writeRoute]);
+  const settleWithoutDocument = useCallback(
+    (action: HistoryAction) => {
+      documentController.current?.abort();
+      selectedPathRef.current = null;
+      setSelectedPath(null);
+      setDocumentResponse(null);
+      setError(null);
+      setVisualError(null);
+      setPhase(
+        kindRef.current === null
+          ? "loading-files"
+          : filesRef.current.length === 0
+            ? "empty"
+            : "home",
+      );
+      writeRoute(null, action);
+    },
+    [writeRoute],
+  );
 
   // The sidebar's own fetch: request the file list and update only
   // file-tree state. It never touches the reader's phase — a slow or failing
@@ -247,6 +257,13 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         setKind(loaded.kind);
         setVersion(loaded.version);
         setFilesLoading(false);
+        setPhase((current) =>
+          current === "home" || current === "empty"
+            ? flattened.length === 0
+              ? "empty"
+              : "home"
+            : current,
+        );
         return loaded;
       } catch (reason: unknown) {
         if (controller.signal.aborted || isAbortError(reason)) {
@@ -302,32 +319,37 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     [api],
   );
 
-  // The "/" starting point has no document in the URL: the workspace's own
-  // default (single file, or the first root's README/index/first root-level
-  // document) can only be chosen from the file list, so this path stays
-  // sequential by design. The URL then canonicalizes to the chosen /doc/...
-  // address via the replace inside loadDocument.
+  // The root needs the listing to distinguish directory, single-file and
+  // empty workspaces. A selection made during that fetch takes precedence.
   const loadWorkspaceDefault = useCallback(async () => {
-    setError(null);
-    setVisualError(null);
-    const loaded = await fetchFileList();
+    const listing = fetchFileList();
+    const controller = listController.current;
+    const loaded = await listing;
+    if (controller?.signal.aborted || selectedPathRef.current !== null) {
+      return;
+    }
     if (loaded === null) {
-      if (selectedPathRef.current === null) {
-        // No document is open whose body could survive the failure, so the
-        // reader owns the error (with a retry); the sidebar shows the same
-        // text through filesError.
-        setError(filesErrorMessage);
-        setPhase("error");
-      }
+      setError(filesErrorMessage);
+      setPhase("error");
       return;
     }
     const target = autoOpenDocument(loaded.roots, loaded.kind);
     if (target === null) {
-      settleWithoutDocument();
+      settleWithoutDocument("replace");
       return;
     }
     await loadDocument(target, "replace");
   }, [fetchFileList, loadDocument, settleWithoutDocument]);
+
+  const goHome = useCallback(() => {
+    if (kindRef.current === "single" || selectedPathRef.current === null) {
+      return;
+    }
+    settleWithoutDocument("push");
+    if (kindRef.current === null) {
+      void loadWorkspaceDefault();
+    }
+  }, [loadWorkspaceDefault, settleWithoutDocument]);
 
   useEffect(() => {
     const route = initialRoute.current;
@@ -357,10 +379,15 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
       setModeState(route.mode);
       setWidthState(route.width);
       setTOCState(route.toc);
+      const kind = kindRef.current;
       const target =
-        route.path ?? autoOpenDocument(rootsRef.current, kindRef.current);
+        route.path ??
+        (kind === null ? null : autoOpenDocument(rootsRef.current, kind));
       if (target === null) {
-        settleWithoutDocument();
+        settleWithoutDocument("replace");
+        if (kind === null) {
+          void loadWorkspaceDefault();
+        }
         return;
       }
       const targetHash = target === route.path ? route.hash : "";
@@ -381,7 +408,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
-  }, [loadDocument, settleWithoutDocument]);
+  }, [loadDocument, loadWorkspaceDefault, settleWithoutDocument]);
 
   useEffect(() => {
     const media =
@@ -417,13 +444,14 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   // commit, before paint — readers (and tests) see the new title immediately
   // rather than on the next passive-effect flush.
   useLayoutEffect(() => {
-    document.title = documentResponse?.title ?? "m2h";
-  }, [documentResponse]);
+    document.title =
+      documentResponse?.title ?? (phase === "home" ? "文档首页 · m2h" : "m2h");
+  }, [documentResponse, phase]);
 
   // The toolbar's refresh: an open document reloads beside its file list, and
   // neither result may discard the other — allSettled, so a failing listing
   // never blanks a document that reloaded fine (and vice versa). With no
-  // document open the workspace default is re-picked from a fresh list.
+  // document open the workspace root reloads from a fresh list.
   const refresh = useCallback(async () => {
     const path = selectedPathRef.current;
     if (path === null) {
@@ -523,6 +551,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     error,
     visualError,
     refresh,
+    goHome,
     readCurrentMarkdown,
     select,
     setMode,

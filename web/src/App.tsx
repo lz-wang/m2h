@@ -392,6 +392,23 @@ export function App({
   const [commentMarkers, setCommentMarkers] = useState<
     Array<{ id: string; x: number; y: number }>
   >([]);
+  const workspaceRoot = preview.selectedPath === null;
+  useLayoutEffect(() => {
+    if (!workspaceRoot) return;
+    if (hoverTimer.current !== null) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+    annotationLayerRef.current?.release();
+    annotationBodyRef.current = null;
+    annotationIndexRef.current = null;
+    annotationPositionsRef.current.clear();
+    setAnnotationsOpen(false);
+    setHoverAnnotation(null);
+    setEditingAnnotation(false);
+    setAnnotationStatuses({});
+    setCommentMarkers([]);
+  }, [workspaceRoot]);
   // The loaded document's content hash, read through a ref so the rebuild
   // callback keys on list changes only: an annotation whose stored hash
   // equals the loaded hash may trust its stored position, one from an
@@ -719,6 +736,13 @@ export function App({
   }
   const documentPath = preview.document?.path ?? null;
   const landedPathRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (preview.phase === "home") {
+      landedPathRef.current = null;
+      pendingSearchRef.current = null;
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+    }
+  }, [preview.phase]);
   useEffect(() => {
     if (preview.phase !== "ready" || documentPath === null) {
       return;
@@ -1053,7 +1077,11 @@ export function App({
               </Tooltip>
             ) : null}
             <DocumentTitle
-              title={preview.document?.title ?? null}
+              title={
+                preview.phase === "home"
+                  ? "文档首页"
+                  : (preview.document?.title ?? null)
+              }
               frontmatter={preview.document?.frontmatter ?? null}
             />
             <div className="toolbar-actions">
@@ -1156,7 +1184,7 @@ export function App({
                   onOpenChange={setTokenSettingsOpen}
                 />
               ) : null}
-              {annotationsEnabled ? (
+              {annotationsEnabled && !workspaceRoot ? (
                 <Tooltip>
                   <TooltipTrigger
                     render={
@@ -1267,7 +1295,7 @@ export function App({
                 }
               />
               {/* The attribution belongs to a successfully opened document
-               * page, not the app shell: loading, unselected, not-found and
+               * page, not the app shell: loading, home, not-found and
                * error states stay footer-less. */}
               {preview.phase === "ready" && preview.document !== null ? (
                 <ReaderFooter version={preview.version} />
@@ -1360,7 +1388,7 @@ export function App({
                     />
                   </>
                 ) : null}
-                {annotationsEnabled ? (
+                {annotationsEnabled && !workspaceRoot ? (
                   <AnnotationPanel
                     open={annotationsOpen}
                     onOpenChange={setAnnotationsOpen}
@@ -1381,27 +1409,28 @@ export function App({
               </div>
             </div>
           </div>
-          {commentMarkers.map((marker) => (
-            <span
-              key={marker.id}
-              className="annotation-comment-marker"
-              style={{ left: marker.x, top: marker.y }}
-              aria-hidden="true"
-            >
-              <svg
+          {!workspaceRoot &&
+            commentMarkers.map((marker) => (
+              <span
+                key={marker.id}
+                className="annotation-comment-marker"
+                style={{ left: marker.x, top: marker.y }}
                 aria-hidden="true"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeLinecap="round"
-                strokeLinejoin="round"
               >
-                <path d="M7.9 20.9A9 9 0 1 0 3.1 16L2 22Z" />
-                <path d="M8 10h8M8 14h5" />
-              </svg>
-            </span>
-          ))}
-          {hoverAnnotation && hoveredItem ? (
+                <svg
+                  aria-hidden="true"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M7.9 20.9A9 9 0 1 0 3.1 16L2 22Z" />
+                  <path d="M8 10h8M8 14h5" />
+                </svg>
+              </span>
+            ))}
+          {!workspaceRoot && hoverAnnotation && hoveredItem ? (
             <>
               {/* biome-ignore lint/a11y/noStaticElementInteractions: Hover retains the contextual controls while moving the pointer. */}
               <div
@@ -2057,14 +2086,10 @@ function PreviewContent({
       </section>
     );
   }
-  // Deliberately not the "empty" panel: documents exist, the reader just has
-  // not picked one yet. Conflating the two would make "no Markdown" and
-  // "nothing selected" indistinguishable again.
-  if (phase === "unselected") {
+  if (phase === "home") {
     return (
-      <section className="state-panel" role="status">
-        <FileQuestion aria-hidden="true" />
-        <p>请选择要查看的文件</p>
+      <section className="state-panel">
+        <h1>文档首页</h1>
       </section>
     );
   }

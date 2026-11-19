@@ -178,7 +178,7 @@ flowchart LR
             await route.fulfill({ response });
           });
         }
-        await page.goto(`${origin}${base}/`);
+        await page.goto(`${origin}${base}/doc/r0/README.md`);
         await expect(page).toHaveURL(`${origin}${base}/doc/r0/README.md`);
         await expect(page.locator(".markdown-body h1")).toHaveText("Base Home");
         await expect(

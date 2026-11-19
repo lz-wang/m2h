@@ -187,30 +187,10 @@ test("collapses the width ladder on mobile viewports without touching the prefer
   await expect(page.locator(".document-width-control")).toBeVisible();
 });
 
-test("opens the root README from the bare workspace address", async ({
+test("shows document metadata on the sidebar entry tooltip", async ({
   page,
 }) => {
-  await page.setViewportSize({ width: 1280, height: 720 });
-  const documentRequests: string[] = [];
-  page.on("request", (request) => {
-    if (request.url().includes("/api/document")) {
-      documentRequests.push(request.url());
-    }
-  });
-
-  await page.goto("/");
-  await page.waitForFunction(
-    () =>
-      document.querySelector(".markdown-body p, .markdown-body h2") !== null,
-  );
-
-  // The workspace picks its own entry document: exactly one document fetch,
-  // the address canonicalizes to the README's /doc/ URL (so refresh and share
-  // land on the same reading state), and the tree marks it current.
-  expect(documentRequests).toHaveLength(1);
-  expect(await page.evaluate(() => window.location.pathname)).toBe(
-    "/doc/README.md",
-  );
+  await page.goto("/doc/README.md");
   await expect(page.locator('[aria-current="page"]')).toContainText(
     "README.md",
   );

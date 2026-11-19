@@ -116,108 +116,17 @@ describe("route model", () => {
     expect(autoOpenDocument([], "single")).toBeNull();
   });
 
-  it("picks the first root's README over index and any other document", () => {
+  it("reserves directory and workspace roots for the home route", () => {
+    const root = directoryRoot([
+      file("README.md"),
+      file("index.md"),
+      file("a.md"),
+    ]);
+    expect(autoOpenDocument([root], "directory")).toBeNull();
     expect(
-      autoOpenDocument(
-        [directoryRoot([file("a.md"), file("index.md"), file("README.md")])],
-        "directory",
-      ),
-    ).toBe("README.md");
-    expect(
-      autoOpenDocument(
-        [directoryRoot([file("a.md"), file("index.md")])],
-        "directory",
-      ),
-    ).toBe("index.md");
-  });
-
-  it("matches README and index case-insensitively and by name only", () => {
-    // Title casing and uppercase extensions do not hide an entry document…
-    expect(
-      autoOpenDocument(
-        [directoryRoot([file("Readme.MD"), file("a.md")])],
-        "directory",
-      ),
-    ).toBe("Readme.MD");
-    expect(
-      autoOpenDocument(
-        [directoryRoot([file("INDEX.md"), file("a.md")])],
-        "directory",
-      ),
-    ).toBe("INDEX.md");
-    // Titles never participate: the file NAME is the convention, so a
-    // README-named title cannot promote a differently named file. (The
-    // summary carries no title anymore — the name alone decides.)
-    expect(autoOpenDocument([directoryRoot([file("a.md")])], "directory")).toBe(
-      "a.md",
-    );
-  });
-
-  it("falls back to the first root-level file in natural name order", () => {
-    // b.md before a.md as served is irrelevant: the pick sorts by name, and
-    // numeric order keeps numbered notes in reading sequence.
-    expect(
-      autoOpenDocument(
-        [directoryRoot([file("b.md"), file("a.md")])],
-        "directory",
-      ),
-    ).toBe("a.md");
-    expect(
-      autoOpenDocument(
-        [
-          directoryRoot([
-            file("10-extra.md"),
-            file("02-guide.md"),
-            file("01-intro.md"),
-          ]),
-        ],
-        "directory",
-      ),
-    ).toBe("01-intro.md");
-  });
-
-  it("never picks a subdirectory README or index", () => {
-    // docs/README.md is not the workspace's entry document…
-    expect(
-      autoOpenDocument(
-        [directoryRoot([file("docs/README.md"), file("a.md")])],
-        "directory",
-      ),
-    ).toBe("a.md");
-    // … and when only nested documents exist, nothing opens.
-    expect(
-      autoOpenDocument([directoryRoot([file("docs/index.md")])], "directory"),
+      autoOpenDocument([root, { ...root, id: "r1" }], "workspace"),
     ).toBeNull();
-  });
-
-  it("opens nothing for an empty root", () => {
-    expect(autoOpenDocument([directoryRoot([])], "directory")).toBeNull();
-    expect(autoOpenDocument([], "directory")).toBeNull();
-    expect(autoOpenDocument([], "workspace")).toBeNull();
-  });
-
-  it("consults only the first root of a multi-root workspace and returns virtual paths", () => {
-    // The first root's README wins over the second root's index.
-    expect(
-      autoOpenDocument(
-        [
-          { id: "root-a", name: "root-a", files: [file("README.md")] },
-          { id: "root-b", name: "root-b", files: [file("index.md")] },
-        ],
-        "workspace",
-      ),
-    ).toBe("root-a/README.md");
-    // A first root without root-level documents never falls through to the
-    // second root's README.
-    expect(
-      autoOpenDocument(
-        [
-          { id: "root-a", name: "root-a", files: [file("nested/guide.md")] },
-          { id: "root-b", name: "root-b", files: [file("README.md")] },
-        ],
-        "workspace",
-      ),
-    ).toBeNull();
+    expect(autoOpenDocument([directoryRoot([])], "single")).toBeNull();
   });
 });
 
@@ -482,19 +391,5 @@ describe("workspace-scale model", () => {
     expect(keys.size).toBe(10_000);
     expect(keys.has("r0/group/group-7/doc-00007.md")).toBe(true);
     expect(keys.has("r1/notes/group-7/doc-00007.md")).toBe(true);
-  });
-
-  it("auto-open stays correct across a 10000-file workspace", () => {
-    // The first root carries no root-level README: with 5K nested documents
-    // the pick still resolves without scanning into the second root.
-    expect(autoOpenDocument(workspace, "workspace")).toBeNull();
-    const readme = [...workspace[0].files];
-    readme[0] = { path: "README.md", name: "README.md" };
-    expect(
-      autoOpenDocument(
-        [{ id: "r0", name: "alpha", files: readme }, workspace[1]],
-        "workspace",
-      ),
-    ).toBe("r0/README.md");
   });
 });

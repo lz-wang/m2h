@@ -82,9 +82,8 @@ describe("usePreview decoupled loading", () => {
     expect(api.getDocument).not.toHaveBeenCalled();
   });
 
-  it("opens the workspace default document once the file list arrives", async () => {
+  it("enters the directory home once the file list arrives", async () => {
     const api = createAPI();
-    const pending = deferred<Awaited<ReturnType<PreviewAPI["getDocument"]>>>();
     api.listFiles.mockResolvedValue({
       kind: "directory",
       version: "test",
@@ -93,19 +92,12 @@ describe("usePreview decoupled loading", () => {
         { path: "guides/setup.md", name: "setup.md" },
       ]),
     });
-    api.getDocument.mockReturnValue(pending.promise);
     const { result } = renderHook(() => usePreview(api));
 
-    await waitFor(() =>
-      expect(api.getDocument).toHaveBeenCalledWith(
-        "README.md",
-        expect.any(AbortSignal),
-      ),
-    );
-    expect(result.current.phase).toBe("loading-document");
-    pending.resolve(documentResponse("README.md"));
-    await waitFor(() => expect(result.current.phase).toBe("ready"));
+    await waitFor(() => expect(result.current.phase).toBe("home"));
     expect(result.current.files).toHaveLength(2);
+    expect(api.getDocument).not.toHaveBeenCalled();
+    expect(window.location.pathname).toBe("/");
   });
 
   it("refresh fetches the file list and the open document concurrently", async () => {
