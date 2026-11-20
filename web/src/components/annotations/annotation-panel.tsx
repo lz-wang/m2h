@@ -13,6 +13,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ExportDocument } from "@/lib/annotation-export";
 import { AnnotationAction } from "./annotation-action";
+import { AnnotationCommentMeta } from "./annotation-comment-meta";
 import {
   AnnotationCopyButton,
   type AnnotationCopyFormat,
@@ -145,10 +146,8 @@ export function AnnotationPanel({
                   ) : item.comment !== "" ? (
                     <p className="mt-1.5 whitespace-pre-wrap">{item.comment}</p>
                   ) : null}
-                  <div className="text-muted-foreground mt-1.5 flex items-center gap-2 text-xs">
-                    <span>{item.authorName}</span>
-                    <span aria-hidden="true">·</span>
-                    <time>{new Date(item.createdAt).toLocaleString()}</time>
+                  <div className="mt-1.5">
+                    <AnnotationCommentMeta item={item} />
                   </div>
                   <div className="mt-1.5 flex items-center gap-1">
                     <AnnotationAction

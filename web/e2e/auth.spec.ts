@@ -908,4 +908,146 @@ test.describe("authenticated mode", () => {
     await page.getByRole("button", { name: "删除此标注" }).click();
     await expect(page.getByText("待重新关联")).toBeHidden();
   });
+  test("overlapping annotations offer the exact hits and independent actions", async ({
+    page,
+  }) => {
+    await page
+      .context()
+      .grantPermissions(["clipboard-read", "clipboard-write"], {
+        origin: baseURL,
+      });
+    await login(page, "alice", "password-1");
+    const documentResponse = await page.request.get(
+      `${baseURL}/api/document?path=README.md`,
+    );
+    const identity = (await documentResponse.json()) as {
+      documentRef: { rootId: string; path: string };
+      documentHash: string;
+    };
+    const create = async (exact: string, comment: string) => {
+      const response = await page.request.post(`${baseURL}/api/annotations`, {
+        headers: { Origin: baseURL },
+        data: {
+          documentRef: identity.documentRef,
+          documentHash: identity.documentHash,
+          selector: {
+            quote: { exact, prefix: "", suffix: "" },
+            position: { start: 0, end: exact.length },
+            version: 1,
+          },
+          comment,
+        },
+      });
+      expect(response.status()).toBe(201);
+      return (await response.json()) as { id: string; updatedAt: number };
+    };
+    const wide = await create("此文档用于验证正文渲染", "较宽选区的标注");
+    const older = await create("验证正文", "同一选区的旧标注");
+    const newer = await create("验证正文", "同一选区的新标注");
+
+    await page.goto(`${baseURL}/doc/README.md`);
+    await page.waitForSelector("article p");
+    const pointAt = (offset: number) =>
+      page.evaluate((offset) => {
+        const text = document.querySelector("article p")?.firstChild;
+        if (!text) throw new Error("missing annotated text");
+        const range = document.createRange();
+        range.setStart(text, offset);
+        range.setEnd(text, offset + 1);
+        const rect = range.getBoundingClientRect();
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      }, offset);
+    const wideOnly = await pointAt(1);
+    const overlap = await pointAt(6);
+    const card = page.getByRole("region", { name: "标注窗口" });
+    const list = card.getByRole("list", { name: "重叠标注" });
+    const comment = card.locator(".annotation-comment-box");
+
+    await expect(async () => {
+      await page.mouse.move(wideOnly.x + 1, wideOnly.y);
+      await page.mouse.move(wideOnly.x, wideOnly.y);
+      await expect(comment).toHaveText("较宽选区的标注", { timeout: 500 });
+    }).toPass({ timeout: 10_000 });
+    await expect(list).toBeHidden();
+    await expect(card.getByText("alice", { exact: true })).toBeVisible();
+    await expect(card.locator("time")).toHaveAttribute(
+      "datetime",
+      new Date(wide.updatedAt).toISOString(),
+    );
+
+    await page.mouse.move(overlap.x, overlap.y);
+    await expect(card.getByText("3 条标注")).toBeVisible();
+    await page.mouse.click(overlap.x, overlap.y);
+    await page.mouse.move(wideOnly.x, wideOnly.y);
+    await expect(list.getByRole("button")).toHaveText([
+      /同一选区的新标注/,
+      /同一选区的旧标注/,
+      /较宽选区的标注/,
+    ]);
+
+    await list.getByRole("button", { name: /同一选区的新标注/ }).click();
+    await expect(comment).toHaveText("同一选区的新标注");
+    await expect(card.locator("time")).toHaveAttribute(
+      "datetime",
+      new Date(newer.updatedAt).toISOString(),
+    );
+    const copy = card.getByRole("button", { name: "复制标注（JSON）" });
+    await copy.click();
+    await expect(copy.locator(".lucide-check")).toBeVisible();
+    const copied = JSON.parse(
+      await page.evaluate(() => navigator.clipboard.readText()),
+    );
+    expect(copied.annotations).toEqual([
+      expect.objectContaining({
+        id: newer.id,
+        comment: "同一选区的新标注",
+      }),
+    ]);
+
+    await page.getByRole("button", { name: "打开标注面板" }).click();
+    const sidebar = page.getByRole("complementary", { name: "标注面板" });
+    const sidebarTime = sidebar.locator(
+      `[data-annotation-id="${newer.id}"] time`,
+    );
+    await expect(sidebarTime).toHaveAttribute(
+      "datetime",
+      new Date(newer.updatedAt).toISOString(),
+    );
+
+    await card.getByRole("button", { name: "编辑评论", exact: true }).click();
+    await card.getByPlaceholder("添加评论…").fill("更新后的新标注");
+    const updateResponse = page.waitForResponse(
+      (response) =>
+        response.url() === `${baseURL}/api/annotations/${newer.id}/comment` &&
+        response.request().method() === "PATCH",
+    );
+    await card.getByRole("button", { name: "保存" }).click();
+    const { updatedAt } = (await (await updateResponse).json()) as {
+      updatedAt: number;
+    };
+    expect(updatedAt).toBeGreaterThan(newer.updatedAt);
+    const updatedTime = new Date(updatedAt).toISOString();
+    await expect(comment).toHaveText("更新后的新标注");
+    await expect(card.locator("time")).toHaveAttribute("datetime", updatedTime);
+    await expect(sidebarTime).toHaveAttribute("datetime", updatedTime);
+    await card.getByRole("button", { name: "返回标注列表" }).click();
+    await expect(
+      list.getByRole("button", { name: /更新后的新标注/ }).locator("time"),
+    ).toHaveAttribute("datetime", updatedTime);
+    await list.getByRole("button", { name: /同一选区的旧标注/ }).click();
+    await card.getByRole("button", { name: "删除标注", exact: true }).click();
+    await expect(list.getByRole("button")).toHaveText([
+      /更新后的新标注/,
+      /较宽选区的标注/,
+    ]);
+
+    const remaining = await page.request.get(
+      `${baseURL}/api/annotations?path=README.md`,
+    );
+    const { annotations: entries } = (await remaining.json()) as {
+      annotations: Array<{ id: string }>;
+    };
+    expect(entries.map(({ id }) => id)).toEqual([wide.id, newer.id]);
+    expect(entries.map(({ id }) => id)).not.toContain(older.id);
+  });
 });

@@ -15,12 +15,10 @@ import {
   MessageCircle,
   MessageSquare,
   Moon,
-  Pencil,
   RefreshCw,
   Scaling,
   Sun,
   SunMoon,
-  Trash2,
   TriangleAlert,
   UserRoundCog,
 } from "lucide-react";
@@ -51,13 +49,15 @@ import {
   type SearchResult,
   type TocItem,
 } from "./api";
-import { AnnotationAction } from "./components/annotations/annotation-action";
+import type { AnnotationCopyFormat } from "./components/annotations/annotation-copy-button";
 import {
-  AnnotationCopyButton,
-  type AnnotationCopyFormat,
-} from "./components/annotations/annotation-copy-button";
-import { AnnotationEditor } from "./components/annotations/annotation-editor";
-import { AnnotationFloatingCard } from "./components/annotations/annotation-floating-card";
+  AnnotationFloatingCard,
+  annotationCardHeight,
+} from "./components/annotations/annotation-floating-card";
+import {
+  AnnotationHoverDetail,
+  AnnotationHoverList,
+} from "./components/annotations/annotation-hover-content";
 import { AnnotationPanel } from "./components/annotations/annotation-panel";
 import { SelectionToolbar } from "./components/annotations/selection-toolbar";
 import { DocumentLightbox } from "./components/document-lightbox";
@@ -380,12 +380,15 @@ export function App({
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tocShare, setTocShare] = useState(50);
   const [hoverAnnotation, setHoverAnnotation] = useState<{
-    id: string;
+    ids: string[];
+    activeId?: string;
     x: number;
     y: number;
     pinned?: boolean;
   } | null>(null);
-  const [editingAnnotation, setEditingAnnotation] = useState(false);
+  const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(
+    null,
+  );
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The human re-anchor flow: the annotation awaiting a new passage, or
   // null. While pending, the selection toolbar serves the re-association
@@ -413,7 +416,7 @@ export function App({
       hoverTimer.current = null;
     }
     setHoverAnnotation(null);
-    setEditingAnnotation(false);
+    setEditingAnnotationId(null);
   }, [annotationIdentity]);
   useLayoutEffect(() => {
     if (!workspaceRoot) return;
@@ -560,9 +563,10 @@ export function App({
     },
     [rebuildAnnotationLayer],
   );
-  const annotationAt = (x: number, y: number): string | null => {
+  const annotationsAt = (x: number, y: number): string[] => {
     const index = annotationIndexRef.current;
-    if (!index) return null;
+    if (!index) return [];
+    const ids: string[] = [];
     for (const [id, position] of annotationPositionsRef.current) {
       const range = index.rangeFromSpan(position);
       if (
@@ -574,14 +578,67 @@ export function App({
             y >= rect.top &&
             y <= rect.bottom,
         )
-      )
-        return id;
+      ) {
+        ids.push(id);
+      }
     }
-    return null;
+    return ids;
   };
-  const hoveredItem = annotations.items.find(
-    (item) => item.id === hoverAnnotation?.id,
+  const hoveredIds = hoverAnnotation?.ids;
+  const hoveredAnnotations = useMemo(
+    () =>
+      hoveredIds
+        ? annotations.items
+            .filter((item) => hoveredIds.includes(item.id))
+            // The API lists in insertion order when timestamps tie.
+            .reverse()
+            .sort((a, b) => b.createdAt - a.createdAt)
+        : [],
+    [annotations.items, hoveredIds],
   );
+  const hoveredItem =
+    hoveredAnnotations.length === 1
+      ? hoveredAnnotations[0]
+      : hoveredAnnotations.find(
+          (item) => item.id === hoverAnnotation?.activeId,
+        );
+  const editingAnnotation =
+    hoveredItem !== undefined && editingAnnotationId === hoveredItem.id;
+
+  function clearHoverTimer() {
+    if (hoverTimer.current !== null) {
+      clearTimeout(hoverTimer.current);
+      hoverTimer.current = null;
+    }
+  }
+
+  function showHoveredAnnotations(
+    ids: string[],
+    x: number,
+    y: number,
+    pinned = false,
+  ) {
+    clearHoverTimer();
+    setHoverAnnotation((current) => {
+      if (
+        current?.ids.length === ids.length &&
+        current.ids.every((id, index) => id === ids[index])
+      ) {
+        return pinned && !current.pinned
+          ? { ...current, pinned: true }
+          : current;
+      }
+      return { ids, x, y, pinned };
+    });
+  }
+
+  function selectHoveredAnnotation(activeId?: string) {
+    setEditingAnnotationId(null);
+    setHoverAnnotation((current) =>
+      current ? { ...current, activeId, pinned: true } : current,
+    );
+  }
+
   const locateAnnotation = useCallback(
     (id: string) => {
       const position = annotationPositionsRef.current.get(id);
@@ -1308,23 +1365,15 @@ export function App({
             ref={readerMainRef}
             onMouseMove={(event) => {
               if (
-                (hoveredItem &&
+                (hoveredAnnotations.length > 0 &&
                   (editingAnnotation || hoverAnnotation?.pinned)) ||
                 !(event.target instanceof Node) ||
                 !annotationBodyRef.current?.contains(event.target)
               )
                 return;
-              const id = annotationAt(event.clientX, event.clientY);
-              if (id) {
-                if (hoverTimer.current) {
-                  clearTimeout(hoverTimer.current);
-                  hoverTimer.current = null;
-                }
-                setHoverAnnotation((current) =>
-                  current?.id === id
-                    ? current
-                    : { id, x: event.clientX, y: event.clientY },
-                );
+              const ids = annotationsAt(event.clientX, event.clientY);
+              if (ids.length > 0) {
+                showHoveredAnnotations(ids, event.clientX, event.clientY);
               } else if (!hoverTimer.current)
                 hoverTimer.current = setTimeout(() => {
                   setHoverAnnotation(null);
@@ -1338,10 +1387,12 @@ export function App({
                 window.getSelection()?.toString()
               )
                 return;
-              const id = annotationAt(event.clientX, event.clientY);
-              if (id) {
+              const ids = annotationsAt(event.clientX, event.clientY);
+              if (ids.length > 1) {
+                showHoveredAnnotations(ids, event.clientX, event.clientY, true);
+              } else if (ids[0] !== undefined) {
                 setAnnotationsOpen(true);
-                annotations.select(id);
+                annotations.select(ids[0]);
                 setAnnotationSelectionVersion((value) => value + 1);
               }
             }}
@@ -1506,11 +1557,19 @@ export function App({
                 <MessageCircle aria-hidden="true" />
               </span>
             ))}
-          {!workspaceRoot && hoverAnnotation && hoveredItem ? (
+          {!workspaceRoot &&
+          hoverAnnotation &&
+          hoveredAnnotations.length > 0 ? (
             <AnnotationFloatingCard
-              key={hoveredItem.id}
+              key={JSON.stringify(hoverAnnotation.ids)}
               left={hoverAnnotation.x}
-              top={hoverAnnotation.y + 16}
+              top={
+                hoverAnnotation.ids.length > 1 &&
+                hoverAnnotation.y + annotationCardHeight + 24 >
+                  window.innerHeight
+                  ? hoverAnnotation.y - annotationCardHeight - 16
+                  : hoverAnnotation.y + 16
+              }
               onAdjust={() => {
                 setHoverAnnotation((current) =>
                   current && !current.pinned
@@ -1518,83 +1577,54 @@ export function App({
                     : current,
                 );
               }}
-              onEnter={() => {
-                if (hoverTimer.current) {
-                  clearTimeout(hoverTimer.current);
-                  hoverTimer.current = null;
-                }
-              }}
+              onEnter={clearHoverTimer}
               onLeave={() => {
                 if (!editingAnnotation && !hoverAnnotation.pinned)
                   setHoverAnnotation(null);
               }}
               onClose={() => {
                 setHoverAnnotation(null);
-                setEditingAnnotation(false);
+                setEditingAnnotationId(null);
               }}
             >
-              {editingAnnotation ? (
-                <AnnotationEditor
-                  initial={hoveredItem.comment}
-                  autoFocus
-                  pending={false}
-                  onCancel={() => setEditingAnnotation(false)}
-                  onSave={(comment) => {
-                    void annotations
-                      .editComment(hoveredItem.id, comment)
-                      .then((ok) => {
-                        if (ok) setEditingAnnotation(false);
-                      });
+              {hoveredItem ? (
+                <AnnotationHoverDetail
+                  key={hoveredItem.id}
+                  item={hoveredItem}
+                  editing={editingAnnotation}
+                  onEditingChange={(editing) =>
+                    setEditingAnnotationId((current) =>
+                      editing
+                        ? hoveredItem.id
+                        : current === hoveredItem.id
+                          ? null
+                          : current,
+                    )
+                  }
+                  onBack={
+                    hoveredAnnotations.length > 1
+                      ? () => selectHoveredAnnotation()
+                      : undefined
+                  }
+                  onCopy={
+                    tokensEnabled
+                      ? (format) => copyAnnotations(format, [hoveredItem.id])
+                      : undefined
+                  }
+                  onSave={(comment) =>
+                    annotations.editComment(hoveredItem.id, comment)
+                  }
+                  onDelete={() => {
+                    if (hoverAnnotation.ids.length === 1)
+                      setHoverAnnotation(null);
+                    return annotations.remove(hoveredItem.id);
                   }}
                 />
               ) : (
-                <>
-                  {/* biome-ignore lint/a11y/noStaticElementInteractions: The edit button provides the keyboard equivalent of this shortcut. */}
-                  <div
-                    className="annotation-comment-box"
-                    onDoubleClick={() => {
-                      if (hoveredItem.mine) setEditingAnnotation(true);
-                    }}
-                  >
-                    {hoveredItem.comment || "无评论"}
-                  </div>
-                  <div className="annotation-hover-actions">
-                    <AnnotationCopyButton
-                      format="markdown"
-                      label="复制标注（Markdown）"
-                      disabled={!tokensEnabled}
-                      onCopy={() =>
-                        copyAnnotations("markdown", [hoveredItem.id])
-                      }
-                    />
-                    <AnnotationCopyButton
-                      format="json"
-                      label="复制标注（JSON）"
-                      disabled={!tokensEnabled}
-                      onCopy={() => copyAnnotations("json", [hoveredItem.id])}
-                    />
-                    {hoveredItem.mine ? (
-                      <>
-                        <AnnotationAction
-                          label="编辑评论"
-                          onClick={() => setEditingAnnotation(true)}
-                        >
-                          <Pencil aria-hidden="true" />
-                        </AnnotationAction>
-                        <AnnotationAction
-                          className="text-destructive hover:text-destructive"
-                          label="删除标注"
-                          onClick={() => {
-                            void annotations.remove(hoveredItem.id);
-                            setHoverAnnotation(null);
-                          }}
-                        >
-                          <Trash2 aria-hidden="true" />
-                        </AnnotationAction>
-                      </>
-                    ) : null}
-                  </div>
-                </>
+                <AnnotationHoverList
+                  items={hoveredAnnotations}
+                  onSelect={selectHoveredAnnotation}
+                />
               )}
             </AnnotationFloatingCard>
           ) : null}
