@@ -375,7 +375,27 @@ test.describe("authenticated mode", () => {
     await expect(
       page.getByRole("complementary", { name: "标注面板" }),
     ).toContainText("侧边栏已更新");
-    await expect(page.getByText(/本页标注/)).toBeVisible();
+    const annotationPanel = page.getByRole("complementary", {
+      name: "标注面板",
+    });
+    const titleCenter = await annotationPanel
+      .getByText(/本页标注/)
+      .evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return rect.top + rect.height / 2;
+      });
+    for (const name of [
+      "复制全部标注（Markdown）",
+      "复制全部标注（JSON）",
+      "批量删除标注",
+    ]) {
+      const icon = await annotationPanel
+        .getByRole("button", { name, exact: true })
+        .locator("svg")
+        .boundingBox();
+      if (!icon) throw new Error(`missing annotation action: ${name}`);
+      expect(Math.abs(icon.y + icon.height / 2 - titleCenter)).toBeLessThan(1);
+    }
     await page.getByRole("button", { name: "复制全部标注（JSON）" }).click();
     await expect(
       page

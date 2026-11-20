@@ -219,7 +219,7 @@ export function AnnotationPanel({
 
   const header = (
     <div className="flex items-center justify-between gap-2">
-      <div className="reader-toc-title mb-0 flex items-center gap-1">
+      <div className="text-foreground flex items-center gap-1 text-xs font-semibold">
         本页标注
         <span>{items.length}</span>
       </div>
