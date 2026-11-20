@@ -1030,6 +1030,8 @@ test.describe("authenticated mode", () => {
     await expect(comment).toHaveText("更新后的新标注");
     await expect(card.locator("time")).toHaveAttribute("datetime", updatedTime);
     await expect(sidebarTime).toHaveAttribute("datetime", updatedTime);
+    await expect(card).not.toContainText("更新于");
+    await expect(sidebar).not.toContainText("更新于");
     await card.getByRole("button", { name: "返回标注列表" }).click();
     await expect(
       list.getByRole("button", { name: /更新后的新标注/ }).locator("time"),
