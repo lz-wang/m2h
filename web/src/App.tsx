@@ -395,7 +395,7 @@ export function App({
     activeId?: string;
     x: number;
     y: number;
-    pinned?: boolean;
+    pinned: boolean;
   } | null>(null);
   const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(
     null,
@@ -640,6 +640,13 @@ export function App({
       }
       return { ids, x, y, pinned };
     });
+  }
+
+  function setHoverPinned(pinned: boolean) {
+    clearHoverTimer();
+    setHoverAnnotation((current) =>
+      current && current.pinned !== pinned ? { ...current, pinned } : current,
+    );
   }
 
   function selectHoveredAnnotation(activeId?: string) {
@@ -1594,13 +1601,9 @@ export function App({
                   ? hoverAnnotation.y - annotationCardHeight - 16
                   : hoverAnnotation.y + 16
               }
-              onAdjust={() => {
-                setHoverAnnotation((current) =>
-                  current && !current.pinned
-                    ? { ...current, pinned: true }
-                    : current,
-                );
-              }}
+              pinned={hoverAnnotation.pinned}
+              onPinnedChange={setHoverPinned}
+              onAdjust={() => setHoverPinned(true)}
               onEnter={clearHoverTimer}
               onLeave={() => {
                 if (!editingAnnotation && !hoverAnnotation.pinned)

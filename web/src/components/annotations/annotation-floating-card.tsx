@@ -1,4 +1,4 @@
-import { GripHorizontal, X } from "lucide-react";
+import { GripHorizontal, Pin, PinOff, X } from "lucide-react";
 import {
   type KeyboardEvent,
   type PointerEvent,
@@ -83,7 +83,9 @@ export function AnnotationFloatingCard({
   top,
   label = "标注窗口",
   closeDisabled = false,
+  pinned = false,
   children,
+  onPinnedChange,
   onAdjust,
   onEnter,
   onLeave,
@@ -93,7 +95,9 @@ export function AnnotationFloatingCard({
   top: number;
   label?: string;
   closeDisabled?: boolean;
+  pinned?: boolean;
   children: ReactNode;
+  onPinnedChange?(pinned: boolean): void;
   onAdjust?(): void;
   onEnter?(): void;
   onLeave?(): void;
@@ -171,6 +175,20 @@ export function AnnotationFloatingCard({
       }}
     >
       <div className="annotation-hover-header">
+        {onPinnedChange ? (
+          <AnnotationAction
+            label="固定悬浮框"
+            tooltip={pinned ? "取消固定悬浮框" : "固定悬浮框"}
+            aria-pressed={pinned}
+            onClick={() => onPinnedChange(!pinned)}
+          >
+            {pinned ? (
+              <PinOff aria-hidden="true" />
+            ) : (
+              <Pin aria-hidden="true" />
+            )}
+          </AnnotationAction>
+        ) : null}
         <AnnotationAction
           className="annotation-hover-move"
           label="移动标注窗口"

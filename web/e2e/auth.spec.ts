@@ -516,17 +516,31 @@ test.describe("authenticated mode", () => {
       timeout: 10_000,
     });
 
-    // The author can delete from the in-text hover card.
-    await expect(async () => {
-      await page.mouse.move(point.x + 2, point.y);
-      await page.mouse.move(point.x, point.y);
-      await expect(
-        page.getByRole("button", { name: "删除标注", exact: true }),
-      ).toBeVisible({
-        timeout: 500,
-      });
-    }).toPass({ timeout: 10_000 });
-    const card = page.locator(".annotation-hover-card");
+    const card = page.getByRole("region", { name: "标注窗口" });
+    const openHoverCard = () =>
+      expect(async () => {
+        await page.mouse.move(point.x + 2, point.y);
+        await page.mouse.move(point.x, point.y);
+        await expect(card).toBeVisible({ timeout: 500 });
+      }).toPass({ timeout: 10_000 });
+    await openHoverCard();
+
+    const pin = card.getByRole("button", { name: "固定悬浮框" });
+    await expect(pin).toHaveAttribute("aria-pressed", "false");
+    await expect(pin.locator(".lucide-pin")).toBeVisible();
+    await pin.click();
+    await expect(pin).toHaveAttribute("aria-pressed", "true");
+    await expect(pin.locator(".lucide-pin-off")).toBeVisible();
+    await page.mouse.move(8, 8);
+    await expect(card).toBeVisible();
+
+    await pin.click();
+    await expect(pin).toHaveAttribute("aria-pressed", "false");
+    await expect(pin.locator(".lucide-pin")).toBeVisible();
+    await page.mouse.move(8, 8);
+    await expect(card).toBeHidden();
+    await openHoverCard();
+
     const start = await card.boundingBox();
     if (!start) throw new Error("missing annotation hover card");
     await dragAnnotationHandle(
