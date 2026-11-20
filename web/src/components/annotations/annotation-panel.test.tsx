@@ -43,7 +43,7 @@ function renderPanel(
   overrides: Partial<Parameters<typeof AnnotationPanel>[0]> = {},
 ) {
   const onLocate = vi.fn();
-  const onDelete = vi.fn().mockResolvedValue(undefined);
+  const onDelete = vi.fn().mockResolvedValue({ deletedIds: [], failures: [] });
   const onOpenChange = vi.fn();
   const view = render(
     <AnnotationPanel
@@ -112,7 +112,7 @@ describe("AnnotationPanel", () => {
     await userEvent.click(trigger);
     let dialog = within(await screen.findByRole("dialog"));
     await userEvent.click(
-      dialog.getByRole("checkbox", { name: "删除所有标注" }),
+      dialog.getByRole("checkbox", { name: "删除我在当前文档中的全部标注" }),
     );
     await userEvent.click(dialog.getByRole("button", { name: "取消" }));
     expect(onDelete).not.toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe("AnnotationPanel", () => {
     await userEvent.click(trigger);
     dialog = within(await screen.findByRole("dialog"));
     await userEvent.click(
-      dialog.getByRole("checkbox", { name: "删除所有标注" }),
+      dialog.getByRole("checkbox", { name: "删除我在当前文档中的全部标注" }),
     );
     await userEvent.click(dialog.getByRole("button", { name: "确认删除" }));
     expect(onDelete).toHaveBeenLastCalledWith(["a1", "a2", "a3"]);

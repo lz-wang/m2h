@@ -121,15 +121,19 @@ describe("useAnnotations", () => {
     await waitFor(() => expect(result.current.items).toHaveLength(1));
 
     await act(async () => {
-      await result.current.remove("a1");
+      const outcome = await result.current.remove("a1");
+      expect(outcome).toEqual({ deletedIds: ["a1"], failures: [] });
     });
     expect(result.current.items).toHaveLength(0);
 
     fetchMock.mockResolvedValueOnce(jsonResponse({ error: "forbidden" }, 403));
     await act(async () => {
-      await result.current.remove("a1");
+      const outcome = await result.current.remove("a1");
+      expect(outcome).toEqual({
+        deletedIds: [],
+        failures: [{ id: "a1", message: "没有权限执行此操作。" }],
+      });
     });
-    expect(result.current.error).toContain("权限");
   });
 
   it("reanchor replaces the stored selector", async () => {
@@ -358,7 +362,7 @@ describe("useAnnotations", () => {
     );
     await waitFor(() => expect(result.current.items).toHaveLength(1));
 
-    let removeDone: Promise<void> | null = null;
+    let removeDone: ReturnType<typeof result.current.remove> | null = null;
     act(() => {
       removeDone = result.current.remove("a1");
     });

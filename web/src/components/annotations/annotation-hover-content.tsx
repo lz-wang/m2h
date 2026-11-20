@@ -53,6 +53,8 @@ export function AnnotationHoverDetail({
   onCopy,
   onSave,
   onDelete,
+  deleting,
+  deleteError,
 }: {
   item: AnnotationItem;
   editing: boolean;
@@ -60,10 +62,11 @@ export function AnnotationHoverDetail({
   onBack?: () => void;
   onCopy?: (format: AnnotationCopyFormat) => Promise<boolean>;
   onSave(comment: string): Promise<boolean>;
-  onDelete(): Promise<void>;
+  onDelete(): void;
+  deleting: boolean;
+  deleteError?: string;
 }) {
   const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   return (
     <>
@@ -72,6 +75,7 @@ export function AnnotationHoverDetail({
           variant="ghost"
           size="xs"
           className="mb-1 self-start"
+          disabled={deleting}
           onClick={onBack}
         >
           <ArrowLeft aria-hidden="true" />
@@ -98,7 +102,7 @@ export function AnnotationHoverDetail({
         <div
           className="annotation-comment-box"
           onDoubleClick={() => {
-            if (item.mine) onEditingChange(true);
+            if (item.mine && !deleting) onEditingChange(true);
           }}
         >
           {item.comment || "无评论"}
@@ -107,6 +111,11 @@ export function AnnotationHoverDetail({
       <div className="mt-1 px-1">
         <AnnotationCommentMeta item={item} />
       </div>
+      {deleteError ? (
+        <p className="text-destructive mt-1 px-1 text-xs" role="alert">
+          {deleteError}
+        </p>
+      ) : null}
       {editing ? null : (
         <div className="annotation-hover-actions">
           <AnnotationCopyButton
@@ -125,18 +134,16 @@ export function AnnotationHoverDetail({
             <>
               <AnnotationAction
                 label="编辑评论"
+                disabled={deleting}
                 onClick={() => onEditingChange(true)}
               >
                 <Pencil aria-hidden="true" />
               </AnnotationAction>
               <AnnotationAction
                 className="text-destructive hover:text-destructive"
-                label="删除标注"
+                label={deleteError ? "重试删除标注" : "删除标注"}
                 disabled={deleting}
-                onClick={() => {
-                  setDeleting(true);
-                  void onDelete().finally(() => setDeleting(false));
-                }}
+                onClick={onDelete}
               >
                 <Trash2 aria-hidden="true" />
               </AnnotationAction>

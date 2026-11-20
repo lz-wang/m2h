@@ -11,6 +11,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import type { AnnotationDeleteResult } from "@/hooks/use-annotations";
 import type { ExportDocument } from "@/lib/annotation-export";
 import { AnnotationAction } from "./annotation-action";
 import { AnnotationCommentMeta } from "./annotation-comment-meta";
@@ -34,7 +35,7 @@ export interface AnnotationPanelProps {
   document: ExportDocument | null;
   // Scrolls the body to the annotation's live position.
   onLocate(id: string): void;
-  onDelete(ids: string | string[]): Promise<void>;
+  onDelete(ids: string | string[]): Promise<AnnotationDeleteResult>;
   onEditComment?(id: string, comment: string): Promise<boolean>;
   // Starts the human re-anchor flow for one of the caller's unresolved
   // annotations: the reader switches to "select the new passage" mode.
@@ -62,6 +63,13 @@ export function AnnotationPanel({
   const [confirming, setConfirming] = useState(false);
   const [deleteAll, setDeleteAll] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteErrors, setDeleteErrors] = useState<Map<string, string>>(
+    new Map(),
+  );
+  const [batchResult, setBatchResult] = useState<{
+    deletedCount: number;
+    failures: AnnotationDeleteResult["failures"];
+  } | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingComment, setSavingComment] = useState(false);
   const panelRef = useRef<HTMLElement | null>(null);
@@ -90,10 +98,38 @@ export function AnnotationPanel({
         ({ id }) => statuses[id] === "orphaned" || statuses[id] === "ambiguous",
       );
 
-  async function deleteAnnotations(ids: string | string[]) {
+  async function deleteRow(id: string) {
     setDeleting(true);
     try {
-      await onDelete(ids);
+      const { failures } = await onDelete(id);
+      setDeleteErrors((current) => {
+        const next = new Map(current);
+        const failure = failures[0];
+        if (failure) next.set(id, failure.message);
+        else next.delete(id);
+        return next;
+      });
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  async function deleteBatch() {
+    const ids = batchResult
+      ? batchResult.failures.map(({ id }) => id)
+      : deletionTargets.map(({ id }) => id);
+    setDeleting(true);
+    try {
+      const result = await onDelete(ids);
+      if (result.failures.length === 0) {
+        setConfirming(false);
+        return;
+      }
+      setBatchResult({
+        deletedCount:
+          (batchResult?.deletedCount ?? 0) + result.deletedIds.length,
+        failures: result.failures,
+      });
     } finally {
       setDeleting(false);
     }
@@ -117,6 +153,7 @@ export function AnnotationPanel({
           <ol className="flex flex-col gap-2 pr-2">
             {items.map((item) => {
               const status = statuses[item.id] ?? "resolved";
+              const deleteError = deleteErrors.get(item.id);
               return (
                 <li
                   key={item.id}
@@ -199,15 +236,20 @@ export function AnnotationPanel({
                           </AnnotationAction>
                         ) : null}
                         <AnnotationAction
-                          label="删除此标注"
+                          label={deleteError ? "重试删除此标注" : "删除此标注"}
                           disabled={deleting}
-                          onClick={() => void deleteAnnotations(item.id)}
+                          onClick={() => void deleteRow(item.id)}
                         >
                           <Trash2 aria-hidden="true" />
                         </AnnotationAction>
                       </>
                     ) : null}
                   </div>
+                  {deleteError ? (
+                    <p className="text-destructive mt-1 text-xs" role="alert">
+                      {deleteError}
+                    </p>
+                  ) : null}
                 </li>
               );
             })}
@@ -239,7 +281,9 @@ export function AnnotationPanel({
         <Dialog
           open={confirming}
           onOpenChange={(nextOpen) => {
+            if (deleting) return;
             setDeleteAll(false);
+            setBatchResult(null);
             setConfirming(nextOpen);
           }}
         >
@@ -259,32 +303,60 @@ export function AnnotationPanel({
           >
             <DialogTitle>批量删除标注</DialogTitle>
             <DialogDescription>
-              将删除你在当前文档中{deleteAll ? "的全部" : "无法定位的"}
-              {deletionTargets.length} 条标注。
+              {batchResult
+                ? "重试时只会删除本次失败的标注。"
+                : deleteAll
+                  ? `将删除你在当前文档中的全部 ${deletionTargets.length} 条标注。`
+                  : `将删除你在当前文档中无法定位的 ${deletionTargets.length} 条标注。`}
             </DialogDescription>
-            <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="accent-primary"
-                checked={deleteAll}
-                onChange={(event) => setDeleteAll(event.target.checked)}
-              />
-              删除所有标注
-            </label>
+            {batchResult ? (
+              <div className="text-destructive space-y-1 text-sm" role="alert">
+                <p>
+                  已删除 {batchResult.deletedCount} 条，
+                  {batchResult.failures.length} 条删除失败。
+                </p>
+                {[
+                  ...new Set(
+                    batchResult.failures.map(({ message }) => message),
+                  ),
+                ].map((message) => (
+                  <p key={message}>{message}</p>
+                ))}
+              </div>
+            ) : (
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  className="accent-primary"
+                  checked={deleteAll}
+                  disabled={deleting}
+                  onChange={(event) => setDeleteAll(event.target.checked)}
+                />
+                删除我在当前文档中的全部标注
+              </label>
+            )}
+            {deleting ? (
+              <p className="text-muted-foreground text-sm" role="status">
+                正在删除标注…
+              </p>
+            ) : null}
             <div className="flex justify-end gap-2">
-              <DialogClose render={<Button variant="ghost" size="sm" />}>
-                取消
+              <DialogClose
+                render={
+                  <Button variant="ghost" size="sm" disabled={deleting} />
+                }
+              >
+                {batchResult ? "关闭" : "取消"}
               </DialogClose>
               <Button
                 variant="destructive"
                 size="sm"
-                disabled={deletionTargets.length === 0}
-                onClick={() => {
-                  setConfirming(false);
-                  void deleteAnnotations(deletionTargets.map(({ id }) => id));
-                }}
+                disabled={
+                  deleting || (!batchResult && deletionTargets.length === 0)
+                }
+                onClick={() => void deleteBatch()}
               >
-                确认删除
+                {batchResult ? "重试失败项" : "确认删除"}
               </Button>
             </div>
           </DialogContent>

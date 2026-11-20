@@ -198,10 +198,18 @@ interface AnnotationPopup {
   ids: string[];
   activeId?: string;
   editingId?: string;
+  deleting?: boolean;
+  deleteError?: string;
   x: number;
   y: number;
   bounds?: AnnotationCardBounds;
   pinned: boolean;
+}
+
+function keepAnnotationPopupOpen(popup: AnnotationPopup): boolean {
+  return Boolean(
+    popup.pinned || popup.editingId || popup.deleting || popup.deleteError,
+  );
 }
 
 interface StoredLayout {
@@ -630,7 +638,7 @@ export function App({
     setAnnotationPopups((current) => {
       const existing = current.find((popup) => popup.key === key);
       const others = current.filter(
-        (popup) => popup.key !== key && (popup.pinned || popup.editingId),
+        (popup) => popup.key !== key && keepAnnotationPopupOpen(popup),
       );
       if (
         existing &&
@@ -1411,7 +1419,7 @@ export function App({
               } else if (!hoverTimer.current)
                 hoverTimer.current = setTimeout(() => {
                   setAnnotationPopups((current) =>
-                    current.filter((popup) => popup.pinned || popup.editingId),
+                    current.filter(keepAnnotationPopupOpen),
                   );
                   hoverTimer.current = null;
                 }, 250);
@@ -1611,6 +1619,7 @@ export function App({
                 updateAnnotationPopup(popup.key, {
                   activeId,
                   editingId: undefined,
+                  deleteError: undefined,
                   pinned: true,
                 });
 
@@ -1626,6 +1635,7 @@ export function App({
                       : popup.y + 16)
                   }
                   initialSize={popup.bounds}
+                  closeDisabled={popup.deleting}
                   pinned={popup.pinned}
                   onPinnedChange={(pinned) => {
                     clearHoverTimer();
@@ -1637,7 +1647,7 @@ export function App({
                   }}
                   onEnter={popup.pinned ? undefined : clearHoverTimer}
                   onLeave={() => {
-                    if (!editing && !popup.pinned)
+                    if (!keepAnnotationPopupOpen(popup))
                       closeAnnotationPopup(popup.key);
                   }}
                   onClose={() => closeAnnotationPopup(popup.key)}
@@ -1661,10 +1671,26 @@ export function App({
                       onSave={(comment) =>
                         annotations.editComment(item.id, comment)
                       }
+                      deleting={popup.deleting ?? false}
+                      deleteError={popup.deleteError}
                       onDelete={() => {
-                        if (popup.ids.length === 1)
-                          closeAnnotationPopup(popup.key);
-                        return annotations.remove(item.id);
+                        updateAnnotationPopup(popup.key, {
+                          deleting: true,
+                          deleteError: undefined,
+                        });
+                        void annotations
+                          .remove(item.id)
+                          .then(({ failures }) => {
+                            const failure = failures[0];
+                            if (!failure && items.length === 1) {
+                              closeAnnotationPopup(popup.key);
+                              return;
+                            }
+                            updateAnnotationPopup(popup.key, {
+                              deleting: false,
+                              deleteError: failure?.message,
+                            });
+                          });
                       }}
                     />
                   ) : (

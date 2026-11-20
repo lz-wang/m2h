@@ -1019,7 +1019,9 @@ test.describe("authenticated mode", () => {
 
     await page.getByRole("button", { name: "批量删除标注" }).click();
     await expect(page.getByRole("button", { name: "确认删除" })).toBeDisabled();
-    await page.getByRole("checkbox", { name: "删除所有标注" }).check();
+    await page
+      .getByRole("checkbox", { name: "删除我在当前文档中的全部标注" })
+      .check();
     await page.getByRole("button", { name: "确认删除" }).click();
     await expect(page.getByText(/还没有标注/)).toBeVisible();
   });
@@ -1076,6 +1078,120 @@ test.describe("authenticated mode", () => {
     await page.getByRole("button", { name: "删除此标注" }).click();
     await expect(page.getByText("待重新关联")).toBeHidden();
   });
+  test("annotation deletion keeps errors visible and retries only failed items", async ({
+    page,
+  }) => {
+    await login(page, "alice", "password-1");
+    const path = "README.md";
+    const identity = await (
+      await page.request.get(`${baseURL}/api/document?path=${path}`)
+    ).json();
+    const seed = async (exact: string, comment: string): Promise<string> => {
+      const response = await page.request.post(`${baseURL}/api/annotations`, {
+        headers: { Origin: baseURL },
+        data: {
+          documentRef: identity.documentRef,
+          documentHash: identity.documentHash,
+          selector: {
+            quote: { exact, prefix: "", suffix: "" },
+            position: { start: 0, end: exact.length },
+            version: 1,
+          },
+          comment,
+        },
+      });
+      expect(response.status()).toBe(201);
+      return (await response.json()).id;
+    };
+    const popupId = await seed("此文档", "悬浮框删除失败");
+    const rowId = await seed("无匹配文本 A", "侧栏删除失败");
+    const bulkOk = await seed("无匹配文本 B", "批量删除成功");
+    const bulkFailed = await seed("无匹配文本 C", "批量删除失败");
+    const firstFailure = new Map([
+      [popupId, 500],
+      [rowId, 403],
+      [bulkFailed, 500],
+    ]);
+    const attempts = new Map<string, number>();
+    await page.route("**/api/annotations/*", async (route) => {
+      if (route.request().method() === "DELETE") {
+        const id =
+          new URL(route.request().url()).pathname.split("/").at(-1) ?? "";
+        const count = (attempts.get(id) ?? 0) + 1;
+        attempts.set(id, count);
+        const status = firstFailure.get(id);
+        if (count === 1 && status !== undefined) {
+          await route.fulfill({
+            status,
+            json: { error: "simulated delete failure" },
+          });
+          return;
+        }
+      }
+      await route.continue();
+    });
+    await page.goto(`${baseURL}/doc/${path}`);
+    const paragraph = page.locator("article p").first();
+    const point = await paragraph.evaluate((element) => {
+      const text = element.firstChild;
+      if (!text) throw new Error("missing annotated text");
+      const range = document.createRange();
+      range.setStart(text, 0);
+      range.setEnd(text, 1);
+      const rect = range.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    const card = page.getByRole("region", { name: "标注窗口" });
+    await expect(async () => {
+      await page.mouse.move(point.x + 1, point.y);
+      await page.mouse.move(point.x, point.y);
+      await expect(card).toBeVisible({ timeout: 500 });
+    }).toPass({ timeout: 10_000 });
+    await card.getByRole("button", { name: "删除标注", exact: true }).click();
+    await expect(card.getByRole("alert")).toHaveText("删除标注失败，请重试。");
+    await page.mouse.move(8, 8);
+    await expect(card).toBeVisible();
+    await card.getByRole("button", { name: "重试删除标注" }).click();
+    await expect(card).toBeHidden();
+
+    await page.getByRole("button", { name: "打开标注面板" }).click();
+    const sidebar = page.getByRole("complementary", { name: "标注面板" });
+    const row = sidebar
+      .getByRole("listitem")
+      .filter({ hasText: "侧栏删除失败" });
+    await row.getByRole("button", { name: "删除此标注" }).click();
+    await expect(row.getByRole("alert")).toHaveText("没有权限执行此操作。");
+    await row.getByRole("button", { name: "重试删除此标注" }).click();
+    await expect(row).toBeHidden();
+
+    await sidebar.getByRole("button", { name: "批量删除标注" }).click();
+    const dialog = page.getByRole("dialog", { name: "批量删除标注" });
+    await expect(
+      dialog.getByRole("checkbox", { name: "删除我在当前文档中的全部标注" }),
+    ).toBeVisible();
+    await dialog.getByRole("button", { name: "确认删除" }).click();
+    await expect(dialog.getByRole("alert")).toContainText(
+      "已删除 1 条，1 条删除失败。",
+    );
+    await expect(dialog.getByRole("alert")).toContainText(
+      "删除标注失败，请重试。",
+    );
+    const partial = await page.request.get(
+      `${baseURL}/api/annotations?path=${path}`,
+    );
+    const remaining = (await partial.json()) as {
+      annotations: Array<{ id: string }>;
+    };
+    expect(remaining.annotations.map(({ id }) => id)).toEqual([bulkFailed]);
+    await dialog.getByRole("button", { name: "重试失败项" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(sidebar.getByText(/还没有标注/)).toBeVisible();
+    expect(attempts.get(popupId)).toBe(2);
+    expect(attempts.get(rowId)).toBe(2);
+    expect(attempts.get(bulkOk)).toBe(1);
+    expect(attempts.get(bulkFailed)).toBe(2);
+  });
+
   test("overlapping annotations offer the exact hits and independent actions", async ({
     page,
   }) => {

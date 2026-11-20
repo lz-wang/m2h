@@ -22,6 +22,11 @@ export interface AnnotationState {
   selectedId: string | null;
 }
 
+export interface AnnotationDeleteResult {
+  deletedIds: string[];
+  failures: Array<{ id: string; message: string }>;
+}
+
 export interface UseAnnotationsResult extends AnnotationState {
   // The current document identity the list belongs to; null while no
   // annotatable document is open (default mode, loading, or anonymous).
@@ -34,7 +39,7 @@ export interface UseAnnotationsResult extends AnnotationState {
     comment: string,
     onCreated?: (id: string) => void,
   ) => Promise<boolean>;
-  remove: (ids: string | string[]) => Promise<void>;
+  remove: (ids: string | string[]) => Promise<AnnotationDeleteResult>;
   // Persists a human-confirmed re-anchor (new selector) for one item.
   reanchor: (id: string, selector: AnnotationSelectorData) => Promise<boolean>;
   editComment: (id: string, comment: string) => Promise<boolean>;
@@ -178,35 +183,46 @@ export function useAnnotations(
     [identity],
   );
 
-  const remove = useCallback(async (ids: string | string[]): Promise<void> => {
-    const writtenFor = identityRef.current;
-    if (writtenFor === null) return;
-    for (const id of typeof ids === "string" ? [ids] : ids) {
-      try {
-        await deleteAnnotation(id);
-        if (sameDocumentPath(identityRef.current, writtenFor)) {
-          if (
-            pendingWrites.current &&
-            sameDocumentPath(pendingWrites.current.identity, writtenFor)
-          ) {
-            pendingWrites.current.changes.set(id, null);
+  const remove = useCallback(
+    async (ids: string | string[]): Promise<AnnotationDeleteResult> => {
+      const writtenFor = identityRef.current;
+      const targets = typeof ids === "string" ? [ids] : [...new Set(ids)];
+      const result: AnnotationDeleteResult = { deletedIds: [], failures: [] };
+      if (writtenFor === null) {
+        result.failures = targets.map((id) => ({
+          id,
+          message: "无法删除标注。请重新打开文档后重试。",
+        }));
+        return result;
+      }
+      for (const id of targets) {
+        try {
+          await deleteAnnotation(id);
+          result.deletedIds.push(id);
+          if (sameDocumentPath(identityRef.current, writtenFor)) {
+            if (
+              pendingWrites.current &&
+              sameDocumentPath(pendingWrites.current.identity, writtenFor)
+            ) {
+              pendingWrites.current.changes.set(id, null);
+            }
+            setState((current) => ({
+              ...current,
+              items: current.items.filter((item) => item.id !== id),
+              selectedId: current.selectedId === id ? null : current.selectedId,
+            }));
           }
-          setState((current) => ({
-            ...current,
-            items: current.items.filter((item) => item.id !== id),
-            selectedId: current.selectedId === id ? null : current.selectedId,
-          }));
-        }
-      } catch (error) {
-        if (sameDocumentPath(identityRef.current, writtenFor)) {
-          setState((current) => ({
-            ...current,
-            error: errorMessage(error, "删除标注失败"),
-          }));
+        } catch (error) {
+          result.failures.push({
+            id,
+            message: errorMessage(error, "删除标注失败，请重试。"),
+          });
         }
       }
-    }
-  }, []);
+      return result;
+    },
+    [],
+  );
 
   const reanchor = useCallback(
     async (id: string, selector: AnnotationSelectorData): Promise<boolean> => {
