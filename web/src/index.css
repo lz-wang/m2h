@@ -603,9 +603,9 @@ body,
 .annotation-hover-card {
   position: fixed;
   z-index: 40;
-  width: 290px;
-  max-width: calc(100vw - 24px);
-  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  padding: 0.25rem 0.5rem 0.5rem;
   border: 1px solid var(--border);
   border-radius: 0.5rem;
   background: var(--popover);
@@ -613,7 +613,43 @@ body,
   box-shadow: 0 8px 24px #0003;
   font-size: 0.875rem;
 }
+.annotation-hover-header {
+  display: flex;
+  align-items: center;
+  padding-bottom: 0.25rem;
+}
+.annotation-hover-card .annotation-hover-move {
+  flex: 1;
+  cursor: grab;
+  touch-action: none;
+}
+.annotation-hover-card .annotation-hover-move:active {
+  cursor: grabbing;
+}
+.annotation-hover-card .annotation-hover-resize {
+  position: absolute;
+  right: 0.25rem;
+  bottom: 0.25rem;
+  cursor: nwse-resize;
+  touch-action: none;
+}
+.annotation-hover-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+.annotation-hover-body > div:has(textarea) {
+  flex: 1;
+  padding-right: 1.25rem;
+}
+.annotation-hover-body textarea {
+  flex: 1;
+  resize: none;
+}
 .annotation-comment-box {
+  flex: 1;
   min-height: 3.5rem;
   padding: 0.375rem 0.5rem;
   border: 1px solid var(--input);
@@ -621,7 +657,6 @@ body,
   background: var(--background);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 10rem;
   overflow: auto;
 }
 .annotation-hover-actions {
@@ -630,6 +665,7 @@ body,
   justify-content: flex-start;
   gap: 0.25rem;
   padding-top: 0.375rem;
+  padding-right: 1.5rem;
 }
 .annotation-comment-marker {
   position: fixed;
@@ -2158,4 +2194,9 @@ body,
 ::highlight(m2h-annotations) {
   background-color: color-mix(in oklch, var(--primary) 22%, transparent);
   color: inherit;
+}
+
+::highlight(m2h-annotation-draft) {
+  background-color: Highlight;
+  color: HighlightText;
 }

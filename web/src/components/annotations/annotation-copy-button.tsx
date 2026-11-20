@@ -6,7 +6,7 @@ import {
   LoaderCircle,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
+import { AnnotationAction } from "./annotation-action";
 
 export type AnnotationCopyFormat = "markdown" | "json";
 
@@ -34,11 +34,9 @@ export function AnnotationCopyButton({
   const Icon = format === "markdown" ? FileText : FileJson;
   return (
     <>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label={label}
-        title={state === "error" ? "复制失败，请重试" : label}
+      <AnnotationAction
+        label={label}
+        tooltip={state === "error" ? "复制失败，请重试" : label}
         disabled={disabled || state === "pending"}
         onClick={() => {
           if (timer.current) clearTimeout(timer.current);
@@ -60,7 +58,7 @@ export function AnnotationCopyButton({
         ) : (
           <Icon aria-hidden="true" />
         )}
-      </Button>
+      </AnnotationAction>
       {state === "error" ? (
         <span className="sr-only" role="alert">
           复制失败，请重试

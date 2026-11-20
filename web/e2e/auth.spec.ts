@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Locator, type Page, test } from "@playwright/test";
 
 import { stopServerProcess } from "./server-process";
 
@@ -78,6 +78,22 @@ async function login(page: Page, username: string, password: string) {
   await page.getByLabel("密码").fill(password);
   await page.getByRole("button", { name: "登录" }).click();
   await page.waitForURL(`${baseURL}/`);
+}
+
+async function dragAnnotationHandle(
+  page: Page,
+  handle: Locator,
+  dx: number,
+  dy: number,
+) {
+  const rect = await handle.boundingBox();
+  if (!rect) throw new Error("missing annotation window control");
+  const x = rect.x + rect.width / 2;
+  const y = rect.y + rect.height / 2;
+  await page.mouse.move(x, y);
+  await page.mouse.down();
+  await page.mouse.move(x + dx, y + dy, { steps: 5 });
+  await page.mouse.up();
 }
 
 test.describe("authenticated mode", () => {
@@ -169,14 +185,82 @@ test.describe("authenticated mode", () => {
       window.getSelection()?.toString(),
     );
     await page.getByRole("button", { name: "评论" }).click();
+    const draftRange = () =>
+      page.evaluate(() =>
+        Array.from(CSS.highlights.get("m2h-annotation-draft") ?? [], (range) =>
+          range.toString(),
+        ),
+      );
+    const composer = page.getByRole("region", { name: "新建评论" });
+    const editor = composer.getByPlaceholder("添加评论…");
+    await expect(editor).toBeFocused();
+    await editor.fill("正在撰写");
+    await expect.poll(draftRange).toEqual([selectedText]);
+    const initialCard = await composer.boundingBox();
+    const initialEditor = await editor.boundingBox();
+    if (!initialCard || !initialEditor)
+      throw new Error("missing comment composer");
+    await dragAnnotationHandle(
+      page,
+      composer.getByRole("button", { name: "移动标注窗口" }),
+      48,
+      32,
+    );
+    expect(await composer.boundingBox()).toMatchObject({
+      x: initialCard.x + 48,
+      y: initialCard.y + 32,
+    });
+    await dragAnnotationHandle(
+      page,
+      composer.getByRole("button", { name: "调整标注窗口大小" }),
+      60,
+      44,
+    );
+    expect(await editor.boundingBox()).toMatchObject({
+      width: initialEditor.width + 60,
+      height: initialEditor.height + 44,
+    });
+    await expect(editor).toBeFocused();
+    await expect(editor).toHaveValue("正在撰写");
+    await expect.poll(draftRange).toEqual([selectedText]);
+
     await page.getByRole("button", { name: "取消" }).click();
+    await expect.poll(draftRange).toEqual([]);
     await expect
       .poll(() => page.evaluate(() => window.getSelection()?.toString()))
       .toBe(selectedText);
     await page.getByRole("button", { name: "评论" }).click();
     await page.getByPlaceholder("添加评论…").fill("需要补充备份方案");
     await page.getByRole("button", { name: "保存" }).click();
-    await expect(page.locator(".annotation-comment-marker")).toHaveCount(1);
+    await expect.poll(draftRange).toEqual([]);
+    const marker = page.locator(".annotation-comment-marker");
+    await expect(marker.locator(".lucide-message-circle")).toHaveCount(1);
+    const beforeScroll = await marker.boundingBox();
+    if (!beforeScroll) throw new Error("missing comment marker");
+    const hiddenOnScroll = await page.evaluate(() => {
+      document.body.style.minHeight = "200vh";
+      return new Promise<boolean>((resolve) => {
+        const observer = new MutationObserver(() => {
+          if (document.querySelector(".annotation-comment-marker")) return;
+          observer.disconnect();
+          resolve(true);
+        });
+        observer.observe(document.body, { childList: true, subtree: true });
+        window.setTimeout(() => {
+          observer.disconnect();
+          resolve(false);
+        }, 1000);
+        window.scrollBy({ top: 36, behavior: "instant" });
+      });
+    });
+    expect(hiddenOnScroll).toBe(true);
+    await expect
+      .poll(async () => (await marker.boundingBox())?.y)
+      .toBeCloseTo(beforeScroll.y - 36);
+    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
+    await expect
+      .poll(async () => (await marker.boundingBox())?.y)
+      .toBeCloseTo(beforeScroll.y);
 
     const point = await page.evaluate(() => {
       window.getSelection()?.removeAllRanges();
@@ -199,6 +283,8 @@ test.describe("authenticated mode", () => {
       "min-height",
       "56px",
     );
+    await page.getByRole("button", { name: "编辑评论", exact: true }).hover();
+    await expect(page.getByRole("tooltip")).toHaveText("编辑评论");
     const actions = page.locator(".annotation-hover-actions");
     const positions = await actions.evaluate((element) => {
       const buttons = [...element.querySelectorAll("button")];
@@ -223,8 +309,9 @@ test.describe("authenticated mode", () => {
     const copiedMarkdown = await page.evaluate(() =>
       navigator.clipboard.readText(),
     );
-    expect(copiedMarkdown).toContain("# m2h 文档评审");
+    expect(copiedMarkdown).toContain("# 文档评审意见");
     expect(copiedMarkdown).toContain("<!--评审意见--1--START-->");
+    expect(copiedMarkdown).toContain("- 评审意见: 需要补充备份方案");
     expect(copiedMarkdown).toContain("需要补充备份方案");
     const match = copiedMarkdown.match(
       /Authorization: Bearer (m2h_[A-Za-z0-9_-]+)/,
@@ -341,11 +428,38 @@ test.describe("authenticated mode", () => {
     await expect(async () => {
       await page.mouse.move(point.x + 2, point.y);
       await page.mouse.move(point.x, point.y);
-      await expect(page.getByRole("button", { name: "删除标注" })).toBeVisible({
+      await expect(
+        page.getByRole("button", { name: "删除标注", exact: true }),
+      ).toBeVisible({
         timeout: 500,
       });
     }).toPass({ timeout: 10_000 });
-    await page.getByRole("button", { name: "删除标注" }).click();
+    const card = page.locator(".annotation-hover-card");
+    const start = await card.boundingBox();
+    if (!start) throw new Error("missing annotation hover card");
+    await dragAnnotationHandle(
+      page,
+      card.getByRole("button", { name: "移动标注窗口" }),
+      48,
+      32,
+    );
+    expect(await card.boundingBox()).toMatchObject({
+      x: start.x + 48,
+      y: start.y + 32,
+    });
+
+    await dragAnnotationHandle(
+      page,
+      card.getByRole("button", { name: "调整标注窗口大小" }),
+      60,
+      44,
+    );
+    await page.mouse.move(8, 8);
+    expect(await card.boundingBox()).toMatchObject({
+      width: start.width + 60,
+      height: start.height + 44,
+    });
+    await page.getByRole("button", { name: "删除标注", exact: true }).click();
     await expect(page.getByText(/还没有标注/)).toBeVisible();
   });
 
@@ -616,25 +730,35 @@ test.describe("authenticated mode", () => {
       documentRef: { rootId: string; path: string };
       documentHash: string;
     };
-    const created = await request.post(`${baseURL}/api/annotations`, {
-      headers: { Cookie: cookieHeader, Origin: baseURL },
-      data: {
-        documentRef: identity.documentRef,
-        documentHash: identity.documentHash,
-        selector: {
-          quote: { exact: "旧版本残留的句子", prefix: "", suffix: "" },
-          position: { start: 0, end: 8 },
-          version: 1,
+    const createOrphan = (comment: string) =>
+      request.post(`${baseURL}/api/annotations`, {
+        headers: { Cookie: cookieHeader, Origin: baseURL },
+        data: {
+          documentRef: identity.documentRef,
+          documentHash: identity.documentHash,
+          selector: {
+            quote: { exact: "旧版本残留的句子", prefix: "", suffix: "" },
+            position: { start: 0, end: 8 },
+            version: 1,
+          },
+          comment,
         },
-        comment: "位置失效的评审意见",
-      },
-    });
-    expect(created.status()).toBe(201);
+      });
+    expect((await createOrphan("位置失效的评审意见")).status()).toBe(201);
 
     await page.goto(`${baseURL}/doc/README.md`);
     await page.waitForSelector("article p");
     await page.getByRole("button", { name: /打开标注面板/ }).click();
-    await expect(page.getByText("未定位")).toBeVisible({ timeout: 10_000 });
+    const locate = page
+      .getByRole("listitem")
+      .filter({ hasText: "旧版本残留的句子" })
+      .getByRole("button", { name: "定位到正文" });
+    await expect(locate).toBeDisabled({ timeout: 10_000 });
+
+    await locate.hover();
+    await expect(page.getByRole("tooltip")).toHaveText(
+      "此标注无法定位，文档可能已经更新",
+    );
 
     // The human repair flow: re-associate onto freshly selected text.
     await page.getByRole("button", { name: "重新关联" }).click();
@@ -661,8 +785,13 @@ test.describe("authenticated mode", () => {
     }).toPass({ timeout: 15_000 });
     await page.getByRole("button", { name: "关联到此选区" }).click();
 
-    // The annotation resolves: the badge and the flow hint disappear.
-    await expect(page.getByText("未定位")).toBeHidden({ timeout: 10_000 });
+    // The annotation resolves and the locate control becomes available.
+    await expect(
+      page
+        .getByRole("listitem")
+        .filter({ hasText: "位置失效的评审意见" })
+        .getByRole("button", { name: "定位到正文" }),
+    ).toBeEnabled({ timeout: 10_000 });
     await expect(page.getByText(/按 Esc 取消/)).toBeHidden();
 
     // Reload proves the new anchor persisted.
@@ -671,7 +800,44 @@ test.describe("authenticated mode", () => {
     await expect(page.getByText("位置失效的评审意见")).toBeVisible({
       timeout: 10_000,
     });
-    await expect(page.getByText("未定位")).toBeHidden();
+    await expect(page.getByRole("button", { name: "重新关联" })).toBeHidden();
+
+    expect((await createOrphan("确认前新增的失效标注")).status()).toBe(201);
+    await page.reload();
+    await page.getByRole("button", { name: /打开标注面板/ }).click();
+    await expect(page.getByRole("button", { name: "重新关联" })).toBeVisible();
+    await page.getByRole("button", { name: "删除此标注" }).first().hover();
+    await expect(
+      page.getByRole("tooltip").filter({ hasText: /^删除此标注$/ }),
+    ).toBeVisible();
+
+    const bulkDelete = page.getByRole("button", { name: "批量删除标注" });
+    await bulkDelete.hover();
+    await expect(
+      page.getByRole("tooltip").filter({ hasText: /^批量删除标注$/ }),
+    ).toBeVisible();
+    await bulkDelete.click();
+    const dialog = page.getByRole("dialog", { name: "批量删除标注" });
+    await expect
+      .poll(() =>
+        dialog.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return Math.hypot(
+            rect.left + rect.width / 2 - window.innerWidth / 2,
+            rect.top + rect.height / 2 - window.innerHeight / 2,
+          );
+        }),
+      )
+      .toBeLessThan(1);
+    await page.getByRole("button", { name: "确认删除" }).click();
+    await expect(page.getByText("确认前新增的失效标注")).toBeHidden();
+    await expect(page.getByText("位置失效的评审意见")).toBeVisible();
+
+    await page.getByRole("button", { name: "批量删除标注" }).click();
+    await expect(page.getByRole("button", { name: "确认删除" })).toBeDisabled();
+    await page.getByRole("checkbox", { name: "删除所有标注" }).check();
+    await page.getByRole("button", { name: "确认删除" }).click();
+    await expect(page.getByText(/还没有标注/)).toBeVisible();
   });
 
   test("the re-anchor flow cancels on Escape with nothing selected", async ({
@@ -709,7 +875,11 @@ test.describe("authenticated mode", () => {
     await page.goto(`${baseURL}/doc/README.md`);
     await page.waitForSelector("article p");
     await page.getByRole("button", { name: /打开标注面板/ }).click();
-    await expect(page.getByText("未定位")).toBeVisible({ timeout: 10_000 });
+    const locate = page
+      .getByRole("listitem")
+      .filter({ hasText: "待重新关联" })
+      .getByRole("button", { name: "定位到正文" });
+    await expect(locate).toBeDisabled({ timeout: 10_000 });
 
     // Enter the flow, select nothing, press Escape: the banner's promise.
     await page.getByRole("button", { name: "重新关联" }).click();
@@ -717,6 +887,9 @@ test.describe("authenticated mode", () => {
     await page.keyboard.press("Escape");
     await expect(page.getByText(/按 Esc 取消/)).toBeHidden();
     // The annotation is untouched — still unresolved.
-    await expect(page.getByText("未定位")).toBeVisible();
+    await expect(locate).toBeDisabled();
+
+    await page.getByRole("button", { name: "删除此标注" }).click();
+    await expect(page.getByText("待重新关联")).toBeHidden();
   });
 });

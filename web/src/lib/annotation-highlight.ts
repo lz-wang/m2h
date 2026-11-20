@@ -10,6 +10,7 @@
 import type { TextIndex, TextPosition } from "./annotation-selector";
 
 export const ANNOTATION_HIGHLIGHT_NAME = "m2h-annotations";
+export const DRAFT_ANNOTATION_HIGHLIGHT_NAME = "m2h-annotation-draft";
 
 interface HighlightConstructor {
   new (...ranges: Range[]): unknown;
@@ -46,6 +47,8 @@ export class HighlightLayer {
   private index: TextIndex | null = null;
   private registered = false;
 
+  constructor(private readonly name = ANNOTATION_HIGHLIGHT_NAME) {}
+
   // attach binds the live body the ranges resolve against; detaching with
   // null invalidates the layer until the next attach.
   attach(index: TextIndex | null): void {
@@ -66,11 +69,11 @@ export class HighlightLayer {
             .map((position) => this.index?.rangeFromSpan(position) ?? null)
             .filter((range): range is Range => range !== null);
     if (ranges.length === 0) {
-      registry.delete(ANNOTATION_HIGHLIGHT_NAME);
+      registry.delete(this.name);
       this.registered = false;
       return;
     }
-    registry.set(ANNOTATION_HIGHLIGHT_NAME, new highlight(...ranges));
+    registry.set(this.name, new highlight(...ranges));
     this.registered = true;
   }
 
@@ -78,7 +81,7 @@ export class HighlightLayer {
   release(): void {
     const registry = highlightRegistry();
     if (registry !== null) {
-      registry.delete(ANNOTATION_HIGHLIGHT_NAME);
+      registry.delete(this.name);
     }
     this.registered = false;
   }

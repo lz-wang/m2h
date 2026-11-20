@@ -1,4 +1,10 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -37,7 +43,7 @@ function renderPanel(
   overrides: Partial<Parameters<typeof AnnotationPanel>[0]> = {},
 ) {
   const onLocate = vi.fn();
-  const onDelete = vi.fn();
+  const onDelete = vi.fn().mockResolvedValue(undefined);
   const onOpenChange = vi.fn();
   const view = render(
     <AnnotationPanel
@@ -58,19 +64,21 @@ function renderPanel(
 }
 
 describe("AnnotationPanel", () => {
-  afterEach(() => {
-    document.body.replaceChildren();
-  });
+  afterEach(cleanup);
 
-  it("lists quotes, comments, authors and anchor states", () => {
-    renderPanel({
+  it("lists the annotation and disables locating missing text", async () => {
+    const { onLocate } = renderPanel({
       statuses: { a1: "orphaned" },
       items: [item()],
     });
     expect(screen.getByText("使用 SQLite")).toBeTruthy();
     expect(screen.getByText("需要补充备份方案")).toBeTruthy();
     expect(screen.getByText("alice")).toBeTruthy();
-    expect(screen.getByText("未定位")).toBeTruthy();
+    expect(screen.queryByText("未定位")).toBeNull();
+    const locate = screen.getByRole("button", { name: "定位到正文" });
+    expect(locate.getAttribute("aria-disabled")).toBe("true");
+    await userEvent.click(locate);
+    expect(onLocate).not.toHaveBeenCalled();
   });
 
   it("locates an annotation when its row action fires", async () => {
@@ -79,12 +87,50 @@ describe("AnnotationPanel", () => {
     expect(onLocate).toHaveBeenCalledWith("a1");
   });
 
-  it("deletes own annotations only after confirmation", async () => {
+  it("deletes an owned annotation immediately", async () => {
     const { onDelete } = renderPanel();
     await userEvent.click(screen.getByRole("button", { name: "删除此标注" }));
-    expect(onDelete).not.toHaveBeenCalled();
-    await userEvent.click(screen.getByRole("button", { name: "确认删除" }));
     expect(onDelete).toHaveBeenCalledWith("a1");
+  });
+
+  it("confirms bulk deletion and defaults to owned unresolved annotations", async () => {
+    const { onDelete } = renderPanel({
+      items: [
+        item(),
+        item({ id: "a2" }),
+        item({ id: "a3" }),
+        item({ id: "a4", mine: false }),
+      ],
+      statuses: {
+        a1: "orphaned",
+        a2: "ambiguous",
+        a3: "resolved",
+        a4: "orphaned",
+      },
+    });
+    const trigger = screen.getByRole("button", { name: "批量删除标注" });
+    await userEvent.click(trigger);
+    let dialog = within(await screen.findByRole("dialog"));
+    await userEvent.click(
+      dialog.getByRole("checkbox", { name: "删除所有标注" }),
+    );
+    await userEvent.click(dialog.getByRole("button", { name: "取消" }));
+    expect(onDelete).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await userEvent.click(trigger);
+    dialog = within(await screen.findByRole("dialog"));
+    await userEvent.click(dialog.getByRole("button", { name: "确认删除" }));
+    expect(onDelete).toHaveBeenLastCalledWith(["a1", "a2"]);
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+
+    await userEvent.click(trigger);
+    dialog = within(await screen.findByRole("dialog"));
+    await userEvent.click(
+      dialog.getByRole("checkbox", { name: "删除所有标注" }),
+    );
+    await userEvent.click(dialog.getByRole("button", { name: "确认删除" }));
+    expect(onDelete).toHaveBeenLastCalledWith(["a1", "a2", "a3"]);
   });
 
   it("offers no delete control for other users' annotations", () => {
@@ -135,7 +181,10 @@ describe("AnnotationPanel", () => {
     await userEvent.click(button);
     await screen.findByRole("alert");
     expect(button.querySelector(".lucide-check")).toBeNull();
-    expect(button.getAttribute("title")).toBe("复制失败，请重试");
+    await userEvent.hover(button);
+    expect((await screen.findByRole("tooltip")).textContent).toBe(
+      "复制失败，请重试",
+    );
   });
 
   it("shows the empty state without a header close button", () => {

@@ -2,8 +2,17 @@ import { Crosshair, LocateFixed, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { AnnotationItem } from "@/api";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { ExportDocument } from "@/lib/annotation-export";
+import { AnnotationAction } from "./annotation-action";
 import {
   AnnotationCopyButton,
   type AnnotationCopyFormat,
@@ -24,7 +33,7 @@ export interface AnnotationPanelProps {
   document: ExportDocument | null;
   // Scrolls the body to the annotation's live position.
   onLocate(id: string): void;
-  onDelete(id: string): void;
+  onDelete(ids: string | string[]): Promise<void>;
   onEditComment?(id: string, comment: string): Promise<boolean>;
   // Starts the human re-anchor flow for one of the caller's unresolved
   // annotations: the reader switches to "select the new passage" mode.
@@ -33,10 +42,7 @@ export interface AnnotationPanelProps {
   onCopy?: (format: AnnotationCopyFormat, ids?: string[]) => Promise<boolean>;
 }
 
-// AnnotationPanel is the right-hand annotation rail:
-// the document's annotation list with locate, copy, delete and whole-set
-// export. Other users' annotations are read-only; the panel states that
-// with a badge instead of hiding entries — review is a shared view.
+// AnnotationPanel shows the document's shared annotations and the author's editing controls.
 export function AnnotationPanel({
   open,
   items,
@@ -52,7 +58,9 @@ export function AnnotationPanel({
   onReanchor,
   onCopy,
 }: AnnotationPanelProps) {
-  const [confirming, setConfirming] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const [deleteAll, setDeleteAll] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [savingComment, setSavingComment] = useState(false);
   const panelRef = useRef<HTMLElement | null>(null);
@@ -73,6 +81,22 @@ export function AnnotationPanel({
         viewport.getBoundingClientRect().top -
         12;
   }, [open, selectedId, selectionVersion]);
+
+  const ownItems = items.filter((item) => item.mine);
+  const deletionTargets = deleteAll
+    ? ownItems
+    : ownItems.filter(
+        ({ id }) => statuses[id] === "orphaned" || statuses[id] === "ambiguous",
+      );
+
+  async function deleteAnnotations(ids: string | string[]) {
+    setDeleting(true);
+    try {
+      await onDelete(ids);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   const list = (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
@@ -125,37 +149,28 @@ export function AnnotationPanel({
                     <span>{item.authorName}</span>
                     <span aria-hidden="true">·</span>
                     <time>{new Date(item.createdAt).toLocaleString()}</time>
-                    {status === "orphaned" ? (
-                      <span className="bg-destructive/10 text-destructive rounded px-1.5 py-0.5">
-                        未定位
-                      </span>
-                    ) : null}
-                    {status === "ambiguous" ? (
-                      <span className="bg-muted text-muted-foreground rounded px-1.5 py-0.5">
-                        位置不确定
-                      </span>
-                    ) : null}
                   </div>
                   <div className="mt-1.5 flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon-xs"
-                      aria-label="定位到正文"
-                      title="定位到正文"
+                    <AnnotationAction
+                      label="定位到正文"
+                      tooltip={
+                        status === "resolved"
+                          ? undefined
+                          : "此标注无法定位，文档可能已经更新"
+                      }
+                      disabled={status !== "resolved"}
                       onClick={() => onLocate(item.id)}
                     >
                       <Crosshair aria-hidden="true" />
-                    </Button>
+                    </AnnotationAction>
                     {status !== "resolved" && item.mine && onReanchor ? (
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label="重新关联"
-                        title="重新选取正文，重新关联此标注"
+                      <AnnotationAction
+                        label="重新关联"
+                        tooltip="重新选取正文，重新关联此标注"
                         onClick={() => onReanchor(item.id)}
                       >
                         <LocateFixed aria-hidden="true" />
-                      </Button>
+                      </AnnotationAction>
                     ) : null}
                     <AnnotationCopyButton
                       format="markdown"
@@ -177,47 +192,20 @@ export function AnnotationPanel({
                     {item.mine ? (
                       <>
                         {onEditComment ? (
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            aria-label="编辑此评论"
-                            title="编辑此评论"
+                          <AnnotationAction
+                            label="编辑此评论"
                             onClick={() => setEditingId(item.id)}
                           >
                             <Pencil aria-hidden="true" />
-                          </Button>
+                          </AnnotationAction>
                         ) : null}
-                        {confirming === item.id ? (
-                          <>
-                            <Button
-                              variant="destructive"
-                              size="xs"
-                              onClick={() => {
-                                onDelete(item.id);
-                                setConfirming(null);
-                              }}
-                            >
-                              确认删除
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="xs"
-                              onClick={() => setConfirming(null)}
-                            >
-                              取消
-                            </Button>
-                          </>
-                        ) : (
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            aria-label="删除此标注"
-                            title="删除此标注"
-                            onClick={() => setConfirming(item.id)}
-                          >
-                            <Trash2 aria-hidden="true" />
-                          </Button>
-                        )}
+                        <AnnotationAction
+                          label="删除此标注"
+                          disabled={deleting}
+                          onClick={() => void deleteAnnotations(item.id)}
+                        >
+                          <Trash2 aria-hidden="true" />
+                        </AnnotationAction>
                       </>
                     ) : null}
                   </div>
@@ -249,6 +237,59 @@ export function AnnotationPanel({
           disabled={!onCopy || !document || items.length === 0}
           onCopy={() => onCopy?.("json") ?? Promise.resolve(false)}
         />
+        <Dialog
+          open={confirming}
+          onOpenChange={(nextOpen) => {
+            setDeleteAll(false);
+            setConfirming(nextOpen);
+          }}
+        >
+          <DialogTrigger
+            render={
+              <AnnotationAction
+                label="批量删除标注"
+                disabled={loading || deleting || ownItems.length === 0}
+              />
+            }
+          >
+            <Trash2 aria-hidden="true" />
+          </DialogTrigger>
+          <DialogContent
+            className="top-1/2 max-w-sm -translate-y-1/2 gap-3 p-4 data-ending-style:-translate-y-1/2 data-starting-style:-translate-y-1/2"
+            showCloseButton={false}
+          >
+            <DialogTitle>批量删除标注</DialogTitle>
+            <DialogDescription>
+              将删除你在当前文档中{deleteAll ? "的全部" : "无法定位的"}
+              {deletionTargets.length} 条标注。
+            </DialogDescription>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                className="accent-primary"
+                checked={deleteAll}
+                onChange={(event) => setDeleteAll(event.target.checked)}
+              />
+              删除所有标注
+            </label>
+            <div className="flex justify-end gap-2">
+              <DialogClose render={<Button variant="ghost" size="sm" />}>
+                取消
+              </DialogClose>
+              <Button
+                variant="destructive"
+                size="sm"
+                disabled={deletionTargets.length === 0}
+                onClick={() => {
+                  setConfirming(false);
+                  void deleteAnnotations(deletionTargets.map(({ id }) => id));
+                }}
+              >
+                确认删除
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     </div>
   );

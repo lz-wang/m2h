@@ -33,7 +33,7 @@ export interface UseAnnotationsResult extends AnnotationState {
     selector: AnnotationSelectorData,
     comment: string,
   ) => Promise<boolean>;
-  remove: (id: string) => Promise<void>;
+  remove: (ids: string | string[]) => Promise<void>;
   // Persists a human-confirmed re-anchor (new selector) for one item.
   reanchor: (id: string, selector: AnnotationSelectorData) => Promise<boolean>;
   editComment: (id: string, comment: string) => Promise<boolean>;
@@ -175,29 +175,32 @@ export function useAnnotations(
     [identity],
   );
 
-  const remove = useCallback(async (id: string): Promise<void> => {
+  const remove = useCallback(async (ids: string | string[]): Promise<void> => {
     const writtenFor = identityRef.current;
-    try {
-      await deleteAnnotation(id);
-      if (sameDocument(identityRef.current, writtenFor)) {
-        if (
-          pendingWrites.current &&
-          sameDocument(pendingWrites.current.identity, writtenFor)
-        ) {
-          pendingWrites.current.changes.set(id, null);
+    if (writtenFor === null) return;
+    for (const id of typeof ids === "string" ? [ids] : ids) {
+      try {
+        await deleteAnnotation(id);
+        if (sameDocumentPath(identityRef.current, writtenFor)) {
+          if (
+            pendingWrites.current &&
+            sameDocumentPath(pendingWrites.current.identity, writtenFor)
+          ) {
+            pendingWrites.current.changes.set(id, null);
+          }
+          setState((current) => ({
+            ...current,
+            items: current.items.filter((item) => item.id !== id),
+            selectedId: current.selectedId === id ? null : current.selectedId,
+          }));
         }
-        setState((current) => ({
-          ...current,
-          items: current.items.filter((item) => item.id !== id),
-          selectedId: current.selectedId === id ? null : current.selectedId,
-        }));
-      }
-    } catch (error) {
-      if (sameDocument(identityRef.current, writtenFor)) {
-        setState((current) => ({
-          ...current,
-          error: errorMessage(error, "删除标注失败"),
-        }));
+      } catch (error) {
+        if (sameDocumentPath(identityRef.current, writtenFor)) {
+          setState((current) => ({
+            ...current,
+            error: errorMessage(error, "删除标注失败"),
+          }));
+        }
       }
     }
   }, []);
@@ -321,9 +324,19 @@ function sameDocument(
   right: AnnotationIdentity | null,
 ): boolean {
   return (
+    sameDocumentPath(left, right) && left?.documentHash === right?.documentHash
+  );
+}
+
+// Deleting an annotation ID applies across versions of its document.
+function sameDocumentPath(
+  left: AnnotationIdentity | null,
+  right: AnnotationIdentity | null,
+): boolean {
+  return (
     left !== null &&
     right !== null &&
     left.path === right.path &&
-    left.documentHash === right.documentHash
+    left.documentRef.rootId === right.documentRef.rootId
   );
 }

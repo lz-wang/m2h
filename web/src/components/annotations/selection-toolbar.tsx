@@ -3,17 +3,26 @@ import {
   type RefObject,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
-
 import { Button } from "@/components/ui/button";
+import {
+  DRAFT_ANNOTATION_HIGHLIGHT_NAME,
+  HighlightLayer,
+} from "@/lib/annotation-highlight";
 import {
   type AnnotationSelector,
   selectorFromRange,
   type TextIndex,
 } from "@/lib/annotation-selector";
 import { AnnotationEditor } from "./annotation-editor";
+import {
+  AnnotationFloatingCard,
+  annotationCardHeight,
+  annotationCardWidth,
+} from "./annotation-floating-card";
 
 export interface SelectionToolbarProps {
   // The rendered body root; selections outside it never open the toolbar.
@@ -57,7 +66,9 @@ export function SelectionToolbar({
 }: SelectionToolbarProps) {
   const [selector, setSelector] = useState<AnnotationSelector | null>(null);
   const [position, setPosition] = useState<ToolbarPosition | null>(null);
-  const [commenting, setCommenting] = useState(false);
+  const [commentPosition, setCommentPosition] =
+    useState<ToolbarPosition | null>(null);
+  const commenting = commentPosition !== null;
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   // The live DOM selection is re-read on demand; only its derived selector
@@ -69,7 +80,7 @@ export function SelectionToolbar({
     if (reanchorPending === null) {
       return;
     }
-    setCommenting(false);
+    setCommentPosition(null);
     setFailure(null);
   }, [reanchorPending]);
 
@@ -77,7 +88,7 @@ export function SelectionToolbar({
     if (disabled) {
       setSelector(null);
       setPosition(null);
-      setCommenting(false);
+      setCommentPosition(null);
     }
   }, [disabled]);
 
@@ -138,8 +149,37 @@ export function SelectionToolbar({
       document.removeEventListener("selectionchange", handleSelectionChange);
   }, [updateFromSelection, commenting, saving]);
 
+  useLayoutEffect(() => {
+    if (disabled || !commenting || selector === null) return;
+    const layer = new HighlightLayer(DRAFT_ANNOTATION_HIGHLIGHT_NAME);
+    layer.attach(indexRef.current);
+    layer.render([selector.position]);
+    return () => layer.release();
+  }, [commenting, disabled, indexRef, selector]);
+
+  const cancelComment = useCallback(() => {
+    if (saving) return;
+    const range = rangeRef.current;
+    if (
+      range !== null &&
+      bodyRef.current?.contains(range.commonAncestorContainer)
+    ) {
+      if (document.activeElement instanceof HTMLElement)
+        document.activeElement.blur();
+      const selection = document.getSelection();
+      selection?.removeAllRanges();
+      selection?.addRange(range);
+    }
+    setCommentPosition(null);
+    setFailure(null);
+  }, [bodyRef, saving]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && commenting) {
+        cancelComment();
+        return;
+      }
       // Escape also serves the re-anchor flow's banner promise while no
       // text is selected yet — that is most of the flow's lifetime.
       if (
@@ -148,7 +188,7 @@ export function SelectionToolbar({
       ) {
         setSelector(null);
         setPosition(null);
-        setCommenting(false);
+        setCommentPosition(null);
         if (reanchorPending !== null) {
           onReanchorCancel?.();
         }
@@ -156,7 +196,7 @@ export function SelectionToolbar({
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selector, reanchorPending, onReanchorCancel]);
+  }, [selector, reanchorPending, onReanchorCancel, commenting, cancelComment]);
 
   if (selector === null || position === null || disabled) {
     return null;
@@ -173,7 +213,7 @@ export function SelectionToolbar({
     if (saved) {
       setSelector(null);
       setPosition(null);
-      setCommenting(false);
+      setCommentPosition(null);
       document.getSelection()?.removeAllRanges();
     } else {
       setFailure("保存失败，可重试");
@@ -235,6 +275,45 @@ export function SelectionToolbar({
     );
   }
 
+  if (commentPosition !== null) {
+    return (
+      <AnnotationFloatingCard
+        left={commentPosition.left}
+        top={commentPosition.top}
+        label="新建评论"
+        closeDisabled={saving}
+        onClose={cancelComment}
+      >
+        <AnnotationEditor
+          autoFocus
+          pending={saving}
+          onCancel={cancelComment}
+          onSave={(comment) => void save(comment)}
+        />
+        {failure !== null ? (
+          <p className="text-destructive px-2 pb-1 text-xs" role="alert">
+            {failure}
+          </p>
+        ) : null}
+      </AnnotationFloatingCard>
+    );
+  }
+
+  function openComment() {
+    if (position === null) return;
+    const rect = rangeRef.current?.getBoundingClientRect?.();
+    const below = (rect?.bottom ?? position.top) + 12;
+    const above = (rect?.top ?? position.top) - annotationCardHeight - 12;
+    setCommentPosition({
+      left: position.left - annotationCardWidth / 2,
+      top:
+        below + annotationCardHeight <= window.innerHeight || above < 8
+          ? below
+          : above,
+    });
+    setFailure(null);
+  }
+
   return (
     <div
       className="bg-popover text-popover-foreground border-border fixed z-40 flex flex-col gap-1 rounded-lg border p-1 shadow-lg"
@@ -246,50 +325,26 @@ export function SelectionToolbar({
       role="toolbar"
       aria-label="标注选中文本"
     >
-      {commenting ? (
-        <AnnotationEditor
-          autoFocus
-          pending={saving}
-          onCancel={() => {
-            const range = rangeRef.current;
-            if (
-              range !== null &&
-              bodyRef.current?.contains(range.commonAncestorContainer)
-            ) {
-              if (document.activeElement instanceof HTMLElement)
-                document.activeElement.blur();
-              const selection = document.getSelection();
-              selection?.removeAllRanges();
-              selection?.addRange(range);
-            }
-            setCommenting(false);
-            setFailure(null);
-          }}
-          onSave={(comment) => void save(comment)}
-          width={260}
-        />
-      ) : (
-        <div className="flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="xs"
-            disabled={saving}
-            onClick={() => void save("")}
-          >
-            <Highlighter aria-hidden="true" />
-            高亮
-          </Button>
-          <Button
-            variant="ghost"
-            size="xs"
-            disabled={saving}
-            onClick={() => setCommenting(true)}
-          >
-            <MessageSquarePlus aria-hidden="true" />
-            评论
-          </Button>
-        </div>
-      )}
+      <div className="flex items-center gap-0.5">
+        <Button
+          variant="ghost"
+          size="xs"
+          disabled={saving}
+          onClick={() => void save("")}
+        >
+          <Highlighter aria-hidden="true" />
+          高亮
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          disabled={saving}
+          onClick={openComment}
+        >
+          <MessageSquarePlus aria-hidden="true" />
+          评论
+        </Button>
+      </div>
       {failure !== null ? (
         <p className="text-destructive px-2 pb-1 text-xs" role="alert">
           {failure}

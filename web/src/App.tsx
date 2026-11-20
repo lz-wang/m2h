@@ -12,6 +12,7 @@ import {
   LoaderCircle,
   LogOut,
   Maximize2,
+  MessageCircle,
   MessageSquare,
   Moon,
   Pencil,
@@ -50,11 +51,13 @@ import {
   type SearchResult,
   type TocItem,
 } from "./api";
+import { AnnotationAction } from "./components/annotations/annotation-action";
 import {
   AnnotationCopyButton,
   type AnnotationCopyFormat,
 } from "./components/annotations/annotation-copy-button";
 import { AnnotationEditor } from "./components/annotations/annotation-editor";
+import { AnnotationFloatingCard } from "./components/annotations/annotation-floating-card";
 import { AnnotationPanel } from "./components/annotations/annotation-panel";
 import { SelectionToolbar } from "./components/annotations/selection-toolbar";
 import { DocumentLightbox } from "./components/document-lightbox";
@@ -150,6 +153,8 @@ const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
   { value: "light", label: "浅色", icon: Sun },
   { value: "dark", label: "深色", icon: Moon },
 ];
+
+const commentMarkerScrollIdleMs = 150;
 
 const layoutStorageKey = "m2h.preview.layout";
 
@@ -361,6 +366,10 @@ export function App({
     }
     return { path, documentRef, documentHash };
   }, [annotationsEnabled, preview.document]);
+  const annotationDocumentKey = JSON.stringify([
+    annotationIdentity?.path,
+    annotationIdentity?.documentHash,
+  ]);
   const currentAnnotationIdentity = useRef(annotationIdentity);
   currentAnnotationIdentity.current = annotationIdentity;
   const annotations = useAnnotations(annotationsEnabled, annotationIdentity);
@@ -374,6 +383,7 @@ export function App({
     id: string;
     x: number;
     y: number;
+    pinned?: boolean;
   } | null>(null);
   const [editingAnnotation, setEditingAnnotation] = useState(false);
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -391,23 +401,27 @@ export function App({
   const annotationIndexRef = useRef<TextIndex | null>(null);
   const annotationLayerRef = useRef<HighlightLayer | null>(null);
   const annotationPositionsRef = useRef<Map<string, TextPosition>>(new Map());
+  const lastCommentMarkerScroll = useRef(-Infinity);
   const [commentMarkers, setCommentMarkers] = useState<
     Array<{ id: string; x: number; y: number }>
   >([]);
   const workspaceRoot = preview.selectedPath === null;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Reset the floating card when its document changes.
   useLayoutEffect(() => {
-    if (!workspaceRoot) return;
     if (hoverTimer.current !== null) {
       clearTimeout(hoverTimer.current);
       hoverTimer.current = null;
     }
+    setHoverAnnotation(null);
+    setEditingAnnotation(false);
+  }, [annotationIdentity]);
+  useLayoutEffect(() => {
+    if (!workspaceRoot) return;
     annotationLayerRef.current?.release();
     annotationBodyRef.current = null;
     annotationIndexRef.current = null;
     annotationPositionsRef.current.clear();
     setAnnotationsOpen(false);
-    setHoverAnnotation(null);
-    setEditingAnnotation(false);
     setAnnotationStatuses({});
     setCommentMarkers([]);
   }, [workspaceRoot]);
@@ -463,8 +477,17 @@ export function App({
   }, [rebuildAnnotationLayer]);
   useLayoutEffect(() => {
     let frame = 0;
+    let idleTimer: number | undefined;
     const update = () => {
       cancelAnimationFrame(frame);
+      window.clearTimeout(idleTimer);
+      const wait =
+        commentMarkerScrollIdleMs -
+        (performance.now() - lastCommentMarkerScroll.current);
+      if (wait > 0) {
+        idleTimer = window.setTimeout(update, wait);
+        return;
+      }
       frame = requestAnimationFrame(() => {
         const index = annotationIndexRef.current;
         const markers = annotations.items.flatMap((item) => {
@@ -485,15 +508,40 @@ export function App({
         setCommentMarkers(markers);
       });
     };
+    const hideWhileScrolling = (event: Event) => {
+      const body = annotationBodyRef.current;
+      const target = event.target;
+      if (
+        !body ||
+        (target !== document &&
+          target !== window &&
+          !(
+            target instanceof Element &&
+            (body.contains(target) || target.contains(body))
+          ))
+      ) {
+        return;
+      }
+      const now = performance.now();
+      if (now - lastCommentMarkerScroll.current >= commentMarkerScrollIdleMs) {
+        setCommentMarkers([]);
+      }
+      lastCommentMarkerScroll.current = now;
+      update();
+    };
     update();
-    window.addEventListener("scroll", update, true);
+    window.addEventListener("scroll", hideWhileScrolling, {
+      capture: true,
+      passive: true,
+    });
     window.addEventListener("resize", update);
     const observer =
       typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
     if (annotationBodyRef.current) observer?.observe(annotationBodyRef.current);
     return () => {
       cancelAnimationFrame(frame);
-      window.removeEventListener("scroll", update, true);
+      window.clearTimeout(idleTimer);
+      window.removeEventListener("scroll", hideWhileScrolling, true);
       window.removeEventListener("resize", update);
       observer?.disconnect();
     };
@@ -1260,7 +1308,8 @@ export function App({
             ref={readerMainRef}
             onMouseMove={(event) => {
               if (
-                editingAnnotation ||
+                (hoveredItem &&
+                  (editingAnnotation || hoverAnnotation?.pinned)) ||
                 !(event.target instanceof Node) ||
                 !annotationBodyRef.current?.contains(event.target)
               )
@@ -1426,6 +1475,7 @@ export function App({
                 ) : null}
                 {annotationsEnabled && !workspaceRoot ? (
                   <AnnotationPanel
+                    key={annotationDocumentKey}
                     open={annotationsOpen}
                     onOpenChange={setAnnotationsOpen}
                     items={annotations.items}
@@ -1436,7 +1486,7 @@ export function App({
                     selectionVersion={annotationSelectionVersion}
                     document={annotationExportDocument}
                     onLocate={locateAnnotation}
-                    onDelete={(id) => void annotations.remove(id)}
+                    onDelete={annotations.remove}
                     onEditComment={annotations.editComment}
                     onReanchor={startReanchor}
                     onCopy={tokensEnabled ? copyAnnotations : undefined}
@@ -1453,112 +1503,100 @@ export function App({
                 style={{ left: marker.x, top: marker.y }}
                 aria-hidden="true"
               >
-                <svg
-                  aria-hidden="true"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M7.9 20.9A9 9 0 1 0 3.1 16L2 22Z" />
-                  <path d="M8 10h8M8 14h5" />
-                </svg>
+                <MessageCircle aria-hidden="true" />
               </span>
             ))}
           {!workspaceRoot && hoverAnnotation && hoveredItem ? (
-            <>
-              {/* biome-ignore lint/a11y/noStaticElementInteractions: Hover retains the contextual controls while moving the pointer. */}
-              <div
-                className="annotation-hover-card"
-                style={{
-                  left: Math.min(hoverAnnotation.x, window.innerWidth - 310),
-                  top: Math.min(
-                    hoverAnnotation.y + 16,
-                    window.innerHeight - 170,
-                  ),
-                }}
-                onMouseEnter={() => {
-                  if (hoverTimer.current) {
-                    clearTimeout(hoverTimer.current);
-                    hoverTimer.current = null;
-                  }
-                }}
-                onMouseLeave={() => {
-                  if (!editingAnnotation) setHoverAnnotation(null);
-                }}
-              >
-                {editingAnnotation ? (
-                  <AnnotationEditor
-                    initial={hoveredItem.comment}
-                    autoFocus
-                    pending={false}
-                    onCancel={() => setEditingAnnotation(false)}
-                    onSave={(comment) => {
-                      void annotations
-                        .editComment(hoveredItem.id, comment)
-                        .then((ok) => {
-                          if (ok) setEditingAnnotation(false);
-                        });
+            <AnnotationFloatingCard
+              key={hoveredItem.id}
+              left={hoverAnnotation.x}
+              top={hoverAnnotation.y + 16}
+              onAdjust={() => {
+                setHoverAnnotation((current) =>
+                  current && !current.pinned
+                    ? { ...current, pinned: true }
+                    : current,
+                );
+              }}
+              onEnter={() => {
+                if (hoverTimer.current) {
+                  clearTimeout(hoverTimer.current);
+                  hoverTimer.current = null;
+                }
+              }}
+              onLeave={() => {
+                if (!editingAnnotation && !hoverAnnotation.pinned)
+                  setHoverAnnotation(null);
+              }}
+              onClose={() => {
+                setHoverAnnotation(null);
+                setEditingAnnotation(false);
+              }}
+            >
+              {editingAnnotation ? (
+                <AnnotationEditor
+                  initial={hoveredItem.comment}
+                  autoFocus
+                  pending={false}
+                  onCancel={() => setEditingAnnotation(false)}
+                  onSave={(comment) => {
+                    void annotations
+                      .editComment(hoveredItem.id, comment)
+                      .then((ok) => {
+                        if (ok) setEditingAnnotation(false);
+                      });
+                  }}
+                />
+              ) : (
+                <>
+                  {/* biome-ignore lint/a11y/noStaticElementInteractions: The edit button provides the keyboard equivalent of this shortcut. */}
+                  <div
+                    className="annotation-comment-box"
+                    onDoubleClick={() => {
+                      if (hoveredItem.mine) setEditingAnnotation(true);
                     }}
-                  />
-                ) : (
-                  <>
-                    {/* biome-ignore lint/a11y/noStaticElementInteractions: The edit button provides the keyboard equivalent of this shortcut. */}
-                    <div
-                      className="annotation-comment-box"
-                      onDoubleClick={() => {
-                        if (hoveredItem.mine) setEditingAnnotation(true);
-                      }}
-                    >
-                      {hoveredItem.comment || "无评论"}
-                    </div>
-                    <div className="annotation-hover-actions">
-                      <AnnotationCopyButton
-                        format="markdown"
-                        label="复制标注（Markdown）"
-                        disabled={!tokensEnabled}
-                        onCopy={() =>
-                          copyAnnotations("markdown", [hoveredItem.id])
-                        }
-                      />
-                      <AnnotationCopyButton
-                        format="json"
-                        label="复制标注（JSON）"
-                        disabled={!tokensEnabled}
-                        onCopy={() => copyAnnotations("json", [hoveredItem.id])}
-                      />
-                      {hoveredItem.mine ? (
-                        <>
-                          <Button
-                            size="icon-xs"
-                            variant="ghost"
-                            aria-label="编辑评论"
-                            title="编辑评论"
-                            onClick={() => setEditingAnnotation(true)}
-                          >
-                            <Pencil aria-hidden="true" />
-                          </Button>
-                          <Button
-                            size="icon-xs"
-                            variant="ghost"
-                            className="text-destructive hover:text-destructive"
-                            aria-label="删除标注"
-                            title="删除标注"
-                            onClick={() => {
-                              void annotations.remove(hoveredItem.id);
-                              setHoverAnnotation(null);
-                            }}
-                          >
-                            <Trash2 aria-hidden="true" />
-                          </Button>
-                        </>
-                      ) : null}
-                    </div>
-                  </>
-                )}
-              </div>
-            </>
+                  >
+                    {hoveredItem.comment || "无评论"}
+                  </div>
+                  <div className="annotation-hover-actions">
+                    <AnnotationCopyButton
+                      format="markdown"
+                      label="复制标注（Markdown）"
+                      disabled={!tokensEnabled}
+                      onCopy={() =>
+                        copyAnnotations("markdown", [hoveredItem.id])
+                      }
+                    />
+                    <AnnotationCopyButton
+                      format="json"
+                      label="复制标注（JSON）"
+                      disabled={!tokensEnabled}
+                      onCopy={() => copyAnnotations("json", [hoveredItem.id])}
+                    />
+                    {hoveredItem.mine ? (
+                      <>
+                        <AnnotationAction
+                          label="编辑评论"
+                          onClick={() => setEditingAnnotation(true)}
+                        >
+                          <Pencil aria-hidden="true" />
+                        </AnnotationAction>
+                        <AnnotationAction
+                          className="text-destructive hover:text-destructive"
+                          label="删除标注"
+                          onClick={() => {
+                            void annotations.remove(hoveredItem.id);
+                            setHoverAnnotation(null);
+                          }}
+                        >
+                          <Trash2 aria-hidden="true" />
+                        </AnnotationAction>
+                      </>
+                    ) : null}
+                  </div>
+                </>
+              )}
+            </AnnotationFloatingCard>
           ) : null}
           {annotationsEnabled ? (
             <>
@@ -1576,6 +1614,8 @@ export function App({
                 </div>
               ) : null}
               <SelectionToolbar
+                key={annotationDocumentKey}
+                disabled={annotationIdentity === null}
                 bodyRef={annotationBodyRef}
                 indexRef={annotationIndexRef}
                 onAnnotate={(selector, comment) =>

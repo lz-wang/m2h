@@ -8,7 +8,6 @@ export interface AnnotationEditorProps {
   autoFocus?: boolean;
   pending: boolean;
   placeholder?: string;
-  width?: number;
   onCancel(): void;
   onSave(comment: string): void;
 }
@@ -21,7 +20,6 @@ export function AnnotationEditor({
   autoFocus = false,
   pending,
   placeholder = "添加评论…",
-  width,
   onCancel,
   onSave,
 }: AnnotationEditorProps) {
@@ -35,10 +33,7 @@ export function AnnotationEditor({
   }, [autoFocus]);
 
   return (
-    <div
-      className="flex flex-col gap-1.5 p-1"
-      style={width === undefined ? undefined : { width }}
-    >
+    <div className="flex flex-col gap-1.5 p-1">
       <textarea
         ref={textareaRef}
         className="bg-background border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 min-h-16 rounded-lg border px-2 py-1.5 text-sm outline-none focus-visible:ring-2"
@@ -48,6 +43,7 @@ export function AnnotationEditor({
         onChange={(event) => setComment(event.target.value)}
         onKeyDown={(event) => {
           if (event.key === "Escape") {
+            event.stopPropagation();
             onCancel();
           }
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {

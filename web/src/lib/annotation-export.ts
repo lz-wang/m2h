@@ -37,7 +37,7 @@ export function exportAnnotationsMarkdown(
   credentials: ReviewCredentials,
 ): string {
   const lines = [
-    "# m2h 文档评审",
+    "# 文档评审意见",
     "",
     `- 文档: ${credentials.url}`,
     `- 版本: \`${document.hash}\``,
@@ -54,9 +54,9 @@ export function exportAnnotationsMarkdown(
       "",
       `- 正文引用: ${entry.selector.quote.exact.replaceAll("\n", "\n  ")}`,
       `- 正文定位: start ${entry.selector.position.start}, end ${entry.selector.position.end}`,
-      `- 评论内容: ${(entry.comment || "（仅高亮，无评论）").replaceAll("\n", "\n  ")}`,
-      `- 评论人员: ${entry.authorName}`,
-      `- 评论时间: ${new Date(entry.createdAt).toLocaleString("zh-CN", { hour12: false })}`,
+      `- 评审意见: ${(entry.comment || "（仅高亮，无评论）").replaceAll("\n", "\n  ")}`,
+      `- 评审人员: ${entry.authorName}`,
+      `- 评审时间: ${new Date(entry.createdAt).toLocaleString("zh-CN", { hour12: false })}`,
       ...(entry.status && entry.status !== "resolved"
         ? [`- 定位状态: ${entry.status}`]
         : []),

@@ -39,7 +39,7 @@ describe("agent review export", () => {
       [entry, { ...entry, id: "a2", comment: "" }],
       credentials,
     );
-    expect(result).toContain("# m2h 文档评审");
+    expect(result).toContain("# 文档评审意见");
     expect(result).toContain(
       "- 文档: https://docs.example.com/docs/raw/README.md",
     );
@@ -48,7 +48,9 @@ describe("agent review export", () => {
     expect(result).toContain("<!--评审意见--1--START-->");
     expect(result).toContain("<!--评审意见--2--END-->");
     expect(result).toContain("- 正文定位: start 4, end 8");
-    expect(result).toContain("- 评论人员: alice");
+    expect(result).toContain("- 评审意见:");
+    expect(result).toContain("- 评审人员: alice");
+    expect(result).toContain("- 评审时间:");
     expect(result).toContain("（仅高亮，无评论）");
   });
   it("produces valid JSON with credentials, selector, and offset timestamps", () => {
