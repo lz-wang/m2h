@@ -303,8 +303,21 @@ test.describe("authenticated mode", () => {
       .toBe(selectedText);
     await page.getByRole("button", { name: "评论" }).click();
     await page.getByPlaceholder("添加评论…").fill("需要补充备份方案");
+    const draftPin = composer.getByRole("button", { name: "固定悬浮框" });
+    await expect(draftPin).toHaveAttribute("aria-pressed", "false");
+    await draftPin.click();
+    await expect(draftPin.locator(".lucide-pin-off")).toBeVisible();
+    const draftBounds = await composer.boundingBox();
     await page.getByRole("button", { name: "保存" }).click();
     await expect.poll(draftRange).toEqual([]);
+    const savedCard = page.getByRole("region", { name: "标注窗口" });
+    await expect(savedCard).toContainText("需要补充备份方案");
+    await expect(
+      savedCard.getByRole("button", { name: "固定悬浮框" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(await savedCard.boundingBox()).toEqual(draftBounds);
+    await savedCard.getByRole("button", { name: "关闭标注窗口" }).click();
+
     const marker = page.locator(".annotation-comment-marker");
     await expect(marker.locator(".lucide-message-circle")).toHaveCount(1);
     const beforeScroll = await marker.boundingBox();
@@ -1130,10 +1143,31 @@ test.describe("authenticated mode", () => {
       new Date(wide.updatedAt).toISOString(),
     );
 
+    const wideCard = card.filter({
+      has: page
+        .locator(".annotation-comment-box")
+        .filter({ hasText: "较宽选区的标注" }),
+    });
+    await wideCard.getByRole("button", { name: "固定悬浮框" }).click();
+    await dragAnnotationHandle(
+      page,
+      wideCard.getByRole("button", { name: "移动标注窗口" }),
+      -180,
+      220,
+    );
     await page.mouse.move(overlap.x, overlap.y);
-    await expect(card.getByText("3 条标注")).toBeVisible();
+    const overlapCard = card.filter({
+      has: page.getByRole("list", { name: "重叠标注" }),
+    });
+    await expect(overlapCard.getByText("3 条标注")).toBeVisible();
+    await expect(wideCard).toBeVisible();
     await page.mouse.click(overlap.x, overlap.y);
-    await page.mouse.move(wideOnly.x, wideOnly.y);
+    await expect(
+      overlapCard.getByRole("button", { name: "固定悬浮框" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await wideCard.getByRole("button", { name: "关闭标注窗口" }).click();
+    await expect(card).toHaveCount(1);
+    await page.mouse.move(8, 8);
     await expect(list.getByRole("button")).toHaveText([
       /同一选区的新标注/,
       /同一选区的旧标注/,

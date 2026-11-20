@@ -19,6 +19,7 @@ import {
 } from "@/lib/annotation-selector";
 import { AnnotationEditor } from "./annotation-editor";
 import {
+  type AnnotationCardBounds,
   AnnotationFloatingCard,
   annotationCardHeight,
   annotationCardWidth,
@@ -34,6 +35,7 @@ export interface SelectionToolbarProps {
   onAnnotate: (
     selector: AnnotationSelector,
     comment: string,
+    pinnedBounds?: AnnotationCardBounds,
   ) => Promise<boolean>;
   // Re-anchor mode: while pending, the toolbar serves the human
   // re-association flow — the next valid selection becomes the
@@ -69,6 +71,8 @@ export function SelectionToolbar({
   const [commentPosition, setCommentPosition] =
     useState<ToolbarPosition | null>(null);
   const commenting = commentPosition !== null;
+  const [commentPinned, setCommentPinned] = useState(false);
+  const commentBounds = useRef<AnnotationCardBounds | null>(null);
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   // The live DOM selection is re-read on demand; only its derived selector
@@ -208,7 +212,10 @@ export function SelectionToolbar({
     }
     setSaving(true);
     setFailure(null);
-    const saved = await onAnnotate(selector, comment);
+    const bounds = commenting && commentPinned ? commentBounds.current : null;
+    const saved = bounds
+      ? await onAnnotate(selector, comment, bounds)
+      : await onAnnotate(selector, comment);
     setSaving(false);
     if (saved) {
       setSelector(null);
@@ -282,6 +289,14 @@ export function SelectionToolbar({
         top={commentPosition.top}
         label="新建评论"
         closeDisabled={saving}
+        pinned={commentPinned}
+        onPinnedChange={(pinned, bounds) => {
+          setCommentPinned(pinned);
+          commentBounds.current = bounds;
+        }}
+        onAdjust={(bounds) => {
+          commentBounds.current = bounds;
+        }}
         onClose={cancelComment}
       >
         <AnnotationEditor
@@ -301,6 +316,8 @@ export function SelectionToolbar({
 
   function openComment() {
     if (position === null) return;
+    setCommentPinned(false);
+    commentBounds.current = null;
     const rect = rangeRef.current?.getBoundingClientRect?.();
     const below = (rect?.bottom ?? position.top) + 12;
     const above = (rect?.top ?? position.top) - annotationCardHeight - 12;

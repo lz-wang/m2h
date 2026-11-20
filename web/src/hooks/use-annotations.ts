@@ -32,6 +32,7 @@ export interface UseAnnotationsResult extends AnnotationState {
   create: (
     selector: AnnotationSelectorData,
     comment: string,
+    onCreated?: (id: string) => void,
   ) => Promise<boolean>;
   remove: (ids: string | string[]) => Promise<void>;
   // Persists a human-confirmed re-anchor (new selector) for one item.
@@ -135,6 +136,7 @@ export function useAnnotations(
     async (
       selector: AnnotationSelectorData,
       comment: string,
+      onCreated?: (id: string) => void,
     ): Promise<boolean> => {
       if (identity === null) {
         return false;
@@ -160,6 +162,7 @@ export function useAnnotations(
               ? current.items
               : [...current.items, created],
           }));
+          onCreated?.(created.id);
         }
         return true;
       } catch (error) {

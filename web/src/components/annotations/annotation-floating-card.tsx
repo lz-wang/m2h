@@ -9,7 +9,7 @@ import {
 } from "react";
 import { AnnotationAction } from "./annotation-action";
 
-interface Bounds {
+export interface AnnotationCardBounds {
   left: number;
   top: number;
   width: number;
@@ -32,7 +32,7 @@ const margin = 8;
 const minWidth = 200;
 const minHeight = 144;
 
-function fitBounds(bounds: Bounds): Bounds {
+function fitBounds(bounds: AnnotationCardBounds): AnnotationCardBounds {
   const availableWidth = window.innerWidth - 2 * margin;
   const availableHeight = window.innerHeight - 2 * margin;
   const width = Math.min(availableWidth, bounds.width);
@@ -51,7 +51,12 @@ function fitBounds(bounds: Bounds): Bounds {
   };
 }
 
-function adjust(start: Bounds, mode: Adjustment, dx: number, dy: number) {
+function adjust(
+  start: AnnotationCardBounds,
+  mode: Adjustment,
+  dx: number,
+  dy: number,
+) {
   if (mode === "move") {
     return fitBounds({
       ...start,
@@ -83,6 +88,7 @@ export function AnnotationFloatingCard({
   top,
   label = "标注窗口",
   closeDisabled = false,
+  initialSize,
   pinned = false,
   children,
   onPinnedChange,
@@ -95,10 +101,11 @@ export function AnnotationFloatingCard({
   top: number;
   label?: string;
   closeDisabled?: boolean;
+  initialSize?: Pick<AnnotationCardBounds, "width" | "height">;
   pinned?: boolean;
   children: ReactNode;
-  onPinnedChange?(pinned: boolean): void;
-  onAdjust?(): void;
+  onPinnedChange?(pinned: boolean, bounds: AnnotationCardBounds): void;
+  onAdjust?(bounds: AnnotationCardBounds): void;
   onEnter?(): void;
   onLeave?(): void;
   onClose(): void;
@@ -107,15 +114,15 @@ export function AnnotationFloatingCard({
     fitBounds({
       left,
       top,
-      width: annotationCardWidth,
-      height: annotationCardHeight,
+      width: initialSize?.width ?? annotationCardWidth,
+      height: initialSize?.height ?? annotationCardHeight,
     }),
   );
   const gesture = useRef<{
     pointerId: number;
     x: number;
     y: number;
-    bounds: Bounds;
+    bounds: AnnotationCardBounds;
   } | null>(null);
 
   useEffect(() => {
@@ -142,8 +149,9 @@ export function AnnotationFloatingCard({
         if (start?.pointerId !== event.pointerId) return;
         const dx = event.clientX - start.x;
         const dy = event.clientY - start.y;
-        if (dx !== 0 || dy !== 0) onAdjust?.();
-        setBounds(adjust(start.bounds, mode, dx, dy));
+        const next = adjust(start.bounds, mode, dx, dy);
+        if (dx !== 0 || dy !== 0) onAdjust?.(next);
+        setBounds(next);
       },
       onLostPointerCapture() {
         gesture.current = null;
@@ -158,8 +166,9 @@ export function AnnotationFloatingCard({
         const step = steps[event.key];
         if (!step) return;
         event.preventDefault();
-        onAdjust?.();
-        setBounds((current) => adjust(current, mode, ...step));
+        const next = adjust(bounds, mode, ...step);
+        onAdjust?.(next);
+        setBounds(next);
       },
     };
   }
@@ -180,7 +189,8 @@ export function AnnotationFloatingCard({
             label="固定悬浮框"
             tooltip={pinned ? "取消固定悬浮框" : "固定悬浮框"}
             aria-pressed={pinned}
-            onClick={() => onPinnedChange(!pinned)}
+            disabled={closeDisabled}
+            onClick={() => onPinnedChange(!pinned, bounds)}
           >
             {pinned ? (
               <PinOff aria-hidden="true" />

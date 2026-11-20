@@ -51,6 +51,7 @@ import {
 } from "./api";
 import type { AnnotationCopyFormat } from "./components/annotations/annotation-copy-button";
 import {
+  type AnnotationCardBounds,
   AnnotationFloatingCard,
   annotationCardHeight,
 } from "./components/annotations/annotation-floating-card";
@@ -190,6 +191,17 @@ function cameFromReloadLikeNavigation(): boolean {
     return false;
   }
   return (entry as PerformanceNavigationTiming).type !== "navigate";
+}
+
+interface AnnotationPopup {
+  key: string;
+  ids: string[];
+  activeId?: string;
+  editingId?: string;
+  x: number;
+  y: number;
+  bounds?: AnnotationCardBounds;
+  pinned: boolean;
 }
 
 interface StoredLayout {
@@ -390,15 +402,8 @@ export function App({
   const [tokenSettingsOpen, setTokenSettingsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [tocShare, setTocShare] = useState(50);
-  const [hoverAnnotation, setHoverAnnotation] = useState<{
-    ids: string[];
-    activeId?: string;
-    x: number;
-    y: number;
-    pinned: boolean;
-  } | null>(null);
-  const [editingAnnotationId, setEditingAnnotationId] = useState<string | null>(
-    null,
+  const [annotationPopups, setAnnotationPopups] = useState<AnnotationPopup[]>(
+    [],
   );
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // The human re-anchor flow: the annotation awaiting a new passage, or
@@ -426,8 +431,7 @@ export function App({
       clearTimeout(hoverTimer.current);
       hoverTimer.current = null;
     }
-    setHoverAnnotation(null);
-    setEditingAnnotationId(null);
+    setAnnotationPopups([]);
   }, [annotationIdentity]);
   useLayoutEffect(() => {
     if (!workspaceRoot) return;
@@ -594,26 +598,18 @@ export function App({
     }
     return ids;
   };
-  const hoveredIds = hoverAnnotation?.ids;
-  const hoveredAnnotations = useMemo(
+  const visibleAnnotationPopups = useMemo(
     () =>
-      hoveredIds
-        ? annotations.items
-            .filter((item) => hoveredIds.includes(item.id))
-            // The API lists in insertion order when timestamps tie.
-            .reverse()
-            .sort((a, b) => b.createdAt - a.createdAt)
-        : [],
-    [annotations.items, hoveredIds],
+      annotationPopups.flatMap((popup) => {
+        const items = annotations.items
+          .filter((item) => popup.ids.includes(item.id))
+          // The API lists in insertion order when timestamps tie.
+          .reverse()
+          .sort((a, b) => b.createdAt - a.createdAt);
+        return items.length > 0 ? [{ popup, items }] : [];
+      }),
+    [annotations.items, annotationPopups],
   );
-  const hoveredItem =
-    hoveredAnnotations.length === 1
-      ? hoveredAnnotations[0]
-      : hoveredAnnotations.find(
-          (item) => item.id === hoverAnnotation?.activeId,
-        );
-  const editingAnnotation =
-    hoveredItem !== undefined && editingAnnotationId === hoveredItem.id;
 
   function clearHoverTimer() {
     if (hoverTimer.current !== null) {
@@ -627,32 +623,45 @@ export function App({
     x: number,
     y: number,
     pinned = false,
+    bounds?: AnnotationCardBounds,
   ) {
     clearHoverTimer();
-    setHoverAnnotation((current) => {
+    const key = JSON.stringify(ids);
+    setAnnotationPopups((current) => {
+      const existing = current.find((popup) => popup.key === key);
+      const others = current.filter(
+        (popup) => popup.key !== key && (popup.pinned || popup.editingId),
+      );
       if (
-        current?.ids.length === ids.length &&
-        current.ids.every((id, index) => id === ids[index])
+        existing &&
+        others.length + 1 === current.length &&
+        (!pinned || existing.pinned)
       ) {
-        return pinned && !current.pinned
-          ? { ...current, pinned: true }
-          : current;
+        return current;
       }
-      return { ids, x, y, pinned };
+      return [
+        ...others,
+        existing
+          ? { ...existing, pinned: existing.pinned || pinned }
+          : { key, ids, x, y, pinned, bounds },
+      ];
     });
   }
 
-  function setHoverPinned(pinned: boolean) {
-    clearHoverTimer();
-    setHoverAnnotation((current) =>
-      current && current.pinned !== pinned ? { ...current, pinned } : current,
+  function updateAnnotationPopup(
+    key: string,
+    changes: Partial<AnnotationPopup>,
+  ) {
+    setAnnotationPopups((current) =>
+      current.map((popup) =>
+        popup.key === key ? { ...popup, ...changes } : popup,
+      ),
     );
   }
 
-  function selectHoveredAnnotation(activeId?: string) {
-    setEditingAnnotationId(null);
-    setHoverAnnotation((current) =>
-      current ? { ...current, activeId, pinned: true } : current,
+  function closeAnnotationPopup(key: string) {
+    setAnnotationPopups((current) =>
+      current.filter((popup) => popup.key !== key),
     );
   }
 
@@ -1389,8 +1398,9 @@ export function App({
             ref={readerMainRef}
             onMouseMove={(event) => {
               if (
-                (hoveredAnnotations.length > 0 &&
-                  (editingAnnotation || hoverAnnotation?.pinned)) ||
+                visibleAnnotationPopups.some(
+                  ({ popup }) => !popup.pinned && popup.editingId,
+                ) ||
                 !(event.target instanceof Node) ||
                 !annotationBodyRef.current?.contains(event.target)
               )
@@ -1400,7 +1410,9 @@ export function App({
                 showHoveredAnnotations(ids, event.clientX, event.clientY);
               } else if (!hoverTimer.current)
                 hoverTimer.current = setTimeout(() => {
-                  setHoverAnnotation(null);
+                  setAnnotationPopups((current) =>
+                    current.filter((popup) => popup.pinned || popup.editingId),
+                  );
                   hoverTimer.current = null;
                 }, 250);
             }}
@@ -1589,72 +1601,78 @@ export function App({
               </span>
             ))}
           {!workspaceRoot &&
-          hoverAnnotation &&
-          hoveredAnnotations.length > 0 ? (
-            <AnnotationFloatingCard
-              key={JSON.stringify(hoverAnnotation.ids)}
-              left={hoverAnnotation.x}
-              top={
-                hoverAnnotation.ids.length > 1 &&
-                hoverAnnotation.y + annotationCardHeight + 24 >
-                  window.innerHeight
-                  ? hoverAnnotation.y - annotationCardHeight - 16
-                  : hoverAnnotation.y + 16
-              }
-              pinned={hoverAnnotation.pinned}
-              onPinnedChange={setHoverPinned}
-              onAdjust={() => setHoverPinned(true)}
-              onEnter={clearHoverTimer}
-              onLeave={() => {
-                if (!editingAnnotation && !hoverAnnotation.pinned)
-                  setHoverAnnotation(null);
-              }}
-              onClose={() => {
-                setHoverAnnotation(null);
-                setEditingAnnotationId(null);
-              }}
-            >
-              {hoveredItem ? (
-                <AnnotationHoverDetail
-                  key={hoveredItem.id}
-                  item={hoveredItem}
-                  editing={editingAnnotation}
-                  onEditingChange={(editing) =>
-                    setEditingAnnotationId((current) =>
-                      editing
-                        ? hoveredItem.id
-                        : current === hoveredItem.id
-                          ? null
-                          : current,
-                    )
+            visibleAnnotationPopups.map(({ popup, items }) => {
+              const item =
+                items.length === 1
+                  ? items[0]
+                  : items.find(({ id }) => id === popup.activeId);
+              const editing = item !== undefined && item.id === popup.editingId;
+              const selectItem = (activeId?: string) =>
+                updateAnnotationPopup(popup.key, {
+                  activeId,
+                  editingId: undefined,
+                  pinned: true,
+                });
+
+              return (
+                <AnnotationFloatingCard
+                  key={popup.key}
+                  left={popup.bounds?.left ?? popup.x}
+                  top={
+                    popup.bounds?.top ??
+                    (popup.ids.length > 1 &&
+                    popup.y + annotationCardHeight + 24 > window.innerHeight
+                      ? popup.y - annotationCardHeight - 16
+                      : popup.y + 16)
                   }
-                  onBack={
-                    hoveredAnnotations.length > 1
-                      ? () => selectHoveredAnnotation()
-                      : undefined
-                  }
-                  onCopy={
-                    tokensEnabled
-                      ? (format) => copyAnnotations(format, [hoveredItem.id])
-                      : undefined
-                  }
-                  onSave={(comment) =>
-                    annotations.editComment(hoveredItem.id, comment)
-                  }
-                  onDelete={() => {
-                    if (hoverAnnotation.ids.length === 1)
-                      setHoverAnnotation(null);
-                    return annotations.remove(hoveredItem.id);
+                  initialSize={popup.bounds}
+                  pinned={popup.pinned}
+                  onPinnedChange={(pinned) => {
+                    clearHoverTimer();
+                    updateAnnotationPopup(popup.key, { pinned });
                   }}
-                />
-              ) : (
-                <AnnotationHoverList
-                  items={hoveredAnnotations}
-                  onSelect={selectHoveredAnnotation}
-                />
-              )}
-            </AnnotationFloatingCard>
-          ) : null}
+                  onAdjust={() => {
+                    if (!popup.pinned)
+                      updateAnnotationPopup(popup.key, { pinned: true });
+                  }}
+                  onEnter={popup.pinned ? undefined : clearHoverTimer}
+                  onLeave={() => {
+                    if (!editing && !popup.pinned)
+                      closeAnnotationPopup(popup.key);
+                  }}
+                  onClose={() => closeAnnotationPopup(popup.key)}
+                >
+                  {item ? (
+                    <AnnotationHoverDetail
+                      key={item.id}
+                      item={item}
+                      editing={editing}
+                      onEditingChange={(editing) =>
+                        updateAnnotationPopup(popup.key, {
+                          editingId: editing ? item.id : undefined,
+                        })
+                      }
+                      onBack={items.length > 1 ? () => selectItem() : undefined}
+                      onCopy={
+                        tokensEnabled
+                          ? (format) => copyAnnotations(format, [item.id])
+                          : undefined
+                      }
+                      onSave={(comment) =>
+                        annotations.editComment(item.id, comment)
+                      }
+                      onDelete={() => {
+                        if (popup.ids.length === 1)
+                          closeAnnotationPopup(popup.key);
+                        return annotations.remove(item.id);
+                      }}
+                    />
+                  ) : (
+                    <AnnotationHoverList items={items} onSelect={selectItem} />
+                  )}
+                </AnnotationFloatingCard>
+              );
+            })}
           {annotationsEnabled ? (
             <>
               {reanchorPending !== null ? (
@@ -1675,8 +1693,20 @@ export function App({
                 disabled={annotationIdentity === null}
                 bodyRef={annotationBodyRef}
                 indexRef={annotationIndexRef}
-                onAnnotate={(selector, comment) =>
-                  annotations.create(selector, comment)
+                onAnnotate={(selector, comment, pinnedBounds) =>
+                  annotations.create(
+                    selector,
+                    comment,
+                    pinnedBounds &&
+                      ((id) =>
+                        showHoveredAnnotations(
+                          [id],
+                          pinnedBounds.left,
+                          pinnedBounds.top,
+                          true,
+                          pinnedBounds,
+                        )),
+                  )
                 }
                 reanchorPending={reanchorPending}
                 onReanchor={confirmReanchor}
