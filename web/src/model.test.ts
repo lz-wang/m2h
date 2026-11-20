@@ -47,6 +47,7 @@ describe("route model", () => {
       mode: "dark",
       width: "wide",
       toc: true,
+      annotationsOpen: false,
       hash: "#install",
     });
     expect(readRoute("/doc/%", "?mode=invalid")).toEqual({
@@ -54,6 +55,7 @@ describe("route model", () => {
       mode: "auto",
       width: "standard",
       toc: true,
+      annotationsOpen: false,
       hash: "",
     });
     expect(readRoute("/", "?mode=light")).toEqual({
@@ -61,6 +63,7 @@ describe("route model", () => {
       mode: "light",
       width: "standard",
       toc: true,
+      annotationsOpen: false,
       hash: "",
     });
     expect(readRoute("/doc/guide.md", "?toc=false")).toEqual({
@@ -68,6 +71,7 @@ describe("route model", () => {
       mode: "auto",
       width: "standard",
       toc: false,
+      annotationsOpen: false,
       hash: "",
     });
     // Unknown toc values fall back to the default (enabled), only the literal
@@ -77,33 +81,62 @@ describe("route model", () => {
     expect(
       routeURL(
         "guide/space name.md",
-        { mode: "auto", width: "standard", toc: true },
+        { mode: "auto", width: "standard", toc: true, annotationsOpen: false },
         "install",
       ),
     ).toBe("/doc/guide/space%20name.md#install");
     expect(
       routeURL(
         "guide/space name.md",
-        { mode: "auto", width: "full", toc: true },
+        { mode: "auto", width: "full", toc: true, annotationsOpen: false },
         "install",
       ),
     ).toBe("/doc/guide/space%20name.md?width=full#install");
     expect(
-      routeURL(null, { mode: "light", width: "standard", toc: true }),
+      routeURL(null, {
+        mode: "light",
+        width: "standard",
+        toc: true,
+        annotationsOpen: false,
+      }),
     ).toBe("/?mode=light");
-    expect(routeURL(null, { mode: "dark", width: "wide", toc: true })).toBe(
-      "/?mode=dark&width=wide",
-    );
+    expect(
+      routeURL(null, {
+        mode: "dark",
+        width: "wide",
+        toc: true,
+        annotationsOpen: false,
+      }),
+    ).toBe("/?mode=dark&width=wide");
     expect(
       routeURL("guide/space name.md", {
         mode: "auto",
         width: "standard",
         toc: false,
+        annotationsOpen: false,
       }),
     ).toBe("/doc/guide/space%20name.md?toc=false");
-    expect(routeURL(null, { mode: "dark", width: "wide", toc: false })).toBe(
-      "/?mode=dark&width=wide&toc=false",
+    expect(
+      routeURL(null, {
+        mode: "dark",
+        width: "wide",
+        toc: false,
+        annotationsOpen: false,
+      }),
+    ).toBe("/?mode=dark&width=wide&toc=false");
+  });
+
+  it("only opens annotations for document routes with annotations=true", () => {
+    expect(
+      readRoute("/doc/guide.md", "?annotations=true").annotationsOpen,
+    ).toBe(true);
+    expect(
+      readRoute("/doc/guide.md", "?annotations=false").annotationsOpen,
+    ).toBe(false);
+    expect(readRoute("/doc/guide.md", "?annotations=1").annotationsOpen).toBe(
+      false,
     );
+    expect(readRoute("/", "?annotations=true").annotationsOpen).toBe(false);
   });
 
   it("auto-opens the single-file preview's one document", () => {

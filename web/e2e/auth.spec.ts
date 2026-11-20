@@ -453,9 +453,9 @@ test.describe("authenticated mode", () => {
       page.getByRole("complementary", { name: "标注面板" }),
     ).toContainText("侧边栏已更新");
 
-    // Reload: the annotation lives in SQLite and comes back.
+    // Reload restores both the annotation and the open panel from the URL.
+    await expect(page).toHaveURL(`${baseURL}/doc/README.md?annotations=true`);
     await page.reload();
-    await page.getByRole("button", { name: /打开标注面板/ }).click();
     await expect(page.getByText("侧边栏已更新")).toBeVisible({
       timeout: 10_000,
     });
@@ -706,12 +706,14 @@ test.describe("authenticated mode", () => {
     await expect(rail).toHaveCSS("width", "336px");
 
     await page.setViewportSize({ width: 375, height: 780 });
-    await page.getByRole("button", { name: "打开标注面板" }).click();
+    await expect(
+      page.getByRole("complementary", { name: "标注面板" }),
+    ).toBeVisible();
     await expect(rail).toBeVisible();
     await expect(handle).toHaveCount(0);
   });
 
-  test("returning home clears the document outline and annotation panel", async ({
+  test("home hides both panels and document history restores the annotation panel", async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -729,23 +731,33 @@ test.describe("authenticated mode", () => {
     await expect(outline).toHaveCount(0);
     await expect(panel).toHaveCount(0);
     await expect(page.getByRole("button", { name: /标注面板/ })).toHaveCount(0);
+    await expect(page).toHaveURL(`${baseURL}/`);
     await page.goBack();
     await expect(outline).toBeVisible();
-    await expect(panel).toHaveCount(0);
-    await expect(
-      page.getByRole("button", { name: "打开标注面板" }),
-    ).toBeVisible();
+    await expect(panel).toBeVisible();
+    await expect(page).toHaveURL(/annotations=true/);
+    await page.goForward();
+    await expect(panel).toBeHidden();
+    await expect(page).toHaveURL(`${baseURL}/`);
   });
 
-  test("annotation toggle also closes the mobile panel", async ({ page }) => {
+  test("annotation links open the mobile panel and closing preserves other URL settings", async ({
+    page,
+  }) => {
     await page.setViewportSize({ width: 390, height: 844 });
-    await login(page, "alice", "password-1");
-    await page.goto(`${baseURL}/doc/README.md`);
-    await page.getByRole("button", { name: "打开标注面板" }).click();
+    await page.goto(
+      `${baseURL}/doc/README.md?mode=light&toc=false&annotations=true`,
+    );
+    await page.getByLabel("用户名").fill("alice");
+    await page.getByLabel("密码").fill("password-1");
+    await page.getByRole("button", { name: "登录" }).click();
     await expect(
       page.getByRole("complementary", { name: "标注面板" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "收起标注面板" }).click();
+    await expect(page).toHaveURL(
+      `${baseURL}/doc/README.md?mode=light&toc=false`,
+    );
     await expect(
       page.getByRole("button", { name: "打开标注面板" }),
     ).toBeVisible();
@@ -887,7 +899,6 @@ test.describe("authenticated mode", () => {
 
     // Reload proves the new anchor persisted.
     await page.reload();
-    await page.getByRole("button", { name: /打开标注面板/ }).click();
     await expect(page.getByText("位置失效的评审意见")).toBeVisible({
       timeout: 10_000,
     });
@@ -895,7 +906,6 @@ test.describe("authenticated mode", () => {
 
     expect((await createOrphan("确认前新增的失效标注")).status()).toBe(201);
     await page.reload();
-    await page.getByRole("button", { name: /打开标注面板/ }).click();
     await expect(page.getByRole("button", { name: "重新关联" })).toBeVisible();
     await page.getByRole("button", { name: "删除此标注" }).first().hover();
     await expect(

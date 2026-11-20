@@ -21,11 +21,16 @@ describe.each(["", "/docs", "/apps/docs"])("deployment prefix %s", (base) => {
       expect(stripBasePath(`${base}-other/doc/a.md`)).toBeNull();
       expect(readRoute("/doc/a.md", "").path).toBeNull();
     }
-    const options = { mode: "dark", width: "wide", toc: false } as const;
+    const options = {
+      mode: "dark",
+      width: "wide",
+      toc: false,
+      annotationsOpen: true,
+    } as const;
     const path = "r0/文档/a #%.md";
     const url = routeURL(path, options, "intro");
     expect(url).toBe(
-      `${base}/doc/r0/%E6%96%87%E6%A1%A3/a%20%23%25.md?mode=dark&width=wide&toc=false#intro`,
+      `${base}/doc/r0/%E6%96%87%E6%A1%A3/a%20%23%25.md?mode=dark&width=wide&toc=false&annotations=true#intro`,
     );
     const parsed = new URL(url, "https://example.com");
     expect(readRoute(parsed.pathname, parsed.search, parsed.hash)).toEqual({

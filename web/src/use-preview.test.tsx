@@ -82,6 +82,34 @@ describe("usePreview decoupled loading", () => {
     expect(result.current.filesError).toBeNull();
   });
 
+  it("writes the annotation panel state without changing the current view settings or anchor", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/doc/README.md?mode=dark&width=wide&toc=false#part",
+    );
+    const api = createAPI();
+    api.listFiles.mockReturnValue(new Promise(() => {}));
+    api.getDocument.mockResolvedValue(documentResponse("README.md"));
+    const { result } = renderHook(() => usePreview(api));
+    await waitFor(() => expect(result.current.phase).toBe("ready"));
+    const historyLength = window.history.length;
+
+    act(() => result.current.setAnnotationsOpen(true));
+    expect(result.current.annotationsOpen).toBe(true);
+    expect(window.location.search).toBe(
+      "?mode=dark&width=wide&toc=false&annotations=true",
+    );
+    expect(window.location.hash).toBe("#part");
+    expect(window.history.length).toBe(historyLength);
+
+    act(() => result.current.setAnnotationsOpen(false));
+    expect(result.current.annotationsOpen).toBe(false);
+    expect(window.location.search).toBe("?mode=dark&width=wide&toc=false");
+    expect(window.location.hash).toBe("#part");
+    expect(api.getDocument).toHaveBeenCalledTimes(1);
+  });
+
   it("does not request a document from the workspace root before the file list answers", async () => {
     const api = createAPI();
     api.listFiles.mockReturnValue(new Promise(() => {}));

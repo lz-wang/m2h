@@ -9,11 +9,8 @@ export type Mode = "light" | "dark" | "auto";
 export type ResolvedMode = "light" | "dark";
 export type DocumentWidth = "standard" | "wide" | "full";
 
-export interface RouteState {
+export interface RouteState extends ViewOptions {
   path: string | null;
-  mode: Mode;
-  width: DocumentWidth;
-  toc: boolean;
   hash: string;
 }
 
@@ -23,6 +20,7 @@ export interface ViewOptions {
   mode: Mode;
   width: DocumentWidth;
   toc: boolean;
+  annotationsOpen: boolean;
 }
 
 export interface DirectoryNode {
@@ -56,24 +54,30 @@ export function readRoute(
   // TOC defaults to true; only the explicit "false" value disables it. Any
   // other value (including a missing parameter) keeps it on.
   const toc = parameters.get("toc") !== "false";
+  const homeRoute = {
+    path: null,
+    mode,
+    width,
+    toc,
+    annotationsOpen: false,
+    hash: normalizeHash(hash),
+  };
   const internalPath = stripBasePath(pathname);
   if (internalPath === null || !internalPath.startsWith("/doc/")) {
-    return { path: null, mode, width, toc, hash: normalizeHash(hash) };
+    return homeRoute;
   }
   const encoded = internalPath.slice("/doc/".length);
   if (encoded === "") {
-    return { path: null, mode, width, toc, hash: normalizeHash(hash) };
+    return homeRoute;
   }
   try {
     return {
+      ...homeRoute,
       path: decodeURIComponent(encoded),
-      mode,
-      width,
-      toc,
-      hash: normalizeHash(hash),
+      annotationsOpen: parameters.get("annotations") === "true",
     };
   } catch {
-    return { path: null, mode, width, toc, hash: normalizeHash(hash) };
+    return homeRoute;
   }
 }
 
@@ -91,6 +95,9 @@ export function routeURL(
   }
   if (!options.toc) {
     parameters.set("toc", "false");
+  }
+  if (path !== null && options.annotationsOpen) {
+    parameters.set("annotations", "true");
   }
   const query = parameters.toString();
   const search = query === "" ? "" : `?${query}`;
@@ -112,10 +119,8 @@ export function encodeVirtualPath(path: string): string {
     .join("/");
 }
 
-// The shareable addresses of one document. Unlike routeURL these carry no
-// mode/width/toc parameters — those are the sender's personal UI preferences —
-// but they do keep the heading hash so a shared link can land on the exact
-// section the sender was reading.
+// The shareable addresses of one document omit the sender's view preferences
+// and keep the heading hash so a shared link can land on the exact section.
 export function documentURL(path: string, hash = ""): string {
   return appPath(`/doc/${encodeVirtualPath(path)}${normalizeHash(hash)}`);
 }

@@ -381,7 +381,10 @@ export function App({
   const currentAnnotationIdentity = useRef(annotationIdentity);
   currentAnnotationIdentity.current = annotationIdentity;
   const annotations = useAnnotations(annotationsEnabled, annotationIdentity);
-  const [annotationsOpen, setAnnotationsOpen] = useState(false);
+  const annotationsOpen =
+    annotationsEnabled &&
+    preview.selectedPath !== null &&
+    preview.annotationsOpen;
   const [annotationSelectionVersion, setAnnotationSelectionVersion] =
     useState(0);
   const [tokenSettingsOpen, setTokenSettingsOpen] = useState(false);
@@ -432,7 +435,6 @@ export function App({
     annotationBodyRef.current = null;
     annotationIndexRef.current = null;
     annotationPositionsRef.current.clear();
-    setAnnotationsOpen(false);
     setAnnotationStatuses({});
     setCommentMarkers([]);
   }, [workspaceRoot]);
@@ -1337,7 +1339,9 @@ export function App({
                         aria-label={
                           annotationsOpen ? "收起标注面板" : "打开标注面板"
                         }
-                        onClick={() => setAnnotationsOpen(!annotationsOpen)}
+                        onClick={() =>
+                          preview.setAnnotationsOpen(!annotationsOpen)
+                        }
                       >
                         <MessageSquare aria-hidden="true" />
                       </Button>
@@ -1404,7 +1408,7 @@ export function App({
               if (ids.length > 1) {
                 showHoveredAnnotations(ids, event.clientX, event.clientY, true);
               } else if (ids[0] !== undefined) {
-                setAnnotationsOpen(true);
+                preview.setAnnotationsOpen(true);
                 annotations.select(ids[0]);
                 setAnnotationSelectionVersion((value) => value + 1);
               }
@@ -1548,7 +1552,7 @@ export function App({
                   <AnnotationPanel
                     key={annotationDocumentKey}
                     open={annotationsOpen}
-                    onOpenChange={setAnnotationsOpen}
+                    onOpenChange={preview.setAnnotationsOpen}
                     items={annotations.items}
                     statuses={annotationStatuses}
                     loading={annotations.loading}

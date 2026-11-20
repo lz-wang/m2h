@@ -53,6 +53,7 @@ export interface PreviewState {
   resolvedMode: ResolvedMode;
   width: DocumentWidth;
   toc: boolean;
+  annotationsOpen: boolean;
   // The reader's own lifecycle. "loading-files" means only "the URL names no
   // document and the workspace default must be picked from the file list" —
   // it says nothing about the sidebar's freshness, which filesLoading below
@@ -81,6 +82,7 @@ export interface PreviewState {
   setMode(mode: Mode): void;
   setWidth(width: DocumentWidth): void;
   setTOC(toc: boolean): void;
+  setAnnotationsOpen(open: boolean): void;
   replaceHash(id: string | null): void;
   reportVisualError(message: string): void;
   retry(): Promise<void>;
@@ -109,6 +111,9 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     initialRoute.current.width,
   );
   const [toc, setTOCState] = useState<boolean>(initialRoute.current.toc);
+  const [annotationsOpen, setAnnotationsOpenState] = useState(
+    initialRoute.current.annotationsOpen,
+  );
   // A deep link already names its document, so the reader starts on the
   // document request itself; only a document-less URL must consult the file
   // list first (to pick the workspace default).
@@ -129,6 +134,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   const modeRef = useRef<Mode>(initialRoute.current.mode);
   const widthRef = useRef<DocumentWidth>(initialRoute.current.width);
   const tocRef = useRef<boolean>(initialRoute.current.toc);
+  const annotationsOpenRef = useRef(initialRoute.current.annotationsOpen);
   const listController = useRef<AbortController | null>(null);
   const documentController = useRef<AbortController | null>(null);
   const documentRequest = useRef(0);
@@ -149,6 +155,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
           mode: modeRef.current,
           width: widthRef.current,
           toc: tocRef.current,
+          annotationsOpen: annotationsOpenRef.current,
         },
         hash,
       );
@@ -338,6 +345,8 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     if (kindRef.current === "single" || selectedPathRef.current === null) {
       return;
     }
+    annotationsOpenRef.current = false;
+    setAnnotationsOpenState(false);
     void loadWorkspaceDefault("push");
   }, [loadWorkspaceDefault]);
 
@@ -366,9 +375,11 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
       modeRef.current = route.mode;
       widthRef.current = route.width;
       tocRef.current = route.toc;
+      annotationsOpenRef.current = route.annotationsOpen;
       setModeState(route.mode);
       setWidthState(route.width);
       setTOCState(route.toc);
+      setAnnotationsOpenState(route.annotationsOpen);
       const kind = kindRef.current;
       const target =
         route.path ??
@@ -378,15 +389,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         return;
       }
       const targetHash = target === route.path ? route.hash : "";
-      const canonical = routeURL(
-        target,
-        {
-          mode: route.mode,
-          width: route.width,
-          toc: route.toc,
-        },
-        targetHash,
-      );
+      const canonical = routeURL(target, route, targetHash);
       const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
       if (canonical !== current) {
         window.history.replaceState(null, "", canonical);
@@ -468,9 +471,20 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     [writeRoute],
   );
 
+  const setAnnotationsOpen = useCallback(
+    (open: boolean) => {
+      const path = selectedPathRef.current;
+      if (path === null || annotationsOpenRef.current === open) return;
+      annotationsOpenRef.current = open;
+      setAnnotationsOpenState(open);
+      writeRoute(path, "replace", window.location.hash);
+    },
+    [writeRoute],
+  );
+
   // replaceHash is the single funnel for rewriting the URL fragment from the UI
   // — TOC clicks, heading permalinks, native Markdown links and the scroll spy
-  // all route through here so mode/width/toc/path stay consistent. It always
+  // all route through here so the document path and view preferences stay consistent. It always
   // replaces history (never pushes): scrolling past many headings must not spam
   // the back stack.
   const replaceHash = useCallback(
@@ -500,6 +514,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     resolvedMode,
     width,
     toc,
+    annotationsOpen,
     phase,
     filesLoading,
     filesError,
@@ -515,6 +530,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     setMode,
     setWidth,
     setTOC,
+    setAnnotationsOpen,
     replaceHash,
     reportVisualError,
     retry: refresh,
