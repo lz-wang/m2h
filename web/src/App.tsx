@@ -414,6 +414,18 @@ export function App({
     [],
   );
   const hoverTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hoverFrame = useRef<number | null>(null);
+  const hoverPoint = useRef({ x: 0, y: 0 });
+  const cancelHoverFrame = useCallback(() => {
+    if (hoverFrame.current === null) return;
+    cancelAnimationFrame(hoverFrame.current);
+    hoverFrame.current = null;
+  }, []);
+  const clearHoverTimer = useCallback(() => {
+    if (hoverTimer.current === null) return;
+    clearTimeout(hoverTimer.current);
+    hoverTimer.current = null;
+  }, []);
   // The human re-anchor flow: the annotation awaiting a new passage, or
   // null. While pending, the selection toolbar serves the re-association
   // instead of creating new annotations.
@@ -435,12 +447,12 @@ export function App({
   const workspaceRoot = preview.selectedPath === null;
   // biome-ignore lint/correctness/useExhaustiveDependencies: Reset the floating card when its document changes.
   useLayoutEffect(() => {
-    if (hoverTimer.current !== null) {
-      clearTimeout(hoverTimer.current);
-      hoverTimer.current = null;
-    }
     setAnnotationPopups([]);
-  }, [annotationIdentity]);
+    return () => {
+      cancelHoverFrame();
+      clearHoverTimer();
+    };
+  }, [annotationIdentity, cancelHoverFrame, clearHoverTimer]);
   useLayoutEffect(() => {
     if (!workspaceRoot) return;
     annotationLayerRef.current?.release();
@@ -618,13 +630,6 @@ export function App({
       }),
     [annotations.items, annotationPopups],
   );
-
-  function clearHoverTimer() {
-    if (hoverTimer.current !== null) {
-      clearTimeout(hoverTimer.current);
-      hoverTimer.current = null;
-    }
-  }
 
   function showHoveredAnnotations(
     ids: string[],
@@ -1411,20 +1416,31 @@ export function App({
                 ) ||
                 !(event.target instanceof Node) ||
                 !annotationBodyRef.current?.contains(event.target)
-              )
+              ) {
+                cancelHoverFrame();
                 return;
-              const ids = annotationsAt(event.clientX, event.clientY);
-              if (ids.length > 0) {
-                showHoveredAnnotations(ids, event.clientX, event.clientY);
-              } else if (!hoverTimer.current)
-                hoverTimer.current = setTimeout(() => {
-                  setAnnotationPopups((current) =>
-                    current.filter(keepAnnotationPopupOpen),
-                  );
-                  hoverTimer.current = null;
-                }, 250);
+              }
+              hoverPoint.current = { x: event.clientX, y: event.clientY };
+              if (hoverFrame.current !== null) return;
+              hoverFrame.current = requestAnimationFrame(() => {
+                hoverFrame.current = null;
+                const { x, y } = hoverPoint.current;
+                const ids = annotationsAt(x, y);
+                if (ids.length > 0) {
+                  showHoveredAnnotations(ids, x, y);
+                } else if (hoverTimer.current === null) {
+                  hoverTimer.current = setTimeout(() => {
+                    setAnnotationPopups((current) =>
+                      current.filter(keepAnnotationPopupOpen),
+                    );
+                    hoverTimer.current = null;
+                  }, 250);
+                }
+              });
             }}
+            onMouseLeave={cancelHoverFrame}
             onClickCapture={(event) => {
+              cancelHoverFrame();
               if (
                 !(event.target instanceof Node) ||
                 !annotationBodyRef.current?.contains(event.target) ||
@@ -1645,7 +1661,10 @@ export function App({
                     if (!popup.pinned)
                       updateAnnotationPopup(popup.key, { pinned: true });
                   }}
-                  onEnter={popup.pinned ? undefined : clearHoverTimer}
+                  onEnter={() => {
+                    cancelHoverFrame();
+                    if (!popup.pinned) clearHoverTimer();
+                  }}
                   onLeave={() => {
                     if (!keepAnnotationPopupOpen(popup))
                       closeAnnotationPopup(popup.key);
