@@ -135,11 +135,27 @@ test.describe("authenticated mode", () => {
     expect(raw.status()).toBe(200);
   });
 
-  test("logout closes the reader", async ({ page }) => {
+  test("logout returns to the system-themed login page", async ({ page }) => {
+    await page.emulateMedia({ colorScheme: "dark" });
     await login(page, "alice", "password-1");
+    await page.goto(`${baseURL}/doc/README.md?mode=light`);
+    await expect(page.locator("html")).toHaveCSS("color-scheme", "light");
     await page.getByRole("button", { name: "设置" }).click();
     await page.getByRole("menuitem", { name: /退出登录/ }).click();
     await expect(page.getByRole("heading", { name: "登录 m2h" })).toBeVisible();
+    const root = page.locator("html");
+    const loginPage = page.getByRole("main");
+    const darkClass = /(?:^|\s)dark(?:\s|$)/;
+    await expect(root).toHaveAttribute("data-mode", "auto");
+    await expect(root).toHaveClass(darkClass);
+    const darkBackground = await loginPage.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    await page.emulateMedia({ colorScheme: "light" });
+    await expect(root).not.toHaveClass(darkClass);
+    await expect(loginPage).not.toHaveCSS("background-color", darkBackground);
+    await page.emulateMedia({ colorScheme: "dark" });
+    await expect(loginPage).toHaveCSS("background-color", darkBackground);
     const raw = await page.request.get(`${baseURL}/raw/README.md`);
     expect(raw.status()).toBe(401);
   });

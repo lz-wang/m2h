@@ -17,6 +17,7 @@ import {
   type PreviewKind,
   type RootSummary,
 } from "./api";
+import { useTheme } from "./hooks/use-theme";
 import {
   autoOpenDocument,
   type DocumentWidth,
@@ -103,9 +104,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   const [documentResponse, setDocumentResponse] =
     useState<DocumentResponse | null>(null);
   const [mode, setModeState] = useState<Mode>(initialRoute.current.mode);
-  const [resolvedMode, setResolvedMode] = useState<ResolvedMode>(() =>
-    resolveMode(initialRoute.current.mode),
-  );
+  const resolvedMode = useTheme(mode);
   const [width, setWidthState] = useState<DocumentWidth>(
     initialRoute.current.width,
   );
@@ -398,36 +397,6 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [loadDocument, loadWorkspaceDefault]);
 
-  useEffect(() => {
-    const media =
-      typeof window.matchMedia === "function"
-        ? window.matchMedia("(prefers-color-scheme: dark)")
-        : null;
-
-    // Resolve the concrete light/dark and mirror it into state so renderers
-    // that bake colors in at render time (Mermaid) can re-run when only the
-    // OS preference flips while mode stays "auto".
-    const apply = () => {
-      const resolved: ResolvedMode =
-        mode === "dark" || (mode === "auto" && (media?.matches ?? false))
-          ? "dark"
-          : "light";
-      setResolvedMode(resolved);
-      applyTheme(mode, resolved === "dark");
-    };
-
-    apply();
-
-    if (mode === "auto" && media !== null) {
-      media.addEventListener("change", apply);
-    }
-    return () => {
-      if (mode === "auto" && media !== null) {
-        media.removeEventListener("change", apply);
-      }
-    };
-  }, [mode]);
-
   // A layout effect (not passive) so the tab title updates synchronously during
   // commit, before paint — readers (and tests) see the new title immediately
   // rather than on the next passive-effect flush.
@@ -550,37 +519,6 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     reportVisualError,
     retry: refresh,
   };
-}
-
-// resolveMode collapses Mode to the concrete light/dark the UI renders. "auto"
-// consults prefers-color-scheme; explicit modes pass straight through. It
-// seeds resolvedMode before the effect runs so the first paint matches.
-function resolveMode(mode: Mode): ResolvedMode {
-  if (mode === "light" || mode === "dark") {
-    return mode;
-  }
-  return typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-color-scheme: dark)").matches
-    ? "dark"
-    : "light";
-}
-
-function applyTheme(mode: Mode, autoDark?: boolean): void {
-  const root = document.documentElement;
-  root.dataset.mode = mode;
-  root.classList.remove("m2h-mode-light", "m2h-mode-dark", "m2h-mode-auto");
-  root.classList.add(`m2h-mode-${mode}`);
-  const systemDark =
-    autoDark ??
-    (typeof window.matchMedia === "function" &&
-      window.matchMedia("(prefers-color-scheme: dark)").matches);
-  const dark = mode === "dark" || (mode === "auto" && systemDark);
-  root.classList.toggle("dark", dark);
-
-  // The Markdown stylesheet is a single stable /ui/markdown.css loaded once by
-  // index.html; both palettes coexist and are selected by the .dark class
-  // toggled above. Theme switches therefore never swap a <link> href and never
-  // trigger a full-body style/layout recalculation.
 }
 
 function documentError(reason: unknown): string {

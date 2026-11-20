@@ -3,6 +3,7 @@ import { type FormEvent, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useTheme } from "@/hooks/use-theme";
 import { cn } from "@/lib/utils";
 
 export interface LoginPageProps {
@@ -22,6 +23,7 @@ export function LoginPage({
   loginPending,
   loginError,
 }: LoginPageProps) {
+  useTheme("auto");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [submitted, setSubmitted] = useState(false);
@@ -39,7 +41,7 @@ export function LoginPage({
   const passwordInvalid = submitted && password === "";
 
   return (
-    <div className="bg-background text-foreground fixed inset-0 grid place-items-center p-4">
+    <main className="bg-background text-foreground fixed inset-0 grid place-items-center p-4">
       <div className="border-border bg-card w-full max-w-sm rounded-xl border p-8 shadow-sm">
         <div className="mb-6 flex flex-col items-center gap-3">
           <span className="bg-primary/10 text-primary grid size-12 place-items-center rounded-full">
@@ -92,6 +94,6 @@ export function LoginPage({
           </Button>
         </form>
       </div>
-    </div>
+    </main>
   );
 }
