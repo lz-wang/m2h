@@ -1545,7 +1545,7 @@ export function App({
                       aria-valuemin={20}
                       aria-valuemax={80}
                       tabIndex={0}
-                      className="reader-rail-resize"
+                      className="reader-rail-resize sidebar-rail-line"
                       onPointerDown={(event) =>
                         event.currentTarget.setPointerCapture(event.pointerId)
                       }

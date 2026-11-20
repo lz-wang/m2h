@@ -707,6 +707,52 @@ test.describe("authenticated mode", () => {
     });
     await expect(panel).toBeVisible();
     await expect(separator).toBeVisible();
+    const outline = page.getByRole("navigation", { name: "文档目录" });
+    const outlineTitle = outline.getByText("本页目录", { exact: true });
+    const annotationTitle = panel.getByText(/本页标注/);
+    const titleStyle = (title: Locator) =>
+      title.evaluate((element) => {
+        const { fontSize, fontWeight, lineHeight, color } =
+          getComputedStyle(element);
+        const { x } = element.getBoundingClientRect();
+        return { fontSize, fontWeight, lineHeight, color, x };
+      });
+    expect(await titleStyle(outlineTitle)).toEqual(
+      await titleStyle(annotationTitle),
+    );
+    const titleBox = await outlineTitle.boundingBox();
+    const viewport = outline.locator('[data-slot="scroll-area-viewport"]');
+    const scrollTop = await viewport.evaluate((element) => {
+      element.scrollTop = 160;
+      return element.scrollTop;
+    });
+    expect(scrollTop).toBeGreaterThan(0);
+    expect(await outlineTitle.boundingBox()).toEqual(titleBox);
+
+    expect(
+      await separator.evaluate(
+        (element) => getComputedStyle(element, "::before").height,
+      ),
+    ).toBe("1px");
+    const widthHandle = page.getByRole("separator", {
+      name: "调整右侧边栏宽度",
+    });
+    await widthHandle.hover();
+    const edgeLine = await widthHandle.evaluate((element) => {
+      const { width, backgroundColor } = getComputedStyle(element, "::after");
+      return { thickness: width, backgroundColor };
+    });
+    await separator.hover();
+    expect(
+      await separator.evaluate((element) => {
+        const { height, backgroundColor } = getComputedStyle(
+          element,
+          "::after",
+        );
+        return { thickness: height, backgroundColor };
+      }),
+    ).toEqual(edgeLine);
+
     const top = await panel.evaluate(
       (element) => element.getBoundingClientRect().top,
     );

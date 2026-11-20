@@ -105,15 +105,17 @@ export function TableOfContentsPanel({
       aria-hidden={!visible}
       inert={!visible}
     >
-      <nav className="reader-toc" aria-label="文档目录">
+      <nav className="reader-toc gap-3 p-3" aria-label="文档目录">
+        <div className="reader-rail-header">
+          <p className="reader-rail-title">本页目录</p>
+        </div>
         {/* The same transient-scrollbar ScrollArea the sidebar uses, so both
          * scrollable rails share one scrollbar behavior. */}
         <ScrollArea
-          className="reader-toc-scroll"
+          className="reader-toc-scroll min-h-0 flex-1"
           scrollbarVisibility="scrolling"
         >
-          <div className="reader-toc-content">
-            <p className="reader-toc-title">本页目录</p>
+          <div className="pr-2 pb-8">
             <TOCLinks
               items={items}
               activeID={activeID}
