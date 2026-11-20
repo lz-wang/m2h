@@ -9,6 +9,7 @@ export interface ExportAnnotation {
   selector: AnnotationSelector;
   status?: "resolved" | "ambiguous" | "orphaned";
   createdAt: number;
+  updatedAt: number;
 }
 
 export interface ExportDocument {
@@ -56,7 +57,7 @@ export function exportAnnotationsMarkdown(
       `- 正文定位: start ${entry.selector.position.start}, end ${entry.selector.position.end}`,
       `- 评审意见: ${(entry.comment || "（仅高亮，无评论）").replaceAll("\n", "\n  ")}`,
       `- 评审人员: ${entry.authorName}`,
-      `- 评审时间: ${new Date(entry.createdAt).toLocaleString("zh-CN", { hour12: false })}`,
+      `- 评审时间: ${new Date(entry.updatedAt).toLocaleString("zh-CN", { hour12: false })}`,
       ...(entry.status && entry.status !== "resolved"
         ? [`- 定位状态: ${entry.status}`]
         : []),
@@ -102,6 +103,7 @@ export function exportAnnotationsJSON(
           blockHint: entry.selector.blockHint ?? "",
         },
         createdAt: localISO(new Date(entry.createdAt)),
+        updatedAt: localISO(new Date(entry.updatedAt)),
       })),
     },
     null,

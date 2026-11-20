@@ -30,6 +30,7 @@ const entry: ExportAnnotation = {
     version: 1,
   },
   createdAt: 1760000000000,
+  updatedAt: 1760000300000,
 };
 
 describe("agent review export", () => {
@@ -50,13 +51,15 @@ describe("agent review export", () => {
     expect(result).toContain("- 正文定位: start 4, end 8");
     expect(result).toContain("- 评审意见:");
     expect(result).toContain("- 评审人员: alice");
-    expect(result).toContain("- 评审时间:");
+    expect(result).toContain(
+      `- 评审时间: ${new Date(entry.updatedAt).toLocaleString("zh-CN", { hour12: false })}`,
+    );
     expect(result).toContain("（仅高亮，无评论）");
   });
   it("produces valid JSON with credentials, selector, and offset timestamps", () => {
-    const parsed: unknown = JSON.parse(
+    const parsed = JSON.parse(
       exportAnnotationsJSON(document, [entry], credentials),
-    );
+    ) as { annotations: Array<{ createdAt: string; updatedAt: string }> };
     expect(parsed).toMatchObject({
       document: {
         title: "m2h",
@@ -79,8 +82,11 @@ describe("agent review export", () => {
         },
       ],
     });
-    expect(exportAnnotationsJSON(document, [entry], credentials)).toMatch(
+    const [annotation] = parsed.annotations;
+    expect(annotation.createdAt).toMatch(
       /\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d[+-]\d\d:\d\d/,
     );
+    expect(Date.parse(annotation.createdAt)).toBe(entry.createdAt);
+    expect(Date.parse(annotation.updatedAt)).toBe(entry.updatedAt);
   });
 });

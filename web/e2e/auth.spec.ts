@@ -1321,6 +1321,10 @@ test.describe("authenticated mode", () => {
 
     await card.getByRole("button", { name: "编辑评论", exact: true }).click();
     await card.getByPlaceholder("添加评论…").fill("更新后的新标注");
+    // The exported timestamps have whole-second precision.
+    await expect
+      .poll(() => Math.floor(Date.now() / 1000))
+      .toBeGreaterThan(Math.floor(newer.updatedAt / 1000));
     const updateResponse = page.waitForResponse(
       (response) =>
         response.url() === `${baseURL}/api/annotations/${newer.id}/comment` &&
@@ -1337,6 +1341,18 @@ test.describe("authenticated mode", () => {
     await expect(sidebarTime).toHaveAttribute("datetime", updatedTime);
     await expect(card).not.toContainText("更新于");
     await expect(sidebar).not.toContainText("更新于");
+    await copy.click();
+    await expect
+      .poll(async () => {
+        const clipboard = await page.evaluate(() =>
+          navigator.clipboard.readText(),
+        );
+        const result = JSON.parse(clipboard) as {
+          annotations: Array<{ updatedAt: string }>;
+        };
+        return Date.parse(result.annotations[0].updatedAt);
+      })
+      .toBe(Math.floor(updatedAt / 1000) * 1000);
     await card.getByRole("button", { name: "返回标注列表" }).click();
     await expect(
       list.getByRole("button", { name: /更新后的新标注/ }).locator("time"),

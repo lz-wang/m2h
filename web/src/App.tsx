@@ -753,6 +753,7 @@ export function App({
           selector: item.selector,
           status: annotationStatuses[item.id] ?? "resolved",
           createdAt: item.createdAt,
+          updatedAt: item.updatedAt,
         }));
         const credentials = {
           url: `${window.location.origin}${markdownURL(doc.path)}`,
