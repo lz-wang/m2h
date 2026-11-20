@@ -195,11 +195,16 @@ function cameFromReloadLikeNavigation(): boolean {
 interface StoredLayout {
   sidebarOpen: boolean;
   sidebarWidth: number;
+  rightSidebarWidth: number;
 }
+
+const rightSidebarMinWidth = 208;
+const rightSidebarMaxWidth = 480;
 
 const defaultLayout: StoredLayout = {
   sidebarOpen: true,
   sidebarWidth: 256,
+  rightSidebarWidth: 240,
 };
 
 const documentWidths: Array<{
@@ -227,6 +232,9 @@ export function App({
     preview.kind === "directory" || preview.kind === "workspace";
   const [initialLayout] = useState(readStoredLayout);
   const [sidebarWidth, setSidebarWidth] = useState(initialLayout.sidebarWidth);
+  const [rightSidebarWidth, setRightSidebarWidth] = useState(
+    initialLayout.rightSidebarWidth,
+  );
   const [sidebarOpen, setSidebarOpen] = useState(initialLayout.sidebarOpen);
   // The mobile Sheet owns its own open state (openMobile) that toggleSidebar
   // flips below 768px; lifting it here lets the tree read one merged fact.
@@ -975,12 +983,12 @@ export function App({
     try {
       window.localStorage.setItem(
         layoutStorageKey,
-        JSON.stringify({ sidebarOpen, sidebarWidth }),
+        JSON.stringify({ sidebarOpen, sidebarWidth, rightSidebarWidth }),
       );
     } catch {
       // Storage can be unavailable in private browsing; the layout still works.
     }
-  }, [sidebarOpen, sidebarWidth]);
+  }, [sidebarOpen, sidebarWidth, rightSidebarWidth]);
 
   const selectMarkdownTarget = (targetElement: EventTarget | null): boolean => {
     if (!(targetElement instanceof Element)) {
@@ -1187,7 +1195,12 @@ export function App({
           </Sidebar>
         ) : null}
 
-        <SidebarInset className="reader-inset">
+        <SidebarInset
+          className="reader-inset"
+          style={
+            { "--reader-toc-width": `${rightSidebarWidth}px` } as CSSProperties
+          }
+        >
           <header className="reader-toolbar">
             {navigationAvailable ? (
               <Tooltip>
@@ -1453,6 +1466,13 @@ export function App({
                 data-toc-open={preview.toc && tocItems.length > 0}
                 data-annotations-open={annotationsOpen}
               >
+                {!isMobileViewport &&
+                ((preview.toc && tocItems.length > 0) || annotationsOpen) ? (
+                  <RightSidebarResizeHandle
+                    width={rightSidebarWidth}
+                    onResize={setRightSidebarWidth}
+                  />
+                ) : null}
                 {tocItems.length > 0 ? (
                   <TableOfContentsPanel
                     visible={preview.toc}
@@ -1693,6 +1713,7 @@ function readStoredLayout(): StoredLayout {
     }
     const candidate = value as Record<string, unknown>;
     const sidebarWidth = candidate.sidebarWidth;
+    const rightSidebarWidth = candidate.rightSidebarWidth;
     return {
       sidebarOpen:
         typeof candidate.sidebarOpen === "boolean"
@@ -1702,6 +1723,11 @@ function readStoredLayout(): StoredLayout {
         typeof sidebarWidth === "number" && Number.isFinite(sidebarWidth)
           ? Math.min(480, Math.max(208, sidebarWidth))
           : defaultLayout.sidebarWidth,
+      rightSidebarWidth:
+        typeof rightSidebarWidth === "number" &&
+        Number.isFinite(rightSidebarWidth)
+          ? clampRightSidebarWidth(rightSidebarWidth)
+          : defaultLayout.rightSidebarWidth,
     };
   } catch {
     return defaultLayout;
@@ -1771,6 +1797,104 @@ function SidebarResizeHandle({
       title="拖动调整侧边栏宽度"
       onPointerDown={handlePointerDown}
       onClick={(event) => event.preventDefault()}
+    />
+  );
+}
+
+function clampRightSidebarWidth(width: number): number {
+  return Math.min(
+    rightSidebarMaxWidth,
+    Math.max(rightSidebarMinWidth, Math.round(width)),
+  );
+}
+
+function RightSidebarResizeHandle({
+  width,
+  onResize,
+}: {
+  width: number;
+  onResize(width: number): void;
+}) {
+  const drag = useRef<{
+    inset: HTMLElement;
+    pointerId: number;
+    startX: number;
+    startWidth: number;
+    nextWidth: number;
+  } | null>(null);
+
+  useLayoutEffect(
+    () => () => {
+      const current = drag.current;
+      if (current === null) return;
+      current.inset.style.setProperty(
+        "--reader-toc-width",
+        `${current.startWidth}px`,
+      );
+      delete current.inset.dataset.railResizing;
+      drag.current = null;
+    },
+    [],
+  );
+
+  return (
+    // biome-ignore lint/a11y/useSemanticElements: This focusable separator adjusts the width with pointer and keyboard input.
+    <div
+      role="separator"
+      aria-label="调整右侧边栏宽度"
+      aria-orientation="vertical"
+      aria-valuemin={rightSidebarMinWidth}
+      aria-valuemax={rightSidebarMaxWidth}
+      aria-valuenow={width}
+      tabIndex={0}
+      className="reader-rail-width-resize sidebar-rail-line"
+      title="拖动或按方向键调整右侧边栏宽度"
+      onPointerDown={(event) => {
+        if (event.button !== 0 || drag.current !== null) return;
+        const inset = event.currentTarget.closest<HTMLElement>(".reader-inset");
+        if (inset === null) return;
+        event.preventDefault();
+        event.currentTarget.setPointerCapture(event.pointerId);
+        inset.dataset.railResizing = "true";
+        drag.current = {
+          inset,
+          pointerId: event.pointerId,
+          startX: event.clientX,
+          startWidth: width,
+          nextWidth: width,
+        };
+      }}
+      onPointerMove={(event) => {
+        const current = drag.current;
+        if (current?.pointerId !== event.pointerId) return;
+        current.nextWidth = clampRightSidebarWidth(
+          current.startWidth + current.startX - event.clientX,
+        );
+        current.inset.style.setProperty(
+          "--reader-toc-width",
+          `${current.nextWidth}px`,
+        );
+      }}
+      onLostPointerCapture={(event) => {
+        const current = drag.current;
+        if (current?.pointerId !== event.pointerId) return;
+        delete current.inset.dataset.railResizing;
+        drag.current = null;
+        onResize(current.nextWidth);
+      }}
+      onKeyDown={(event) => {
+        if (drag.current !== null) return;
+        const nextWidths: Record<string, number> = {
+          ArrowLeft: width + 16,
+          ArrowRight: width - 16,
+          Home: rightSidebarMinWidth,
+          End: rightSidebarMaxWidth,
+        };
+        const next = nextWidths[event.key];
+        if (typeof next !== "number") return;
+        event.preventDefault();
+        onResize(clampRightSidebarWidth(next));
+      }}
     />
   );
 }

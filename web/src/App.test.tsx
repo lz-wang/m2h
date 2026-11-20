@@ -1189,6 +1189,9 @@ describe("App directory preview", () => {
       JSON.parse(window.localStorage.getItem("m2h.preview.layout") ?? "{}"),
     ).not.toHaveProperty("documentWidth");
     expect(
+      JSON.parse(window.localStorage.getItem("m2h.preview.layout") ?? "{}"),
+    ).toHaveProperty("rightSidebarWidth", 240);
+    expect(
       document
         .querySelector('[data-slot="sidebar-wrapper"]')
         ?.getAttribute("style"),

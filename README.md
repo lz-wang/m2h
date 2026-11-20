@@ -67,6 +67,8 @@ m2h docs wiki notes.md
 m2h export README.md
 ```
 
+在桌面布局中，拖动右侧栏的左边缘可调整宽度。也可聚焦边缘后按左右方向键。浏览器会记住调整后的宽度。
+
 更多用法见 [浏览与导出 Markdown](docs/browsing.md)，全部选项见 `m2h --help`。
 
 ### 标注 Markdown

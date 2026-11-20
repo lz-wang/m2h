@@ -656,6 +656,61 @@ test.describe("authenticated mode", () => {
     await expect(panel).toHaveCount(0);
   });
 
+  test("the right sidebar resizes with pointer and keyboard input and restores its width", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await login(page, "alice", "password-1");
+    await page.goto(`${baseURL}/doc/toc-scroll.md`);
+    const handle = page.getByRole("separator", { name: "调整右侧边栏宽度" });
+    const rail = page.locator(".reader-rail");
+    const slot = page.locator(".reader-rail-slot");
+    const leftSidebar = page.locator('[data-slot="sidebar-container"]');
+    const readerNavigation = page.getByRole("navigation", {
+      name: "阅读位置导航",
+    });
+    await expect(handle).toBeVisible();
+    await expect(rail).toHaveCSS("width", "240px");
+    await expect(leftSidebar).toHaveCSS("width", "256px");
+    await page.getByRole("button", { name: "打开标注面板" }).click();
+
+    const leftHandle = page.getByRole("button", { name: "调整侧边栏宽度" });
+    const dividerStyle = (target: Locator) =>
+      target.evaluate((element) => {
+        const { width, backgroundColor } = getComputedStyle(element, "::after");
+        return { width, backgroundColor };
+      });
+    expect(await dividerStyle(handle)).toEqual(await dividerStyle(leftHandle));
+    await leftHandle.hover();
+    const hoveredDivider = await dividerStyle(leftHandle);
+    await handle.hover();
+    expect(await dividerStyle(handle)).toEqual(hoveredDivider);
+
+    const box = await handle.boundingBox();
+    if (!box) throw new Error("right sidebar handle is missing");
+    await page.mouse.move(box.x + box.width / 2, box.y + 32);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width / 2 - 80, box.y + 32, { steps: 5 });
+    await expect(rail).toHaveCSS("width", "320px");
+    await expect(slot).toHaveCSS("width", "320px");
+    await expect(readerNavigation).toHaveCSS("right", "344px");
+    expect(await dividerStyle(handle)).toEqual(hoveredDivider);
+    await page.mouse.up();
+    await expect(handle).toHaveAttribute("aria-valuenow", "320");
+
+    await handle.press("ArrowLeft");
+    await expect(handle).toHaveAttribute("aria-valuenow", "336");
+    await expect(leftSidebar).toHaveCSS("width", "256px");
+    await page.reload();
+    await expect(handle).toHaveAttribute("aria-valuenow", "336");
+    await expect(rail).toHaveCSS("width", "336px");
+
+    await page.setViewportSize({ width: 375, height: 780 });
+    await page.getByRole("button", { name: "打开标注面板" }).click();
+    await expect(rail).toBeVisible();
+    await expect(handle).toHaveCount(0);
+  });
+
   test("returning home clears the document outline and annotation panel", async ({
     page,
   }) => {
