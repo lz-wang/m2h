@@ -228,7 +228,7 @@ test.describe("authenticated mode", () => {
     });
     await dragAnnotationHandle(
       page,
-      composer.getByRole("button", { name: "调整标注窗口大小" }),
+      composer.getByRole("button", { name: "从右下角调整标注窗口大小" }),
       60,
       44,
     );
@@ -236,6 +236,62 @@ test.describe("authenticated mode", () => {
       width: initialEditor.width + 60,
       height: initialEditor.height + 44,
     });
+    const cornerDrags = [
+      {
+        name: "左上角",
+        cursor: "nwse-resize",
+        dx: -20,
+        dy: -12,
+        originX: -20,
+        originY: -12,
+        width: 20,
+        height: 12,
+      },
+      {
+        name: "右上角",
+        cursor: "nesw-resize",
+        dx: 12,
+        dy: 8,
+        originX: 0,
+        originY: 8,
+        width: 12,
+        height: -8,
+      },
+      {
+        name: "左下角",
+        cursor: "nesw-resize",
+        dx: 16,
+        dy: 10,
+        originX: 16,
+        originY: 0,
+        width: -16,
+        height: 10,
+      },
+    ];
+    for (const {
+      name,
+      cursor,
+      dx,
+      dy,
+      originX,
+      originY,
+      width,
+      height,
+    } of cornerDrags) {
+      const handle = composer.getByRole("button", {
+        name: `从${name}调整标注窗口大小`,
+      });
+      const before = await composer.boundingBox();
+      if (!before) throw new Error("missing comment composer bounds");
+      await expect(handle).toHaveCSS("cursor", cursor);
+      await dragAnnotationHandle(page, handle, dx, dy);
+      expect(await composer.boundingBox()).toMatchObject({
+        x: before.x + originX,
+        y: before.y + originY,
+        width: before.width + width,
+        height: before.height + height,
+      });
+    }
     await expect(editor).toBeFocused();
     await expect(editor).toHaveValue("正在撰写");
     await expect.poll(draftRange).toEqual([selectedText]);
@@ -486,7 +542,7 @@ test.describe("authenticated mode", () => {
 
     await dragAnnotationHandle(
       page,
-      card.getByRole("button", { name: "调整标注窗口大小" }),
+      card.getByRole("button", { name: "从右下角调整标注窗口大小" }),
       60,
       44,
     );

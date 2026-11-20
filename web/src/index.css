@@ -636,12 +636,37 @@ body,
 .annotation-hover-card .annotation-hover-move:active {
   cursor: grabbing;
 }
-.annotation-hover-card .annotation-hover-resize {
+.annotation-hover-card .annotation-hover-corner {
   position: absolute;
-  right: 0.25rem;
-  bottom: 0.25rem;
-  cursor: nwse-resize;
+  z-index: 1;
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 0.25rem;
   touch-action: none;
+}
+.annotation-hover-corner[data-corner^="top"] {
+  top: -0.25rem;
+}
+.annotation-hover-corner[data-corner^="bottom"] {
+  bottom: -0.25rem;
+}
+.annotation-hover-corner[data-corner$="left"] {
+  left: -0.25rem;
+}
+.annotation-hover-corner[data-corner$="right"] {
+  right: -0.25rem;
+}
+.annotation-hover-card .annotation-hover-corner[data-corner="top-left"],
+.annotation-hover-card .annotation-hover-corner[data-corner="bottom-right"] {
+  cursor: nwse-resize;
+}
+.annotation-hover-card .annotation-hover-corner[data-corner="top-right"],
+.annotation-hover-card .annotation-hover-corner[data-corner="bottom-left"] {
+  cursor: nesw-resize;
+}
+.annotation-hover-corner:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: -2px;
 }
 .annotation-hover-body {
   display: flex;
@@ -652,7 +677,6 @@ body,
 }
 .annotation-hover-body > div:has(textarea) {
   flex: 1;
-  padding-right: 1.25rem;
 }
 .annotation-hover-body textarea {
   flex: 1;
@@ -675,7 +699,6 @@ body,
   justify-content: flex-start;
   gap: 0.25rem;
   padding-top: 0.375rem;
-  padding-right: 1.5rem;
 }
 .annotation-comment-marker {
   position: fixed;

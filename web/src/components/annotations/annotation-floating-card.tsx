@@ -1,4 +1,4 @@
-import { GripHorizontal, Scaling, X } from "lucide-react";
+import { GripHorizontal, X } from "lucide-react";
 import {
   type KeyboardEvent,
   type PointerEvent,
@@ -16,7 +16,14 @@ interface Bounds {
   height: number;
 }
 
-type Adjustment = "move" | "resize";
+const resizeCorners = [
+  { position: "top-left", label: "左上角", x: -1, y: -1 },
+  { position: "top-right", label: "右上角", x: 1, y: -1 },
+  { position: "bottom-left", label: "左下角", x: -1, y: 1 },
+  { position: "bottom-right", label: "右下角", x: 1, y: 1 },
+] as const;
+
+type Adjustment = "move" | (typeof resizeCorners)[number];
 
 export const annotationCardWidth = 290;
 export const annotationCardHeight = 176;
@@ -44,25 +51,31 @@ function fitBounds(bounds: Bounds): Bounds {
   };
 }
 
-function adjust(bounds: Bounds, mode: Adjustment, dx: number, dy: number) {
+function adjust(start: Bounds, mode: Adjustment, dx: number, dy: number) {
   if (mode === "move") {
     return fitBounds({
-      ...bounds,
-      left: bounds.left + dx,
-      top: bounds.top + dy,
+      ...start,
+      left: start.left + dx,
+      top: start.top + dy,
     });
   }
-  return fitBounds({
-    ...bounds,
-    width: Math.min(
-      Math.max(minWidth, bounds.width + dx),
-      window.innerWidth - bounds.left - margin,
-    ),
-    height: Math.min(
-      Math.max(minHeight, bounds.height + dy),
-      window.innerHeight - bounds.top - margin,
-    ),
-  });
+  const bounds = fitBounds(start);
+  const right = bounds.left + bounds.width;
+  const bottom = bounds.top + bounds.height;
+  const width = Math.min(
+    Math.max(minWidth, bounds.width + dx * mode.x),
+    mode.x < 0 ? right - margin : window.innerWidth - bounds.left - margin,
+  );
+  const height = Math.min(
+    Math.max(minHeight, bounds.height + dy * mode.y),
+    mode.y < 0 ? bottom - margin : window.innerHeight - bounds.top - margin,
+  );
+  return {
+    left: mode.x < 0 ? right - width : bounds.left,
+    top: mode.y < 0 ? bottom - height : bounds.top,
+    width,
+    height,
+  };
 }
 
 export function AnnotationFloatingCard({
@@ -125,8 +138,7 @@ export function AnnotationFloatingCard({
         if (start?.pointerId !== event.pointerId) return;
         const dx = event.clientX - start.x;
         const dy = event.clientY - start.y;
-        if (dx === 0 && dy === 0) return;
-        onAdjust?.();
+        if (dx !== 0 || dy !== 0) onAdjust?.();
         setBounds(adjust(start.bounds, mode, dx, dy));
       },
       onLostPointerCapture() {
@@ -176,14 +188,17 @@ export function AnnotationFloatingCard({
         </AnnotationAction>
       </div>
       <div className="annotation-hover-body">{children}</div>
-      <AnnotationAction
-        className="annotation-hover-resize"
-        label="调整标注窗口大小"
-        tooltip="拖动或按方向键调整宽度和高度"
-        {...adjustmentEvents("resize")}
-      >
-        <Scaling aria-hidden="true" />
-      </AnnotationAction>
+      {resizeCorners.map((corner) => (
+        <button
+          key={corner.position}
+          type="button"
+          className="annotation-hover-corner"
+          data-corner={corner.position}
+          aria-label={`从${corner.label}调整标注窗口大小`}
+          tabIndex={corner.position === "bottom-right" ? 0 : -1}
+          {...adjustmentEvents(corner)}
+        />
+      ))}
     </section>
   );
 }
