@@ -426,6 +426,16 @@ export function App({
     clearTimeout(hoverTimer.current);
     hoverTimer.current = null;
   }, []);
+  function scheduleHoverDismiss() {
+    if (hoverTimer.current !== null) return;
+    hoverTimer.current = setTimeout(() => {
+      hoverTimer.current = null;
+      setAnnotationPopups((current) => {
+        const retained = current.filter(keepAnnotationPopupOpen);
+        return retained.length === current.length ? current : retained;
+      });
+    }, 250);
+  }
   // The human re-anchor flow: the annotation awaiting a new passage, or
   // null. While pending, the selection toolbar serves the re-association
   // instead of creating new annotations.
@@ -1429,17 +1439,15 @@ export function App({
                 const ids = annotationsAt(x, y);
                 if (ids.length > 0) {
                   showHoveredAnnotations(ids, x, y);
-                } else if (hoverTimer.current === null) {
-                  hoverTimer.current = setTimeout(() => {
-                    setAnnotationPopups((current) =>
-                      current.filter(keepAnnotationPopupOpen),
-                    );
-                    hoverTimer.current = null;
-                  }, 250);
+                } else {
+                  scheduleHoverDismiss();
                 }
               });
             }}
-            onMouseLeave={cancelHoverFrame}
+            onMouseLeave={() => {
+              cancelHoverFrame();
+              scheduleHoverDismiss();
+            }}
             onClickCapture={(event) => {
               cancelHoverFrame();
               if (

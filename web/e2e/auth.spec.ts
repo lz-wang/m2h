@@ -1238,6 +1238,78 @@ test.describe("authenticated mode", () => {
     expect(attempts.get(bulkFailed)).toBe(2);
   });
 
+  for (const destination of ["toolbar", "popup"] as const) {
+    test(`annotation hover when the pointer moves directly to the ${destination}`, async ({
+      page,
+    }) => {
+      await login(page, "alice", "password-1");
+      const url = `${baseURL}/doc/README.md?annotations=true`;
+      const response = await page.request.get(
+        `${baseURL}/api/document?path=README.md`,
+      );
+      const { documentRef, documentHash } = (await response.json()) as {
+        documentRef: { rootId: string; path: string };
+        documentHash: string;
+      };
+      const exact = "此文档用于验证正文渲染和侧栏悬停提示。";
+      const created = await page.request.post(`${baseURL}/api/annotations`, {
+        headers: { Origin: baseURL },
+        data: {
+          documentRef,
+          documentHash,
+          selector: {
+            quote: { exact, prefix: "", suffix: "" },
+            position: { start: 0, end: exact.length },
+            version: 1,
+          },
+          comment: "悬停窗口测试",
+        },
+      });
+      expect(created.status()).toBe(201);
+      const { id } = (await created.json()) as { id: string };
+      try {
+        await page.goto(url);
+        await expect(
+          page.locator(`[data-annotation-id="${id}"]`),
+        ).toBeVisible();
+        const point = await page
+          .locator("article p")
+          .first()
+          .evaluate((p) => {
+            const range = document.createRange();
+            range.selectNodeContents(p);
+            const rect = range.getBoundingClientRect();
+            return {
+              x: rect.left + rect.width / 2,
+              y: rect.top + rect.height / 2,
+            };
+          });
+        await page.mouse.move(point.x, point.y);
+        const popup = page.getByRole("region", { name: "标注窗口" });
+        await expect(popup).toContainText("悬停窗口测试");
+        await expect(
+          popup.getByRole("button", { name: "固定悬浮框" }),
+        ).toHaveAttribute("aria-pressed", "false");
+
+        if (destination === "toolbar") {
+          await page.getByRole("button", { name: "收起标注面板" }).hover();
+          await expect(popup).toBeHidden();
+        } else {
+          await page.clock.install();
+          await popup.locator(".annotation-comment-box").hover();
+          await page.clock.runFor(300);
+          await expect(popup).toBeVisible();
+        }
+      } finally {
+        const deleted = await page.request.delete(
+          `${baseURL}/api/annotations/${id}`,
+          { headers: { Origin: baseURL } },
+        );
+        expect(deleted.ok()).toBe(true);
+      }
+    });
+  }
+
   test("overlapping annotations offer the exact hits and independent actions", async ({
     page,
   }) => {
