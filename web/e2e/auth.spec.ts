@@ -76,8 +76,25 @@ async function login(page: Page, username: string, password: string) {
   await page.goto(`${baseURL}/`);
   await page.getByLabel("用户名").fill(username);
   await page.getByLabel("密码").fill(password);
+  // The login page renders at the reader's own URL and success never
+  // navigates, so waiting for the URL proves nothing: the helper would
+  // return while the argon2id verification is still running. Wait for the
+  // login response itself, then for the session cookie it installs —
+  // callers capture that cookie immediately and raced an empty header.
+  const loginResponse = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/auth/login") &&
+      response.request().method() === "POST",
+  );
   await page.getByRole("button", { name: "登录" }).click();
-  await page.waitForURL(`${baseURL}/`);
+  expect((await loginResponse).status()).toBe(200);
+  await expect
+    .poll(async () =>
+      (await page.context().cookies(baseURL)).some(
+        (cookie) => cookie.name === "m2h_session",
+      ),
+    )
+    .toBe(true);
 }
 
 async function dragAnnotationHandle(
