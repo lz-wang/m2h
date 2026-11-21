@@ -2248,8 +2248,8 @@ body,
   --annotation-blue: #58a6ff;
   --annotation-green: #3fb950;
   --annotation-amber: #d29922;
-  --annotation-fill: 25%;
-  --annotation-fill-active: 39%;
+  --annotation-fill: 39%;
+  --annotation-fill-active: 47%;
 }
 
 [data-annotation-color="blue"] {

@@ -1430,20 +1430,43 @@ test.describe("authenticated mode", () => {
       "此文档用于",
       "渲染",
     ]);
-    const amberBackground = () =>
+    const highlightOpacity = () =>
       page
         .locator("article p")
         .first()
-        .evaluate(
-          (element) =>
-            getComputedStyle(element, "::highlight(m2h-annotations-amber)")
-              .backgroundColor,
-        );
-    const lightBackground = await amberBackground();
-    expect(lightBackground).not.toBe("rgba(0, 0, 0, 0)");
+        .evaluate((element) => {
+          const context = document.createElement("canvas").getContext("2d");
+          if (!context) throw new Error("missing canvas context");
+          const names = [
+            "m2h-annotations",
+            "m2h-annotations-green",
+            "m2h-annotations-amber",
+          ];
+          return names.map((name) =>
+            [name, `${name}-active`].map((group) => {
+              context.clearRect(0, 0, 1, 1);
+              context.fillStyle = getComputedStyle(
+                element,
+                `::highlight(${group})`,
+              ).backgroundColor;
+              context.fillRect(0, 0, 1, 1);
+              const alpha = context.getImageData(0, 0, 1, 1).data[3];
+              return Math.round((alpha / 255) * 100);
+            }),
+          );
+        });
+    expect(await highlightOpacity()).toEqual([
+      [19, 31],
+      [19, 31],
+      [19, 31],
+    ]);
     await page.getByRole("button", { name: "设置" }).click();
     await page.getByRole("menuitemradio", { name: "深色主题" }).click();
-    await expect.poll(amberBackground).not.toBe(lightBackground);
+    await expect.poll(highlightOpacity).toEqual([
+      [39, 47],
+      [39, 47],
+      [39, 47],
+    ]);
     await page.getByRole("button", { name: "设置" }).click();
     await page.getByRole("menuitemradio", { name: "浅色主题" }).click();
     const pointAt = (offset: number) =>
