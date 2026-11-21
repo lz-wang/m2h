@@ -85,6 +85,7 @@ export function AnnotationHoverDetail({
       {editing ? (
         <AnnotationEditor
           initial={item.comment}
+          color={item.color}
           autoFocus
           pending={saving}
           onCancel={() => onEditingChange(false)}
@@ -101,6 +102,7 @@ export function AnnotationHoverDetail({
         // biome-ignore lint/a11y/noStaticElementInteractions: The edit button provides the keyboard equivalent of this shortcut.
         <div
           className="annotation-comment-box"
+          data-annotation-color={item.color}
           onDoubleClick={() => {
             if (item.mine && !deleting) onEditingChange(true);
           }}

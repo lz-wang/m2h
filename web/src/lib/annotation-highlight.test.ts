@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   ANNOTATION_HIGHLIGHT_NAME,
+  AnnotationHighlightLayer,
   HighlightLayer,
   supportsHighlights,
 } from "./annotation-highlight";
@@ -46,6 +47,34 @@ function installFakeRegistry() {
 
 afterEach(() => {
   document.body.replaceChildren();
+});
+
+describe("AnnotationHighlightLayer", () => {
+  it("paints only the newest color across overlaps and moves emphasized spans to their own group", () => {
+    const fake = installFakeRegistry();
+    try {
+      const layer = new AnnotationHighlightLayer();
+      layer.render(new TextIndex(mountBody("<p>abcdefghij</p>")), [
+        { id: "one", color: "blue", position: { start: 0, end: 8 } },
+        { id: "two", color: "green", position: { start: 2, end: 6 } },
+        { id: "three", color: "amber", position: { start: 4, end: 5 } },
+      ]);
+      const textOf = (name: string) =>
+        fake.store.get(name)?.ranges.map((range) => range.toString());
+      expect(textOf("m2h-annotations")).toEqual(["ab", "gh"]);
+      expect(textOf("m2h-annotations-green")).toEqual(["cd", "f"]);
+      expect(textOf("m2h-annotations-amber")).toEqual(["e"]);
+
+      layer.emphasize("two", "three");
+      expect(textOf("m2h-annotations-green")).toBeUndefined();
+      expect(textOf("m2h-annotations-green-active")).toEqual(["cd", "f"]);
+      expect(textOf("m2h-annotations-amber-active")).toEqual(["e"]);
+      layer.release();
+      expect(fake.store.size).toBe(0);
+    } finally {
+      fake.restore();
+    }
+  });
 });
 
 describe("HighlightLayer", () => {

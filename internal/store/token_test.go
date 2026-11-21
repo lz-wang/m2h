@@ -82,6 +82,7 @@ func TestTokenOwnerNameBackfilledFromV3(t *testing.T) {
 	for _, statement := range []string{
 		`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY)`,
 		`INSERT INTO schema_migrations (version) VALUES (3)`,
+		migrations[1].statements[0], // v2 annotations table, upgraded alongside tokens
 		`CREATE TABLE api_tokens (
 			id TEXT PRIMARY KEY,
 			secret_hash TEXT NOT NULL UNIQUE,

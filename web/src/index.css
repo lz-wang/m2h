@@ -2251,12 +2251,110 @@ body,
 /* Annotation highlights (CSS Custom Highlight API). The registry group is
  * owned by lib/annotation-highlight.ts; these rules only style it. Browsers
  * without the API simply never match — the panel carries the state. */
-::highlight(m2h-annotations) {
-  background-color: color-mix(in oklch, var(--primary) 22%, transparent);
-  color: inherit;
+:root {
+  --annotation-blue: #0969da;
+  --annotation-green: #1a7f37;
+  --annotation-amber: #bf8700;
+  --annotation-fill: 19%;
+  --annotation-fill-active: 31%;
 }
 
+.dark {
+  --annotation-blue: #58a6ff;
+  --annotation-green: #3fb950;
+  --annotation-amber: #d29922;
+  --annotation-fill: 25%;
+  --annotation-fill-active: 39%;
+}
+
+[data-annotation-color="blue"] {
+  --annotation-accent: var(--annotation-blue);
+}
+
+[data-annotation-color="green"] {
+  --annotation-accent: var(--annotation-green);
+}
+
+[data-annotation-color="amber"] {
+  --annotation-accent: var(--annotation-amber);
+}
+
+[data-annotation-id][data-annotation-color] {
+  border-inline-start: 3px solid var(--annotation-accent);
+}
+
+.annotation-comment-box[data-annotation-color],
+.annotation-hover-body textarea[data-annotation-color] {
+  border-color: var(--annotation-accent);
+}
+
+.annotation-hover-body textarea[data-annotation-color]:focus-visible {
+  --tw-ring-color: color-mix(
+    in srgb,
+    var(--annotation-accent) 35%,
+    transparent
+  );
+}
+
+.annotation-color-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 50%;
+  background: var(--annotation-accent);
+}
+
+[aria-pressed="true"] > .annotation-color-swatch {
+  outline: 1px solid var(--annotation-accent);
+  outline-offset: 2px;
+}
+
+::highlight(m2h-annotations) {
+  background-color: color-mix(
+    in srgb,
+    var(--annotation-blue) var(--annotation-fill),
+    transparent
+  );
+}
+
+::highlight(m2h-annotations-green) {
+  background-color: color-mix(
+    in srgb,
+    var(--annotation-green) var(--annotation-fill),
+    transparent
+  );
+}
+
+::highlight(m2h-annotations-amber) {
+  background-color: color-mix(
+    in srgb,
+    var(--annotation-amber) var(--annotation-fill),
+    transparent
+  );
+}
+
+::highlight(m2h-annotations-active),
 ::highlight(m2h-annotation-draft) {
-  background-color: Highlight;
-  color: HighlightText;
+  background-color: color-mix(
+    in srgb,
+    var(--annotation-blue) var(--annotation-fill-active),
+    transparent
+  );
+}
+
+::highlight(m2h-annotations-green-active),
+::highlight(m2h-annotation-draft-green) {
+  background-color: color-mix(
+    in srgb,
+    var(--annotation-green) var(--annotation-fill-active),
+    transparent
+  );
+}
+
+::highlight(m2h-annotations-amber-active),
+::highlight(m2h-annotation-draft-amber) {
+  background-color: color-mix(
+    in srgb,
+    var(--annotation-amber) var(--annotation-fill-active),
+    transparent
+  );
 }

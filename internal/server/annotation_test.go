@@ -51,6 +51,11 @@ func newAnnotationFixture(t *testing.T) *annotationFixture {
 
 func (fixture *annotationFixture) createAnnotation(t *testing.T, session *http.Cookie, comment string) *http.Response {
 	t.Helper()
+	return fixture.createAnnotationWithColor(t, session, comment, "")
+}
+
+func (fixture *annotationFixture) createAnnotationWithColor(t *testing.T, session *http.Cookie, comment, color string) *http.Response {
+	t.Helper()
 	payload := map[string]any{
 		"documentRef":  fixture.document.Ref,
 		"documentHash": fixture.document.Hash,
@@ -60,6 +65,9 @@ func (fixture *annotationFixture) createAnnotation(t *testing.T, session *http.C
 			"version":  1,
 		},
 		"comment": comment,
+	}
+	if color != "" {
+		payload["color"] = color
 	}
 	body, _ := json.Marshal(payload)
 	request, _ := http.NewRequest(http.MethodPost, fixture.server.URL+"/api/annotations", bytes.NewReader(body))
@@ -97,7 +105,7 @@ func TestAnnotationCreateListDeleteLifecycle(t *testing.T) {
 		t.Fatalf("decode created: %v", err)
 	}
 	created.Body.Close()
-	if entry.ID == "" || entry.AuthorName != "alice" || !entry.Mine || entry.Quote != "Body text" {
+	if entry.ID == "" || entry.AuthorName != "alice" || !entry.Mine || entry.Quote != "Body text" || entry.Color != "blue" {
 		t.Fatalf("created annotation = %+v", entry)
 	}
 
@@ -141,6 +149,37 @@ func TestAnnotationCreateListDeleteLifecycle(t *testing.T) {
 	}
 	if remaining := list(fixture.alice); len(remaining) != 0 {
 		t.Fatalf("annotation survived delete: %+v", remaining)
+	}
+}
+
+func TestAnnotationCreateColor(t *testing.T) {
+	fixture := newAnnotationFixture(t)
+	for _, color := range []string{"blue", "green", "amber", "purple"} {
+		t.Run(color, func(t *testing.T) {
+			response := fixture.createAnnotationWithColor(t, fixture.alice, "", color)
+			defer response.Body.Close()
+			if color == "purple" {
+				if response.StatusCode != http.StatusBadRequest {
+					t.Fatalf("unsupported color returned %d, want 400", response.StatusCode)
+				}
+				return
+			}
+			if response.StatusCode != http.StatusCreated {
+				t.Fatalf("create returned %d, want 201", response.StatusCode)
+			}
+			var entry annotationResponse
+			if err := json.NewDecoder(response.Body).Decode(&entry); err != nil {
+				t.Fatal(err)
+			}
+			if string(entry.Color) != color {
+				t.Fatalf("created color = %q, want %q", entry.Color, color)
+			}
+		})
+	}
+	list := fixture.do(fixture.requestWithSession(http.MethodGet, "/api/annotations?path=guide.md", fixture.alice, nil))
+	entries := decodeAnnotations(t, list)
+	if len(entries) != 3 || entries[0].Color != "blue" || entries[1].Color != "green" || entries[2].Color != "amber" {
+		t.Fatalf("stored annotations = %+v", entries)
 	}
 }
 

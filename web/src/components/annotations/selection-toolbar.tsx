@@ -7,11 +7,13 @@ import {
   useRef,
   useState,
 } from "react";
-import { Button } from "@/components/ui/button";
 import {
-  DRAFT_ANNOTATION_HIGHLIGHT_NAME,
-  HighlightLayer,
-} from "@/lib/annotation-highlight";
+  ANNOTATION_COLORS,
+  type AnnotationColor,
+  DEFAULT_ANNOTATION_COLOR,
+} from "@/api";
+import { Button } from "@/components/ui/button";
+import { draftHighlightName, HighlightLayer } from "@/lib/annotation-highlight";
 import {
   type AnnotationSelector,
   selectorFromRange,
@@ -35,6 +37,7 @@ export interface SelectionToolbarProps {
   onAnnotate: (
     selector: AnnotationSelector,
     comment: string,
+    color: AnnotationColor,
     pinnedBounds?: AnnotationCardBounds,
   ) => Promise<boolean>;
   // Re-anchor mode: while pending, the toolbar serves the human
@@ -53,6 +56,12 @@ interface ToolbarPosition {
   left: number;
 }
 
+const colorLabels: Record<AnnotationColor, string> = {
+  blue: "蓝色",
+  green: "绿色",
+  amber: "琥珀色",
+};
+
 // SelectionToolbar is the floating 高亮/评论 pill that appears on a valid
 // body selection. Only canonical-content selections qualify: a range the
 // text index cannot address (empty, collapsed, or touching UI decorations
@@ -67,6 +76,7 @@ export function SelectionToolbar({
   disabled = false,
 }: SelectionToolbarProps) {
   const [selector, setSelector] = useState<AnnotationSelector | null>(null);
+  const [color, setColor] = useState<AnnotationColor>(DEFAULT_ANNOTATION_COLOR);
   const [position, setPosition] = useState<ToolbarPosition | null>(null);
   const [commentPosition, setCommentPosition] =
     useState<ToolbarPosition | null>(null);
@@ -90,6 +100,7 @@ export function SelectionToolbar({
 
   useEffect(() => {
     if (disabled) {
+      rangeRef.current = null;
       setSelector(null);
       setPosition(null);
       setCommentPosition(null);
@@ -119,6 +130,16 @@ export function SelectionToolbar({
     if (candidate === null) {
       return;
     }
+    const previousRange = rangeRef.current;
+    if (
+      previousRange === null ||
+      range.startContainer !== previousRange.startContainer ||
+      range.startOffset !== previousRange.startOffset ||
+      range.endContainer !== previousRange.endContainer ||
+      range.endOffset !== previousRange.endOffset
+    ) {
+      setColor(DEFAULT_ANNOTATION_COLOR);
+    }
     rangeRef.current = range.cloneRange();
     setSelector(candidate);
     setFailure(null);
@@ -144,6 +165,7 @@ export function SelectionToolbar({
       }
       updateFromSelection();
       if (document.getSelection()?.isCollapsed === true) {
+        rangeRef.current = null;
         setSelector(null);
         setPosition(null);
       }
@@ -155,11 +177,11 @@ export function SelectionToolbar({
 
   useLayoutEffect(() => {
     if (disabled || !commenting || selector === null) return;
-    const layer = new HighlightLayer(DRAFT_ANNOTATION_HIGHLIGHT_NAME);
+    const layer = new HighlightLayer(draftHighlightName(color), 1);
     layer.attach(indexRef.current);
     layer.render([selector.position]);
     return () => layer.release();
-  }, [commenting, disabled, indexRef, selector]);
+  }, [color, commenting, disabled, indexRef, selector]);
 
   const cancelComment = useCallback(() => {
     if (saving) return;
@@ -190,6 +212,7 @@ export function SelectionToolbar({
         event.key === "Escape" &&
         (selector !== null || reanchorPending !== null)
       ) {
+        rangeRef.current = null;
         setSelector(null);
         setPosition(null);
         setCommentPosition(null);
@@ -213,11 +236,15 @@ export function SelectionToolbar({
     setSaving(true);
     setFailure(null);
     const bounds = commenting && commentPinned ? commentBounds.current : null;
-    const saved = bounds
-      ? await onAnnotate(selector, comment, bounds)
-      : await onAnnotate(selector, comment);
+    const saved = await onAnnotate(
+      selector,
+      comment,
+      color,
+      bounds ?? undefined,
+    );
     setSaving(false);
     if (saved) {
+      rangeRef.current = null;
       setSelector(null);
       setPosition(null);
       setCommentPosition(null);
@@ -301,6 +328,7 @@ export function SelectionToolbar({
       >
         <AnnotationEditor
           autoFocus
+          color={color}
           pending={saving}
           onCancel={cancelComment}
           onSave={(comment) => void save(comment)}
@@ -336,13 +364,34 @@ export function SelectionToolbar({
       className="bg-popover text-popover-foreground border-border fixed z-40 flex flex-col gap-1 rounded-lg border p-1 shadow-lg"
       style={{
         top: position.top,
-        left: position.left,
+        left: `clamp(122px, ${position.left}px, calc(100vw - 122px))`,
         transform: "translateX(-50%)",
       }}
       role="toolbar"
       aria-label="标注选中文本"
     >
       <div className="flex items-center gap-0.5">
+        <fieldset
+          className="border-border mr-1.5 flex items-center gap-0.5 border-r pr-1.5"
+          aria-label="标注颜色"
+        >
+          {ANNOTATION_COLORS.map((option) => (
+            <Button
+              key={option}
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={colorLabels[option]}
+              aria-pressed={option === color}
+              disabled={saving}
+              data-annotation-color={option}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setColor(option)}
+            >
+              <span className="annotation-color-swatch" />
+            </Button>
+          ))}
+        </fieldset>
         <Button
           variant="ghost"
           size="xs"

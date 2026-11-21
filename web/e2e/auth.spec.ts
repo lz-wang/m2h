@@ -180,6 +180,7 @@ test.describe("authenticated mode", () => {
   test("annotations: highlight, comment, reload, and delete", async ({
     page,
   }) => {
+    await page.emulateMedia({ colorScheme: "light" });
     await page
       .context()
       .grantPermissions(["clipboard-read", "clipboard-write"], {
@@ -217,16 +218,26 @@ test.describe("authenticated mode", () => {
     const selectedText = await page.evaluate(() =>
       window.getSelection()?.toString(),
     );
+    await expect(page.getByRole("button", { name: "蓝色" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await page.getByRole("button", { name: "琥珀色" }).click();
+    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(
+      selectedText,
+    );
     await page.getByRole("button", { name: "评论" }).click();
     const draftRange = () =>
       page.evaluate(() =>
-        Array.from(CSS.highlights.get("m2h-annotation-draft") ?? [], (range) =>
-          range.toString(),
+        Array.from(
+          CSS.highlights.get("m2h-annotation-draft-amber") ?? [],
+          (range) => range.toString(),
         ),
       );
     const composer = page.getByRole("region", { name: "新建评论" });
     const editor = composer.getByPlaceholder("添加评论…");
     await expect(editor).toBeFocused();
+    await expect(editor).toHaveCSS("border-top-color", "rgb(191, 135, 0)");
     await editor.fill("正在撰写");
     await expect.poll(draftRange).toEqual([selectedText]);
     const initialCard = await composer.boundingBox();
@@ -329,6 +340,10 @@ test.describe("authenticated mode", () => {
     await expect.poll(draftRange).toEqual([]);
     const savedCard = page.getByRole("region", { name: "标注窗口" });
     await expect(savedCard).toContainText("需要补充备份方案");
+    await expect(savedCard.locator(".annotation-comment-box")).toHaveCSS(
+      "border-top-color",
+      "rgb(191, 135, 0)",
+    );
     await expect(
       savedCard.getByRole("button", { name: "固定悬浮框" }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -439,6 +454,7 @@ test.describe("authenticated mode", () => {
       await page.evaluate(() => navigator.clipboard.readText()),
     ) as { annotations: unknown[] };
     expect(singleExport.annotations).toHaveLength(1);
+    expect(singleExport.annotations[0]).toMatchObject({ color: "amber" });
     await page.locator(".annotation-comment-box").dblclick();
     await page.getByPlaceholder("添加评论…").fill("已经补充备份方案");
     await page.getByRole("button", { name: "保存" }).click();
@@ -545,6 +561,11 @@ test.describe("authenticated mode", () => {
     await expect(page.getByText("侧边栏已更新")).toBeVisible({
       timeout: 10_000,
     });
+    const annotation = page.locator("[data-annotation-id]").filter({
+      hasText: "侧边栏已更新",
+    });
+    await expect(annotation).toHaveCSS("border-left-width", "3px");
+    await expect(annotation).toHaveCSS("border-left-color", "rgb(191, 135, 0)");
 
     const card = page.getByRole("region", { name: "标注窗口" });
     const openHoverCard = () =>
@@ -1330,6 +1351,7 @@ test.describe("authenticated mode", () => {
   test("overlapping annotations offer the exact hits and independent actions", async ({
     page,
   }) => {
+    await page.emulateMedia({ colorScheme: "light" });
     await page
       .context()
       .grantPermissions(["clipboard-read", "clipboard-write"], {
@@ -1343,7 +1365,7 @@ test.describe("authenticated mode", () => {
       documentRef: { rootId: string; path: string };
       documentHash: string;
     };
-    const create = async (exact: string, comment: string) => {
+    const create = async (exact: string, comment: string, color: string) => {
       const response = await page.request.post(`${baseURL}/api/annotations`, {
         headers: { Origin: baseURL },
         data: {
@@ -1355,17 +1377,51 @@ test.describe("authenticated mode", () => {
             version: 1,
           },
           comment,
+          color,
         },
       });
       expect(response.status()).toBe(201);
       return (await response.json()) as { id: string; updatedAt: number };
     };
-    const wide = await create("此文档用于验证正文渲染", "较宽选区的标注");
-    const older = await create("验证正文", "同一选区的旧标注");
-    const newer = await create("验证正文", "同一选区的新标注");
+    const wide = await create(
+      "此文档用于验证正文渲染",
+      "较宽选区的标注",
+      "blue",
+    );
+    const older = await create("验证正文", "同一选区的旧标注", "green");
+    const newer = await create("验证正文", "同一选区的新标注", "amber");
 
     await page.goto(`${baseURL}/doc/README.md`);
     await page.waitForSelector("article p");
+    const paintedText = (name: string) =>
+      page.evaluate(
+        (name) => Array.from(CSS.highlights.get(name) ?? [], String),
+        name,
+      );
+    await expect
+      .poll(() => paintedText("m2h-annotations-amber"))
+      .toEqual(["验证正文"]);
+    expect(await paintedText("m2h-annotations-green")).toEqual([]);
+    expect(await paintedText("m2h-annotations")).toEqual([
+      "此文档用于",
+      "渲染",
+    ]);
+    const amberBackground = () =>
+      page
+        .locator("article p")
+        .first()
+        .evaluate(
+          (element) =>
+            getComputedStyle(element, "::highlight(m2h-annotations-amber)")
+              .backgroundColor,
+        );
+    const lightBackground = await amberBackground();
+    expect(lightBackground).not.toBe("rgba(0, 0, 0, 0)");
+    await page.getByRole("button", { name: "设置" }).click();
+    await page.getByRole("menuitemradio", { name: "深色主题" }).click();
+    await expect.poll(amberBackground).not.toBe(lightBackground);
+    await page.getByRole("button", { name: "设置" }).click();
+    await page.getByRole("menuitemradio", { name: "浅色主题" }).click();
     const pointAt = (offset: number) =>
       page.evaluate((offset) => {
         const text = document.querySelector("article p")?.firstChild;

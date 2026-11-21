@@ -99,6 +99,13 @@ var migrations = []migration{
 				WHERE owner_name = '' AND owner_id LIKE 'local:%'`,
 		},
 	},
+	{
+		version: 5,
+		statements: []string{
+			`ALTER TABLE annotations ADD COLUMN color TEXT NOT NULL DEFAULT 'blue'
+				CHECK (color IN ('blue', 'green', 'amber'))`,
+		},
+	},
 }
 
 // latestVersion is the highest schema version this build understands.

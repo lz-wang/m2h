@@ -13,6 +13,7 @@ import { AnnotationPanel } from "./annotation-panel";
 
 function item(overrides: Partial<AnnotationItem> = {}): AnnotationItem {
   return {
+    color: "blue",
     id: "a1",
     authorId: "local:alice",
     authorName: "alice",

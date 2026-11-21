@@ -9,7 +9,10 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TextIndex } from "@/lib/annotation-selector";
-import { SelectionToolbar } from "./selection-toolbar";
+import {
+  SelectionToolbar,
+  type SelectionToolbarProps,
+} from "./selection-toolbar";
 
 function mountBody(html: string): HTMLElement {
   document.body.replaceChildren();
@@ -44,8 +47,7 @@ describe("SelectionToolbar", () => {
   }
 
   it("shows the actions for a valid content selection and saves highlights", async () => {
-    const onAnnotate =
-      vi.fn<(selector: unknown, comment: string) => Promise<boolean>>();
+    const onAnnotate = vi.fn<SelectionToolbarProps["onAnnotate"]>();
     onAnnotate.mockResolvedValue(true);
     const bodyRef = { current: body };
     const indexRef = { current: index };
@@ -53,7 +55,7 @@ describe("SelectionToolbar", () => {
       <SelectionToolbar
         bodyRef={bodyRef}
         indexRef={indexRef}
-        onAnnotate={onAnnotate as never}
+        onAnnotate={onAnnotate}
       />,
     );
 
@@ -64,39 +66,51 @@ describe("SelectionToolbar", () => {
       ).toBeTruthy(),
     );
 
+    expect(
+      screen.getByRole("button", { name: "蓝色" }).getAttribute("aria-pressed"),
+    ).toBe("true");
+    await userEvent.click(screen.getByRole("button", { name: "绿色" }));
     await userEvent.click(screen.getByRole("button", { name: "高亮" }));
     await waitFor(() => expect(onAnnotate).toHaveBeenCalledTimes(1));
-    const [selector, comment] = onAnnotate.mock.calls[0] as [
-      { quote: { exact: string }; position: { start: number } },
-      string,
-    ];
-    expect(selector.quote.exact).toBe("使用 SQLite");
-    expect(selector.position.start).toBe(2);
-    expect(comment).toBe("");
+    expect(onAnnotate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        quote: expect.objectContaining({ exact: "使用 SQLite" }),
+        position: expect.objectContaining({ start: 2 }),
+      }),
+      "",
+      "green",
+      undefined,
+    );
     // A saved annotation clears the toolbar.
     expect(screen.queryByRole("toolbar", { name: "标注选中文本" })).toBeNull();
+    select(0, 2);
+    const blue = await screen.findByRole("button", { name: "蓝色" });
+    expect(blue.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("opens the comment editor and submits its text", async () => {
-    const onAnnotate =
-      vi.fn<(selector: unknown, comment: string) => Promise<boolean>>();
+    const onAnnotate = vi.fn<SelectionToolbarProps["onAnnotate"]>();
     onAnnotate.mockResolvedValue(true);
     render(
       <SelectionToolbar
         bodyRef={{ current: body }}
         indexRef={{ current: index }}
-        onAnnotate={onAnnotate as never}
+        onAnnotate={onAnnotate}
       />,
     );
 
     select(0, 2);
     await waitFor(() => expect(screen.getByRole("toolbar")).toBeTruthy());
+    await userEvent.click(screen.getByRole("button", { name: "琥珀色" }));
     await userEvent.click(screen.getByRole("button", { name: "评论" }));
     const editor = await screen.findByPlaceholderText("添加评论…");
+    expect(editor.getAttribute("data-annotation-color")).toBe("amber");
+    expect(screen.queryByRole("group", { name: "标注颜色" })).toBeNull();
     await userEvent.type(editor, "需要补充备份");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(onAnnotate).toHaveBeenCalledTimes(1));
     expect(onAnnotate.mock.calls[0]?.[1]).toBe("需要补充备份");
+    expect(onAnnotate.mock.calls[0]?.[2]).toBe("amber");
   });
 
   it("restores the original selection when comment editing is canceled", async () => {

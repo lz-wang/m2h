@@ -100,7 +100,10 @@ import {
   exportAnnotationsJSON,
   exportAnnotationsMarkdown,
 } from "./lib/annotation-export";
-import { HighlightLayer } from "./lib/annotation-highlight";
+import {
+  type AnnotationHighlight,
+  AnnotationHighlightLayer,
+} from "./lib/annotation-highlight";
 import { reanchor } from "./lib/annotation-reanchor";
 import { TextIndex, type TextPosition } from "./lib/annotation-selector";
 import { copyText } from "./lib/clipboard";
@@ -448,7 +451,7 @@ export function App({
   >({});
   const annotationBodyRef = useRef<HTMLElement | null>(null);
   const annotationIndexRef = useRef<TextIndex | null>(null);
-  const annotationLayerRef = useRef<HighlightLayer | null>(null);
+  const annotationLayerRef = useRef<AnnotationHighlightLayer | null>(null);
   const annotationPositionsRef = useRef<Map<string, TextPosition>>(new Map());
   const lastCommentMarkerScroll = useRef(-Infinity);
   const [commentMarkers, setCommentMarkers] = useState<
@@ -479,7 +482,7 @@ export function App({
   const annotationDocumentHashRef = useRef<string | null>(null);
   annotationDocumentHashRef.current = annotationIdentity?.documentHash ?? null;
   if (annotationLayerRef.current === null) {
-    annotationLayerRef.current = new HighlightLayer();
+    annotationLayerRef.current = new AnnotationHighlightLayer();
   }
   // rebuildAnnotationLayer re-resolves every annotation against the live
   // body index: exact-match re-anchoring, highlight registration, status
@@ -498,9 +501,8 @@ export function App({
       setAnnotationStatuses({});
       return;
     }
-    layer.attach(index);
     const currentHash = annotationDocumentHashRef.current;
-    const positions: TextPosition[] = [];
+    const highlights: AnnotationHighlight[] = [];
     const statuses: Record<string, "resolved" | "ambiguous" | "orphaned"> = {};
     const located = new Map<string, TextPosition>();
     for (const item of annotations.items) {
@@ -511,12 +513,16 @@ export function App({
       );
       statuses[item.id] = result.status;
       if (result.position !== null) {
-        positions.push(result.position);
+        highlights.push({
+          id: item.id,
+          color: item.color,
+          position: result.position,
+        });
         located.set(item.id, result.position);
       }
     }
     annotationPositionsRef.current = located;
-    layer.render(positions);
+    layer.render(index, highlights);
     setAnnotationStatuses(statuses);
   }, [annotations.items]);
   useEffect(() => {
@@ -640,6 +646,17 @@ export function App({
       }),
     [annotations.items, annotationPopups],
   );
+  const latestAnnotationPopup = visibleAnnotationPopups.at(-1);
+  const hoveredAnnotationId =
+    latestAnnotationPopup?.popup.activeId ??
+    latestAnnotationPopup?.items[0]?.id ??
+    null;
+  useEffect(() => {
+    annotationLayerRef.current?.emphasize(
+      annotations.selectedId,
+      hoveredAnnotationId,
+    );
+  }, [annotations.selectedId, hoveredAnnotationId]);
 
   function showHoveredAnnotations(
     ids: string[],
@@ -760,6 +777,7 @@ export function App({
           documentHash: item.documentHash,
           authorName: item.authorName,
           comment: item.comment,
+          color: item.color,
           selector: item.selector,
           status: annotationStatuses[item.id] ?? "resolved",
           createdAt: item.createdAt,
@@ -1747,10 +1765,11 @@ export function App({
                 disabled={annotationIdentity === null}
                 bodyRef={annotationBodyRef}
                 indexRef={annotationIndexRef}
-                onAnnotate={(selector, comment, pinnedBounds) =>
+                onAnnotate={(selector, comment, color, pinnedBounds) =>
                   annotations.create(
                     selector,
                     comment,
+                    color,
                     pinnedBounds &&
                       ((id) =>
                         showHoveredAnnotations(

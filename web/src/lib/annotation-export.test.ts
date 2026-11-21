@@ -18,6 +18,7 @@ const credentials = {
   expiresInMinutes: 30,
 };
 const entry: ExportAnnotation = {
+  color: "amber",
   id: "a1",
   documentPath: "README.md",
   documentHash: "sha256:abc",
@@ -60,6 +61,7 @@ describe("agent review export", () => {
     const parsed = JSON.parse(
       exportAnnotationsJSON(document, [entry], credentials),
     ) as { annotations: Array<{ createdAt: string; updatedAt: string }> };
+    expect(parsed.annotations[0]).toMatchObject({ color: "amber" });
     expect(parsed).toMatchObject({
       document: {
         title: "m2h",

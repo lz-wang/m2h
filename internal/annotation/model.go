@@ -11,6 +11,27 @@ package annotation
 // version, letting old anchors stay interpretable.
 const SelectorVersion = 1
 
+// Color identifies an annotation's display color.
+type Color string
+
+const (
+	ColorBlue  Color = "blue"
+	ColorGreen Color = "green"
+	ColorAmber Color = "amber"
+)
+
+// WithDefault returns blue for clients that omit the color.
+func (color Color) WithDefault() Color {
+	if color == "" {
+		return ColorBlue
+	}
+	return color
+}
+
+func (color Color) Valid() bool {
+	return color == ColorBlue || color == ColorGreen || color == ColorAmber
+}
+
 // Field limits, enforced server-side so a malicious or buggy client cannot
 // bloat the database. Positions live in the normalized reading text, so
 // they are bounded by a generous document-size ceiling rather than any
@@ -63,6 +84,7 @@ type Annotation struct {
 	AuthorName   string
 	Selector     Selector
 	Comment      string
+	Color        Color
 	DocumentHash string
 	CreatedAt    int64
 	UpdatedAt    int64

@@ -41,6 +41,7 @@ func TestAnnotationRoundTrip(t *testing.T) {
 	ctx := context.Background()
 
 	entry := sampleAnnotation(rootID, "需要补充备份方案")
+	entry.Color = annotation.ColorAmber
 	if err := dataStore.CreateAnnotation(ctx, &entry); err != nil {
 		t.Fatalf("CreateAnnotation failed: %v", err)
 	}
@@ -59,7 +60,7 @@ func TestAnnotationRoundTrip(t *testing.T) {
 		loaded.Selector.Position.Start != 120 || loaded.Selector.Position.End != 129 ||
 		loaded.Selector.HeadingID != "数据存储" ||
 		loaded.AuthorID != "local:alice" || loaded.AuthorName != "alice" ||
-		loaded.DocumentHash != "sha256:abc" {
+		loaded.DocumentHash != "sha256:abc" || loaded.Color != annotation.ColorAmber {
 		t.Fatalf("round trip lost data: %+v", loaded)
 	}
 
@@ -71,6 +72,42 @@ func TestAnnotationRoundTrip(t *testing.T) {
 	other, err := dataStore.ListAnnotations(ctx, rootID, "other.md")
 	if err != nil || len(other) != 0 {
 		t.Fatalf("other document listed = %v (err %v)", other, err)
+	}
+}
+
+func TestAnnotationColorDefaultsOnV4Upgrade(t *testing.T) {
+	ctx := context.Background()
+	dataStore, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer dataStore.Close()
+	if _, err := dataStore.Version(ctx); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range migrations[:4] {
+		if err := dataStore.apply(ctx, step); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rootID, err := dataStore.EnsureDocumentRoot(ctx, t.TempDir(), RootKindDirectory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := dataStore.db.ExecContext(ctx, `
+		INSERT INTO annotations (
+			id, root_id, document_path, author_id, author_name, quote_exact,
+			position_start, position_end, document_hash, comment, created_at, updated_at
+		) VALUES ('old', ?, 'design.md', 'local:alice', 'alice', 'x', 0, 1, 'sha256:abc', 'old comment', 1, 2)
+	`, rootID); err != nil {
+		t.Fatal(err)
+	}
+	if err := dataStore.Migrate(ctx); err != nil {
+		t.Fatal(err)
+	}
+	entry, err := dataStore.GetAnnotation(ctx, "old")
+	if err != nil || entry.Color != annotation.ColorBlue || entry.Comment != "old comment" || entry.UpdatedAt != 2 {
+		t.Fatalf("migrated annotation = %+v, %v", entry, err)
 	}
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  type AnnotationColor,
   type AnnotationItem,
   type AnnotationSelectorData,
   APIError,
@@ -37,6 +38,7 @@ export interface UseAnnotationsResult extends AnnotationState {
   create: (
     selector: AnnotationSelectorData,
     comment: string,
+    color?: AnnotationColor,
     onCreated?: (id: string) => void,
   ) => Promise<boolean>;
   remove: (ids: string | string[]) => Promise<AnnotationDeleteResult>;
@@ -141,6 +143,7 @@ export function useAnnotations(
     async (
       selector: AnnotationSelectorData,
       comment: string,
+      color?: AnnotationColor,
       onCreated?: (id: string) => void,
     ): Promise<boolean> => {
       if (identity === null) {
@@ -153,6 +156,7 @@ export function useAnnotations(
           writtenFor.documentHash,
           selector,
           comment,
+          color,
         );
         if (sameDocument(identityRef.current, writtenFor)) {
           if (

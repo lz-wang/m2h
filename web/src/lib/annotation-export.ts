@@ -1,3 +1,4 @@
+import type { AnnotationColor } from "@/api";
 import type { AnnotationSelector } from "./annotation-selector";
 
 export interface ExportAnnotation {
@@ -6,6 +7,7 @@ export interface ExportAnnotation {
   documentHash: string;
   authorName: string;
   comment: string;
+  color: AnnotationColor;
   selector: AnnotationSelector;
   status?: "resolved" | "ambiguous" | "orphaned";
   createdAt: number;
@@ -95,6 +97,7 @@ export function exportAnnotationsJSON(
         documentHash: entry.documentHash,
         authorName: entry.authorName,
         comment: entry.comment,
+        color: entry.color,
         status: entry.status ?? "resolved",
         selector: {
           ...entry.selector,

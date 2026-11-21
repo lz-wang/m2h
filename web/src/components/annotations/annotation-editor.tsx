@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { AnnotationColor } from "@/api";
 
 import { Button } from "@/components/ui/button";
 
@@ -6,6 +7,7 @@ export interface AnnotationEditorProps {
   // Initial comment text (empty for a fresh annotation).
   initial?: string;
   autoFocus?: boolean;
+  color?: AnnotationColor;
   pending: boolean;
   placeholder?: string;
   onCancel(): void;
@@ -18,6 +20,7 @@ export interface AnnotationEditorProps {
 export function AnnotationEditor({
   initial = "",
   autoFocus = false,
+  color,
   pending,
   placeholder = "添加评论…",
   onCancel,
@@ -36,6 +39,7 @@ export function AnnotationEditor({
     <div className="flex flex-col gap-1.5 p-1">
       <textarea
         ref={textareaRef}
+        data-annotation-color={color}
         className="bg-background border-input placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-ring/50 min-h-16 rounded-lg border px-2 py-1.5 text-sm outline-none focus-visible:ring-2"
         value={comment}
         placeholder={placeholder}

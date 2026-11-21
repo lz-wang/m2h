@@ -43,6 +43,7 @@ type createAnnotationRequest struct {
 	DocumentHash string                    `json:"documentHash"`
 	Selector     annotationSelectorRequest `json:"selector"`
 	Comment      string                    `json:"comment"`
+	Color        annotation.Color          `json:"color"`
 }
 
 type annotationResponse struct {
@@ -50,6 +51,7 @@ type annotationResponse struct {
 	AuthorID     string                    `json:"authorId"`
 	AuthorName   string                    `json:"authorName"`
 	Comment      string                    `json:"comment"`
+	Color        annotation.Color          `json:"color"`
 	Quote        string                    `json:"quote"`
 	Selector     annotationSelectorRequest `json:"selector"`
 	DocumentHash string                    `json:"documentHash"`
@@ -98,6 +100,7 @@ func annotationResponseFrom(entry annotation.Annotation, callerID string) annota
 		AuthorID:     entry.AuthorID,
 		AuthorName:   entry.AuthorName,
 		Comment:      entry.Comment,
+		Color:        entry.Color,
 		Quote:        entry.Selector.Quote.Exact,
 		Selector:     selectorResponse(entry.Selector),
 		DocumentHash: entry.DocumentHash,
@@ -230,6 +233,11 @@ func (handler *documentHandler) serveCreateAnnotation(response http.ResponseWrit
 		writeJSONError(response, http.StatusBadRequest, err.Error())
 		return
 	}
+	color := body.Color.WithDefault()
+	if !color.Valid() {
+		writeJSONError(response, http.StatusBadRequest, "annotation color must be blue, green, or amber")
+		return
+	}
 	if !strings.HasPrefix(body.DocumentHash, "sha256:") {
 		writeJSONError(response, http.StatusBadRequest, "document hash is required")
 		return
@@ -255,6 +263,7 @@ func (handler *documentHandler) serveCreateAnnotation(response http.ResponseWrit
 		AuthorName:   identity.DisplayName,
 		Selector:     selector,
 		Comment:      body.Comment,
+		Color:        color,
 		DocumentHash: hash,
 	}
 	if err := dataStore.CreateAnnotation(request.Context(), &entry); err != nil {

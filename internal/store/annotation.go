@@ -20,18 +20,19 @@ func (store *Store) CreateAnnotation(ctx context.Context, entry *annotation.Anno
 		return err
 	}
 	now := time.Now().UnixMilli()
+	color := entry.Color.WithDefault()
 	result, err := store.db.ExecContext(ctx, `
 		INSERT INTO annotations (
 			id, root_id, document_path, author_id, author_name,
 			quote_exact, quote_prefix, quote_suffix,
 			position_start, position_end, heading_id, tab_id, block_hint,
-			document_hash, selector_version, comment, created_at, updated_at
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			document_hash, selector_version, comment, created_at, updated_at, color
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		id, entry.RootID, entry.DocumentPath, entry.AuthorID, entry.AuthorName,
 		entry.Selector.Quote.Exact, entry.Selector.Quote.Prefix, entry.Selector.Quote.Suffix,
 		entry.Selector.Position.Start, entry.Selector.Position.End,
 		nullString(entry.Selector.HeadingID), nullString(entry.Selector.TabID), nullString(entry.Selector.BlockHint),
-		entry.DocumentHash, entry.Selector.Version, entry.Comment, now, now)
+		entry.DocumentHash, entry.Selector.Version, entry.Comment, now, now, color)
 	if err != nil {
 		return err
 	}
@@ -45,6 +46,7 @@ func (store *Store) CreateAnnotation(ctx context.Context, entry *annotation.Anno
 	entry.ID = id
 	entry.CreatedAt = now
 	entry.UpdatedAt = now
+	entry.Color = color
 	return nil
 }
 
@@ -54,7 +56,7 @@ func (store *Store) ListAnnotations(ctx context.Context, rootID, documentPath st
 		SELECT id, root_id, document_path, author_id, author_name,
 			quote_exact, quote_prefix, quote_suffix,
 			position_start, position_end, heading_id, tab_id, block_hint,
-			document_hash, selector_version, comment, created_at, updated_at
+			document_hash, selector_version, comment, created_at, updated_at, color
 		FROM annotations
 		WHERE root_id = ? AND document_path = ?
 		ORDER BY created_at, rowid`, rootID, documentPath)
@@ -79,7 +81,7 @@ func (store *Store) GetAnnotation(ctx context.Context, id string) (annotation.An
 		SELECT id, root_id, document_path, author_id, author_name,
 			quote_exact, quote_prefix, quote_suffix,
 			position_start, position_end, heading_id, tab_id, block_hint,
-			document_hash, selector_version, comment, created_at, updated_at
+			document_hash, selector_version, comment, created_at, updated_at, color
 		FROM annotations WHERE id = ?`, id)
 	entry, err := scanAnnotation(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -168,7 +170,7 @@ func scanAnnotation(scanner annotationScanner) (annotation.Annotation, error) {
 		&entry.Selector.Position.Start, &entry.Selector.Position.End,
 		&headingID, &tabID, &blockHint,
 		&entry.DocumentHash, &entry.Selector.Version, &entry.Comment,
-		&entry.CreatedAt, &entry.UpdatedAt)
+		&entry.CreatedAt, &entry.UpdatedAt, &entry.Color)
 	if err != nil {
 		return annotation.Annotation{}, err
 	}

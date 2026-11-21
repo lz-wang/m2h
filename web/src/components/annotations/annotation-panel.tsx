@@ -158,6 +158,7 @@ export function AnnotationPanel({
                 <li
                   key={item.id}
                   data-annotation-id={item.id}
+                  data-annotation-color={item.color}
                   className={`border-border bg-card rounded-lg border p-2.5 text-sm transition-colors ${
                     selectedId === item.id ? "border-primary/60" : ""
                   }`}

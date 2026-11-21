@@ -25,6 +25,7 @@ function item(overrides: Partial<AnnotationItem> = {}): AnnotationItem {
     authorId: "local:alice",
     authorName: "alice",
     comment: "评论",
+    color: "blue",
     quote: "使用 SQLite",
     selector: {
       quote: { exact: "使用 SQLite", prefix: "", suffix: "" },
@@ -69,7 +70,7 @@ describe("useAnnotations", () => {
   it("create appends the created item on success", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ annotations: [] }))
-      .mockResolvedValueOnce(jsonResponse(item({ id: "a2" })));
+      .mockResolvedValueOnce(jsonResponse(item({ id: "a2", color: "green" })));
     const { result } = renderHook(() => useAnnotations(true, identity));
     await waitFor(() => expect(result.current.loading).toBe(false));
 
@@ -82,13 +83,18 @@ describe("useAnnotations", () => {
           version: 1,
         },
         "评论",
+        "green",
       );
     });
     expect(saved).toBe(true);
     expect(result.current.items.map((entry) => entry.id)).toEqual(["a2"]);
+    expect(result.current.items[0]?.color).toBe("green");
     const call = fetchMock.mock.calls[1];
     expect(String(call?.[0])).toBe("/api/annotations");
     expect(String(call?.[1]?.method)).toBe("POST");
+    expect(JSON.parse(String(call?.[1]?.body))).toMatchObject({
+      color: "green",
+    });
   });
 
   it("create surfaces 409 as a document-changed message and keeps the list", async () => {

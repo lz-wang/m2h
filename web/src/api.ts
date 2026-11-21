@@ -330,11 +330,16 @@ export interface AnnotationSelectorData {
   version: 1;
 }
 
+export const ANNOTATION_COLORS = ["blue", "green", "amber"] as const;
+export type AnnotationColor = (typeof ANNOTATION_COLORS)[number];
+export const DEFAULT_ANNOTATION_COLOR: AnnotationColor = "blue";
+
 export interface AnnotationItem {
   id: string;
   authorId: string;
   authorName: string;
   comment: string;
+  color: AnnotationColor;
   quote: string;
   selector: AnnotationSelectorData;
   documentHash: string;
@@ -367,7 +372,9 @@ function parseAnnotationItem(value: unknown): AnnotationItem {
     throw new Error("标注响应格式无效");
   }
   const selector = value.selector;
+  const color = value.color ?? DEFAULT_ANNOTATION_COLOR;
   if (
+    (color !== "blue" && color !== "green" && color !== "amber") ||
     !isRecord(selector.quote) ||
     typeof selector.quote.exact !== "string" ||
     typeof selector.quote.prefix !== "string" ||
@@ -384,6 +391,7 @@ function parseAnnotationItem(value: unknown): AnnotationItem {
     authorId: value.authorId,
     authorName: value.authorName,
     comment: value.comment,
+    color,
     quote: value.quote,
     documentHash: value.documentHash,
     mine: value.mine,
@@ -457,6 +465,7 @@ export async function createAnnotation(
   documentHash: string,
   selector: AnnotationSelectorData,
   comment: string,
+  color: AnnotationColor = DEFAULT_ANNOTATION_COLOR,
 ): Promise<AnnotationItem> {
   return parseAnnotationItem(
     await requestMutation(appPath("/api/annotations"), "POST", {
@@ -464,6 +473,7 @@ export async function createAnnotation(
       documentHash,
       selector,
       comment,
+      color,
     }),
   );
 }
