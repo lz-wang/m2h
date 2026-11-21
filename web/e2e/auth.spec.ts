@@ -235,6 +235,9 @@ test.describe("authenticated mode", () => {
     const amber = palette.getByRole("button", { name: "琥珀色" });
     const editor = composer.getByPlaceholder("添加评论…");
     await expect(editor).toBeFocused();
+    const placeholderColor = await editor.evaluate(
+      (element) => getComputedStyle(element, "::placeholder").color,
+    );
     await expect(blue).toHaveAttribute("aria-pressed", "true");
     await expect
       .poll(() => draftRange("m2h-annotation-draft"))
@@ -480,6 +483,21 @@ test.describe("authenticated mode", () => {
     await annotationPanel.getByPlaceholder("添加评论…").fill("");
     await annotationPanel.getByRole("button", { name: "保存" }).click();
     await expect(annotationPanel).not.toContainText("已经补充备份方案");
+    const emptyComment = hoverCard.getByText("双击添加评论...", {
+      exact: true,
+    });
+    await expect(async () => {
+      await page.mouse.move(point.x + 1, point.y);
+      await page.mouse.move(point.x, point.y);
+      await expect(emptyComment).toBeVisible({ timeout: 500 });
+    }).toPass({ timeout: 10_000 });
+    await expect(emptyComment).toHaveCSS("color", placeholderColor);
+    const timestamp = await annotationPanel.locator("time").innerText();
+    expect(timestamp).toMatch(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/);
+    await expect(hoverCard.locator("time")).toHaveText(timestamp);
+    await emptyComment.dblclick();
+    await expect(hoverEditor).toHaveValue("");
+    await hoverEditor.press("Escape");
     await page.getByRole("button", { name: "编辑此评论" }).click();
     await page.getByPlaceholder("添加评论…").fill("侧边栏已更新");
     await page.getByRole("button", { name: "保存" }).click();

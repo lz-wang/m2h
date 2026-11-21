@@ -1,4 +1,5 @@
 import type { AnnotationItem } from "@/api";
+import { formatLocalTimestamp } from "@/lib/local-time";
 
 export function AnnotationCommentMeta({ item }: { item: AnnotationItem }) {
   const updated = new Date(item.updatedAt);
@@ -6,7 +7,9 @@ export function AnnotationCommentMeta({ item }: { item: AnnotationItem }) {
     <span className="text-muted-foreground flex flex-wrap items-baseline gap-x-1.5 text-xs">
       <span className="break-all">{item.authorName}</span>
       <span aria-hidden="true">·</span>
-      <time dateTime={updated.toISOString()}>{updated.toLocaleString()}</time>
+      <time dateTime={updated.toISOString()}>
+        {formatLocalTimestamp(updated)}
+      </time>
     </span>
   );
 }

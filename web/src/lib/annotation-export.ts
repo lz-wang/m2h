@@ -1,5 +1,6 @@
 import type { AnnotationColor } from "@/api";
 import type { AnnotationSelector } from "./annotation-selector";
+import { formatLocalTimestamp } from "./local-time";
 
 export interface ExportAnnotation {
   id: string;
@@ -31,7 +32,8 @@ export interface ReviewCredentials {
 function localISO(date: Date): string {
   const offset = -date.getTimezoneOffset();
   const pad = (value: number) => String(Math.abs(value)).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}${offset >= 0 ? "+" : "-"}${pad(Math.trunc(offset / 60))}:${pad(offset % 60)}`;
+  const timestamp = formatLocalTimestamp(date).replace(" ", "T");
+  return `${timestamp}${offset >= 0 ? "+" : "-"}${pad(Math.trunc(offset / 60))}:${pad(offset % 60)}`;
 }
 
 export function exportAnnotationsMarkdown(
@@ -59,7 +61,7 @@ export function exportAnnotationsMarkdown(
       `- 正文定位: start ${entry.selector.position.start}, end ${entry.selector.position.end}`,
       `- 评审意见: ${(entry.comment || "（仅高亮，无评论）").replaceAll("\n", "\n  ")}`,
       `- 评审人员: ${entry.authorName}`,
-      `- 评审时间: ${new Date(entry.updatedAt).toLocaleString("zh-CN", { hour12: false })}`,
+      `- 评审时间: ${formatLocalTimestamp(new Date(entry.updatedAt))}`,
       ...(entry.status && entry.status !== "resolved"
         ? [`- 定位状态: ${entry.status}`]
         : []),

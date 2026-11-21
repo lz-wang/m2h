@@ -109,7 +109,13 @@ export function AnnotationHoverDetail({
           if (item.mine && !deleting) onEditingChange(true);
         }}
       >
-        {item.comment || "无评论"}
+        {item.comment.trim() ? (
+          item.comment
+        ) : (
+          <span className="text-muted-foreground text-sm">
+            {item.mine ? "双击添加评论..." : "无评论"}
+          </span>
+        )}
       </div>
       <div className="mt-1 px-1">
         <AnnotationCommentMeta item={item} />

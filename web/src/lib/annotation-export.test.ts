@@ -31,7 +31,7 @@ const entry: ExportAnnotation = {
     version: 1,
   },
   createdAt: 1760000000000,
-  updatedAt: 1760000300000,
+  updatedAt: new Date(2026, 10, 22, 0, 52, 11).getTime(),
 };
 
 describe("agent review export", () => {
@@ -52,9 +52,7 @@ describe("agent review export", () => {
     expect(result).toContain("- 正文定位: start 4, end 8");
     expect(result).toContain("- 评审意见:");
     expect(result).toContain("- 评审人员: alice");
-    expect(result).toContain(
-      `- 评审时间: ${new Date(entry.updatedAt).toLocaleString("zh-CN", { hour12: false })}`,
-    );
+    expect(result).toContain("- 评审时间: 2026-11-22 00:52:11");
     expect(result).toContain("（仅高亮，无评论）");
   });
   it("produces valid JSON with credentials, selector, and offset timestamps", () => {
