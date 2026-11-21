@@ -357,34 +357,7 @@ test.describe("authenticated mode", () => {
     expect(await savedCard.boundingBox()).toEqual(draftBounds);
     await savedCard.getByRole("button", { name: "关闭标注窗口" }).click();
 
-    const marker = page.locator(".annotation-comment-marker");
-    await expect(marker.locator(".lucide-message-circle")).toHaveCount(1);
-    const beforeScroll = await marker.boundingBox();
-    if (!beforeScroll) throw new Error("missing comment marker");
-    const hiddenOnScroll = await page.evaluate(() => {
-      document.body.style.minHeight = "200vh";
-      return new Promise<boolean>((resolve) => {
-        const observer = new MutationObserver(() => {
-          if (document.querySelector(".annotation-comment-marker")) return;
-          observer.disconnect();
-          resolve(true);
-        });
-        observer.observe(document.body, { childList: true, subtree: true });
-        window.setTimeout(() => {
-          observer.disconnect();
-          resolve(false);
-        }, 1000);
-        window.scrollBy({ top: 36, behavior: "instant" });
-      });
-    });
-    expect(hiddenOnScroll).toBe(true);
-    await expect
-      .poll(async () => (await marker.boundingBox())?.y)
-      .toBeCloseTo(beforeScroll.y - 36);
-    await page.evaluate(() => window.scrollTo({ top: 0, behavior: "instant" }));
-    await expect
-      .poll(async () => (await marker.boundingBox())?.y)
-      .toBeCloseTo(beforeScroll.y);
+    await expect(page.locator(".annotation-comment-marker")).toHaveCount(0);
 
     const point = await page.evaluate(() => {
       window.getSelection()?.removeAllRanges();
@@ -506,11 +479,10 @@ test.describe("authenticated mode", () => {
     await annotationPanel.getByRole("button", { name: "琥珀色" }).click();
     await annotationPanel.getByPlaceholder("添加评论…").fill("");
     await annotationPanel.getByRole("button", { name: "保存" }).click();
-    await expect(page.locator(".annotation-comment-marker")).toHaveCount(0);
+    await expect(annotationPanel).not.toContainText("已经补充备份方案");
     await page.getByRole("button", { name: "编辑此评论" }).click();
     await page.getByPlaceholder("添加评论…").fill("侧边栏已更新");
     await page.getByRole("button", { name: "保存" }).click();
-    await expect(page.locator(".annotation-comment-marker")).toHaveCount(1);
     await expect(
       page.getByRole("complementary", { name: "标注面板" }),
     ).toContainText("侧边栏已更新");
@@ -1310,10 +1282,8 @@ test.describe("authenticated mode", () => {
     expect(attempts.get(bulkFailed)).toBe(2);
   });
 
-  for (const destination of ["toolbar", "popup"] as const) {
-    test(`annotation hover when the pointer moves directly to the ${destination}`, async ({
-      page,
-    }) => {
+  for (const scenario of ["toolbar", "popup", "scroll"] as const) {
+    test(`annotation hover after ${scenario} interaction`, async ({ page }) => {
       await login(page, "alice", "password-1");
       const url = `${baseURL}/doc/README.md?annotations=true`;
       const response = await page.request.get(
@@ -1363,13 +1333,33 @@ test.describe("authenticated mode", () => {
           popup.getByRole("button", { name: "固定悬浮框" }),
         ).toHaveAttribute("aria-pressed", "false");
 
-        if (destination === "toolbar") {
+        if (scenario === "toolbar") {
           await page.getByRole("button", { name: "收起标注面板" }).hover();
           await expect(popup).toBeHidden();
-        } else {
+        } else if (scenario === "popup") {
           await page.clock.install();
           await popup.locator(".annotation-comment-box").hover();
           await page.clock.runFor(300);
+          await expect(popup).toBeVisible();
+        } else {
+          await page.evaluate(() => {
+            document.body.style.minHeight = "200vh";
+            window.scrollBy({ top: 72, behavior: "instant" });
+          });
+          await expect(popup).toBeHidden();
+
+          await page.evaluate(() =>
+            window.scrollTo({ top: 0, behavior: "instant" }),
+          );
+          await page.mouse.move(point.x + 1, point.y);
+          await expect(popup).toBeVisible();
+          const pin = popup.getByRole("button", { name: "固定悬浮框" });
+          await pin.click();
+          await expect(pin).toHaveAttribute("aria-pressed", "true");
+          await page.mouse.move(point.x, point.y);
+          await page.evaluate(() =>
+            window.scrollBy({ top: 72, behavior: "instant" }),
+          );
           await expect(popup).toBeVisible();
         }
       } finally {

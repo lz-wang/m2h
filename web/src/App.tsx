@@ -12,7 +12,6 @@ import {
   LoaderCircle,
   LogOut,
   Maximize2,
-  MessageCircle,
   MessageSquare,
   Moon,
   RefreshCw,
@@ -157,8 +156,6 @@ const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
   { value: "light", label: "浅色", icon: Sun },
   { value: "dark", label: "深色", icon: Moon },
 ];
-
-const commentMarkerScrollIdleMs = 150;
 
 const layoutStorageKey = "m2h.preview.layout";
 
@@ -453,10 +450,6 @@ export function App({
   const annotationIndexRef = useRef<TextIndex | null>(null);
   const annotationLayerRef = useRef<AnnotationHighlightLayer | null>(null);
   const annotationPositionsRef = useRef<Map<string, TextPosition>>(new Map());
-  const lastCommentMarkerScroll = useRef(-Infinity);
-  const [commentMarkers, setCommentMarkers] = useState<
-    Array<{ id: string; x: number; y: number }>
-  >([]);
   const workspaceRoot = preview.selectedPath === null;
   // biome-ignore lint/correctness/useExhaustiveDependencies: Reset the floating card when its document changes.
   useLayoutEffect(() => {
@@ -473,7 +466,6 @@ export function App({
     annotationIndexRef.current = null;
     annotationPositionsRef.current.clear();
     setAnnotationStatuses({});
-    setCommentMarkers([]);
   }, [workspaceRoot]);
   // The loaded document's content hash, read through a ref so the rebuild
   // callback keys on list changes only: an annotation whose stored hash
@@ -528,77 +520,6 @@ export function App({
   useEffect(() => {
     rebuildAnnotationLayer();
   }, [rebuildAnnotationLayer]);
-  useLayoutEffect(() => {
-    let frame = 0;
-    let idleTimer: number | undefined;
-    const update = () => {
-      cancelAnimationFrame(frame);
-      window.clearTimeout(idleTimer);
-      const wait =
-        commentMarkerScrollIdleMs -
-        (performance.now() - lastCommentMarkerScroll.current);
-      if (wait > 0) {
-        idleTimer = window.setTimeout(update, wait);
-        return;
-      }
-      frame = requestAnimationFrame(() => {
-        const index = annotationIndexRef.current;
-        const markers = annotations.items.flatMap((item) => {
-          if (
-            !item.comment ||
-            !index ||
-            annotationStatuses[item.id] !== "resolved"
-          )
-            return [];
-          const position = annotationPositionsRef.current.get(item.id);
-          const rect = position
-            ? index.rangeFromSpan(position)?.getClientRects()[0]
-            : undefined;
-          return rect && rect.width > 0 && rect.height > 0
-            ? [{ id: item.id, x: rect.left, y: rect.top }]
-            : [];
-        });
-        setCommentMarkers(markers);
-      });
-    };
-    const hideWhileScrolling = (event: Event) => {
-      const body = annotationBodyRef.current;
-      const target = event.target;
-      if (
-        !body ||
-        (target !== document &&
-          target !== window &&
-          !(
-            target instanceof Element &&
-            (body.contains(target) || target.contains(body))
-          ))
-      ) {
-        return;
-      }
-      const now = performance.now();
-      if (now - lastCommentMarkerScroll.current >= commentMarkerScrollIdleMs) {
-        setCommentMarkers([]);
-      }
-      lastCommentMarkerScroll.current = now;
-      update();
-    };
-    update();
-    window.addEventListener("scroll", hideWhileScrolling, {
-      capture: true,
-      passive: true,
-    });
-    window.addEventListener("resize", update);
-    const observer =
-      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
-    if (annotationBodyRef.current) observer?.observe(annotationBodyRef.current);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.clearTimeout(idleTimer);
-      window.removeEventListener("scroll", hideWhileScrolling, true);
-      window.removeEventListener("resize", update);
-      observer?.disconnect();
-    };
-  }, [annotations.items, annotationStatuses]);
   useEffect(
     () => () => {
       annotationLayerRef.current?.release();
@@ -613,7 +534,7 @@ export function App({
     },
     [rebuildAnnotationLayer],
   );
-  const annotationsAt = (x: number, y: number): string[] => {
+  const annotationsAt = useCallback((x: number, y: number): string[] => {
     const index = annotationIndexRef.current;
     if (!index) return [];
     const ids: string[] = [];
@@ -633,7 +554,64 @@ export function App({
       }
     }
     return ids;
-  };
+  }, []);
+  const transientAnnotationPopup = annotationPopups.find(
+    (popup) => !keepAnnotationPopupOpen(popup),
+  );
+  useEffect(() => {
+    if (transientAnnotationPopup === undefined) return;
+    const { key } = transientAnnotationPopup;
+    let frame: number | null = null;
+    const rememberPointer = ({ clientX, clientY }: MouseEvent) => {
+      hoverPoint.current = { x: clientX, y: clientY };
+    };
+    const checkHoverOnScroll = ({ target }: Event) => {
+      const body = annotationBodyRef.current;
+      if (
+        !body ||
+        frame !== null ||
+        (target !== window &&
+          target !== document &&
+          !(
+            target instanceof Node &&
+            (target.contains(body) || body.contains(target))
+          ))
+      ) {
+        return;
+      }
+      // Scrolling moves the highlight without necessarily firing mousemove.
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        const { x, y } = hoverPoint.current;
+        const element = document.elementFromPoint(x, y);
+        if (
+          element?.closest(".annotation-hover-card") ||
+          (body.contains(element) &&
+            JSON.stringify(annotationsAt(x, y)) === key)
+        ) {
+          return;
+        }
+        setAnnotationPopups((current) =>
+          current.filter(
+            (popup) => popup.key !== key || keepAnnotationPopupOpen(popup),
+          ),
+        );
+      });
+    };
+    window.addEventListener("mousemove", rememberPointer, {
+      capture: true,
+      passive: true,
+    });
+    window.addEventListener("scroll", checkHoverOnScroll, {
+      capture: true,
+      passive: true,
+    });
+    return () => {
+      window.removeEventListener("mousemove", rememberPointer, true);
+      window.removeEventListener("scroll", checkHoverOnScroll, true);
+      if (frame !== null) cancelAnimationFrame(frame);
+    };
+  }, [annotationsAt, transientAnnotationPopup]);
   const visibleAnnotationPopups = useMemo(
     () =>
       annotationPopups.flatMap((popup) => {
@@ -1640,17 +1618,6 @@ export function App({
               </div>
             </div>
           </div>
-          {!workspaceRoot &&
-            commentMarkers.map((marker) => (
-              <span
-                key={marker.id}
-                className="annotation-comment-marker"
-                style={{ left: marker.x, top: marker.y }}
-                aria-hidden="true"
-              >
-                <MessageCircle aria-hidden="true" />
-              </span>
-            ))}
           {!workspaceRoot &&
             visibleAnnotationPopups.map(({ popup, items }) => {
               const item =
