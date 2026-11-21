@@ -486,10 +486,12 @@ export async function deleteAnnotation(id: string): Promise<void> {
 export async function updateAnnotationComment(
   id: string,
   comment: string,
+  color?: AnnotationColor,
 ): Promise<AnnotationItem> {
   return parseAnnotationItem(
     await requestMutation(appPath(`/api/annotations/${id}/comment`), "PATCH", {
       comment,
+      color,
     }),
   );
 }

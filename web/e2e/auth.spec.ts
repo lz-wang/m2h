@@ -218,24 +218,29 @@ test.describe("authenticated mode", () => {
     const selectedText = await page.evaluate(() =>
       window.getSelection()?.toString(),
     );
-    await expect(page.getByRole("button", { name: "蓝色" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    await page.getByRole("button", { name: "琥珀色" }).click();
-    expect(await page.evaluate(() => window.getSelection()?.toString())).toBe(
-      selectedText,
-    );
-    await page.getByRole("button", { name: "评论" }).click();
-    const draftRange = () =>
-      page.evaluate(() =>
-        Array.from(
-          CSS.highlights.get("m2h-annotation-draft-amber") ?? [],
-          (range) => range.toString(),
-        ),
+    const toolbar = page.getByRole("toolbar", { name: "标注选中文本" });
+    await expect(toolbar.getByRole("button")).toHaveCount(1);
+    await toolbar.getByRole("button", { name: "标注" }).click();
+    const draftRange = (name = "m2h-annotation-draft-amber") =>
+      page.evaluate(
+        (name) =>
+          Array.from(CSS.highlights.get(name) ?? [], (range) =>
+            range.toString(),
+          ),
+        name,
       );
-    const composer = page.getByRole("region", { name: "新建评论" });
+    const composer = page.getByRole("region", { name: "新建标注" });
+    const palette = composer.getByRole("group", { name: "标注颜色" });
+    const blue = palette.getByRole("button", { name: "蓝色" });
+    const amber = palette.getByRole("button", { name: "琥珀色" });
     const editor = composer.getByPlaceholder("添加评论…");
+    await expect(editor).toBeFocused();
+    await expect(blue).toHaveAttribute("aria-pressed", "true");
+    await expect
+      .poll(() => draftRange("m2h-annotation-draft"))
+      .toEqual([selectedText]);
+    await amber.click();
+    await expect(amber).toHaveAttribute("aria-pressed", "true");
     await expect(editor).toBeFocused();
     await expect(editor).toHaveCSS("border-top-color", "rgb(191, 135, 0)");
     await editor.fill("正在撰写");
@@ -329,7 +334,9 @@ test.describe("authenticated mode", () => {
     await expect
       .poll(() => page.evaluate(() => window.getSelection()?.toString()))
       .toBe(selectedText);
-    await page.getByRole("button", { name: "评论" }).click();
+    await toolbar.getByRole("button", { name: "标注" }).click();
+    await expect(blue).toHaveAttribute("aria-pressed", "true");
+    await amber.click();
     await page.getByPlaceholder("添加评论…").fill("需要补充备份方案");
     const draftPin = composer.getByRole("button", { name: "固定悬浮框" });
     await expect(draftPin).toHaveAttribute("aria-pressed", "false");
@@ -455,20 +462,50 @@ test.describe("authenticated mode", () => {
     ) as { annotations: unknown[] };
     expect(singleExport.annotations).toHaveLength(1);
     expect(singleExport.annotations[0]).toMatchObject({ color: "amber" });
-    await page.locator(".annotation-comment-box").dblclick();
-    await page.getByPlaceholder("添加评论…").fill("已经补充备份方案");
-    await page.getByRole("button", { name: "保存" }).click();
-    await expect(page.locator(".annotation-hover-card")).toContainText(
-      "已经补充备份方案",
+    const hoverCard = page.getByRole("region", { name: "标注窗口" });
+    await hoverCard.locator(".annotation-comment-box").dblclick();
+    const hoverEditor = hoverCard.getByPlaceholder("添加评论…");
+    await expect(hoverCard.locator("time")).toHaveCount(0);
+    await expect(hoverCard.getByText("alice", { exact: true })).toHaveCount(0);
+    await expect(
+      hoverCard.getByRole("button", { name: "琥珀色" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await hoverCard.getByRole("button", { name: "绿色" }).click();
+    await expect(hoverEditor).toHaveCSS("border-top-color", "rgb(26, 127, 55)");
+    await hoverCard.getByRole("button", { name: "取消" }).click();
+    await expect(hoverCard.locator(".annotation-comment-box")).toHaveCSS(
+      "border-top-color",
+      "rgb(191, 135, 0)",
     );
+    await hoverCard.locator(".annotation-comment-box").dblclick();
+    await hoverCard.getByRole("button", { name: "绿色" }).click();
+    await hoverEditor.fill("已经补充备份方案");
+    await hoverCard.getByRole("button", { name: "保存" }).click();
+    await expect(hoverCard).toContainText("已经补充备份方案");
+    await expect(hoverCard.locator("time")).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            CSS.highlights.has("m2h-annotations-green") ||
+            CSS.highlights.has("m2h-annotations-green-active"),
+        ),
+      )
+      .toBe(true);
     await page.mouse.move(point.x, point.y);
     await page.mouse.click(point.x, point.y);
+    const annotationPanel = page.getByRole("complementary", {
+      name: "标注面板",
+    });
+    await expect(annotationPanel).toContainText("已经补充备份方案");
+    await annotationPanel.getByRole("button", { name: "编辑此评论" }).click();
+    await expect(annotationPanel.locator("time")).toHaveCount(0);
     await expect(
-      page.getByRole("complementary", { name: "标注面板" }),
-    ).toContainText("已经补充备份方案");
-    await page.getByRole("button", { name: "编辑此评论" }).click();
-    await page.getByPlaceholder("添加评论…").fill("");
-    await page.getByRole("button", { name: "保存" }).click();
+      annotationPanel.getByRole("button", { name: "绿色" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await annotationPanel.getByRole("button", { name: "琥珀色" }).click();
+    await annotationPanel.getByPlaceholder("添加评论…").fill("");
+    await annotationPanel.getByRole("button", { name: "保存" }).click();
     await expect(page.locator(".annotation-comment-marker")).toHaveCount(0);
     await page.getByRole("button", { name: "编辑此评论" }).click();
     await page.getByPlaceholder("添加评论…").fill("侧边栏已更新");
@@ -477,9 +514,6 @@ test.describe("authenticated mode", () => {
     await expect(
       page.getByRole("complementary", { name: "标注面板" }),
     ).toContainText("侧边栏已更新");
-    const annotationPanel = page.getByRole("complementary", {
-      name: "标注面板",
-    });
     const titleCenter = await annotationPanel
       .getByText(/本页标注/)
       .evaluate((element) => {

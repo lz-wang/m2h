@@ -370,7 +370,8 @@ func (handler *documentHandler) serveUpdateAnnotationComment(response http.Respo
 	}
 	request.Body = http.MaxBytesReader(response, request.Body, 64<<10)
 	var body struct {
-		Comment string `json:"comment"`
+		Comment string            `json:"comment"`
+		Color   *annotation.Color `json:"color"`
 	}
 	if err := json.NewDecoder(request.Body).Decode(&body); err != nil {
 		writeJSONError(response, http.StatusBadRequest, "invalid annotation request")
@@ -378,6 +379,10 @@ func (handler *documentHandler) serveUpdateAnnotationComment(response http.Respo
 	}
 	if err := annotation.ValidateComment(body.Comment); err != nil {
 		writeJSONError(response, http.StatusBadRequest, err.Error())
+		return
+	}
+	if body.Color != nil && !body.Color.Valid() {
+		writeJSONError(response, http.StatusBadRequest, "annotation color must be blue, green, or amber")
 		return
 	}
 	entry, err := dataStore.GetAnnotation(request.Context(), id)
@@ -397,7 +402,7 @@ func (handler *documentHandler) serveUpdateAnnotationComment(response http.Respo
 		writeJSONError(response, http.StatusForbidden, "only the author can edit this annotation")
 		return
 	}
-	if err := dataStore.UpdateAnnotationComment(request.Context(), id, identity.ID, body.Comment); err != nil {
+	if err := dataStore.UpdateAnnotationComment(request.Context(), id, identity.ID, body.Comment, body.Color); err != nil {
 		if errors.Is(err, store.ErrAnnotationNotFound) {
 			writeJSONError(response, http.StatusNotFound, "annotation not found")
 		} else {

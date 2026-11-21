@@ -197,7 +197,7 @@ func TestAnnotationCommentEditingAuthorization(t *testing.T) {
 		want    int
 	}{{"other author", fixture.bob, http.StatusForbidden}, {"author", fixture.alice, http.StatusOK}} {
 		t.Run(test.name, func(t *testing.T) {
-			request, _ := http.NewRequest(http.MethodPatch, fixture.server.URL+"/api/annotations/"+entry.ID+"/comment", strings.NewReader(`{"comment":"新评论"}`))
+			request, _ := http.NewRequest(http.MethodPatch, fixture.server.URL+"/api/annotations/"+entry.ID+"/comment", strings.NewReader(`{"comment":"新评论","color":"green"}`))
 			request.Header.Set("Origin", fixture.server.URL)
 			request.AddCookie(test.session)
 			response := fixture.do(request)
@@ -205,10 +205,19 @@ func TestAnnotationCommentEditingAuthorization(t *testing.T) {
 			if response.StatusCode != test.want {
 				t.Fatalf("status = %d", response.StatusCode)
 			}
+			if response.StatusCode == http.StatusOK {
+				var updated annotationResponse
+				if err := json.NewDecoder(response.Body).Decode(&updated); err != nil {
+					t.Fatal(err)
+				}
+				if updated.Color != "green" || updated.Comment != "新评论" || updated.Selector != entry.Selector {
+					t.Fatalf("edit response = %+v", updated)
+				}
+			}
 		})
 	}
 	updated, err := fixture.stack.dataStore.GetAnnotation(context.Background(), entry.ID)
-	if err != nil || updated.Comment != "新评论" {
+	if err != nil || updated.Comment != "新评论" || updated.Color != "green" {
 		t.Fatalf("updated = %+v, %v", updated, err)
 	}
 }
@@ -227,6 +236,8 @@ func TestAnnotationCommentEditingValidation(t *testing.T) {
 	}{
 		{"invalid JSON", entry.ID, http.MethodPatch, "{", http.StatusBadRequest},
 		{"long comment", entry.ID, http.MethodPatch, `{"comment":"` + strings.Repeat("x", 10001) + `"}`, http.StatusBadRequest},
+		{"invalid color", entry.ID, http.MethodPatch, `{"comment":"x","color":"purple"}`, http.StatusBadRequest},
+		{"empty color", entry.ID, http.MethodPatch, `{"comment":"x","color":""}`, http.StatusBadRequest},
 		{"missing", "missing", http.MethodPatch, `{"comment":"x"}`, http.StatusNotFound},
 		{"wrong method", entry.ID, http.MethodPost, `{"comment":"x"}`, http.StatusMethodNotAllowed},
 	} {

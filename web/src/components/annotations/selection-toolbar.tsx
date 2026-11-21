@@ -1,4 +1,4 @@
-import { Highlighter, LocateFixed, MessageSquarePlus } from "lucide-react";
+import { Highlighter, LocateFixed } from "lucide-react";
 import {
   type RefObject,
   useCallback,
@@ -7,11 +7,7 @@ import {
   useRef,
   useState,
 } from "react";
-import {
-  ANNOTATION_COLORS,
-  type AnnotationColor,
-  DEFAULT_ANNOTATION_COLOR,
-} from "@/api";
+import { type AnnotationColor, DEFAULT_ANNOTATION_COLOR } from "@/api";
 import { Button } from "@/components/ui/button";
 import { draftHighlightName, HighlightLayer } from "@/lib/annotation-highlight";
 import {
@@ -33,7 +29,7 @@ export interface SelectionToolbarProps {
   // The live text index of the current body (kept fresh by the app).
   indexRef: RefObject<TextIndex | null>;
   // Saves an annotation for the given selector; resolves false on failure
-  // (the toolbar then stays put, selection intact, so nothing is lost).
+  // (the editor then keeps the draft and its selected text).
   onAnnotate: (
     selector: AnnotationSelector,
     comment: string,
@@ -56,13 +52,7 @@ interface ToolbarPosition {
   left: number;
 }
 
-const colorLabels: Record<AnnotationColor, string> = {
-  blue: "蓝色",
-  green: "绿色",
-  amber: "琥珀色",
-};
-
-// SelectionToolbar is the floating 高亮/评论 pill that appears on a valid
+// SelectionToolbar is the floating 标注 button that appears on a valid
 // body selection. Only canonical-content selections qualify: a range the
 // text index cannot address (empty, collapsed, or touching UI decorations
 // and generated visuals) never shows it.
@@ -129,16 +119,6 @@ export function SelectionToolbar({
     const candidate = selectorFromRange(index, range);
     if (candidate === null) {
       return;
-    }
-    const previousRange = rangeRef.current;
-    if (
-      previousRange === null ||
-      range.startContainer !== previousRange.startContainer ||
-      range.startOffset !== previousRange.startOffset ||
-      range.endContainer !== previousRange.endContainer ||
-      range.endOffset !== previousRange.endOffset
-    ) {
-      setColor(DEFAULT_ANNOTATION_COLOR);
     }
     rangeRef.current = range.cloneRange();
     setSelector(candidate);
@@ -229,13 +209,13 @@ export function SelectionToolbar({
     return null;
   }
 
-  const save = async (comment: string) => {
+  const save = async (comment: string, color: AnnotationColor) => {
     if (selector === null || saving) {
       return;
     }
     setSaving(true);
     setFailure(null);
-    const bounds = commenting && commentPinned ? commentBounds.current : null;
+    const bounds = commentPinned ? commentBounds.current : null;
     const saved = await onAnnotate(
       selector,
       comment,
@@ -314,7 +294,7 @@ export function SelectionToolbar({
       <AnnotationFloatingCard
         left={commentPosition.left}
         top={commentPosition.top}
-        label="新建评论"
+        label="新建标注"
         closeDisabled={saving}
         pinned={commentPinned}
         onPinnedChange={(pinned, bounds) => {
@@ -328,10 +308,10 @@ export function SelectionToolbar({
       >
         <AnnotationEditor
           autoFocus
-          color={color}
+          onColorChange={setColor}
           pending={saving}
           onCancel={cancelComment}
-          onSave={(comment) => void save(comment)}
+          onSave={(comment, color) => void save(comment, color)}
         />
         {failure !== null ? (
           <p className="text-destructive px-2 pb-1 text-xs" role="alert">
@@ -342,8 +322,9 @@ export function SelectionToolbar({
     );
   }
 
-  function openComment() {
+  function openAnnotation() {
     if (position === null) return;
+    setColor(DEFAULT_ANNOTATION_COLOR);
     setCommentPinned(false);
     commentBounds.current = null;
     const rect = rangeRef.current?.getBoundingClientRect?.();
@@ -364,58 +345,16 @@ export function SelectionToolbar({
       className="bg-popover text-popover-foreground border-border fixed z-40 flex flex-col gap-1 rounded-lg border p-1 shadow-lg"
       style={{
         top: position.top,
-        left: `clamp(122px, ${position.left}px, calc(100vw - 122px))`,
+        left: position.left,
         transform: "translateX(-50%)",
       }}
       role="toolbar"
       aria-label="标注选中文本"
     >
-      <div className="flex items-center gap-0.5">
-        <fieldset
-          className="border-border mr-1.5 flex items-center gap-0.5 border-r pr-1.5"
-          aria-label="标注颜色"
-        >
-          {ANNOTATION_COLORS.map((option) => (
-            <Button
-              key={option}
-              type="button"
-              variant="ghost"
-              size="icon-xs"
-              aria-label={colorLabels[option]}
-              aria-pressed={option === color}
-              disabled={saving}
-              data-annotation-color={option}
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => setColor(option)}
-            >
-              <span className="annotation-color-swatch" />
-            </Button>
-          ))}
-        </fieldset>
-        <Button
-          variant="ghost"
-          size="xs"
-          disabled={saving}
-          onClick={() => void save("")}
-        >
-          <Highlighter aria-hidden="true" />
-          高亮
-        </Button>
-        <Button
-          variant="ghost"
-          size="xs"
-          disabled={saving}
-          onClick={openComment}
-        >
-          <MessageSquarePlus aria-hidden="true" />
-          评论
-        </Button>
-      </div>
-      {failure !== null ? (
-        <p className="text-destructive px-2 pb-1 text-xs" role="alert">
-          {failure}
-        </p>
-      ) : null}
+      <Button variant="ghost" size="xs" onClick={openAnnotation}>
+        <Highlighter aria-hidden="true" />
+        标注
+      </Button>
     </div>
   );
 }

@@ -46,7 +46,7 @@ describe("SelectionToolbar", () => {
     document.dispatchEvent(new Event("selectionchange"));
   }
 
-  it("shows the actions for a valid content selection and saves highlights", async () => {
+  it("offers one annotation action and saves a highlight with an empty comment", async () => {
     const onAnnotate = vi.fn<SelectionToolbarProps["onAnnotate"]>();
     onAnnotate.mockResolvedValue(true);
     const bodyRef = { current: body };
@@ -60,17 +60,17 @@ describe("SelectionToolbar", () => {
     );
 
     select(2, 11);
-    await waitFor(() =>
-      expect(
-        screen.getByRole("toolbar", { name: "标注选中文本" }),
-      ).toBeTruthy(),
-    );
+    const toolbar = await screen.findByRole("toolbar", {
+      name: "标注选中文本",
+    });
+    expect(toolbar.querySelectorAll("button")).toHaveLength(1);
+    await userEvent.click(screen.getByRole("button", { name: "标注" }));
 
     expect(
       screen.getByRole("button", { name: "蓝色" }).getAttribute("aria-pressed"),
     ).toBe("true");
     await userEvent.click(screen.getByRole("button", { name: "绿色" }));
-    await userEvent.click(screen.getByRole("button", { name: "高亮" }));
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(onAnnotate).toHaveBeenCalledTimes(1));
     expect(onAnnotate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -84,6 +84,7 @@ describe("SelectionToolbar", () => {
     // A saved annotation clears the toolbar.
     expect(screen.queryByRole("toolbar", { name: "标注选中文本" })).toBeNull();
     select(0, 2);
+    await userEvent.click(await screen.findByRole("button", { name: "标注" }));
     const blue = await screen.findByRole("button", { name: "蓝色" });
     expect(blue.getAttribute("aria-pressed")).toBe("true");
   });
@@ -100,13 +101,11 @@ describe("SelectionToolbar", () => {
     );
 
     select(0, 2);
-    await waitFor(() => expect(screen.getByRole("toolbar")).toBeTruthy());
-    await userEvent.click(screen.getByRole("button", { name: "琥珀色" }));
-    await userEvent.click(screen.getByRole("button", { name: "评论" }));
+    await userEvent.click(await screen.findByRole("button", { name: "标注" }));
     const editor = await screen.findByPlaceholderText("添加评论…");
-    expect(editor.getAttribute("data-annotation-color")).toBe("amber");
-    expect(screen.queryByRole("group", { name: "标注颜色" })).toBeNull();
     await userEvent.type(editor, "需要补充备份");
+    await userEvent.click(screen.getByRole("button", { name: "琥珀色" }));
+    expect(editor.getAttribute("data-annotation-color")).toBe("amber");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(onAnnotate).toHaveBeenCalledTimes(1));
     expect(onAnnotate.mock.calls[0]?.[1]).toBe("需要补充备份");
@@ -122,31 +121,35 @@ describe("SelectionToolbar", () => {
       />,
     );
     select(2, 11);
-    await userEvent.click(await screen.findByRole("button", { name: "评论" }));
+    await userEvent.click(await screen.findByRole("button", { name: "标注" }));
     await userEvent.click(screen.getByRole("button", { name: "取消" }));
     expect(document.getSelection()?.toString()).toBe("使用 SQLite");
-    expect(screen.getByRole("button", { name: "评论" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "标注" })).toBeTruthy();
   });
 
-  it("keeps the toolbar with a failure notice when saving fails", async () => {
-    const onAnnotate =
-      vi.fn<(selector: unknown, comment: string) => Promise<boolean>>();
+  it("keeps the draft and its chosen color when saving fails", async () => {
+    const onAnnotate = vi.fn<SelectionToolbarProps["onAnnotate"]>();
     onAnnotate.mockResolvedValue(false);
     render(
       <SelectionToolbar
         bodyRef={{ current: body }}
         indexRef={{ current: index }}
-        onAnnotate={onAnnotate as never}
+        onAnnotate={onAnnotate}
       />,
     );
 
     select(0, 2);
-    await waitFor(() => expect(screen.getByRole("toolbar")).toBeTruthy());
-    await userEvent.click(screen.getByRole("button", { name: "高亮" }));
+    await userEvent.click(await screen.findByRole("button", { name: "标注" }));
+    const editor =
+      await screen.findByPlaceholderText<HTMLTextAreaElement>("添加评论…");
+    await userEvent.click(screen.getByRole("button", { name: "琥珀色" }));
+    await userEvent.type(editor, "草稿");
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
     expect((await screen.findByRole("alert")).textContent).toContain(
       "保存失败",
     );
-    expect(screen.getByRole("toolbar")).toBeTruthy();
+    expect(editor.value).toBe("草稿");
+    expect(editor.getAttribute("data-annotation-color")).toBe("amber");
   });
 
   it("never appears for collapsed or decoration-only selections", () => {

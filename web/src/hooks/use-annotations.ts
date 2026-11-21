@@ -44,7 +44,11 @@ export interface UseAnnotationsResult extends AnnotationState {
   remove: (ids: string | string[]) => Promise<AnnotationDeleteResult>;
   // Persists a human-confirmed re-anchor (new selector) for one item.
   reanchor: (id: string, selector: AnnotationSelectorData) => Promise<boolean>;
-  editComment: (id: string, comment: string) => Promise<boolean>;
+  editComment: (
+    id: string,
+    comment: string,
+    color: AnnotationColor,
+  ) => Promise<boolean>;
   select: (id: string | null) => void;
   clearError: () => void;
 }
@@ -273,11 +277,15 @@ export function useAnnotations(
   }, []);
 
   const editComment = useCallback(
-    async (id: string, comment: string): Promise<boolean> => {
+    async (
+      id: string,
+      comment: string,
+      color: AnnotationColor,
+    ): Promise<boolean> => {
       const writtenFor = identityRef.current;
       if (writtenFor === null) return false;
       try {
-        const updated = await updateAnnotationComment(id, comment);
+        const updated = await updateAnnotationComment(id, comment, color);
         if (sameDocument(identityRef.current, writtenFor)) {
           if (
             pendingWrites.current &&

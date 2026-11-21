@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import type { AnnotationColor } from "@/api";
+import {
+  ANNOTATION_COLORS,
+  type AnnotationColor,
+  DEFAULT_ANNOTATION_COLOR,
+} from "@/api";
 
 import { Button } from "@/components/ui/button";
 
@@ -7,12 +11,19 @@ export interface AnnotationEditorProps {
   // Initial comment text (empty for a fresh annotation).
   initial?: string;
   autoFocus?: boolean;
-  color?: AnnotationColor;
+  initialColor?: AnnotationColor;
+  onColorChange?(color: AnnotationColor): void;
   pending: boolean;
   placeholder?: string;
   onCancel(): void;
-  onSave(comment: string): void;
+  onSave(comment: string, color: AnnotationColor): void;
 }
+
+const colorLabels: Record<AnnotationColor, string> = {
+  blue: "蓝色",
+  green: "绿色",
+  amber: "琥珀色",
+};
 
 // AnnotationEditor is the one-box comment editor shared by the selection
 // toolbar and the panel. It is plain text — never markup — and keeps the
@@ -20,13 +31,15 @@ export interface AnnotationEditorProps {
 export function AnnotationEditor({
   initial = "",
   autoFocus = false,
-  color,
+  initialColor = DEFAULT_ANNOTATION_COLOR,
+  onColorChange,
   pending,
   placeholder = "添加评论…",
   onCancel,
   onSave,
 }: AnnotationEditorProps) {
   const [comment, setComment] = useState(initial);
+  const [color, setColor] = useState(initialColor);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -51,17 +64,49 @@ export function AnnotationEditor({
             onCancel();
           }
           if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
-            onSave(comment);
+            onSave(comment, color);
           }
         }}
       />
-      <div className="flex justify-end gap-1">
-        <Button variant="ghost" size="xs" disabled={pending} onClick={onCancel}>
-          取消
-        </Button>
-        <Button size="xs" disabled={pending} onClick={() => onSave(comment)}>
-          保存
-        </Button>
+      <div className="flex items-center gap-2">
+        <fieldset className="flex items-center gap-0.5" aria-label="标注颜色">
+          {ANNOTATION_COLORS.map((option) => (
+            <Button
+              key={option}
+              type="button"
+              variant="ghost"
+              size="icon-xs"
+              aria-label={colorLabels[option]}
+              aria-pressed={option === color}
+              disabled={pending}
+              data-annotation-color={option}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                setColor(option);
+                onColorChange?.(option);
+              }}
+            >
+              <span className="annotation-color-swatch" />
+            </Button>
+          ))}
+        </fieldset>
+        <div className="ml-auto flex gap-1">
+          <Button
+            variant="ghost"
+            size="xs"
+            disabled={pending}
+            onClick={onCancel}
+          >
+            取消
+          </Button>
+          <Button
+            size="xs"
+            disabled={pending}
+            onClick={() => onSave(comment, color)}
+          >
+            保存
+          </Button>
+        </div>
       </div>
     </div>
   );

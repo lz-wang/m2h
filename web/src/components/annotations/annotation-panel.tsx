@@ -1,6 +1,6 @@
 import { Crosshair, LocateFixed, Pencil, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import type { AnnotationItem } from "@/api";
+import type { AnnotationColor, AnnotationItem } from "@/api";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -36,7 +36,11 @@ export interface AnnotationPanelProps {
   // Scrolls the body to the annotation's live position.
   onLocate(id: string): void;
   onDelete(ids: string | string[]): Promise<AnnotationDeleteResult>;
-  onEditComment?(id: string, comment: string): Promise<boolean>;
+  onEditComment?(
+    id: string,
+    comment: string,
+    color: AnnotationColor,
+  ): Promise<boolean>;
   // Starts the human re-anchor flow for one of the caller's unresolved
   // annotations: the reader switches to "select the new passage" mode.
   onReanchor?(id: string): void;
@@ -146,7 +150,7 @@ export function AnnotationPanel({
         <p className="text-muted-foreground px-1 text-sm">正在加载标注…</p>
       ) : items.length === 0 ? (
         <p className="text-muted-foreground px-1 py-8 text-center text-sm">
-          还没有标注。选中正文后使用「高亮」或「评论」。
+          还没有标注。选中正文后点击「标注」。
         </p>
       ) : (
         <ScrollArea className="min-h-0 flex-1" scrollbarVisibility="scrolling">
@@ -169,88 +173,101 @@ export function AnnotationPanel({
                   {editingId === item.id && onEditComment ? (
                     <AnnotationEditor
                       initial={item.comment}
+                      initialColor={item.color}
                       autoFocus
                       pending={savingComment}
                       onCancel={() => setEditingId(null)}
-                      onSave={(comment) => {
+                      onSave={(comment, color) => {
                         setSavingComment(true);
-                        void onEditComment(item.id, comment)
+                        void onEditComment(item.id, comment, color)
                           .then((saved) => {
                             if (saved) setEditingId(null);
                           })
                           .finally(() => setSavingComment(false));
                       }}
                     />
-                  ) : item.comment !== "" ? (
-                    <p className="mt-1.5 whitespace-pre-wrap">{item.comment}</p>
-                  ) : null}
-                  <div className="mt-1.5">
-                    <AnnotationCommentMeta item={item} />
-                  </div>
-                  <div className="mt-1.5 flex items-center gap-1">
-                    <AnnotationAction
-                      label="定位到正文"
-                      tooltip={
-                        status === "resolved"
-                          ? undefined
-                          : "此标注无法定位，文档可能已经更新"
-                      }
-                      disabled={status !== "resolved"}
-                      onClick={() => onLocate(item.id)}
-                    >
-                      <Crosshair aria-hidden="true" />
-                    </AnnotationAction>
-                    {status !== "resolved" && item.mine && onReanchor ? (
-                      <AnnotationAction
-                        label="重新关联"
-                        tooltip="重新选取正文，重新关联此标注"
-                        onClick={() => onReanchor(item.id)}
-                      >
-                        <LocateFixed aria-hidden="true" />
-                      </AnnotationAction>
-                    ) : null}
-                    <AnnotationCopyButton
-                      format="markdown"
-                      label="复制此标注（Markdown）"
-                      disabled={!onCopy || !document}
-                      onCopy={() =>
-                        onCopy?.("markdown", [item.id]) ??
-                        Promise.resolve(false)
-                      }
-                    />
-                    <AnnotationCopyButton
-                      format="json"
-                      label="复制此标注（JSON）"
-                      disabled={!onCopy || !document}
-                      onCopy={() =>
-                        onCopy?.("json", [item.id]) ?? Promise.resolve(false)
-                      }
-                    />
-                    {item.mine ? (
-                      <>
-                        {onEditComment ? (
+                  ) : (
+                    <>
+                      {item.comment !== "" ? (
+                        <p className="mt-1.5 whitespace-pre-wrap">
+                          {item.comment}
+                        </p>
+                      ) : null}
+                      <div className="mt-1.5">
+                        <AnnotationCommentMeta item={item} />
+                      </div>
+                      <div className="mt-1.5 flex items-center gap-1">
+                        <AnnotationAction
+                          label="定位到正文"
+                          tooltip={
+                            status === "resolved"
+                              ? undefined
+                              : "此标注无法定位，文档可能已经更新"
+                          }
+                          disabled={status !== "resolved"}
+                          onClick={() => onLocate(item.id)}
+                        >
+                          <Crosshair aria-hidden="true" />
+                        </AnnotationAction>
+                        {status !== "resolved" && item.mine && onReanchor ? (
                           <AnnotationAction
-                            label="编辑此评论"
-                            onClick={() => setEditingId(item.id)}
+                            label="重新关联"
+                            tooltip="重新选取正文，重新关联此标注"
+                            onClick={() => onReanchor(item.id)}
                           >
-                            <Pencil aria-hidden="true" />
+                            <LocateFixed aria-hidden="true" />
                           </AnnotationAction>
                         ) : null}
-                        <AnnotationAction
-                          label={deleteError ? "重试删除此标注" : "删除此标注"}
-                          disabled={deleting}
-                          onClick={() => void deleteRow(item.id)}
+                        <AnnotationCopyButton
+                          format="markdown"
+                          label="复制此标注（Markdown）"
+                          disabled={!onCopy || !document}
+                          onCopy={() =>
+                            onCopy?.("markdown", [item.id]) ??
+                            Promise.resolve(false)
+                          }
+                        />
+                        <AnnotationCopyButton
+                          format="json"
+                          label="复制此标注（JSON）"
+                          disabled={!onCopy || !document}
+                          onCopy={() =>
+                            onCopy?.("json", [item.id]) ??
+                            Promise.resolve(false)
+                          }
+                        />
+                        {item.mine ? (
+                          <>
+                            {onEditComment ? (
+                              <AnnotationAction
+                                label="编辑此评论"
+                                onClick={() => setEditingId(item.id)}
+                              >
+                                <Pencil aria-hidden="true" />
+                              </AnnotationAction>
+                            ) : null}
+                            <AnnotationAction
+                              label={
+                                deleteError ? "重试删除此标注" : "删除此标注"
+                              }
+                              disabled={deleting}
+                              onClick={() => void deleteRow(item.id)}
+                            >
+                              <Trash2 aria-hidden="true" />
+                            </AnnotationAction>
+                          </>
+                        ) : null}
+                      </div>
+                      {deleteError ? (
+                        <p
+                          className="text-destructive mt-1 text-xs"
+                          role="alert"
                         >
-                          <Trash2 aria-hidden="true" />
-                        </AnnotationAction>
-                      </>
-                    ) : null}
-                  </div>
-                  {deleteError ? (
-                    <p className="text-destructive mt-1 text-xs" role="alert">
-                      {deleteError}
-                    </p>
-                  ) : null}
+                          {deleteError}
+                        </p>
+                      ) : null}
+                    </>
+                  )}
                 </li>
               );
             })}

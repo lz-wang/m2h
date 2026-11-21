@@ -202,7 +202,7 @@ export function AnnotationFloatingCard({
         <AnnotationAction
           className="annotation-hover-move"
           label="移动标注窗口"
-          tooltip="拖动或按方向键移动标注窗口"
+          tooltip="拖动移动标注窗口"
           {...adjustmentEvents("move")}
         >
           <GripHorizontal aria-hidden="true" />

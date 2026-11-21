@@ -1,6 +1,6 @@
 import { ArrowLeft, Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
-import type { AnnotationItem } from "@/api";
+import type { AnnotationColor, AnnotationItem } from "@/api";
 import { Button } from "@/components/ui/button";
 import { AnnotationAction } from "./annotation-action";
 import { AnnotationCommentMeta } from "./annotation-comment-meta";
@@ -61,12 +61,31 @@ export function AnnotationHoverDetail({
   onEditingChange(editing: boolean): void;
   onBack?: () => void;
   onCopy?: (format: AnnotationCopyFormat) => Promise<boolean>;
-  onSave(comment: string): Promise<boolean>;
+  onSave(comment: string, color: AnnotationColor): Promise<boolean>;
   onDelete(): void;
   deleting: boolean;
   deleteError?: string;
 }) {
   const [saving, setSaving] = useState(false);
+  if (editing) {
+    return (
+      <AnnotationEditor
+        initial={item.comment}
+        initialColor={item.color}
+        autoFocus
+        pending={saving}
+        onCancel={() => onEditingChange(false)}
+        onSave={(comment, color) => {
+          setSaving(true);
+          void onSave(comment, color)
+            .then((saved) => {
+              if (saved) onEditingChange(false);
+            })
+            .finally(() => setSaving(false));
+        }}
+      />
+    );
+  }
 
   return (
     <>
@@ -82,34 +101,16 @@ export function AnnotationHoverDetail({
           返回标注列表
         </Button>
       ) : null}
-      {editing ? (
-        <AnnotationEditor
-          initial={item.comment}
-          color={item.color}
-          autoFocus
-          pending={saving}
-          onCancel={() => onEditingChange(false)}
-          onSave={(comment) => {
-            setSaving(true);
-            void onSave(comment)
-              .then((saved) => {
-                if (saved) onEditingChange(false);
-              })
-              .finally(() => setSaving(false));
-          }}
-        />
-      ) : (
-        // biome-ignore lint/a11y/noStaticElementInteractions: The edit button provides the keyboard equivalent of this shortcut.
-        <div
-          className="annotation-comment-box"
-          data-annotation-color={item.color}
-          onDoubleClick={() => {
-            if (item.mine && !deleting) onEditingChange(true);
-          }}
-        >
-          {item.comment || "无评论"}
-        </div>
-      )}
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: The edit button provides the keyboard equivalent of this shortcut. */}
+      <div
+        className="annotation-comment-box"
+        data-annotation-color={item.color}
+        onDoubleClick={() => {
+          if (item.mine && !deleting) onEditingChange(true);
+        }}
+      >
+        {item.comment || "无评论"}
+      </div>
       <div className="mt-1 px-1">
         <AnnotationCommentMeta item={item} />
       </div>
@@ -118,41 +119,39 @@ export function AnnotationHoverDetail({
           {deleteError}
         </p>
       ) : null}
-      {editing ? null : (
-        <div className="annotation-hover-actions">
-          <AnnotationCopyButton
-            format="markdown"
-            label="复制标注（Markdown）"
-            disabled={!onCopy}
-            onCopy={() => onCopy?.("markdown") ?? Promise.resolve(false)}
-          />
-          <AnnotationCopyButton
-            format="json"
-            label="复制标注（JSON）"
-            disabled={!onCopy}
-            onCopy={() => onCopy?.("json") ?? Promise.resolve(false)}
-          />
-          {item.mine ? (
-            <>
-              <AnnotationAction
-                label="编辑评论"
-                disabled={deleting}
-                onClick={() => onEditingChange(true)}
-              >
-                <Pencil aria-hidden="true" />
-              </AnnotationAction>
-              <AnnotationAction
-                className="text-destructive hover:text-destructive"
-                label={deleteError ? "重试删除标注" : "删除标注"}
-                disabled={deleting}
-                onClick={onDelete}
-              >
-                <Trash2 aria-hidden="true" />
-              </AnnotationAction>
-            </>
-          ) : null}
-        </div>
-      )}
+      <div className="annotation-hover-actions">
+        <AnnotationCopyButton
+          format="markdown"
+          label="复制标注（Markdown）"
+          disabled={!onCopy}
+          onCopy={() => onCopy?.("markdown") ?? Promise.resolve(false)}
+        />
+        <AnnotationCopyButton
+          format="json"
+          label="复制标注（JSON）"
+          disabled={!onCopy}
+          onCopy={() => onCopy?.("json") ?? Promise.resolve(false)}
+        />
+        {item.mine ? (
+          <>
+            <AnnotationAction
+              label="编辑评论"
+              disabled={deleting}
+              onClick={() => onEditingChange(true)}
+            >
+              <Pencil aria-hidden="true" />
+            </AnnotationAction>
+            <AnnotationAction
+              className="text-destructive hover:text-destructive"
+              label={deleteError ? "重试删除标注" : "删除标注"}
+              disabled={deleting}
+              onClick={onDelete}
+            >
+              <Trash2 aria-hidden="true" />
+            </AnnotationAction>
+          </>
+        ) : null}
+      </div>
     </>
   );
 }

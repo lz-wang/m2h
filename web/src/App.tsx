@@ -1714,8 +1714,8 @@ export function App({
                           ? (format) => copyAnnotations(format, [item.id])
                           : undefined
                       }
-                      onSave={(comment) =>
-                        annotations.editComment(item.id, comment)
+                      onSave={(comment, color) =>
+                        annotations.editComment(item.id, comment, color)
                       }
                       deleting={popup.deleting ?? false}
                       deleteError={popup.deleteError}

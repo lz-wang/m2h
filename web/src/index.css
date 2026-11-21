@@ -2284,11 +2284,11 @@ body,
 }
 
 .annotation-comment-box[data-annotation-color],
-.annotation-hover-body textarea[data-annotation-color] {
+textarea[data-annotation-color] {
   border-color: var(--annotation-accent);
 }
 
-.annotation-hover-body textarea[data-annotation-color]:focus-visible {
+textarea[data-annotation-color]:focus-visible {
   --tw-ring-color: color-mix(
     in srgb,
     var(--annotation-accent) 35%,

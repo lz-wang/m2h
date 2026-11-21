@@ -139,16 +139,18 @@ describe("AnnotationPanel", () => {
     expect(screen.queryByRole("button", { name: "删除此标注" })).toBeNull();
   });
 
-  it("edits the author's comment from the list", async () => {
+  it("edits the author's comment and color from the list without showing metadata", async () => {
     const onEditComment = vi.fn().mockResolvedValue(true);
     renderPanel({ onEditComment });
     await userEvent.click(screen.getByRole("button", { name: "编辑此评论" }));
+    expect(document.querySelector("time")).toBeNull();
     const editor = screen.getByPlaceholderText("添加评论…");
     await userEvent.clear(editor);
     await userEvent.type(editor, "新评论");
+    await userEvent.click(screen.getByRole("button", { name: "绿色" }));
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() =>
-      expect(onEditComment).toHaveBeenCalledWith("a1", "新评论"),
+      expect(onEditComment).toHaveBeenCalledWith("a1", "新评论", "green"),
     );
     await waitFor(() =>
       expect(screen.queryByPlaceholderText("添加评论…")).toBeNull(),
