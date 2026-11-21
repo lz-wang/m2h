@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/lz-wang/m2h/internal/auth"
 	"github.com/lz-wang/m2h/internal/files"
@@ -327,6 +328,89 @@ func TestLoginLogoutMeLifecycle(t *testing.T) {
 	expired.Body.Close()
 	if expired.StatusCode != http.StatusUnauthorized {
 		t.Fatalf("me after logout = %d, want 401", expired.StatusCode)
+	}
+}
+
+func TestSessionLifetimeSlidesOnActivity(t *testing.T) {
+	fixture := newAuthedTestServer(t, localAuthConfig())
+	for _, tc := range []struct {
+		name       string
+		method     string
+		path       string
+		crossSite  bool
+		expired    bool
+		wantStatus int
+		renews     bool
+	}{
+		{name: "identity API", method: http.MethodGet, path: "/api/auth/me", wantStatus: http.StatusOK, renews: true},
+		{name: "document shell", method: http.MethodGet, path: "/doc/guide.md", wantStatus: http.StatusOK, renews: true},
+		{name: "health probe", method: http.MethodGet, path: "/healthz", wantStatus: http.StatusOK},
+		{name: "cross-origin mutation", method: http.MethodPost, path: "/api/annotations", crossSite: true, wantStatus: http.StatusForbidden},
+		{name: "expired session", method: http.MethodGet, path: "/api/auth/me", expired: true, wantStatus: http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			session := fixture.loginAs(t, "alice", "password-1")
+			sevenDays := 7 * 24 * time.Hour
+			if remaining := time.Until(session.Expires); remaining < sevenDays-time.Minute || remaining > sevenDays+time.Second {
+				t.Fatalf("initial cookie lifetime = %s, want 7 days", remaining)
+			}
+
+			// Simulate an existing session close to its persisted expiry.
+			oldExpiry := time.Now().Add(time.Hour)
+			if tc.expired {
+				oldExpiry = time.Now().Add(-time.Second)
+			}
+			sessionStore := fixture.stack.sessionStore
+			data, found, err := sessionStore.Find(session.Value)
+			if err != nil || !found {
+				t.Fatalf("find session = %v, %v", found, err)
+			}
+			if err := sessionStore.Commit(session.Value, data, oldExpiry); err != nil {
+				t.Fatal(err)
+			}
+
+			request, err := http.NewRequest(tc.method, fixture.server.URL+tc.path, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request.AddCookie(session)
+			if tc.crossSite {
+				request.Header.Set("Origin", "https://other.example")
+			}
+			response := fixture.do(request)
+			if err := response.Body.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != tc.wantStatus {
+				t.Fatalf("status = %d, want %d", response.StatusCode, tc.wantStatus)
+			}
+			cookies := response.Cookies()
+			if tc.renews {
+				if len(cookies) != 1 || cookies[0].Name != session.Name || cookies[0].Value != session.Value {
+					t.Fatal("response did not refresh the existing session cookie")
+				}
+				if remaining := time.Until(cookies[0].Expires); remaining < sevenDays-time.Minute || remaining > sevenDays+time.Second {
+					t.Fatalf("refreshed cookie lifetime = %s, want 7 days", remaining)
+				}
+			} else if len(cookies) != 0 {
+				t.Fatal("response unexpectedly set a cookie")
+			}
+
+			var storedExpiry int64
+			err = fixture.stack.dataStore.DB().QueryRow(
+				"SELECT expires_at FROM sessions ORDER BY rowid DESC LIMIT 1",
+			).Scan(&storedExpiry)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.renews {
+				if expiry := time.UnixMilli(storedExpiry); cookies[0].Expires.Sub(expiry) > time.Second || cookies[0].Expires.Before(expiry) {
+					t.Fatalf("stored expiry %v does not match cookie expiry %v", expiry, cookies[0].Expires)
+				}
+			} else if storedExpiry != oldExpiry.UnixMilli() {
+				t.Fatal("stored expiry changed without activity")
+			}
+		})
 	}
 }
 

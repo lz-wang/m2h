@@ -50,6 +50,9 @@ func TestSessionStoreCommitFindDelete(t *testing.T) {
 	if _, found, _ := sessionStore.Find("token-1"); found {
 		t.Fatalf("deleted session still found")
 	}
+	if expiry, err := sessionStore.Refresh(context.Background(), "token-1", time.Hour); err != nil || !expiry.IsZero() {
+		t.Fatalf("refresh deleted session = %v, %v", expiry, err)
+	}
 	// Deleting again is a no-op.
 	if err := sessionStore.Delete("token-1"); err != nil {
 		t.Fatalf("delete again failed: %v", err)
@@ -63,6 +66,9 @@ func TestSessionStoreExpiredSessionsNotServed(t *testing.T) {
 	}
 	if _, found, err := sessionStore.Find("stale"); found || err != nil {
 		t.Fatalf("expired session served: %v %v", found, err)
+	}
+	if expiry, err := sessionStore.Refresh(context.Background(), "stale", time.Hour); err != nil || !expiry.IsZero() {
+		t.Fatalf("refresh expired session = %v, %v", expiry, err)
 	}
 	if err := sessionStore.CleanupSessions(context.Background()); err != nil {
 		t.Fatalf("cleanup failed: %v", err)

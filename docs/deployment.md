@@ -5,7 +5,7 @@ tags:
   - 部署
   - 安全
 create_date: 2026-08-30
-update_date: 2026-11-18
+update_date: 2026-11-21
 ---
 
 # VPS 部署指南
@@ -346,7 +346,8 @@ M2H_LDAP_ALLOWED_USERS='alice,bob' \
 
 ### 会话与数据
 
-- 浏览器使用 `m2h_session` Cookie（HttpOnly、SameSite=Lax、路径跟随 `--base-path`），12 小时闲置 / 7 天绝对过期；登录失败统一报错并按用户名限流（15 分钟 10 次失败锁定该用户名）。
+- 浏览器使用 `m2h_session` Cookie（HttpOnly、SameSite=Lax、路径跟随 `--base-path`）。通过会话认证的文档页面或受保护资源请求会将过期时间顺延至 7 天后。健康检查和公开静态资源请求不触发续期。
+- 登录失败统一报错，并按用户名限流。15 分钟内失败 10 次会锁定该用户名。
 - 标注、会话与 Token 全部存在数据目录的 `m2h.db`（纯 Go SQLite 驱动，权限 0600）。数据库运行在 WAL 模式，**运行期间直接复制该文件不是一致性备份**——尚未合并进主文件的写入可能丢失。停机时复制文件即可；运行中备份使用 `sqlite3 <data-dir>/m2h.db "VACUUM INTO '<backup-path>/m2h.db'"`（或 SQLite Online Backup，`sqlite3 … ".backup '<backup-path>/m2h.db'"`）生成一致性快照，恢复时把快照放回数据目录重启即可。Schema 由版本号管理，旧库自动迁移，比程序新的库拒绝打开。
 - 切换 Local/LDAP 后，旧模式签发的会话与 Token 失效。从 `M2H_LOCAL_USERS_JSON` 删除账号或从 `M2H_LDAP_ALLOWED_USERS` 移除用户后，重启服务以加载新配置。该账号的会话与 Token 在下一次请求时失效。
 - LDAP 已有凭证只检查本地白名单，不检查目录中的禁用状态。禁用目录账号时，也须从白名单移除该用户并重启服务。同名账号重新加入配置后，未撤销且未过期的旧 Token 可能再次生效。移除账号前，应先在设置中撤销其所有 Token；不要依赖同名账号重建来撤销凭证。

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
+	"fmt"
 	"time"
 )
 
@@ -58,6 +59,25 @@ func (store *SQLiteSessionStore) Commit(token string, data []byte, expiry time.T
 		 ON CONFLICT(id_hash) DO UPDATE SET data = excluded.data, expires_at = excluded.expires_at`,
 		idHash, data, now, expiry.UnixMilli())
 	return err
+}
+
+// Refresh extends an active session's expiry without recreating a deleted
+// session or shortening the expiry set by a concurrent request.
+func (store *SQLiteSessionStore) Refresh(ctx context.Context, token string, lifetime time.Duration) (time.Time, error) {
+	now := time.Now()
+	var expiry int64
+	err := store.db.QueryRowContext(ctx,
+		`UPDATE sessions SET expires_at = MAX(expires_at, ?)
+		 WHERE id_hash = ? AND expires_at > ? RETURNING expires_at`,
+		now.Add(lifetime).UnixMilli(), hashSessionToken(token), now.UnixMilli(),
+	).Scan(&expiry)
+	if err == sql.ErrNoRows {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("refresh session expiry: %w", err)
+	}
+	return time.UnixMilli(expiry), nil
 }
 
 // Delete removes the session for a token; missing tokens are a no-op.

@@ -61,26 +61,39 @@ func (handler *documentHandler) authenticate(next http.Handler) http.Handler {
 			handler.authorizeBearer(response, request, next)
 			return
 		}
-		if publicAuthPath(path) {
-			// Public paths stay reachable, but a valid session still
-			// identifies the caller — the document shell needs to know
-			// whether it may probe deep links without leaking existence
-			// to anonymous visitors.
-			if identity := handler.principalFromSession(request); identity != nil {
-				request = requestWithPrincipal(request, identity)
-			}
-			next.ServeHTTP(response, request)
-			return
-		}
-
+		public := publicAuthPath(path)
 		identity := handler.principalFromSession(request)
 		if identity == nil {
-			writeUnauthorized(response, path)
+			if public {
+				next.ServeHTTP(response, request)
+			} else {
+				writeUnauthorized(response, path)
+			}
 			return
 		}
-		if !readOnlyMethod(request.Method) && !handler.sameOrigin(request) {
+		if !public && !readOnlyMethod(request.Method) && !handler.sameOrigin(request) {
 			writeJSONError(response, http.StatusForbidden, "cross-origin request rejected")
 			return
+		}
+		// Opening the shell counts as activity. Public probes and resources
+		// may be requested with no user interaction, and logout deletes the session.
+		if (!public && path != "/api/auth/logout") || path == "/" || strings.HasPrefix(path, "/doc/") {
+			ctx := request.Context()
+			token := handler.auth.sessions.Token(ctx)
+			expiry, err := handler.auth.sessionStore.Refresh(ctx, token, sessionLifetime)
+			if err != nil {
+				handler.auth.sessions.ErrorFunc(response, request, err)
+				return
+			}
+			if expiry.IsZero() {
+				if public {
+					next.ServeHTTP(response, request)
+				} else {
+					writeUnauthorized(response, path)
+				}
+				return
+			}
+			handler.auth.sessions.WriteSessionCookie(ctx, response, token, expiry)
 		}
 		next.ServeHTTP(response, requestWithPrincipal(request, identity))
 	})

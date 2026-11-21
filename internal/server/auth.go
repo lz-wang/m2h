@@ -37,6 +37,8 @@ const (
 // runs. The default mode never starts this loop.
 const sessionCleanupInterval = time.Hour
 
+const sessionLifetime = 7 * 24 * time.Hour
+
 // authStack bundles everything an authenticated run adds to the server:
 // the authenticator behind the mode, the scs session manager backed by
 // SQLite, the login limiter, and the trusted public origin.
@@ -85,8 +87,7 @@ func buildAuthStack(config *auth.Config, dataStore *store.Store, basePath string
 	sessionStore := auth.NewSQLiteSessionStore(dataStore.DB())
 	sessions := scs.New()
 	sessions.Store = sessionStore
-	sessions.Lifetime = 7 * 24 * time.Hour
-	sessions.IdleTimeout = 12 * time.Hour
+	sessions.Lifetime = sessionLifetime
 	sessions.Cookie.Name = auth.SessionCookieName
 	sessions.Cookie.HttpOnly = true
 	sessions.Cookie.SameSite = http.SameSiteLaxMode
