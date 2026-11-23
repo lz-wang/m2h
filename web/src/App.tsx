@@ -539,9 +539,28 @@ export function App({
   );
   const annotationsAt = useCallback((x: number, y: number): string[] => {
     const index = annotationIndexRef.current;
-    if (!index) return [];
+    const positions = annotationPositionsRef.current;
+    if (!index || positions.size === 0) return [];
+    let offset: number | null = null;
+    if (document.caretPositionFromPoint || document.caretRangeFromPoint) {
+      const caret = document.caretPositionFromPoint?.(x, y);
+      const legacy = caret ? null : document.caretRangeFromPoint?.(x, y);
+      const node = caret?.offsetNode ?? legacy?.startContainer;
+      const boundary = caret?.offset ?? legacy?.startOffset;
+      if (node === undefined || boundary === undefined) return [];
+      offset = index.offsetFromBoundary(node, boundary);
+      if (offset === null) return [];
+    }
     const ids: string[] = [];
-    for (const [id, position] of annotationPositionsRef.current) {
+    for (const [id, position] of positions) {
+      // A caret can snap to either edge of a glyph. Include both endpoints,
+      // then use the rectangles to distinguish adjacent highlights.
+      if (
+        offset !== null &&
+        (offset < position.start || offset > position.end)
+      ) {
+        continue;
+      }
       const range = index.rangeFromSpan(position);
       if (
         range &&

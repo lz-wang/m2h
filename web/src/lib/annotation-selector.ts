@@ -92,15 +92,18 @@ export class TextIndex {
   // spanFromRange converts a DOM range into a code-point span. Selections
   // that touch excluded regions or collapse to nothing return null.
   spanFromRange(range: Range): TextPosition | null {
-    const start = this.boundaryFrom(range.startContainer, range.startOffset);
-    const end = this.boundaryFrom(range.endContainer, range.endOffset);
+    const start = this.offsetFromBoundary(
+      range.startContainer,
+      range.startOffset,
+    );
+    const end = this.offsetFromBoundary(range.endContainer, range.endOffset);
     if (start === null || end === null || end <= start) {
       return null;
     }
     return { start, end };
   }
 
-  private boundaryFrom(container: Node, utf16Offset: number): number | null {
+  offsetFromBoundary(container: Node, utf16Offset: number): number | null {
     if (!(container instanceof Text)) {
       return null;
     }

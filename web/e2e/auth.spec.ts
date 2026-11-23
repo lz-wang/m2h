@@ -1526,12 +1526,25 @@ test.describe("authenticated mode", () => {
     const list = card.getByRole("list", { name: "重叠标注" });
     const comment = card.locator(".annotation-comment-box");
 
+    await page.evaluate(() => {
+      const getClientRects = Range.prototype.getClientRects;
+      Range.prototype.getClientRects = function () {
+        const body = this.startContainer.parentElement?.closest("article");
+        if (body && String(this) === "验证正文") {
+          body.dataset.readUnrelatedAnnotationRect = "true";
+        }
+        return getClientRects.call(this);
+      };
+    });
     await expect(async () => {
       await page.mouse.move(wideOnly.x + 1, wideOnly.y);
       await page.mouse.move(wideOnly.x, wideOnly.y);
       await expect(comment).toHaveText("较宽选区的标注", { timeout: 500 });
     }).toPass({ timeout: 10_000 });
     await expect(list).toBeHidden();
+    await expect(
+      page.locator("article[data-read-unrelated-annotation-rect]"),
+    ).toHaveCount(0);
     await expect(card.getByText("alice", { exact: true })).toBeVisible();
     await expect(card.locator("time")).toHaveAttribute(
       "datetime",
