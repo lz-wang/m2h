@@ -25,13 +25,32 @@ function mountBody(html: string): HTMLElement {
 describe("SelectionToolbar", () => {
   let body: HTMLElement;
   let index: TextIndex;
+  let rangeRects: DOMRect[];
+  const originalGetClientRects = Object.getOwnPropertyDescriptor(
+    Range.prototype,
+    "getClientRects",
+  );
 
   beforeEach(() => {
     body = mountBody("<p>建议使用 SQLite 作为持久化存储。</p>");
     index = new TextIndex(body);
+    rangeRects = [new DOMRect(100, 120, 120, 24)];
+    Object.defineProperty(Range.prototype, "getClientRects", {
+      configurable: true,
+      value: () => rangeRects,
+    });
   });
 
   afterEach(() => {
+    if (originalGetClientRects) {
+      Object.defineProperty(
+        Range.prototype,
+        "getClientRects",
+        originalGetClientRects,
+      );
+    } else {
+      Reflect.deleteProperty(Range.prototype, "getClientRects");
+    }
     document.body.replaceChildren();
   });
 
@@ -45,6 +64,55 @@ describe("SelectionToolbar", () => {
     selection?.addRange(range);
     document.dispatchEvent(new Event("selectionchange"));
   }
+
+  it("follows visible selection fragments across scroll and keeps the native selection", async () => {
+    const header = document.createElement("header");
+    vi.spyOn(header, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 600, 48),
+    );
+    render(
+      <SelectionToolbar
+        bodyRef={{ current: body }}
+        readerToolbarRef={{ current: header }}
+        indexRef={{ current: index }}
+        onAnnotate={vi.fn()}
+      />,
+    );
+
+    select(2, 11);
+    const toolbar = await screen.findByRole("toolbar", {
+      name: "标注选中文本",
+    });
+    expect(toolbar.style.top).toBe("112px");
+    rangeRects = [new DOMRect(100, 22, 120, 22), new DOMRect(120, 52, 120, 22)];
+    fireEvent.scroll(document);
+    await waitFor(() => expect(toolbar.style.top).toBe("82px"));
+    expect(toolbar.style.left).toBe("180px");
+
+    rangeRects = [new DOMRect(100, 12, 120, 20)];
+    fireEvent.scroll(document);
+    await waitFor(() => expect(screen.queryByRole("toolbar")).toBeNull());
+    expect(document.getSelection()?.toString()).toBe("使用 SQLite");
+
+    rangeRects = [new DOMRect(100, 140, 120, 24)];
+    fireEvent.scroll(document);
+    expect((await screen.findByRole("toolbar")).style.top).toBe("132px");
+
+    await userEvent.click(screen.getByRole("button", { name: "标注" }));
+    const editor =
+      screen.getByPlaceholderText<HTMLTextAreaElement>("添加评论…");
+    await userEvent.type(editor, "草稿");
+    rangeRects = [];
+    await act(async () => {
+      fireEvent.scroll(document);
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(editor.value).toBe("草稿");
+    expect(screen.getByRole("region", { name: "新建标注" })).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "取消" }));
+    expect(screen.queryByRole("toolbar")).toBeNull();
+    expect(document.getSelection()?.toString()).toBe("使用 SQLite");
+  });
 
   it("offers one annotation action and saves a highlight with an empty comment", async () => {
     const onAnnotate = vi.fn<SelectionToolbarProps["onAnnotate"]>();

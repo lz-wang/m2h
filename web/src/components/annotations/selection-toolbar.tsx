@@ -15,6 +15,7 @@ import {
   selectorFromRange,
   type TextIndex,
 } from "@/lib/annotation-selector";
+import { watchReaderScroll } from "@/lib/reader-scroll";
 import { AnnotationEditor } from "./annotation-editor";
 import {
   type AnnotationCardBounds,
@@ -26,6 +27,7 @@ import {
 export interface SelectionToolbarProps {
   // The rendered body root; selections outside it never open the toolbar.
   bodyRef: RefObject<HTMLElement | null>;
+  readerToolbarRef?: RefObject<HTMLElement | null>;
   // The live text index of the current body (kept fresh by the app).
   indexRef: RefObject<TextIndex | null>;
   // Saves an annotation for the given selector; resolves false on failure
@@ -49,7 +51,9 @@ export interface SelectionToolbarProps {
 
 interface ToolbarPosition {
   top: number;
+  bottom: number;
   left: number;
+  above: boolean;
 }
 
 // SelectionToolbar is the floating 标注 button that appears on a valid
@@ -58,6 +62,7 @@ interface ToolbarPosition {
 // and generated visuals) never shows it.
 export function SelectionToolbar({
   bodyRef,
+  readerToolbarRef,
   indexRef,
   onAnnotate,
   reanchorPending = null,
@@ -68,15 +73,16 @@ export function SelectionToolbar({
   const [selector, setSelector] = useState<AnnotationSelector | null>(null);
   const [color, setColor] = useState<AnnotationColor>(DEFAULT_ANNOTATION_COLOR);
   const [position, setPosition] = useState<ToolbarPosition | null>(null);
-  const [commentPosition, setCommentPosition] =
-    useState<ToolbarPosition | null>(null);
+  const [commentPosition, setCommentPosition] = useState<Pick<
+    ToolbarPosition,
+    "top" | "left"
+  > | null>(null);
   const commenting = commentPosition !== null;
   const [commentPinned, setCommentPinned] = useState(false);
   const commentBounds = useRef<AnnotationCardBounds | null>(null);
   const [saving, setSaving] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
-  // The live DOM selection is re-read on demand; only its derived selector
-  // and rectangle live in state.
+  // Keep the range while its text is offscreen and while editing a draft.
   const rangeRef = useRef<Range | null>(null);
 
   // Leaving re-anchor mode discards any pending toolbar state.
@@ -97,63 +103,85 @@ export function SelectionToolbar({
     }
   }, [disabled]);
 
-  const updateFromSelection = useCallback(() => {
-    if (disabled) {
-      return;
-    }
-    const body = bodyRef.current;
-    const index = indexRef.current;
-    const selection = document.getSelection();
+  const updatePosition = useCallback(() => {
+    const range = rangeRef.current;
     if (
-      body === null ||
-      index === null ||
-      selection === null ||
-      selection.rangeCount === 0
+      range === null ||
+      !bodyRef.current?.contains(range.commonAncestorContainer)
     ) {
+      setPosition(null);
       return;
     }
-    const range = selection.getRangeAt(0);
-    if (range.collapsed || !body.contains(range.commonAncestorContainer)) {
+
+    const visibleTop = Math.max(
+      readerToolbarRef?.current?.getBoundingClientRect().bottom ?? 0,
+      0,
+    );
+    const viewportWidth =
+      document.documentElement.clientWidth || window.innerWidth;
+    const viewportHeight =
+      document.documentElement.clientHeight || window.innerHeight;
+    // Use a visible fragment so a wrapped selection can follow the portion
+    // that is still on screen, including when it moves under the sticky header.
+    for (const rect of range.getClientRects()) {
+      const top = Math.max(visibleTop, rect.top);
+      const bottom = Math.min(viewportHeight, rect.bottom);
+      const left = Math.max(0, rect.left);
+      const right = Math.min(viewportWidth, rect.right);
+      if (top >= bottom || left >= right) continue;
+
+      const inset = Math.min(90, viewportWidth / 2);
+      const center = Math.min(
+        Math.max((left + right) / 2, inset),
+        viewportWidth - inset,
+      );
+      const above = top - visibleTop >= (reanchorPending === null ? 44 : 76);
+      setPosition({ top, bottom, left: center, above });
       return;
     }
-    const candidate = selectorFromRange(index, range);
-    if (candidate === null) {
-      return;
-    }
-    rangeRef.current = range.cloneRange();
-    setSelector(candidate);
-    setFailure(null);
-    // Some engines (and test DOMs) lack Range.getBoundingClientRect; a
-    // zero rectangle only means the pill parks at the top-left — the
-    // annotation itself is unaffected.
-    let top = 8;
-    let center = 90;
-    if (typeof range.getBoundingClientRect === "function") {
-      const rectangle = range.getBoundingClientRect();
-      top = Math.max(rectangle.top - 44, 8);
-      center = rectangle.left + rectangle.width / 2;
-    }
-    const left = Math.min(Math.max(center, 90), window.innerWidth - 90);
-    setPosition({ top, left });
-  }, [bodyRef, indexRef, disabled]);
+    setPosition(null);
+  }, [bodyRef, readerToolbarRef, reanchorPending]);
 
   useEffect(() => {
     const handleSelectionChange = () => {
       // The editor's own textarea drives selectionchange too; ignore those.
-      if (commenting || saving) {
-        return;
-      }
-      updateFromSelection();
-      if (document.getSelection()?.isCollapsed === true) {
+      if (disabled || commenting || saving) return;
+      const body = bodyRef.current;
+      const index = indexRef.current;
+      const selection = document.getSelection();
+      const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+      const candidate =
+        index &&
+        range &&
+        !range.collapsed &&
+        body?.contains(range.commonAncestorContainer)
+          ? selectorFromRange(index, range)
+          : null;
+      if (candidate === null || range === null) {
         rangeRef.current = null;
         setSelector(null);
-        setPosition(null);
+      } else {
+        rangeRef.current = range.cloneRange();
+        setSelector(candidate);
+        setFailure(null);
       }
+      updatePosition();
     };
     document.addEventListener("selectionchange", handleSelectionChange);
     return () =>
       document.removeEventListener("selectionchange", handleSelectionChange);
-  }, [updateFromSelection, commenting, saving]);
+  }, [bodyRef, indexRef, updatePosition, disabled, commenting, saving]);
+
+  const hasSelection = selector !== null;
+  useEffect(() => {
+    if (!hasSelection || disabled || commenting || saving) return;
+    const stopWatchingScroll = watchReaderScroll(bodyRef, updatePosition);
+    window.addEventListener("resize", updatePosition);
+    return () => {
+      stopWatchingScroll();
+      window.removeEventListener("resize", updatePosition);
+    };
+  }, [bodyRef, updatePosition, hasSelection, disabled, commenting, saving]);
 
   useLayoutEffect(() => {
     if (disabled || !commenting || selector === null) return;
@@ -176,9 +204,10 @@ export function SelectionToolbar({
       selection?.removeAllRanges();
       selection?.addRange(range);
     }
+    updatePosition();
     setCommentPosition(null);
     setFailure(null);
-  }, [bodyRef, saving]);
+  }, [bodyRef, saving, updatePosition]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -205,9 +234,20 @@ export function SelectionToolbar({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [selector, reanchorPending, onReanchorCancel, commenting, cancelComment]);
 
-  if (selector === null || position === null || disabled) {
+  if (selector === null || disabled) {
     return null;
   }
+
+  const toolbarStyle =
+    position === null
+      ? undefined
+      : {
+          top: position.above ? position.top - 8 : position.bottom + 8,
+          left: position.left,
+          transform: position.above
+            ? "translate(-50%, -100%)"
+            : "translateX(-50%)",
+        };
 
   const save = async (comment: string, color: AnnotationColor) => {
     if (selector === null || saving) {
@@ -243,6 +283,7 @@ export function SelectionToolbar({
     const saved = await onReanchor(selector);
     setSaving(false);
     if (saved) {
+      rangeRef.current = null;
       setSelector(null);
       setPosition(null);
       document.getSelection()?.removeAllRanges();
@@ -252,14 +293,11 @@ export function SelectionToolbar({
   };
 
   if (reanchorPending !== null && onReanchor !== undefined) {
+    if (position === null) return null;
     return (
       <div
         className="bg-popover text-popover-foreground border-border fixed z-40 flex flex-col gap-1 rounded-lg border p-1 shadow-lg"
-        style={{
-          top: position.top,
-          left: position.left,
-          transform: "translateX(-50%)",
-        }}
+        style={toolbarStyle}
         role="toolbar"
         aria-label="重新关联标注"
       >
@@ -322,14 +360,15 @@ export function SelectionToolbar({
     );
   }
 
+  if (position === null) return null;
+
   function openAnnotation() {
     if (position === null) return;
     setColor(DEFAULT_ANNOTATION_COLOR);
     setCommentPinned(false);
     commentBounds.current = null;
-    const rect = rangeRef.current?.getBoundingClientRect?.();
-    const below = (rect?.bottom ?? position.top) + 12;
-    const above = (rect?.top ?? position.top) - annotationCardHeight - 12;
+    const below = position.bottom + 12;
+    const above = position.top - annotationCardHeight - 12;
     setCommentPosition({
       left: position.left - annotationCardWidth / 2,
       top:
@@ -343,11 +382,7 @@ export function SelectionToolbar({
   return (
     <div
       className="bg-popover text-popover-foreground border-border fixed z-40 flex flex-col gap-1 rounded-lg border p-1 shadow-lg"
-      style={{
-        top: position.top,
-        left: position.left,
-        transform: "translateX(-50%)",
-      }}
+      style={toolbarStyle}
       role="toolbar"
       aria-label="标注选中文本"
     >

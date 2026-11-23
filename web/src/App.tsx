@@ -113,6 +113,7 @@ import {
 import { enhanceDocumentLinks } from "./lib/document-links";
 import { findHeadingElement } from "./lib/heading";
 import { observeLazyImages, prepareLazyImages } from "./lib/lazy-images";
+import { watchReaderScroll } from "./lib/reader-scroll";
 import {
   renderRichContent,
   rerenderMermaid,
@@ -347,6 +348,7 @@ export function App({
     [headings],
   );
   const tocVisible = preview.toc && tocItems.length > 0;
+  const readerToolbarRef = useRef<HTMLElement>(null);
   const readerMainRef = useRef<HTMLDivElement>(null);
   const activeHeadingID = useHeadingSpy(
     headings,
@@ -561,55 +563,32 @@ export function App({
   useEffect(() => {
     if (transientAnnotationPopup === undefined) return;
     const { key } = transientAnnotationPopup;
-    let frame: number | null = null;
     const rememberPointer = ({ clientX, clientY }: MouseEvent) => {
       hoverPoint.current = { x: clientX, y: clientY };
     };
-    const checkHoverOnScroll = ({ target }: Event) => {
-      const body = annotationBodyRef.current;
+    // Scrolling moves the highlight without necessarily firing mousemove.
+    const stopWatchingScroll = watchReaderScroll(annotationBodyRef, (body) => {
+      const { x, y } = hoverPoint.current;
+      const element = document.elementFromPoint(x, y);
       if (
-        !body ||
-        frame !== null ||
-        (target !== window &&
-          target !== document &&
-          !(
-            target instanceof Node &&
-            (target.contains(body) || body.contains(target))
-          ))
+        element?.closest(".annotation-hover-card") ||
+        (body.contains(element) && JSON.stringify(annotationsAt(x, y)) === key)
       ) {
         return;
       }
-      // Scrolling moves the highlight without necessarily firing mousemove.
-      frame = requestAnimationFrame(() => {
-        frame = null;
-        const { x, y } = hoverPoint.current;
-        const element = document.elementFromPoint(x, y);
-        if (
-          element?.closest(".annotation-hover-card") ||
-          (body.contains(element) &&
-            JSON.stringify(annotationsAt(x, y)) === key)
-        ) {
-          return;
-        }
-        setAnnotationPopups((current) =>
-          current.filter(
-            (popup) => popup.key !== key || keepAnnotationPopupOpen(popup),
-          ),
-        );
-      });
-    };
-    window.addEventListener("mousemove", rememberPointer, {
-      capture: true,
-      passive: true,
+      setAnnotationPopups((current) =>
+        current.filter(
+          (popup) => popup.key !== key || keepAnnotationPopupOpen(popup),
+        ),
+      );
     });
-    window.addEventListener("scroll", checkHoverOnScroll, {
+    window.addEventListener("mousemove", rememberPointer, {
       capture: true,
       passive: true,
     });
     return () => {
       window.removeEventListener("mousemove", rememberPointer, true);
-      window.removeEventListener("scroll", checkHoverOnScroll, true);
-      if (frame !== null) cancelAnimationFrame(frame);
+      stopWatchingScroll();
     };
   }, [annotationsAt, transientAnnotationPopup]);
   const visibleAnnotationPopups = useMemo(
@@ -1239,7 +1218,7 @@ export function App({
             { "--reader-toc-width": `${rightSidebarWidth}px` } as CSSProperties
           }
         >
-          <header className="reader-toolbar">
+          <header className="reader-toolbar" ref={readerToolbarRef}>
             {navigationAvailable ? (
               <Tooltip>
                 <TooltipTrigger
@@ -1731,6 +1710,7 @@ export function App({
                 key={annotationDocumentKey}
                 disabled={annotationIdentity === null}
                 bodyRef={annotationBodyRef}
+                readerToolbarRef={readerToolbarRef}
                 indexRef={annotationIndexRef}
                 onAnnotate={(selector, comment, color, pinnedBounds) =>
                   annotations.create(
