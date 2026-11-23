@@ -5,7 +5,7 @@ tags:
   - agent
   - api
 create_date: 2026-11-18
-update_date: 2026-11-20
+update_date: 2026-11-23
 ---
 
 # Agent 知识库接入
@@ -68,5 +68,7 @@ list_documents()          → GET /api/files
 `GET /api/recent` 返回 `created` 和 `updated` 两组结果，各最多 10 条。每条包含 `path`、`title`、`date` 和 `dateSource`。多根工作区的 `path` 带 `r0/` 等根前缀。认证模式下，API 令牌须有 `document:read` 权限，结果仅包含其范围内可读取的文档。
 
 日期为 `YYYY-MM-DD`。有效 Frontmatter 日期的 `dateSource` 为 `frontmatter`。使用文件修改日期时为 `mtime`，此时创建日期为估算值。同一天的条目按文件修改时间倒序排列，再按路径升序排列。
+
+`updated` 只包含计算后的更新日期与创建日期不同的文档。此规则也适用于单篇文档令牌。
 
 单篇文档令牌直接读取该文档的元数据。绑定文档版本的令牌仅在内容哈希匹配时返回条目。其他请求使用共享元数据缓存，其有效期为 30 秒。新增和编辑的文档可能要等缓存刷新后才出现。缓存通过文件路径、目标路径、大小和修改时间判定文件是否变化。原地改写时若保留大小和修改时间，缓存可能继续显示旧元数据。

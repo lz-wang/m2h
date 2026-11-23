@@ -88,7 +88,9 @@ func (handler *documentHandler) recentScopedDocument(rootID, relative string, ve
 	metadata, ok, err := handler.loadRecent(virtual, recentMetadata{}, version)
 	if ok {
 		result.Created = append(result.Created, metadata.created)
-		result.Updated = append(result.Updated, metadata.updated)
+		if metadata.updated.Date != metadata.created.Date {
+			result.Updated = append(result.Updated, metadata.updated)
+		}
 	}
 	return err
 }
@@ -125,6 +127,9 @@ func (handler *documentHandler) recentLists(r *http.Request, result *recentRespo
 			}
 			if err := r.Context().Err(); err != nil {
 				return err
+			}
+			if list == &result.Updated && candidate.updated.Date == candidate.created.Date {
+				continue
 			}
 			entry := document(candidate)
 			valid, checked := visible[entry.Path]

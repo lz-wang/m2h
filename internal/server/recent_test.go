@@ -68,10 +68,12 @@ func TestRecentOrdersLogicalDatesWithStableTieBreakers(t *testing.T) {
 	writeRecentFile(t, root, "d.md", "---\ncreate_date: invalid\nupdate_date: invalid\ndate: 2099-12-31\n---\n# D heading", 4)
 	writeRecentFile(t, root, "e.md", "---\ntitle: [broken\n---\n# E heading", 1)
 	writeRecentFile(t, root, "filename.md", "## No H1", 1)
+	writeRecentFile(t, root, "new.md", "---\ncreate_date: 2026-11-12\nupdate_date: 2026-11-12\n---\n# New", 1)
 
 	handler, routed := recentTestHandler(t, root)
 	got := recentFrom(t, routed, "/api/recent")
 	wantCreated := []recentDocument{
+		{"new.md", "New", "2026-11-12", "frontmatter"},
 		{"c.md", "C heading", "2026-11-05", "frontmatter"},
 		{"a.md", "Explicit title", "2026-11-05", "frontmatter"},
 		{"b.md", "B heading", "2026-11-05", "frontmatter"},
@@ -83,7 +85,6 @@ func TestRecentOrdersLogicalDatesWithStableTieBreakers(t *testing.T) {
 		{"c.md", "C heading", "2026-11-11", "frontmatter"},
 		{"a.md", "Explicit title", "2026-11-10", "frontmatter"},
 		{"b.md", "B heading", "2026-11-09", "frontmatter"},
-		wantCreated[3], wantCreated[4], wantCreated[5],
 	}
 	if !reflect.DeepEqual(got.Created, wantCreated) || !reflect.DeepEqual(got.Updated, wantUpdated) {
 		t.Fatalf("unexpected result: %+v", got)
@@ -97,7 +98,7 @@ func TestRecentOrdersLogicalDatesWithStableTieBreakers(t *testing.T) {
 	}
 	handler.recent.expiresAt = time.Time{}
 	got = recentFrom(t, routed, "/api/recent")
-	wantCreated[0], wantCreated[1] = wantCreated[1], wantCreated[0]
+	wantCreated[1], wantCreated[2] = wantCreated[2], wantCreated[1]
 	if !reflect.DeepEqual(got.Created, wantCreated) || !reflect.DeepEqual(got.Updated, wantUpdated) {
 		t.Fatalf("checkout changed the logical date: %+v", got)
 	}
@@ -106,7 +107,8 @@ func TestRecentOrdersLogicalDatesWithStableTieBreakers(t *testing.T) {
 func TestRecentCacheRefreshesAndDropsUnavailableEntries(t *testing.T) {
 	root := t.TempDir()
 	for index := range 12 {
-		writeRecentFile(t, root, fmt.Sprintf("%02d.md", index), fmt.Sprintf("# Note %d", index), index+1)
+		source := fmt.Sprintf("---\nupdate_date: 2025-02-%02d\n---\n# Note %d", index+1, index)
+		writeRecentFile(t, root, fmt.Sprintf("%02d.md", index), source, index+1)
 	}
 	handler, routed := recentTestHandler(t, root)
 	first := recentFrom(t, routed, "/api/recent")
@@ -125,8 +127,8 @@ func TestRecentCacheRefreshesAndDropsUnavailableEntries(t *testing.T) {
 	if len(warm.Created) != 10 || warm.Created[0].Path != "09.md" || warm.Created[9].Path != "00.md" {
 		t.Fatalf("warm lists must omit old paths and backfill the page: %+v", warm)
 	}
-	if !reflect.DeepEqual(warm.Created, warm.Updated) {
-		t.Fatalf("warm updated list disagrees with created: %+v", warm)
+	if len(warm.Updated) != 10 || warm.Updated[0].Path != "09.md" || warm.Updated[9].Path != "00.md" {
+		t.Fatalf("warm updated list must omit old paths and backfill the page: %+v", warm)
 	}
 
 	writeRecentFile(t, root, "09.md", "# Edited and refreshed", 13)
@@ -157,7 +159,7 @@ func TestRecentConcurrentRequestsShareDiscovery(t *testing.T) {
 			response := performRequest(routed, http.MethodGet, "/api/recent")
 			var result recentResponse
 			if err := json.Unmarshal(response.Body.Bytes(), &result); err != nil ||
-				response.Code != http.StatusOK || len(result.Created) != 1 || len(result.Updated) != 1 {
+				response.Code != http.StatusOK || len(result.Created) != 1 || len(result.Updated) != 0 {
 				t.Errorf("unexpected concurrent response: %d %s", response.Code, response.Body.String())
 			}
 		})
@@ -174,6 +176,9 @@ func TestRecentSharesPublishingRules(t *testing.T) {
 	writeTestFile(t, filepath.Join(root, ".hidden.md"), "# Hidden")
 	routed := newDocumentHandler(workspace, nil, directoryTestUI())
 	want := map[string]bool{"README.md": true, "guide.md": true, "notes/public.md": true}
+	for name := range want {
+		writeTestFile(t, filepath.Join(root, name), "---\ncreate_date: 2025-01-01\nupdate_date: 2025-01-02\n---\n# Published")
+	}
 	assertVisible := func() {
 		t.Helper()
 		result := recentFrom(t, routed, "/api/recent")
@@ -307,10 +312,8 @@ func TestRecentDocumentTokenSkipsWorkspaceDiscovery(t *testing.T) {
 
 	var got recentResponse
 	decodeJSON(t, response, &got)
-	for _, list := range [][]recentDocument{got.Created, got.Updated} {
-		if response.Code != http.StatusOK || len(list) != 1 || list[0].Path != "r1/README.md" {
-			t.Fatalf("expected only the scoped virtual document: %d %+v", response.Code, got)
-		}
+	if response.Code != http.StatusOK || len(got.Created) != 1 || got.Created[0].Path != "r1/README.md" || len(got.Updated) != 0 {
+		t.Fatalf("expected the scoped virtual document only in created: %d %+v", response.Code, got)
 	}
 	if handler.recent.files != nil {
 		t.Fatal("document-scoped request populated the shared cache")
@@ -319,6 +322,7 @@ func TestRecentDocumentTokenSkipsWorkspaceDiscovery(t *testing.T) {
 
 func TestRecentTokenPermissionsAndVersionBinding(t *testing.T) {
 	fixture := newTokenFixture(t)
+	writeTestFile(t, filepath.Join(fixture.docsDir, "guide.md"), "---\ncreate_date: 2025-01-01\nupdate_date: 2025-01-02\n---\n# Guide")
 	alice := fixture.loginAs(t, "alice", "password-1")
 	for index := range 12 {
 		writeTestFile(t, filepath.Join(fixture.docsDir, fmt.Sprintf("future-%02d.md", index)),

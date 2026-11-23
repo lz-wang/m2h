@@ -98,13 +98,16 @@ test("returning home reloads the file tree and recent lists once", async ({
     await page.getByRole("button", { name: "文档首页" }).click();
     await expect(tree.getByText("added-while-reading.md")).toBeVisible();
     await expect(page.getByText("3 个 Markdown 文件")).toBeAttached();
-    for (const name of ["最新创建", "最近更新"]) {
-      await expect(
-        page
-          .getByRole("region", { name })
-          .getByRole("link", { name: /Added while reading/ }),
-      ).toBeVisible();
-    }
+    await expect(
+      page
+        .getByRole("region", { name: "最新创建" })
+        .getByRole("link", { name: /Added while reading/ }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("region", { name: "最近更新" })
+        .getByRole("link", { name: /Added while reading/ }),
+    ).toHaveCount(0);
     expect(requests).toEqual(["/api/files", "/api/recent"]);
   } finally {
     rmSync(added, { force: true });

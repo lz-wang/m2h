@@ -15,7 +15,7 @@ test("directory home opens document links and survives history navigation and re
   await expect(home).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
   await expect(created.getByRole("link")).toHaveCount(10);
-  await expect(updated.getByRole("link")).toHaveCount(10);
+  await expect(updated.getByRole("link")).toHaveCount(1);
   expect(requests.filter((path) => path === "/api/document")).toEqual([]);
   expect(requests.filter((path) => path === "/api/recent")).toHaveLength(1);
 
@@ -28,7 +28,7 @@ test("directory home opens document links and survives history navigation and re
 
   await page.goBack();
   await expect(home).toBeVisible();
-  await expect(updated.getByRole("link")).toHaveCount(10);
+  await expect(recent).toHaveAttribute("href", href);
   await expect(page.locator(".markdown-body")).toHaveCount(0);
   await page.goForward();
   await expect(page).toHaveURL(new URL(href, page.url()).href);
