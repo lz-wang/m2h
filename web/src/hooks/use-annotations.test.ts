@@ -142,6 +142,42 @@ describe("useAnnotations", () => {
     });
   });
 
+  it("limits concurrent deletes and applies the successful items together", async () => {
+    const ids = ["a1", "a2", "a3", "a4", "a5", "a6"];
+    const requests: Array<(response: Response) => void> = [];
+    fetchMock.mockResolvedValueOnce(
+      jsonResponse({ annotations: ids.map((id) => item({ id })) }),
+    );
+    fetchMock.mockImplementation(
+      () => new Promise((resolve) => requests.push(resolve)),
+    );
+    const { result } = renderHook(() => useAnnotations(true, identity));
+    await waitFor(() => expect(result.current.items).toHaveLength(6));
+    act(() => result.current.select("a1"));
+
+    const pending = result.current.remove([...ids, "a1"]);
+    expect(requests).toHaveLength(4);
+    await act(async () => {
+      requests[0](jsonResponse({ ok: true }));
+      requests[1](jsonResponse({ error: "forbidden" }, 403));
+    });
+    expect(requests).toHaveLength(6);
+    expect(result.current.items.map(({ id }) => id)).toEqual(ids);
+    expect(result.current.selectedId).toBe("a1");
+    await act(async () => {
+      for (const resolve of requests.slice(2).reverse()) {
+        resolve(jsonResponse({ ok: true }));
+      }
+      expect(await pending).toEqual({
+        deletedIds: ["a1", "a3", "a4", "a5", "a6"],
+        failures: [{ id: "a2", message: "没有权限执行此操作。" }],
+      });
+    });
+    expect(result.current.items.map(({ id }) => id)).toEqual(["a2"]);
+    expect(result.current.selectedId).toBeNull();
+    expect(fetchMock).toHaveBeenCalledTimes(7);
+  });
+
   it("reanchor replaces the stored selector", async () => {
     fetchMock
       .mockResolvedValueOnce(jsonResponse({ annotations: [item()] }))

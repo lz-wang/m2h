@@ -23,6 +23,8 @@ export interface AnnotationState {
   selectedId: string | null;
 }
 
+const MAX_CONCURRENT_DELETES = 4;
+
 export interface AnnotationDeleteResult {
   deletedIds: string[];
   failures: Array<{ id: string; message: string }>;
@@ -203,29 +205,51 @@ export function useAnnotations(
         }));
         return result;
       }
-      for (const id of targets) {
-        try {
-          await deleteAnnotation(id);
-          result.deletedIds.push(id);
-          if (sameDocumentPath(identityRef.current, writtenFor)) {
-            if (
-              pendingWrites.current &&
-              sameDocumentPath(pendingWrites.current.identity, writtenFor)
-            ) {
-              pendingWrites.current.changes.set(id, null);
+      const failures = new Map<string, string>();
+      const queue = targets.values();
+      const deleteNext = async () => {
+        for (let target = queue.next(); !target.done; target = queue.next()) {
+          const id = target.value;
+          try {
+            await deleteAnnotation(id);
+            // A concurrent list response can contain items deleted before
+            // the batch finishes. Record each successful deletion immediately.
+            const writes = pendingWrites.current;
+            if (writes && sameDocumentPath(writes.identity, writtenFor)) {
+              writes.changes.set(id, null);
             }
-            setState((current) => ({
-              ...current,
-              items: current.items.filter((item) => item.id !== id),
-              selectedId: current.selectedId === id ? null : current.selectedId,
-            }));
+          } catch (error) {
+            failures.set(id, errorMessage(error, "删除标注失败，请重试。"));
           }
-        } catch (error) {
-          result.failures.push({
-            id,
-            message: errorMessage(error, "删除标注失败，请重试。"),
-          });
         }
+      };
+      await Promise.all(
+        Array.from(
+          { length: Math.min(targets.length, MAX_CONCURRENT_DELETES) },
+          deleteNext,
+        ),
+      );
+      for (const id of targets) {
+        const message = failures.get(id);
+        if (message === undefined) {
+          result.deletedIds.push(id);
+        } else {
+          result.failures.push({ id, message });
+        }
+      }
+      if (
+        result.deletedIds.length > 0 &&
+        sameDocumentPath(identityRef.current, writtenFor)
+      ) {
+        const deleted = new Set(result.deletedIds);
+        setState((current) => ({
+          ...current,
+          items: current.items.filter((item) => !deleted.has(item.id)),
+          selectedId:
+            current.selectedId !== null && deleted.has(current.selectedId)
+              ? null
+              : current.selectedId,
+        }));
       }
       return result;
     },
