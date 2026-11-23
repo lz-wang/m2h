@@ -52,11 +52,13 @@ interface TextSegment {
 export class TextIndex {
   readonly root: Element;
   readonly text: string;
-  private readonly segments: TextSegment[];
+  readonly length: number;
+  private readonly segments: TextSegment[] = [];
+  private readonly segmentsByNode = new WeakMap<Text, TextSegment>();
+  private readonly lowSurrogates: number[];
 
   constructor(root: Element) {
     this.root = root;
-    this.segments = [];
     let offset = 0;
     let text = "";
     const walker = document.createTreeWalker(
@@ -69,17 +71,22 @@ export class TextIndex {
       const segment = node as Text;
       const runes = codePointCount(segment.data);
       if (runes > 0) {
-        this.segments.push({ node: segment, startCP: offset, runes });
+        const entry = { node: segment, startCP: offset, runes };
+        this.segments.push(entry);
+        this.segmentsByNode.set(segment, entry);
         text += segment.data;
         offset += runes;
       }
       node = walker.nextNode();
     }
     this.text = text;
-  }
-
-  get length(): number {
-    return this.segments.reduce((total, segment) => total + segment.runes, 0);
+    this.length = offset;
+    // Store only the extra UTF-16 units in valid pairs. BMP characters
+    // and unpaired surrogates each use one unit and need no entry.
+    this.lowSurrogates = Array.from(
+      text.matchAll(/[\uD800-\uDBFF][\uDC00-\uDFFF]/g),
+      (match) => match.index + 1,
+    );
   }
 
   // spanFromRange converts a DOM range into a code-point span. Selections
@@ -97,21 +104,12 @@ export class TextIndex {
     if (!(container instanceof Text)) {
       return null;
     }
-    const segment = this.segmentFor(container);
-    if (segment === null) {
+    const segment = this.segmentsByNode.get(container);
+    if (segment === undefined) {
       return null;
     }
     const clamped = Math.min(Math.max(utf16Offset, 0), container.data.length);
     return segment.startCP + codePointsBefore(container.data, clamped);
-  }
-
-  private segmentFor(node: Text): TextSegment | null {
-    for (const segment of this.segments) {
-      if (segment.node === node) {
-        return segment;
-      }
-    }
-    return null;
   }
 
   // rangeFromSpan maps a code-point span back onto a live DOM range. The
@@ -141,27 +139,35 @@ export class TextIndex {
   }
 
   private resolveBoundary(cp: number): { node: Text; utf16: number } | null {
-    let remaining = cp;
-    for (const segment of this.segments) {
-      if (remaining <= segment.runes) {
-        return {
+    // A boundary shared by two nodes belongs to the preceding node.
+    const index = firstIndex(
+      this.segments,
+      ({ startCP, runes }) => startCP + runes < cp,
+    );
+    const segment = this.segments[index];
+    return segment === undefined
+      ? null
+      : {
           node: segment.node,
-          utf16: utf16OffsetAt(segment.node.data, remaining),
+          utf16: utf16OffsetAt(segment.node.data, cp - segment.startCP),
         };
-      }
-      remaining -= segment.runes;
-    }
-    // Offsets landing exactly on the end map to the last segment's end.
-    const last = this.segments.at(-1);
-    if (last !== undefined && remaining === 0 && cp > 0) {
-      return { node: last.node, utf16: last.node.data.length };
-    }
-    return null;
+  }
+
+  private utf16At(cp: number): number {
+    const pairs = firstIndex(
+      this.lowSurrogates,
+      (low, index) => low - index <= cp,
+    );
+    return cp + pairs;
   }
 
   // slice returns the canonical text between two code-point offsets.
   slice(start: number, end: number): string {
-    return cpSlice(this.text, start, end);
+    if (end <= start) return "";
+    return this.text.slice(
+      this.utf16At(Math.max(0, start)),
+      this.utf16At(Math.max(0, end)),
+    );
   }
 
   // context returns up to contextRunes characters around a span.
@@ -170,13 +176,11 @@ export class TextIndex {
     contextRunes = SELECTOR_CONTEXT_RUNES,
   ): Pick<TextQuote, "prefix" | "suffix"> {
     return {
-      prefix: cpSlice(
-        this.text,
+      prefix: this.slice(
         Math.max(0, position.start - contextRunes),
         position.start,
       ),
-      suffix: cpSlice(
-        this.text,
+      suffix: this.slice(
         position.end,
         Math.min(this.length, position.end + contextRunes),
       ),
@@ -191,12 +195,19 @@ export class TextIndex {
     }
     const starts: number[] = [];
     let from = 0;
+    let pairs = 0;
     for (;;) {
       const found = this.text.indexOf(needle, from);
       if (found === -1) {
         break;
       }
-      starts.push(utf16ToCodePoint(this.text, found));
+      while (
+        pairs < this.lowSurrogates.length &&
+        this.lowSurrogates[pairs] < found
+      ) {
+        pairs += 1;
+      }
+      starts.push(found - pairs);
       from = found + 1;
     }
     return starts;
@@ -260,17 +271,22 @@ function codePointCount(data: string): number {
   return count;
 }
 
-function utf16ToCodePoint(data: string, utf16Offset: number): number {
-  return codePointsBefore(data, utf16Offset);
-}
-
-function cpSlice(data: string, startCP: number, endCP: number): string {
-  if (endCP <= startCP) {
-    return "";
+// Return the first index for which the sorted prefix predicate is false.
+function firstIndex<T>(
+  values: readonly T[],
+  before: (value: T, index: number) => boolean,
+): number {
+  let start = 0;
+  let end = values.length;
+  while (start < end) {
+    const middle = Math.floor((start + end) / 2);
+    if (before(values[middle], middle)) {
+      start = middle + 1;
+    } else {
+      end = middle;
+    }
   }
-  const start = utf16OffsetAt(data, Math.max(0, startCP));
-  const end = utf16OffsetAt(data, endCP);
-  return data.slice(start, end);
+  return start;
 }
 
 // The block containers a selection must live inside as ONE unit: a

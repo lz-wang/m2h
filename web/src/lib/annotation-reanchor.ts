@@ -60,8 +60,9 @@ export function reanchor(
   // code points — the index's unit — never UTF-16 units, or every
   // astral-plane quote (emoji) would probe its context at a shifted
   // window and falsely collapse into ambiguity.
+  const exactRunes = runeLength(exact);
   const contextual = candidates.filter((start) =>
-    contextMatches(index, selector, start, runeLength(exact)),
+    contextMatches(index, selector, start, exactRunes),
   );
   const narrowed = contextual.length > 0 ? contextual : candidates;
 
@@ -106,7 +107,7 @@ export function reanchor(
 
   const position: TextPosition = {
     start: winner,
-    end: winner + runeLength(exact),
+    end: winner + exactRunes,
   };
   return {
     status: "resolved",

@@ -103,6 +103,16 @@ describe("TextIndex", () => {
     const index = new TextIndex(root);
     expect(index.findAll("重复")).toEqual([0, 3, 6]);
   });
+  it("finds overlapping Unicode quotes and preserves offsets across text nodes", () => {
+    const index = new TextIndex(mountBody("<p>甲😀<em>😀😀</em>甲</p>"));
+    expect(index.findAll("😀😀")).toEqual([1, 2]);
+    expect(index.findAll("甲")).toEqual([0, 4]);
+    expect(index.slice(1, 4)).toBe("😀😀😀");
+    expect(index.slice(4, 5)).toBe("甲");
+    expect(index.rangeFromSpan({ start: 1, end: 4 })?.toString()).toBe(
+      "😀😀😀",
+    );
+  });
 });
 
 describe("selectorFromRange", () => {
