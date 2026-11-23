@@ -10,7 +10,7 @@ import {
   deleteAnnotation,
   listAnnotations,
   reanchorAnnotation,
-  updateAnnotationComment,
+  updateAnnotation,
 } from "../api";
 
 // AnnotationState is the per-document annotation view: items are the
@@ -44,7 +44,7 @@ export interface UseAnnotationsResult extends AnnotationState {
   remove: (ids: string | string[]) => Promise<AnnotationDeleteResult>;
   // Persists a human-confirmed re-anchor (new selector) for one item.
   reanchor: (id: string, selector: AnnotationSelectorData) => Promise<boolean>;
-  editComment: (
+  update: (
     id: string,
     comment: string,
     color: AnnotationColor,
@@ -276,7 +276,7 @@ export function useAnnotations(
     setState((current) => ({ ...current, selectedId: id }));
   }, []);
 
-  const editComment = useCallback(
+  const update = useCallback(
     async (
       id: string,
       comment: string,
@@ -285,7 +285,7 @@ export function useAnnotations(
       const writtenFor = identityRef.current;
       if (writtenFor === null) return false;
       try {
-        const updated = await updateAnnotationComment(id, comment, color);
+        const updated = await updateAnnotation(id, comment, color);
         if (sameDocument(identityRef.current, writtenFor)) {
           if (
             pendingWrites.current &&
@@ -322,7 +322,7 @@ export function useAnnotations(
     create,
     remove,
     reanchor,
-    editComment,
+    update,
     select,
     clearError,
   };

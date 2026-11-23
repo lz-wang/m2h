@@ -1589,7 +1589,7 @@ export function App({
                     document={annotationExportDocument}
                     onLocate={locateAnnotation}
                     onDelete={annotations.remove}
-                    onEditComment={annotations.editComment}
+                    onUpdateAnnotation={annotations.update}
                     onReanchor={startReanchor}
                     onCopy={tokensEnabled ? copyAnnotations : undefined}
                   />
@@ -1661,7 +1661,7 @@ export function App({
                           : undefined
                       }
                       onSave={(comment, color) =>
-                        annotations.editComment(item.id, comment, color)
+                        annotations.update(item.id, comment, color)
                       }
                       deleting={popup.deleting ?? false}
                       deleteError={popup.deleteError}

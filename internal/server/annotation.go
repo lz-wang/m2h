@@ -342,7 +342,7 @@ func (handler *documentHandler) serveAnnotationItem(response http.ResponseWriter
 			writeJSONError(response, http.StatusMethodNotAllowed, "method not allowed")
 			return
 		}
-		handler.serveUpdateAnnotationComment(response, request, id)
+		handler.serveUpdateAnnotation(response, request, id)
 		return
 	}
 	if id, ok := strings.CutSuffix(remainder, "/anchor"); ok && id != "" {
@@ -357,7 +357,7 @@ func (handler *documentHandler) serveAnnotationItem(response http.ResponseWriter
 	handler.serveDeleteAnnotation(response, request)
 }
 
-func (handler *documentHandler) serveUpdateAnnotationComment(response http.ResponseWriter, request *http.Request, id string) {
+func (handler *documentHandler) serveUpdateAnnotation(response http.ResponseWriter, request *http.Request, id string) {
 	identity := principalFromRequest(request)
 	if identity == nil || identity.Via != principalViaSession {
 		writeJSONError(response, http.StatusForbidden, "annotation editing requires a browser session")
@@ -402,7 +402,7 @@ func (handler *documentHandler) serveUpdateAnnotationComment(response http.Respo
 		writeJSONError(response, http.StatusForbidden, "only the author can edit this annotation")
 		return
 	}
-	if err := dataStore.UpdateAnnotationComment(request.Context(), id, identity.ID, body.Comment, body.Color); err != nil {
+	if err := dataStore.UpdateAnnotation(request.Context(), id, identity.ID, body.Comment, body.Color); err != nil {
 		if errors.Is(err, store.ErrAnnotationNotFound) {
 			writeJSONError(response, http.StatusNotFound, "annotation not found")
 		} else {

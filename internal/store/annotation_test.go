@@ -111,7 +111,7 @@ func TestAnnotationColorDefaultsOnV4Upgrade(t *testing.T) {
 	}
 }
 
-func TestUpdateAnnotationComment(t *testing.T) {
+func TestUpdateAnnotation(t *testing.T) {
 	dataStore, rootID := openAnnotated(t)
 	ctx := context.Background()
 	entry := sampleAnnotation(rootID, "原评论")
@@ -120,17 +120,17 @@ func TestUpdateAnnotationComment(t *testing.T) {
 		t.Fatal(err)
 	}
 	green := annotation.ColorGreen
-	if err := dataStore.UpdateAnnotationComment(ctx, entry.ID, "local:bob", "无权修改", &green); !errors.Is(err, ErrAnnotationNotFound) {
+	if err := dataStore.UpdateAnnotation(ctx, entry.ID, "local:bob", "无权修改", &green); !errors.Is(err, ErrAnnotationNotFound) {
 		t.Fatalf("foreign edit: %v", err)
 	}
-	if err := dataStore.UpdateAnnotationComment(ctx, entry.ID, entry.AuthorID, "更新评论", nil); err != nil {
+	if err := dataStore.UpdateAnnotation(ctx, entry.ID, entry.AuthorID, "更新评论", nil); err != nil {
 		t.Fatal(err)
 	}
 	updated, err := dataStore.GetAnnotation(ctx, entry.ID)
 	if err != nil || updated.Comment != "更新评论" || updated.Color != annotation.ColorAmber {
 		t.Fatalf("updated = %+v, %v", updated, err)
 	}
-	if err := dataStore.UpdateAnnotationComment(ctx, "missing", entry.AuthorID, "x", &green); !errors.Is(err, ErrAnnotationNotFound) {
+	if err := dataStore.UpdateAnnotation(ctx, "missing", entry.AuthorID, "x", &green); !errors.Is(err, ErrAnnotationNotFound) {
 		t.Fatalf("missing edit: %v", err)
 	}
 }

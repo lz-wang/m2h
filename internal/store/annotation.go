@@ -134,8 +134,8 @@ func (store *Store) UpdateAnnotationSelector(ctx context.Context, id, authorID s
 	return nil
 }
 
-// UpdateAnnotationComment updates the author's comment and, if supplied, its color.
-func (store *Store) UpdateAnnotationComment(ctx context.Context, id, authorID, comment string, color *annotation.Color) error {
+// UpdateAnnotation updates the comment and optional color on the author's annotation.
+func (store *Store) UpdateAnnotation(ctx context.Context, id, authorID, comment string, color *annotation.Color) error {
 	result, err := store.db.ExecContext(ctx, `
 		UPDATE annotations SET comment = ?, color = COALESCE(?, color), updated_at = ?
 		WHERE id = ? AND author_id = ?`, comment, color, time.Now().UnixMilli(), id, authorID)

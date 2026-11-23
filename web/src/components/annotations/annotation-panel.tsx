@@ -36,7 +36,7 @@ export interface AnnotationPanelProps {
   // Scrolls the body to the annotation's live position.
   onLocate(id: string): void;
   onDelete(ids: string | string[]): Promise<AnnotationDeleteResult>;
-  onEditComment?(
+  onUpdateAnnotation?(
     id: string,
     comment: string,
     color: AnnotationColor,
@@ -60,7 +60,7 @@ export function AnnotationPanel({
   document,
   onLocate,
   onDelete,
-  onEditComment,
+  onUpdateAnnotation,
   onReanchor,
   onCopy,
 }: AnnotationPanelProps) {
@@ -170,7 +170,7 @@ export function AnnotationPanel({
                   <blockquote className="border-border text-muted-foreground border-l-2 pl-2 text-xs leading-relaxed">
                     {item.selector.quote.exact}
                   </blockquote>
-                  {editingId === item.id && onEditComment ? (
+                  {editingId === item.id && onUpdateAnnotation ? (
                     <AnnotationEditor
                       initial={item.comment}
                       initialColor={item.color}
@@ -179,7 +179,7 @@ export function AnnotationPanel({
                       onCancel={() => setEditingId(null)}
                       onSave={(comment, color) => {
                         setSavingComment(true);
-                        void onEditComment(item.id, comment, color)
+                        void onUpdateAnnotation(item.id, comment, color)
                           .then((saved) => {
                             if (saved) setEditingId(null);
                           })
@@ -238,7 +238,7 @@ export function AnnotationPanel({
                         />
                         {item.mine ? (
                           <>
-                            {onEditComment ? (
+                            {onUpdateAnnotation ? (
                               <AnnotationAction
                                 label="编辑此评论"
                                 onClick={() => setEditingId(item.id)}

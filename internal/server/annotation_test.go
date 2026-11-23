@@ -279,13 +279,13 @@ func TestAnnotationCommentRequiresStoreAndSession(t *testing.T) {
 	handler := &documentHandler{}
 	request := httptest.NewRequest(http.MethodPatch, "/api/annotations/a/comment", strings.NewReader(`{"comment":"x"}`))
 	response := httptest.NewRecorder()
-	handler.serveUpdateAnnotationComment(response, request, "a")
+	handler.serveUpdateAnnotation(response, request, "a")
 	if response.Code != http.StatusForbidden {
 		t.Fatalf("anonymous = %d", response.Code)
 	}
 	request = requestWithPrincipal(request, &principal{ID: "local:alice", Via: principalViaSession})
 	response = httptest.NewRecorder()
-	handler.serveUpdateAnnotationComment(response, request, "a")
+	handler.serveUpdateAnnotation(response, request, "a")
 	if response.Code != http.StatusServiceUnavailable {
 		t.Fatalf("no store = %d", response.Code)
 	}
