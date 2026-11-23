@@ -31,6 +31,7 @@ import type {
 import {
   useCallback,
   useEffect,
+  useEffectEvent,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -2240,11 +2241,16 @@ function PreviewContent({
   // DOM that is about to disappear. The body generation guard keeps a slow
   // runtime from notifying about a body the reader has already left, and a
   // theme switch never re-fires this (the body effect does not re-run).
+  const notifyBodyReady = useEffectEvent((root: HTMLElement) =>
+    onBodyReady?.(root),
+  );
+  const needsBodyIndex = onBodyReady !== undefined;
   useEffect(() => {
     // `html` re-arms this effect on every body swap; the generation guard
     // below discards notifications from a body the reader has left.
     void html;
-    if (phase !== "ready" || onBodyReady === undefined) {
+    void onVisualError;
+    if (phase !== "ready" || !needsBodyIndex) {
       return;
     }
     let cancelled = false;
@@ -2257,13 +2263,13 @@ function PreviewContent({
         bodyGenerationRef.current === generation &&
         root.isConnected
       ) {
-        onBodyReady(root);
+        notifyBodyReady(root);
       }
     });
     return () => {
       cancelled = true;
     };
-  }, [html, phase, onBodyReady]);
+  }, [html, phase, needsBodyIndex, onVisualError]);
 
   // A theme switch repaints only Mermaid diagrams, leaving the article DOM,
   // KaTeX, copy buttons, and any in-body focus untouched. On the initial render

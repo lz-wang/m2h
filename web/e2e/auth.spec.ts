@@ -474,6 +474,19 @@ test.describe("authenticated mode", () => {
       name: "标注面板",
     });
     await expect(annotationPanel).toContainText("已经补充备份方案");
+    await page.evaluate(() => {
+      const createTreeWalker = document.createTreeWalker.bind(document);
+      document.createTreeWalker = (root, whatToShow, filter) => {
+        if (
+          root instanceof HTMLElement &&
+          root.tagName === "ARTICLE" &&
+          whatToShow === NodeFilter.SHOW_TEXT
+        ) {
+          root.dataset.textIndexRebuilt = "true";
+        }
+        return createTreeWalker(root, whatToShow, filter);
+      };
+    });
     await annotationPanel.getByRole("button", { name: "编辑此评论" }).click();
     await expect(annotationPanel.locator("time")).toHaveCount(0);
     await expect(
@@ -483,6 +496,16 @@ test.describe("authenticated mode", () => {
     await annotationPanel.getByPlaceholder("添加评论…").fill("");
     await annotationPanel.getByRole("button", { name: "保存" }).click();
     await expect(annotationPanel).not.toContainText("已经补充备份方案");
+    // Wait for passive effects and their rich-content callbacks to settle.
+    await page.evaluate(
+      () =>
+        new Promise<void>((resolve) => {
+          requestAnimationFrame(() => requestAnimationFrame(() => resolve()));
+        }),
+    );
+    await expect(page.locator("article[data-text-index-rebuilt]")).toHaveCount(
+      0,
+    );
     const emptyComment = hoverCard.getByText("双击添加评论...", {
       exact: true,
     });
