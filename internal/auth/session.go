@@ -61,21 +61,49 @@ func (store *SQLiteSessionStore) Commit(token string, data []byte, expiry time.T
 	return err
 }
 
-// Refresh extends an active session's expiry without recreating a deleted
-// session or shortening the expiry set by a concurrent request.
-func (store *SQLiteSessionStore) Refresh(ctx context.Context, token string, lifetime time.Duration) (time.Time, error) {
+// Refresh extends an active session only when minInterval has elapsed since
+// its last renewal. Zero expiry means the session is missing or expired.
+func (store *SQLiteSessionStore) Refresh(ctx context.Context, token string, lifetime, minInterval time.Duration) (time.Time, bool, error) {
 	now := time.Now()
+	idHash := hashSessionToken(token)
+	expiry, err := store.activeExpiry(ctx, idHash, now)
+	if err != nil || expiry.IsZero() {
+		return expiry, false, err
+	}
+	nextExpiry := now.Add(lifetime)
+	threshold := nextExpiry.Add(-minInterval)
+	if expiry.After(threshold) {
+		return expiry, false, nil
+	}
+
+	var renewed int64
+	err = store.db.QueryRowContext(ctx,
+		`UPDATE sessions SET expires_at = ?
+		 WHERE id_hash = ? AND expires_at > ? AND expires_at <= ? RETURNING expires_at`,
+		nextExpiry.UnixMilli(), idHash, time.Now().UnixMilli(), threshold.UnixMilli(),
+	).Scan(&renewed)
+	if err == sql.ErrNoRows {
+		// Another request renewed or removed the session after our read.
+		expiry, err = store.activeExpiry(ctx, idHash, time.Now())
+		return expiry, false, err
+	}
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("refresh session expiry: %w", err)
+	}
+	return time.UnixMilli(renewed), true, nil
+}
+
+func (store *SQLiteSessionStore) activeExpiry(ctx context.Context, idHash string, now time.Time) (time.Time, error) {
 	var expiry int64
 	err := store.db.QueryRowContext(ctx,
-		`UPDATE sessions SET expires_at = MAX(expires_at, ?)
-		 WHERE id_hash = ? AND expires_at > ? RETURNING expires_at`,
-		now.Add(lifetime).UnixMilli(), hashSessionToken(token), now.UnixMilli(),
+		`SELECT expires_at FROM sessions WHERE id_hash = ? AND expires_at > ?`,
+		idHash, now.UnixMilli(),
 	).Scan(&expiry)
 	if err == sql.ErrNoRows {
 		return time.Time{}, nil
 	}
 	if err != nil {
-		return time.Time{}, fmt.Errorf("refresh session expiry: %w", err)
+		return time.Time{}, fmt.Errorf("read session expiry: %w", err)
 	}
 	return time.UnixMilli(expiry), nil
 }

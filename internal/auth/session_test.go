@@ -50,7 +50,7 @@ func TestSessionStoreCommitFindDelete(t *testing.T) {
 	if _, found, _ := sessionStore.Find("token-1"); found {
 		t.Fatalf("deleted session still found")
 	}
-	if expiry, err := sessionStore.Refresh(context.Background(), "token-1", time.Hour); err != nil || !expiry.IsZero() {
+	if expiry, renewed, err := sessionStore.Refresh(context.Background(), "token-1", time.Hour, time.Minute); err != nil || renewed || !expiry.IsZero() {
 		t.Fatalf("refresh deleted session = %v, %v", expiry, err)
 	}
 	// Deleting again is a no-op.
@@ -67,11 +67,56 @@ func TestSessionStoreExpiredSessionsNotServed(t *testing.T) {
 	if _, found, err := sessionStore.Find("stale"); found || err != nil {
 		t.Fatalf("expired session served: %v %v", found, err)
 	}
-	if expiry, err := sessionStore.Refresh(context.Background(), "stale", time.Hour); err != nil || !expiry.IsZero() {
+	if expiry, renewed, err := sessionStore.Refresh(context.Background(), "stale", time.Hour, time.Minute); err != nil || renewed || !expiry.IsZero() {
 		t.Fatalf("refresh expired session = %v, %v", expiry, err)
 	}
 	if err := sessionStore.CleanupSessions(context.Background()); err != nil {
 		t.Fatalf("cleanup failed: %v", err)
+	}
+}
+
+func TestConcurrentSessionRefreshRenewsOnce(t *testing.T) {
+	sessionStore := openSessionStore(t)
+	const lifetime = time.Hour
+	const interval = 10 * time.Minute
+	const requests = 32
+	ctx := t.Context()
+	if err := sessionStore.Commit("active", []byte("payload"), time.Now().Add(lifetime-2*interval)); err != nil {
+		t.Fatal(err)
+	}
+
+	type result struct {
+		expiry  time.Time
+		renewed bool
+		err     error
+	}
+	start := make(chan struct{})
+	results := make(chan result, requests)
+	for range requests {
+		go func() {
+			<-start
+			expiry, renewed, err := sessionStore.Refresh(ctx, "active", lifetime, interval)
+			results <- result{expiry, renewed, err}
+		}()
+	}
+	close(start)
+
+	first := <-results
+	all := []result{first}
+	for range requests - 1 {
+		all = append(all, <-results)
+	}
+	renewals := 0
+	for _, got := range all {
+		if got.err != nil || got.expiry.IsZero() || !got.expiry.Equal(first.expiry) {
+			t.Errorf("refresh = %v, %v, %v, want expiry %v", got.expiry, got.renewed, got.err, first.expiry)
+		}
+		if got.renewed {
+			renewals++
+		}
+	}
+	if renewals != 1 {
+		t.Fatalf("renewals = %d, want 1", renewals)
 	}
 }
 

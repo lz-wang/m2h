@@ -37,7 +37,10 @@ const (
 // runs. The default mode never starts this loop.
 const sessionCleanupInterval = time.Hour
 
-const sessionLifetime = 7 * 24 * time.Hour
+const (
+	sessionLifetime        = 7 * 24 * time.Hour
+	sessionRefreshInterval = 10 * time.Minute
+)
 
 // authStack bundles everything an authenticated run adds to the server:
 // the authenticator behind the mode, the scs session manager backed by

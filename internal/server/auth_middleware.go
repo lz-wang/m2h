@@ -80,7 +80,7 @@ func (handler *documentHandler) authenticate(next http.Handler) http.Handler {
 		if (!public && path != "/api/auth/logout") || path == "/" || strings.HasPrefix(path, "/doc/") {
 			ctx := request.Context()
 			token := handler.auth.sessions.Token(ctx)
-			expiry, err := handler.auth.sessionStore.Refresh(ctx, token, sessionLifetime)
+			expiry, renewed, err := handler.auth.sessionStore.Refresh(ctx, token, sessionLifetime, sessionRefreshInterval)
 			if err != nil {
 				handler.auth.sessions.ErrorFunc(response, request, err)
 				return
@@ -93,7 +93,9 @@ func (handler *documentHandler) authenticate(next http.Handler) http.Handler {
 				}
 				return
 			}
-			handler.auth.sessions.WriteSessionCookie(ctx, response, token, expiry)
+			if renewed {
+				handler.auth.sessions.WriteSessionCookie(ctx, response, token, expiry)
+			}
 		}
 		next.ServeHTTP(response, requestWithPrincipal(request, identity))
 	})

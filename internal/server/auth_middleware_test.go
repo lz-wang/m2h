@@ -337,12 +337,14 @@ func TestSessionLifetimeSlidesOnActivity(t *testing.T) {
 		name       string
 		method     string
 		path       string
+		fresh      bool
 		crossSite  bool
 		expired    bool
 		wantStatus int
 		renews     bool
 	}{
 		{name: "identity API", method: http.MethodGet, path: "/api/auth/me", wantStatus: http.StatusOK, renews: true},
+		{name: "recently renewed session", method: http.MethodGet, path: "/api/auth/me", fresh: true, wantStatus: http.StatusOK},
 		{name: "document shell", method: http.MethodGet, path: "/doc/guide.md", wantStatus: http.StatusOK, renews: true},
 		{name: "health probe", method: http.MethodGet, path: "/healthz", wantStatus: http.StatusOK},
 		{name: "cross-origin mutation", method: http.MethodPost, path: "/api/annotations", crossSite: true, wantStatus: http.StatusForbidden},
@@ -357,6 +359,9 @@ func TestSessionLifetimeSlidesOnActivity(t *testing.T) {
 
 			// Simulate an existing session close to its persisted expiry.
 			oldExpiry := time.Now().Add(time.Hour)
+			if tc.fresh {
+				oldExpiry = time.Now().Add(sevenDays - time.Minute)
+			}
 			if tc.expired {
 				oldExpiry = time.Now().Add(-time.Second)
 			}
