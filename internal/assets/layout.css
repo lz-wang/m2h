@@ -325,9 +325,16 @@ html.m2h-mode-dark {
   }
 }
 
+/* Keep the full header in the column's minimum width. */
 .markdown-body table:not([class]) thead th {
   position: relative;
   padding-right: 2rem;
+  white-space: nowrap;
+}
+
+.markdown-body table:not([class]) thead th code {
+  /* Preserve code spacing without the base stylesheet's wrap points. */
+  white-space: pre;
 }
 
 .markdown-body th[role="columnheader"]:not([data-sort-method="none"]) {

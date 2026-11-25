@@ -263,7 +263,7 @@ func TestStylesheetSortableHeaderGeometryIsStatic(t *testing.T) {
 		t.Fatalf("Stylesheet(\"light\") returned error: %v", err)
 	}
 	for _, want := range []string{
-		".markdown-body table:not([class]) thead th {\n  position: relative;\n  padding-right: 2rem;\n}",
+		".markdown-body table:not([class]) thead th {\n  position: relative;\n  padding-right: 2rem;\n  white-space: nowrap;\n}",
 		".markdown-body th[role=\"columnheader\"]:not([data-sort-method=\"none\"]) {\n  cursor: pointer;\n  user-select: none;\n}",
 	} {
 		if !strings.Contains(stylesheet, want) {

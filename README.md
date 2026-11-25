@@ -102,7 +102,7 @@ m2h check docs
 
 | 类别 | 支持内容与演示 |
 | --- | --- |
-| GitHub 风格 | GFM、[语法高亮](docs/demos/syntax-highlight/00-index.md)、标题锚点、脚注、Emoji、GitHub Alerts、可排序表格 |
+| GitHub 风格 | GFM、[语法高亮](docs/demos/syntax-highlight/00-index.md)、标题锚点、脚注、Emoji、GitHub Alerts、[单行表头与表格排序](docs/demos/table-layout.md) |
 | 富内容 | [数学公式](docs/demos/math.md)、[Mermaid 图表与浏览器兼容要求](docs/demos/mermaid/00-index.md) |
 | 元数据 | [Frontmatter 标题、日期与描述](docs/demos/frontmatter/00-index.md) |
 | 本地引用 | [文档、图片与目录链接](docs/demos/checkers/02-local-target-missing.md) |
