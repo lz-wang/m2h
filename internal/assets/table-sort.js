@@ -42,11 +42,14 @@ export function enhanceSortableTables(root, Tablesort) {
     table.dataset.m2hSortable = "true";
 
     let current;
+    let defaultHeader;
     const controls = headers.map((cell) => {
       const label = cell.textContent.trim();
       const button = table.ownerDocument.createElement("button");
       button.type = "button";
       button.className = "m2h-sort-button";
+      button.dataset.m2hDecor = "table-sort";
+      if (cell.hasAttribute("data-sort-default")) defaultHeader = cell;
       cell.setAttribute("aria-sort", "none");
       cell.append(button);
       button.addEventListener("click", () => sortBy(cell));
@@ -75,9 +78,6 @@ export function enhanceSortableTables(root, Tablesort) {
       syncButtons();
     }
 
-    const defaultHeader = headers.findLast((cell) =>
-      cell.hasAttribute("data-sort-default"),
-    );
     if (defaultHeader) sortBy(defaultHeader);
     else syncButtons();
   }

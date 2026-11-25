@@ -27,23 +27,21 @@ export default defineConfig({
     baseURL: `http://127.0.0.1:${port}`,
   },
   // Desktop Chromium owns the full suite (the touch-drag regressions drive
-  // CDP, which exists only there); mobile-sidebar.spec.ts runs under the two
-  // phone profiles — hasTouch + isMobile emulation a desktop viewport never
-  // exercises — so the sidebar sheet's focus and first-swipe contracts hold
-  // on real touch opens in both engines.
+  // CDP, which exists only there). The phone profiles cover touch interaction
+  // with the mobile sidebar and table controls in both engines.
   projects: [
     {
       name: "chromium",
-      testIgnore: /mobile-sidebar/,
+      testIgnore: /mobile-(sidebar|table-layout)/,
     },
     {
       name: "mobile-chromium",
-      testMatch: /mobile-sidebar/,
+      testMatch: /mobile-(sidebar|table-layout)/,
       use: { ...devices["Pixel 7"] },
     },
     {
       name: "mobile-webkit",
-      testMatch: /mobile-sidebar/,
+      testMatch: /mobile-(sidebar|table-layout)/,
       use: { ...devices["iPhone 13"] },
     },
   ],
