@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -75,7 +76,7 @@ func TestAnnotationRoundTrip(t *testing.T) {
 	}
 }
 
-func TestAnnotationColorDefaultsOnV4Upgrade(t *testing.T) {
+func TestAnnotationColorsSurviveUpgrade(t *testing.T) {
 	ctx := context.Background()
 	dataStore, err := Open(t.TempDir())
 	if err != nil {
@@ -102,12 +103,26 @@ func TestAnnotationColorDefaultsOnV4Upgrade(t *testing.T) {
 	`, rootID); err != nil {
 		t.Fatal(err)
 	}
+	if err := dataStore.apply(ctx, migrations[4]); err != nil {
+		t.Fatal(err)
+	}
+	for _, color := range []annotation.Color{annotation.ColorGreen, annotation.ColorAmber} {
+		entry := sampleAnnotation(rootID, string(color))
+		entry.Color = color
+		if err := dataStore.CreateAnnotation(ctx, &entry); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before, err := dataStore.ListAnnotations(ctx, rootID, "design.md")
+	if err != nil || len(before) != 3 || before[0].Color != annotation.ColorBlue {
+		t.Fatalf("v5 annotations = %+v, %v", before, err)
+	}
 	if err := dataStore.Migrate(ctx); err != nil {
 		t.Fatal(err)
 	}
-	entry, err := dataStore.GetAnnotation(ctx, "old")
-	if err != nil || entry.Color != annotation.ColorBlue || entry.Comment != "old comment" || entry.UpdatedAt != 2 {
-		t.Fatalf("migrated annotation = %+v, %v", entry, err)
+	after, err := dataStore.ListAnnotations(ctx, rootID, "design.md")
+	if err != nil || !slices.Equal(before, after) {
+		t.Fatalf("migrated annotations = %+v, %v, want %+v", after, err, before)
 	}
 }
 

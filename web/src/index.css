@@ -2240,6 +2240,8 @@ body,
   --annotation-blue: #0969da;
   --annotation-green: #1a7f37;
   --annotation-amber: #bf8700;
+  --annotation-red: #cf222e;
+  --annotation-purple: #8250df;
   --annotation-fill: 19%;
   --annotation-fill-active: 31%;
 }
@@ -2248,6 +2250,8 @@ body,
   --annotation-blue: #58a6ff;
   --annotation-green: #3fb950;
   --annotation-amber: #d29922;
+  --annotation-red: #f85149;
+  --annotation-purple: #ab7df8;
   --annotation-fill: 39%;
   --annotation-fill-active: 47%;
 }
@@ -2262,6 +2266,14 @@ body,
 
 [data-annotation-color="amber"] {
   --annotation-accent: var(--annotation-amber);
+}
+
+[data-annotation-color="red"] {
+  --annotation-accent: var(--annotation-red);
+}
+
+[data-annotation-color="purple"] {
+  --annotation-accent: var(--annotation-purple);
 }
 
 [data-annotation-id][data-annotation-color] {
@@ -2317,6 +2329,22 @@ textarea[data-annotation-color]:focus-visible {
   );
 }
 
+::highlight(m2h-annotations-red) {
+  background-color: color-mix(
+    in srgb,
+    var(--annotation-red) var(--annotation-fill),
+    transparent
+  );
+}
+
+::highlight(m2h-annotations-purple) {
+  background-color: color-mix(
+    in srgb,
+    var(--annotation-purple) var(--annotation-fill),
+    transparent
+  );
+}
+
 ::highlight(m2h-annotations-active),
 ::highlight(m2h-annotation-draft) {
   background-color: color-mix(
@@ -2340,6 +2368,24 @@ textarea[data-annotation-color]:focus-visible {
   background-color: color-mix(
     in srgb,
     var(--annotation-amber) var(--annotation-fill-active),
+    transparent
+  );
+}
+
+::highlight(m2h-annotations-red-active),
+::highlight(m2h-annotation-draft-red) {
+  background-color: color-mix(
+    in srgb,
+    var(--annotation-red) var(--annotation-fill-active),
+    transparent
+  );
+}
+
+::highlight(m2h-annotations-purple-active),
+::highlight(m2h-annotation-draft-purple) {
+  background-color: color-mix(
+    in srgb,
+    var(--annotation-purple) var(--annotation-fill-active),
     transparent
   );
 }

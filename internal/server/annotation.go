@@ -14,6 +14,8 @@ import (
 	"github.com/lz-wang/m2h/internal/store"
 )
 
+const invalidAnnotationColor = "annotation color must be amber, green, red, purple, or blue"
+
 // annotation API wire types. The selector shape mirrors the persisted
 // model one-to-one; comments travel as plain text and are rendered as
 // plain text by the WebUI.
@@ -235,7 +237,7 @@ func (handler *documentHandler) serveCreateAnnotation(response http.ResponseWrit
 	}
 	color := body.Color.WithDefault()
 	if !color.Valid() {
-		writeJSONError(response, http.StatusBadRequest, "annotation color must be blue, green, or amber")
+		writeJSONError(response, http.StatusBadRequest, invalidAnnotationColor)
 		return
 	}
 	if !strings.HasPrefix(body.DocumentHash, "sha256:") {
@@ -382,7 +384,7 @@ func (handler *documentHandler) serveUpdateAnnotation(response http.ResponseWrit
 		return
 	}
 	if body.Color != nil && !body.Color.Valid() {
-		writeJSONError(response, http.StatusBadRequest, "annotation color must be blue, green, or amber")
+		writeJSONError(response, http.StatusBadRequest, invalidAnnotationColor)
 		return
 	}
 	entry, err := dataStore.GetAnnotation(request.Context(), id)

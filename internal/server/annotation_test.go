@@ -105,7 +105,7 @@ func TestAnnotationCreateListDeleteLifecycle(t *testing.T) {
 		t.Fatalf("decode created: %v", err)
 	}
 	created.Body.Close()
-	if entry.ID == "" || entry.AuthorName != "alice" || !entry.Mine || entry.Quote != "Body text" || entry.Color != "blue" {
+	if entry.ID == "" || entry.AuthorName != "alice" || !entry.Mine || entry.Quote != "Body text" || entry.Color != "amber" {
 		t.Fatalf("created annotation = %+v", entry)
 	}
 
@@ -154,11 +154,23 @@ func TestAnnotationCreateListDeleteLifecycle(t *testing.T) {
 
 func TestAnnotationCreateColor(t *testing.T) {
 	fixture := newAnnotationFixture(t)
-	for _, color := range []string{"blue", "green", "amber", "purple"} {
-		t.Run(color, func(t *testing.T) {
-			response := fixture.createAnnotationWithColor(t, fixture.alice, "", color)
+	var colors []string
+	for _, test := range []struct {
+		requested string
+		want      string
+	}{
+		{"amber", "amber"},
+		{"green", "green"},
+		{"red", "red"},
+		{"purple", "purple"},
+		{"blue", "blue"},
+		{"", "amber"},
+		{"orange", ""},
+	} {
+		t.Run("color="+test.requested, func(t *testing.T) {
+			response := fixture.createAnnotationWithColor(t, fixture.alice, "", test.requested)
 			defer response.Body.Close()
-			if color == "purple" {
+			if test.want == "" {
 				if response.StatusCode != http.StatusBadRequest {
 					t.Fatalf("unsupported color returned %d, want 400", response.StatusCode)
 				}
@@ -171,15 +183,21 @@ func TestAnnotationCreateColor(t *testing.T) {
 			if err := json.NewDecoder(response.Body).Decode(&entry); err != nil {
 				t.Fatal(err)
 			}
-			if string(entry.Color) != color {
-				t.Fatalf("created color = %q, want %q", entry.Color, color)
+			if string(entry.Color) != test.want {
+				t.Fatalf("created color = %q, want %q", entry.Color, test.want)
 			}
+			colors = append(colors, test.want)
 		})
 	}
 	list := fixture.do(fixture.requestWithSession(http.MethodGet, "/api/annotations?path=guide.md", fixture.alice, nil))
 	entries := decodeAnnotations(t, list)
-	if len(entries) != 3 || entries[0].Color != "blue" || entries[1].Color != "green" || entries[2].Color != "amber" {
+	if len(entries) != len(colors) {
 		t.Fatalf("stored annotations = %+v", entries)
+	}
+	for index, color := range colors {
+		if string(entries[index].Color) != color {
+			t.Errorf("stored color %d = %q, want %q", index, entries[index].Color, color)
+		}
 	}
 }
 
@@ -197,7 +215,7 @@ func TestAnnotationCommentEditingAuthorization(t *testing.T) {
 		want    int
 	}{{"other author", fixture.bob, http.StatusForbidden}, {"author", fixture.alice, http.StatusOK}} {
 		t.Run(test.name, func(t *testing.T) {
-			request, _ := http.NewRequest(http.MethodPatch, fixture.server.URL+"/api/annotations/"+entry.ID+"/comment", strings.NewReader(`{"comment":"新评论","color":"green"}`))
+			request, _ := http.NewRequest(http.MethodPatch, fixture.server.URL+"/api/annotations/"+entry.ID+"/comment", strings.NewReader(`{"comment":"新评论","color":"purple"}`))
 			request.Header.Set("Origin", fixture.server.URL)
 			request.AddCookie(test.session)
 			response := fixture.do(request)
@@ -210,14 +228,14 @@ func TestAnnotationCommentEditingAuthorization(t *testing.T) {
 				if err := json.NewDecoder(response.Body).Decode(&updated); err != nil {
 					t.Fatal(err)
 				}
-				if updated.Color != "green" || updated.Comment != "新评论" || updated.Selector != entry.Selector {
+				if updated.Color != "purple" || updated.Comment != "新评论" || updated.Selector != entry.Selector {
 					t.Fatalf("edit response = %+v", updated)
 				}
 			}
 		})
 	}
 	updated, err := fixture.stack.dataStore.GetAnnotation(context.Background(), entry.ID)
-	if err != nil || updated.Comment != "新评论" || updated.Color != "green" {
+	if err != nil || updated.Comment != "新评论" || updated.Color != "purple" {
 		t.Fatalf("updated = %+v, %v", updated, err)
 	}
 }
@@ -236,7 +254,7 @@ func TestAnnotationCommentEditingValidation(t *testing.T) {
 	}{
 		{"invalid JSON", entry.ID, http.MethodPatch, "{", http.StatusBadRequest},
 		{"long comment", entry.ID, http.MethodPatch, `{"comment":"` + strings.Repeat("x", 10001) + `"}`, http.StatusBadRequest},
-		{"invalid color", entry.ID, http.MethodPatch, `{"comment":"x","color":"purple"}`, http.StatusBadRequest},
+		{"invalid color", entry.ID, http.MethodPatch, `{"comment":"x","color":"orange"}`, http.StatusBadRequest},
 		{"empty color", entry.ID, http.MethodPatch, `{"comment":"x","color":""}`, http.StatusBadRequest},
 		{"missing", "missing", http.MethodPatch, `{"comment":"x"}`, http.StatusNotFound},
 		{"wrong method", entry.ID, http.MethodPost, `{"comment":"x"}`, http.StatusMethodNotAllowed},

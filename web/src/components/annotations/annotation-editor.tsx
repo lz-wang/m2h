@@ -20,9 +20,11 @@ export interface AnnotationEditorProps {
 }
 
 const colorLabels: Record<AnnotationColor, string> = {
-  blue: "蓝色",
-  green: "绿色",
   amber: "琥珀色",
+  green: "绿色",
+  red: "红色",
+  purple: "紫色",
+  blue: "蓝色",
 };
 
 // AnnotationEditor is the one-box comment editor shared by the selection
@@ -68,7 +70,7 @@ export function AnnotationEditor({
           }
         }}
       />
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         <fieldset className="flex items-center gap-0.5" aria-label="标注颜色">
           {ANNOTATION_COLORS.map((option) => (
             <Button

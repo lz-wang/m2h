@@ -330,9 +330,19 @@ export interface AnnotationSelectorData {
   version: 1;
 }
 
-export const ANNOTATION_COLORS = ["blue", "green", "amber"] as const;
+export const ANNOTATION_COLORS = [
+  "amber",
+  "green",
+  "red",
+  "purple",
+  "blue",
+] as const;
 export type AnnotationColor = (typeof ANNOTATION_COLORS)[number];
-export const DEFAULT_ANNOTATION_COLOR: AnnotationColor = "blue";
+export const DEFAULT_ANNOTATION_COLOR: AnnotationColor = "amber";
+
+function isAnnotationColor(value: unknown): value is AnnotationColor {
+  return ANNOTATION_COLORS.some((color) => color === value);
+}
 
 export interface AnnotationItem {
   id: string;
@@ -372,9 +382,10 @@ function parseAnnotationItem(value: unknown): AnnotationItem {
     throw new Error("标注响应格式无效");
   }
   const selector = value.selector;
-  const color = value.color ?? DEFAULT_ANNOTATION_COLOR;
+  // Responses from servers that predate color support represent blue highlights.
+  const color = value.color ?? "blue";
   if (
-    (color !== "blue" && color !== "green" && color !== "amber") ||
+    !isAnnotationColor(color) ||
     !isRecord(selector.quote) ||
     typeof selector.quote.exact !== "string" ||
     typeof selector.quote.prefix !== "string" ||

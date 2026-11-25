@@ -106,6 +106,16 @@ var migrations = []migration{
 				CHECK (color IN ('blue', 'green', 'amber'))`,
 		},
 	},
+	{
+		version: 6,
+		statements: []string{
+			`ALTER TABLE annotations RENAME COLUMN color TO previous_color`,
+			`ALTER TABLE annotations ADD COLUMN color TEXT NOT NULL DEFAULT 'amber'
+				CHECK (color IN ('amber', 'green', 'red', 'purple', 'blue'))`,
+			`UPDATE annotations SET color = previous_color`,
+			`ALTER TABLE annotations DROP COLUMN previous_color`,
+		},
+	},
 }
 
 // latestVersion is the highest schema version this build understands.

@@ -135,7 +135,9 @@ describe("SelectionToolbar", () => {
     await userEvent.click(screen.getByRole("button", { name: "标注" }));
 
     expect(
-      screen.getByRole("button", { name: "蓝色" }).getAttribute("aria-pressed"),
+      screen
+        .getByRole("button", { name: "琥珀色" })
+        .getAttribute("aria-pressed"),
     ).toBe("true");
     await userEvent.click(screen.getByRole("button", { name: "绿色" }));
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
@@ -153,8 +155,8 @@ describe("SelectionToolbar", () => {
     expect(screen.queryByRole("toolbar", { name: "标注选中文本" })).toBeNull();
     select(0, 2);
     await userEvent.click(await screen.findByRole("button", { name: "标注" }));
-    const blue = await screen.findByRole("button", { name: "蓝色" });
-    expect(blue.getAttribute("aria-pressed")).toBe("true");
+    const amber = await screen.findByRole("button", { name: "琥珀色" });
+    expect(amber.getAttribute("aria-pressed")).toBe("true");
   });
 
   it("opens the comment editor and submits its text", async () => {
@@ -172,12 +174,12 @@ describe("SelectionToolbar", () => {
     await userEvent.click(await screen.findByRole("button", { name: "标注" }));
     const editor = await screen.findByPlaceholderText("添加评论…");
     await userEvent.type(editor, "需要补充备份");
-    await userEvent.click(screen.getByRole("button", { name: "琥珀色" }));
-    expect(editor.getAttribute("data-annotation-color")).toBe("amber");
+    await userEvent.click(screen.getByRole("button", { name: "红色" }));
+    expect(editor.getAttribute("data-annotation-color")).toBe("red");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(onAnnotate).toHaveBeenCalledTimes(1));
     expect(onAnnotate.mock.calls[0]?.[1]).toBe("需要补充备份");
-    expect(onAnnotate.mock.calls[0]?.[2]).toBe("amber");
+    expect(onAnnotate.mock.calls[0]?.[2]).toBe("red");
   });
 
   it("restores the original selection when comment editing is canceled", async () => {
@@ -210,14 +212,14 @@ describe("SelectionToolbar", () => {
     await userEvent.click(await screen.findByRole("button", { name: "标注" }));
     const editor =
       await screen.findByPlaceholderText<HTMLTextAreaElement>("添加评论…");
-    await userEvent.click(screen.getByRole("button", { name: "琥珀色" }));
+    await userEvent.click(screen.getByRole("button", { name: "紫色" }));
     await userEvent.type(editor, "草稿");
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     expect((await screen.findByRole("alert")).textContent).toContain(
       "保存失败",
     );
     expect(editor.value).toBe("草稿");
-    expect(editor.getAttribute("data-annotation-color")).toBe("amber");
+    expect(editor.getAttribute("data-annotation-color")).toBe("purple");
   });
 
   it("never appears for collapsed or decoration-only selections", () => {

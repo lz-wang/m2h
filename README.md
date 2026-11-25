@@ -77,7 +77,8 @@ m2h export README.md
 M2H_LOCAL_USERS_JSON='{"alice":"请替换为你的密码"}' m2h docs --auth local
 ```
 
-登录后，选中正文并点击「标注」。LDAP 配置见 [内置认证](docs/deployment.md#内置认证可选v0270-起)。
+登录后，选中正文并点击「标注」。可选琥珀、绿、红、紫、蓝五色，默认琥珀色。
+LDAP 配置见 [内置认证](docs/deployment.md#内置认证可选v0270-起)。
 
 ### 检查 Markdown
 

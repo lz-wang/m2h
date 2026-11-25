@@ -15,21 +15,28 @@ const SelectorVersion = 1
 type Color string
 
 const (
-	ColorBlue  Color = "blue"
-	ColorGreen Color = "green"
-	ColorAmber Color = "amber"
+	ColorAmber  Color = "amber"
+	ColorGreen  Color = "green"
+	ColorRed    Color = "red"
+	ColorPurple Color = "purple"
+	ColorBlue   Color = "blue"
 )
 
-// WithDefault returns blue for clients that omit the color.
+// WithDefault returns amber for clients that omit the color.
 func (color Color) WithDefault() Color {
 	if color == "" {
-		return ColorBlue
+		return ColorAmber
 	}
 	return color
 }
 
 func (color Color) Valid() bool {
-	return color == ColorBlue || color == ColorGreen || color == ColorAmber
+	switch color {
+	case ColorAmber, ColorGreen, ColorRed, ColorPurple, ColorBlue:
+		return true
+	default:
+		return false
+	}
 }
 
 // Field limits, enforced server-side so a malicious or buggy client cannot
