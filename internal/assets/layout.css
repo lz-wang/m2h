@@ -273,37 +273,8 @@ html.m2h-mode-dark {
   margin-right: 0.375rem;
 }
 
-/*
- * Sortable table headers, enhanced at runtime in both the standalone
- * rich-content script and the WebUI. Tablesort stamps role=columnheader on
- * header cells it wires up and writes the active direction to aria-sort, so
- * the indicator keys off those attributes; headers opted out through
- * data-sort-method="none" (interactive cells) keep their native semantics.
- *
- * The indicator is Lucide's arrow-down-up vector applied as a CSS mask: the
- * body is not React-rendered (neither is the standalone output), so a mask
- * keeps one shared stylesheet serving both without any JS DOM injection.
- * The icon paints in --m2h-sort-fg through background-color and follows the
- * theme automatically. The active column always shows the icon at full
- * opacity — direction itself stays conveyed by aria-sort and the header
- * title — while an unsorted column only hints its affordance on hover/focus,
- * so headers read clean at rest. The reserved right padding keeps the icon
- * from overlapping header text.
- *
- * Geometry is reserved statically: every plain GFM header cell (the same
- * classless <table> the sorter targets) carries the indicator space from the
- * first layout pass, so Tablesort attaching its attributes never changes
- * column widths or table height and cannot shift a just-restored scroll
- * position. Only interaction properties are keyed on the runtime attributes,
- * because those do not affect layout.
- *
- * The icon, hover wash, and focus ring colors are m2h variables because
- * github-markdown-css defines no theme variables under these names — a bare
- * var(--bgColor-muted, …) would silently fall back to the light value on the
- * #0d1117 dark page. Dark mode (and the auto dark media query) therefore
- * swap the palette explicitly, mirroring the keycap tokens below. The mask
- * itself is theme-independent (alpha only) and defined once.
- */
+/* Tables reserve space for the sort button before the runtime loads.
+ * The button uses a Lucide arrow as a mask so it follows the theme. */
 html {
   --m2h-sort-fg: #59636e;
   --m2h-sort-hover-bg: #f6f8fa;
@@ -326,7 +297,8 @@ html.m2h-mode-dark {
 }
 
 /* Keep the full header in the column's minimum width. */
-.markdown-body table:not([class]) thead th {
+.markdown-body table:not([class]) thead th,
+.markdown-body table:not([class]) thead td {
   position: relative;
   padding-right: 2rem;
   white-space: nowrap;
@@ -337,61 +309,42 @@ html.m2h-mode-dark {
   white-space: pre;
 }
 
-.markdown-body th[role="columnheader"]:not([data-sort-method="none"]) {
-  cursor: pointer;
-  user-select: none;
-}
-
-.markdown-body th[role="columnheader"]:not([data-sort-method="none"])::after {
+.markdown-body .m2h-sort-button {
+  all: unset;
   position: absolute;
   top: 50%;
-  right: 0.75rem;
-
-  width: 0.875rem;
-  height: 0.875rem;
-
-  background-color: var(--m2h-sort-fg);
-
-  -webkit-mask-image: var(--m2h-sort-icon);
-  mask-image: var(--m2h-sort-icon);
-  -webkit-mask-repeat: no-repeat;
-  mask-repeat: no-repeat;
-  -webkit-mask-position: center;
-  mask-position: center;
-  -webkit-mask-size: contain;
-  mask-size: contain;
-
-  content: "";
-  opacity: 0;
-
+  right: 0.4375rem;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 0.25rem;
+  cursor: pointer;
   transform: translateY(-50%);
-  transition:
-    background-color 120ms ease,
-    opacity 120ms ease;
 }
 
-.markdown-body th[role="columnheader"][aria-sort="none"]:hover::after,
-.markdown-body th[role="columnheader"][aria-sort="none"]:focus-visible::after {
+.markdown-body .m2h-sort-button::after {
+  width: 0.875rem;
+  height: 0.875rem;
+  background-color: var(--m2h-sort-fg);
+  -webkit-mask: var(--m2h-sort-icon) center / contain no-repeat;
+  mask: var(--m2h-sort-icon) center / contain no-repeat;
+  content: "";
   opacity: 0.65;
 }
 
-/* The sorted-state selectors repeat role=columnheader so they tie the base
- * indicator rule's specificity and win by source order — a bare
- * th[aria-sort] rule would silently lose to the :not()-bearing base and the
- * active column's icon would stay invisible. */
-.markdown-body th[role="columnheader"][aria-sort="ascending"]::after,
-.markdown-body th[role="columnheader"][aria-sort="descending"]::after {
-  opacity: 1;
-}
-
-.markdown-body th[role="columnheader"]:not([data-sort-method="none"]):hover,
-.markdown-body th[role="columnheader"]:not([data-sort-method="none"]):focus-visible {
+.markdown-body .m2h-sort-button:is(:hover, :focus-visible) {
   background-color: var(--m2h-sort-hover-bg);
 }
 
-.markdown-body th[role="columnheader"]:focus-visible {
+.markdown-body .m2h-sort-button:focus-visible {
   outline: 2px solid var(--m2h-sort-focus);
-  outline-offset: -2px;
+}
+
+.markdown-body .m2h-sort-button:is(:hover, :focus-visible)::after,
+.markdown-body [aria-sort="ascending"] > .m2h-sort-button::after,
+.markdown-body [aria-sort="descending"] > .m2h-sort-button::after {
+  opacity: 1;
 }
 
 /*

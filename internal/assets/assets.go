@@ -27,6 +27,9 @@ var (
 	//go:embed layout.css
 	layoutCSS string
 
+	//go:embed table-sort.js
+	tableSortJS string
+
 	//go:embed LICENSE.github-markdown-css
 	githubMarkdownCSSLicense string
 
@@ -62,6 +65,11 @@ func WebStylesheet() string {
 	light := scopeMarkdownCSS(githubMarkdownLight, "html:not(.dark)")
 	dark := scopeMarkdownCSS(githubMarkdownDark, "html.dark")
 	return strings.Join([]string{light, dark, syntaxCSS, layoutCSS}, "\n")
+}
+
+// TableSortScript returns the shared module for exported HTML.
+func TableSortScript() string {
+	return tableSortJS
 }
 
 // scopeMarkdownCSS rewrites every ".markdown-body" selector in a GitHub

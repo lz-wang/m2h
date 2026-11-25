@@ -137,14 +137,8 @@
           throwOnError: false
         });
       }
-      if (typeof Tablesort === "function") {
-        root.querySelectorAll('table:not([class]):not([data-m2h-sortable="true"])').forEach(function (table) {
-          if (!table.tHead || table.tBodies.length === 0 || table.tBodies[0].rows.length <= 1) {
-            return;
-          }
-          table.setAttribute("data-m2h-sortable", "true");
-          new Tablesort(table);
-        });
+      if (typeof Tablesort === "function" && typeof enhanceSortableTables === "function") {
+        enhanceSortableTables(root, Tablesort);
       }
     };
     var initializeTheme = function () {

@@ -38,6 +38,7 @@ export type MathAutoRenderer = (
 ) => void;
 
 export interface TablesortInstance {
+  sortTable(cell: HTMLTableCellElement): void;
   refresh(): void;
 }
 

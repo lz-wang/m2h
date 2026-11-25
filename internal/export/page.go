@@ -126,8 +126,10 @@ func runtimeFragments(body string) (template.HTML, template.HTML) {
 	}
 	if containsSortableTable(body) {
 		fmt.Fprintf(&scripts, "  <script src=\"%s\"></script>\n", urls.TablesortJS)
+		fmt.Fprintf(&scripts, "  <script type=\"module\">\n%s\n%s\n</script>\n", assets.TableSortScript(), runtimeJS)
+	} else {
+		scripts.WriteString(exportBootstrapScript)
 	}
-	scripts.WriteString(exportBootstrapScript)
 	return template.HTML(head.String()), template.HTML(scripts.String())
 }
 

@@ -248,13 +248,7 @@ func TestStylesheetSortableHeadersAreThemeAware(t *testing.T) {
 	}
 }
 
-// TestStylesheetSortableHeaderGeometryIsStatic guards the layout-stability
-// contract: the sorting-indicator space (position and padding-right) must be
-// reserved by a static rule on every plain GFM header cell, present from the
-// first layout pass. The runtime rule keyed on Tablesort's role attribute may
-// only carry interaction properties — if geometry ever moved back behind the
-// async enhancement, table columns would reflow after load and shift a
-// restored reading position.
+// Reserve space before adding a sort button to a header.
 func TestStylesheetSortableHeaderGeometryIsStatic(t *testing.T) {
 	t.Parallel()
 
@@ -263,23 +257,11 @@ func TestStylesheetSortableHeaderGeometryIsStatic(t *testing.T) {
 		t.Fatalf("Stylesheet(\"light\") returned error: %v", err)
 	}
 	for _, want := range []string{
-		".markdown-body table:not([class]) thead th {\n  position: relative;\n  padding-right: 2rem;\n  white-space: nowrap;\n}",
-		".markdown-body th[role=\"columnheader\"]:not([data-sort-method=\"none\"]) {\n  cursor: pointer;\n  user-select: none;\n}",
+		".markdown-body table:not([class]) thead th,\n.markdown-body table:not([class]) thead td {\n  position: relative;\n  padding-right: 2rem;\n  white-space: nowrap;\n}",
+		".markdown-body .m2h-sort-button {\n  all: unset;\n  position: absolute;",
 	} {
 		if !strings.Contains(stylesheet, want) {
 			t.Errorf("stylesheet does not contain sortable-header rule %q", want)
-		}
-	}
-	// The runtime rule must not re-introduce geometry: any layout property on
-	// the role-keyed block is the regression this test exists to catch.
-	dynamicRule := strings.Index(stylesheet, "th[role=\"columnheader\"]:not([data-sort-method=\"none\"]) {")
-	if dynamicRule == -1 {
-		t.Fatal("stylesheet lost the role-keyed sortable-header rule")
-	}
-	block := stylesheet[dynamicRule : strings.Index(stylesheet[dynamicRule:], "}")+dynamicRule]
-	for _, unwanted := range []string{"padding", "width", "position"} {
-		if strings.Contains(block, unwanted) {
-			t.Errorf("role-keyed sortable-header rule still carries geometry property %q:\n%s", unwanted, block)
 		}
 	}
 }

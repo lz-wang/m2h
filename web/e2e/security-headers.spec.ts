@@ -85,16 +85,11 @@ test("renders rich content under the strict CSP without refusals", async ({
     )
     .toBe(true);
 
-  // Tablesort enhanced the table (role=columnheader is its stamp) and
-  // clicking the numeric header reorders the rows.
-  await page.waitForFunction(
-    () =>
-      document.querySelectorAll(".markdown-body table [role=columnheader]")
-        .length >= 2,
-  );
+  // The sort button still works under the page's content security policy.
+  const sortButtons = page.locator(".markdown-body table .m2h-sort-button");
   const firstCell = page.locator(".markdown-body tbody tr td").first();
   await expect(firstCell).toHaveText("m2h");
-  await page.locator(".markdown-body table [role=columnheader]").nth(1).click();
+  await sortButtons.nth(1).click();
   await expect(firstCell).toHaveText("Nginx");
 
   // Nothing on the page — app bundle, runtimes, images, styles — was

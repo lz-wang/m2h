@@ -254,7 +254,7 @@ test("hidden rich content, sorting, lazy image and Lightbox work on first activa
         .evaluate((img: HTMLImageElement) => img.naturalWidth),
     )
     .toBeGreaterThan(0);
-  await hidden.getByRole("columnheader", { name: /名称/ }).click();
+  await hidden.getByRole("button", { name: /名称：升序排序/ }).click();
   await expect(hidden.locator("tbody tr").first()).toContainText("alpha");
   await hidden.locator(".m2h-rich-visual-frame").hover();
   await hidden.getByRole("button", { name: "查看 Mermaid 图表" }).click();

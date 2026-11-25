@@ -303,6 +303,8 @@ func TestRunExportPreservesRichContent(t *testing.T) {
 		`<script src="https://cdn.jsdelivr.net/npm/katex@0.18.4/dist/contrib/auto-render.min.js"></script>`,
 		`<script src="https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.min.js"></script>`,
 		`<script src="https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/tablesort.min.js"></script>`,
+		`<script type="module">`,
+		"export function enhanceSortableTables(",
 		"renderMathInElement",
 		`var LITERAL_DOLLAR_CLASS = "m2h-literal-dollar"`,
 		"protectLiteralDollars(root)",
@@ -352,6 +354,9 @@ func TestRunExportWithoutRichContentStaysLean(t *testing.T) {
 	}
 	if strings.Contains(body, "cdn.jsdelivr.net") {
 		t.Errorf("plain document unexpectedly loads CDN runtimes")
+	}
+	if strings.Contains(body, "export function enhanceSortableTables(") {
+		t.Error("plain document unexpectedly embeds the table sorting module")
 	}
 }
 

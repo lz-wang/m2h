@@ -1498,9 +1498,9 @@ describe("image lightbox triggers", () => {
     await renderRichContent(root, { mode: "light" });
 
     // Sort by name descending: the Beta row — and its b.png — moves first.
-    const header = root.querySelector<HTMLTableCellElement>("thead th");
-    header?.click();
-    header?.click();
+    const sortButton = sortButtonAt(root, 0);
+    sortButton.click();
+    sortButton.click();
     expect(
       Array.from(root.querySelectorAll("tbody td:first-child")).map(
         (cell) => cell.textContent,
@@ -1936,8 +1936,11 @@ describe("sortable tables", () => {
     const header = plain?.querySelector<HTMLTableCellElement>("thead th");
     expect(header?.getAttribute("role")).toBe("columnheader");
     expect(header?.getAttribute("aria-sort")).toBe("none");
-    expect(header?.tabIndex).toBe(0);
-    expect(header?.title).toBe("点击升序排序");
+    expect(header?.tabIndex).toBe(-1);
+    expect(header?.title).toBe("");
+    expect(sortButtonAt(root, 0).getAttribute("aria-label")).toBe(
+      "Project：升序排序",
+    );
 
     // A class attribute marks user-authored HTML: no marker, no sortable role.
     expect(classed?.hasAttribute("data-m2h-sortable")).toBe(false);
@@ -1996,9 +1999,15 @@ describe("sortable tables", () => {
     await renderRichContent(root, { mode: "light" });
 
     const header = headerAt(root, 0);
+    const button = sortButtonAt(root, 0);
+    const bubbled = vi.fn();
+    root.addEventListener("click", bubbled);
     header.click();
+    expect(bubbled).toHaveBeenCalledOnce();
+    expect(header.getAttribute("aria-sort")).toBe("none");
+    button.click();
     expect(columnValues(root, 0)).toEqual(["Alpha", "Beta", "Gamma"]);
-    header.click();
+    button.click();
     expect(columnValues(root, 0)).toEqual(["Gamma", "Beta", "Alpha"]);
   });
 
@@ -2008,10 +2017,27 @@ describe("sortable tables", () => {
     root.innerHTML = DEMO_TABLE;
     await renderRichContent(root, { mode: "light" });
 
-    headerAt(root, 4).click();
+    sortButtonAt(root, 4).click();
 
     // String order would be 120, 42, 8; numeric order is 8, 42, 120.
     expect(columnValues(root, 4)).toEqual(["8", "42", "120"]);
+  });
+
+  it("preserves the default column and the explicit comparison method", async () => {
+    const { renderRichContent } = await import("./render-rich-content");
+    const root = document.createElement("div");
+    root.innerHTML = DEMO_TABLE.replace(
+      "<th>Downloads</th>",
+      '<th data-sort-default data-sort-method="number">Downloads</th>',
+    );
+    await renderRichContent(root, { mode: "light" });
+
+    const header = headerAt(root, 4);
+    expect(header.dataset.sortMethod).toBe("number");
+    expect(header.getAttribute("aria-sort")).toBe("ascending");
+    expect(columnValues(root, 4)).toEqual(["8", "42", "120"]);
+    sortButtonAt(root, 4).click();
+    expect(columnValues(root, 4)).toEqual(["120", "42", "8"]);
   });
 
   it("sorts file sizes by magnitude", async () => {
@@ -2020,7 +2046,7 @@ describe("sortable tables", () => {
     root.innerHTML = DEMO_TABLE;
     await renderRichContent(root, { mode: "light" });
 
-    headerAt(root, 2).click();
+    sortButtonAt(root, 2).click();
 
     // String order would be "1.5 GB", "12 MB", "850 KB".
     expect(columnValues(root, 2)).toEqual(["850 KB", "12 MB", "1.5 GB"]);
@@ -2032,7 +2058,7 @@ describe("sortable tables", () => {
     root.innerHTML = DEMO_TABLE;
     await renderRichContent(root, { mode: "light" });
 
-    headerAt(root, 3).click();
+    sortButtonAt(root, 3).click();
 
     expect(columnValues(root, 3)).toEqual([
       "2026-07-01",
@@ -2047,28 +2073,10 @@ describe("sortable tables", () => {
     root.innerHTML = DEMO_TABLE;
     await renderRichContent(root, { mode: "light" });
 
-    headerAt(root, 1).click();
+    sortButtonAt(root, 1).click();
 
     // 1.10.0 must outrank 1.2.0 instead of comparing "10" < "2" as text.
     expect(columnValues(root, 1)).toEqual(["1.2.0", "1.10.0", "2.0.0"]);
-  });
-
-  it("sorts with Enter and Space key presses", async () => {
-    const { renderRichContent } = await import("./render-rich-content");
-    const root = document.createElement("div");
-    root.innerHTML = DEMO_TABLE;
-    await renderRichContent(root, { mode: "light" });
-
-    const header = headerAt(root, 0);
-    header.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter" }));
-    expect(columnValues(root, 0)).toEqual(["Alpha", "Beta", "Gamma"]);
-
-    header.dispatchEvent(new KeyboardEvent("keydown", { key: " " }));
-    expect(columnValues(root, 0)).toEqual(["Gamma", "Beta", "Alpha"]);
-
-    // Other keys leave the table alone.
-    header.dispatchEvent(new KeyboardEvent("keydown", { key: "ArrowDown" }));
-    expect(columnValues(root, 0)).toEqual(["Gamma", "Beta", "Alpha"]);
   });
 
   it("keeps aria-sort and titles in step through the sort cycle", async () => {
@@ -2078,22 +2086,23 @@ describe("sortable tables", () => {
     await renderRichContent(root, { mode: "light" });
 
     const project = headerAt(root, 0);
+    const button = sortButtonAt(root, 0);
     expect(project.getAttribute("aria-sort")).toBe("none");
-    expect(project.title).toBe("点击升序排序");
+    expect(button.title).toBe("升序排序");
 
-    project.click();
+    button.click();
     expect(project.getAttribute("aria-sort")).toBe("ascending");
-    expect(project.title).toBe("当前升序，点击切换为降序");
+    expect(button.title).toBe("当前升序，切换为降序");
 
-    project.click();
+    button.click();
     expect(project.getAttribute("aria-sort")).toBe("descending");
-    expect(project.title).toBe("当前降序，点击切换为升序");
+    expect(button.title).toBe("当前降序，切换为升序");
 
     // Sorting another column restores the explicit "none" baseline — and the
     // default title — on the column that is no longer driving the sort.
-    headerAt(root, 1).click();
+    sortButtonAt(root, 1).click();
     expect(project.getAttribute("aria-sort")).toBe("none");
-    expect(project.title).toBe("点击升序排序");
+    expect(button.title).toBe("升序排序");
     expect(headerAt(root, 1).getAttribute("aria-sort")).toBe("ascending");
   });
 
@@ -2108,7 +2117,7 @@ describe("sortable tables", () => {
     await renderRichContent(root, { mode: "light" });
 
     const linkHeader = headerAt(root, 0);
-    expect(linkHeader.getAttribute("data-sort-method")).toBe("none");
+    expect(linkHeader.querySelector("button")).toBeNull();
     // No sort affordances: the link keeps its native click meaning.
     expect(linkHeader.getAttribute("aria-sort")).toBeNull();
     expect(linkHeader.title).toBe("");
@@ -2118,7 +2127,7 @@ describe("sortable tables", () => {
     expect(columnValues(root, 1)).toEqual(["2.0.0", "1.0.0"]);
 
     // The plain column right next to it still sorts.
-    headerAt(root, 1).click();
+    sortButtonAt(root, 1).click();
     expect(columnValues(root, 1)).toEqual(["1.0.0", "2.0.0"]);
   });
 
@@ -2132,7 +2141,7 @@ describe("sortable tables", () => {
     // One click must apply exactly one ascending sort. If the second pass had
     // registered another click handler, this click would toggle the column
     // straight back to its original order.
-    headerAt(root, 1).click();
+    sortButtonAt(root, 1).click();
     expect(columnValues(root, 1)).toEqual(["1.2.0", "1.10.0", "2.0.0"]);
     expect(headerAt(root, 1).getAttribute("aria-sort")).toBe("ascending");
     // The marker also keeps the second pass from re-fetching the runtime.
@@ -2147,7 +2156,7 @@ describe("sortable tables", () => {
     root.innerHTML = `${DEMO_TABLE}<pre><code class="language-mermaid">graph TD</code></pre>`;
     await renderRichContent(root, { mode: "light" });
 
-    headerAt(root, 1).click();
+    sortButtonAt(root, 1).click();
     const before = columnValues(root, 1);
 
     // A theme switch regenerates diagrams only; the table DOM — and its
@@ -2175,6 +2184,16 @@ function headerAt(root: HTMLElement, column: number): HTMLTableCellElement {
     throw new Error(`no header at column ${column}`);
   }
   return header;
+}
+
+function sortButtonAt(root: HTMLElement, column: number): HTMLButtonElement {
+  const button = headerAt(root, column).querySelector<HTMLButtonElement>(
+    ".m2h-sort-button",
+  );
+  if (button === null) {
+    throw new Error(`no sort button at column ${column}`);
+  }
+  return button;
 }
 
 function columnValues(root: HTMLElement, column: number): string[] {
