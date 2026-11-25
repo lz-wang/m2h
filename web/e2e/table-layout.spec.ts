@@ -123,12 +123,12 @@ test("keeps table headers on one line and sorts from the icon in exported HTML",
     const input = join(outputDir, "input.md");
     copyFileSync("e2e/docs/table-layout.md", input);
     execFileSync("../build/e2e/m2h", ["export", input, "-o", "index.html"]);
+    const tablesortURL =
+      "https://cdn.jsdelivr.net/npm/tablesort@5.3.0/dist/tablesort.min.js";
     await page.route("https://cdn.jsdelivr.net/**", async (route) => {
-      const filename = new URL(route.request().url()).pathname
-        .split("/")
-        .at(-1);
+      expect(route.request().url()).toBe(tablesortURL);
       await route.fulfill({
-        response: await page.request.get(`/runtime/${filename}`),
+        response: await page.request.get("/runtime/tablesort.min.js"),
       });
     });
     await page.goto(pathToFileURL(join(outputDir, "index.html")).href);

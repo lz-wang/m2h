@@ -31,4 +31,7 @@ comparators (`tablesort.number|date|filesize|dotsep|monthname.js`) flat in this
 directory; the comparators are the upstream minified `dist/sorts` builds renamed
 without the `.min` infix. Note the 5.3.0 npm package ships dist builds whose
 banner still reads v5.2.1 — upstream published the release without rebuilding
-dist — so the npm version, not the banner, is authoritative here.
+dist. The vendored core matches the 5.3.0 jsDelivr file byte for byte.
+Both files have SHA-256
+`45cdd19887a0d271a36620b517996ccbc92f45f6833696c19f3739dbfbd24538`.
+The Export browser test uses that copy for the pinned jsDelivr URL.
