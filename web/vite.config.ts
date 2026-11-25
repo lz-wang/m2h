@@ -25,7 +25,9 @@ export default defineConfig({
     setupFiles: ["./src/test/setup.ts"],
     coverage: {
       enabled: true,
+      allowExternal: true,
       include: [
+        path.resolve(import.meta.dirname, "../internal/assets/table-sort.js"),
         "src/App.tsx",
         "src/api.ts",
         "src/lib/lazy-images.ts",
