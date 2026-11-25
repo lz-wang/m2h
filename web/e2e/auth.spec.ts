@@ -1428,6 +1428,114 @@ test.describe("authenticated mode", () => {
     });
   }
 
+  test("keeps annotations on the same cells across sorting and reload", async ({
+    page,
+  }) => {
+    await login(page, "alice", "password-1");
+    await page.goto(`${baseURL}/doc/table-layout.md`);
+    const rows = page.locator("article table:not([class]) tbody tr");
+    const keys = rows.locator("td:first-child");
+    const sort = page.getByRole("button", { name: /^字段：/ });
+    const toolbar = page.getByRole("toolbar", { name: "标注选中文本" });
+    const composer = page.getByRole("region", { name: "新建标注" });
+    const cellIn = (row: string) =>
+      rows
+        .filter({ has: page.getByRole("cell", { name: row, exact: true }) })
+        .locator("td:nth-child(2)");
+    const beginAnnotation = async (
+      row: string,
+      color: string,
+      comment: string,
+    ) => {
+      await expect(async () => {
+        await cellIn(row).evaluate((cell) => {
+          const range = document.createRange();
+          range.selectNodeContents(cell.firstChild ?? cell);
+          const selection = window.getSelection();
+          selection?.removeAllRanges();
+          selection?.addRange(range);
+          document.dispatchEvent(new Event("selectionchange"));
+        });
+        await toolbar.waitFor({ timeout: 1_000 });
+      }).toPass({ timeout: 12_000 });
+      await toolbar.getByRole("button", { name: "标注" }).click();
+      await composer.getByRole("button", { name: color }).click();
+      await composer.getByPlaceholder("添加评论…").fill(comment);
+    };
+    const save = async () => {
+      await composer.getByRole("button", { name: "保存" }).click();
+      await expect(composer).toBeHidden();
+    };
+    const highlighted = (groups: string[]) =>
+      page.evaluate(
+        (groups) =>
+          groups.flatMap((group) =>
+            Array.from(CSS.highlights.get(group) ?? [], (range) => ({
+              row: range.startContainer.parentElement?.closest("tr")?.cells[0]
+                ?.textContent,
+              text: range.toString(),
+            })),
+          ),
+        groups,
+      );
+    const red = ["m2h-annotations-red", "m2h-annotations-red-active"];
+    const purple = ["m2h-annotations-purple", "m2h-annotations-purple-active"];
+
+    await expect(keys).toHaveText(["beta", "alpha"]);
+    await beginAnnotation("beta", "红色", "beta 的必填标注");
+    await save();
+    await expect
+      .poll(() => highlighted(red))
+      .toEqual([{ row: "beta", text: "是" }]);
+
+    await sort.click();
+    await expect(keys).toHaveText(["alpha", "beta"]);
+    await expect
+      .poll(() => highlighted(red))
+      .toEqual([{ row: "beta", text: "是" }]);
+    const popup = page.getByRole("region", { name: "标注窗口" });
+    const point = await cellIn("beta").evaluate((cell) => {
+      const range = document.createRange();
+      range.selectNodeContents(cell.firstChild ?? cell);
+      const rect = range.getBoundingClientRect();
+      return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    });
+    await expect(async () => {
+      await page.mouse.move(point.x + 1, point.y);
+      await page.mouse.move(point.x, point.y);
+      await expect(popup).toContainText("beta 的必填标注", { timeout: 500 });
+    }).toPass({ timeout: 5_000 });
+
+    await page.getByRole("button", { name: "打开标注面板" }).click();
+    const panel = page.getByRole("complementary", { name: "标注面板" });
+    await panel.getByRole("button", { name: "定位到正文" }).click();
+    await expect
+      .poll(() => highlighted(["m2h-annotations-red-active"]))
+      .toEqual([{ row: "beta", text: "是" }]);
+
+    await beginAnnotation("alpha", "紫色", "alpha 的必填标注");
+    await sort.focus();
+    await page.keyboard.press("Enter");
+    await expect(keys).toHaveText(["beta", "alpha"]);
+    await expect
+      .poll(() => highlighted(["m2h-annotation-draft-purple"]))
+      .toEqual([{ row: "alpha", text: "是" }]);
+    await save();
+    await expect
+      .poll(() => highlighted(purple))
+      .toEqual([{ row: "alpha", text: "是" }]);
+    await sort.click();
+    await expect(keys).toHaveText(["alpha", "beta"]);
+    await page.reload();
+    await expect(keys).toHaveText(["beta", "alpha"]);
+    await expect
+      .poll(() => highlighted(red))
+      .toEqual([{ row: "beta", text: "是" }]);
+    await expect
+      .poll(() => highlighted(purple))
+      .toEqual([{ row: "alpha", text: "是" }]);
+  });
+
   test("overlapping annotations offer the exact hits and independent actions", async ({
     page,
   }) => {
