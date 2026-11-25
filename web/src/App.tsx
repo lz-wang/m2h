@@ -537,6 +537,27 @@ export function App({
     },
     [rebuildAnnotationLayer],
   );
+  useEffect(() => {
+    if (!annotationsEnabled) return;
+    const handleTableSort = (event: Event) => {
+      if (
+        !(event.target instanceof HTMLTableElement) ||
+        !annotationBodyRef.current?.contains(event.target)
+      )
+        return;
+      annotationLayerRef.current?.refreshRanges();
+      cancelHoverFrame();
+      clearHoverTimer();
+      setAnnotationPopups((current) => {
+        const retained = current.filter(keepAnnotationPopupOpen);
+        return retained.length === current.length ? current : retained;
+      });
+    };
+    // Tablesort's afterSort event reaches ancestors during capture.
+    document.addEventListener("afterSort", handleTableSort, true);
+    return () =>
+      document.removeEventListener("afterSort", handleTableSort, true);
+  }, [annotationsEnabled, cancelHoverFrame, clearHoverTimer]);
   const annotationsAt = useCallback((x: number, y: number): string[] => {
     const index = annotationIndexRef.current;
     const positions = annotationPositionsRef.current;

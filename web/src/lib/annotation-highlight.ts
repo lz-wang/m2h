@@ -168,6 +168,8 @@ export class AnnotationHighlightLayer {
       { color, emphasized: true, layer: new HighlightLayer(`${name}-active`) },
     ];
   });
+  private index: TextIndex | null = null;
+  private visible: AnnotationHighlight[] = [];
   private spans: Array<{ id: string; color: AnnotationColor; range: Range }> =
     [];
   private selectedId: string | null = null;
@@ -175,12 +177,25 @@ export class AnnotationHighlightLayer {
 
   render(index: TextIndex, annotations: AnnotationHighlight[]): void {
     if (!supportsHighlights()) return;
-    this.spans = visibleSpans(annotations).flatMap(
-      ({ id, color, position }) => {
-        const range = index.rangeFromSpan(position);
-        return range === null ? [] : [{ id, color, range }];
-      },
-    );
+    this.index = index;
+    this.visible = visibleSpans(annotations);
+    this.refreshRanges();
+  }
+
+  // Moving table rows changes live DOM Ranges. The saved text offsets
+  // still address the same nodes in the original reading order.
+  refreshRanges(): void {
+    const index = this.index;
+    if (
+      index === null ||
+      (this.visible.length === 0 && this.spans.length === 0)
+    ) {
+      return;
+    }
+    this.spans = this.visible.flatMap(({ id, color, position }) => {
+      const range = index.rangeFromSpan(position);
+      return range === null ? [] : [{ id, color, range }];
+    });
     this.paint();
   }
 
@@ -191,6 +206,8 @@ export class AnnotationHighlightLayer {
   }
 
   release(): void {
+    this.index = null;
+    this.visible = [];
     this.spans = [];
     for (const { layer } of this.groups) layer.release();
   }

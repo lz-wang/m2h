@@ -72,6 +72,26 @@ describe("TextIndex", () => {
     expect(back?.toString()).toBe("。第二段正");
   });
 
+  it("keeps both boundaries inside a cell when adjacent rows move", () => {
+    const root = mountBody(
+      "<table><tbody><tr><td>允许</td></tr><tr><td><em>允</em>许</td></tr><tr><td>允许</td></tr></tbody></table>",
+    );
+    const index = new TextIndex(root);
+    const rows = root.querySelectorAll("tr");
+    const cell = rows[1].cells[0];
+    rows[0].parentElement?.append(rows[1], rows[0]);
+
+    const range = index.rangeFromSpan({ start: 2, end: 4 });
+    expect(range?.toString()).toBe("允许");
+    expect(range?.startContainer.parentElement?.closest("td")).toBe(cell);
+    expect(range?.endContainer.parentElement).toBe(cell);
+    if (!range) throw new Error("missing cell range");
+    expect(selectorFromRange(index, range)?.position).toEqual({
+      start: 2,
+      end: 4,
+    });
+  });
+
   it("rejects ranges touching excluded regions", () => {
     const root = mountBody('<p>正文</p><span data-m2h-decor="x">装饰</span>');
     const index = new TextIndex(root);

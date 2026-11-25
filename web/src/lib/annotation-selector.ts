@@ -126,9 +126,14 @@ export class TextIndex {
     ) {
       return null;
     }
-    const start = this.resolveBoundary(position.start);
-    const end = this.resolveBoundary(position.end);
-    if (start === null || end === null) {
+    const start = this.resolveBoundary(position.start, "start");
+    const end = this.resolveBoundary(position.end, "end");
+    if (
+      !start ||
+      !end ||
+      !this.root.contains(start.node) ||
+      !this.root.contains(end.node)
+    ) {
       return null;
     }
     const range = document.createRange();
@@ -138,14 +143,19 @@ export class TextIndex {
     } catch {
       return null;
     }
-    return range;
+    return range.collapsed ? null : range;
   }
 
-  private resolveBoundary(cp: number): { node: Text; utf16: number } | null {
-    // A boundary shared by two nodes belongs to the preceding node.
+  private resolveBoundary(
+    cp: number,
+    edge: "start" | "end",
+  ): { node: Text; utf16: number } | null {
+    // Keep each edge on a node that contributes text to the span. The
+    // adjacent node may now be in a different row after sorting.
     const index = firstIndex(
       this.segments,
-      ({ startCP, runes }) => startCP + runes < cp,
+      ({ startCP, runes }) =>
+        startCP + runes < cp || (edge === "start" && startCP + runes === cp),
     );
     const segment = this.segments[index];
     return segment === undefined

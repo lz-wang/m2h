@@ -186,10 +186,20 @@ export function SelectionToolbar({
   useLayoutEffect(() => {
     if (disabled || !commenting || selector === null) return;
     const layer = new HighlightLayer(draftHighlightName(color), 1);
-    layer.attach(indexRef.current);
+    const body = bodyRef.current;
+    const index = indexRef.current;
+    layer.attach(index);
     layer.render([selector.position]);
-    return () => layer.release();
-  }, [color, commenting, disabled, indexRef, selector]);
+    const refreshDraft = () => {
+      rangeRef.current = index?.rangeFromSpan(selector.position) ?? null;
+      layer.renderRanges(rangeRef.current ? [rangeRef.current] : []);
+    };
+    body?.addEventListener("afterSort", refreshDraft, true);
+    return () => {
+      body?.removeEventListener("afterSort", refreshDraft, true);
+      layer.release();
+    };
+  }, [bodyRef, color, commenting, disabled, indexRef, selector]);
 
   const cancelComment = useCallback(() => {
     if (saving) return;
