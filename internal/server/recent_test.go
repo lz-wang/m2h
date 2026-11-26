@@ -132,8 +132,7 @@ func TestRecentCacheRefreshesAndDropsUnavailableEntries(t *testing.T) {
 	}
 
 	writeRecentFile(t, root, "09.md", "# Edited and refreshed", 13)
-	handler.recent.expiresAt = time.Time{}
-	refreshed := recentFrom(t, routed, "/api/recent")
+	refreshed := recentFrom(t, routed, "/api/recent?refresh=true")
 	if len(refreshed.Created) != 10 || refreshed.Created[0].Title != "Edited and refreshed" || refreshed.Created[1].Path != "renamed.md" {
 		t.Fatalf("refresh did not update edited and renamed documents: %+v", refreshed)
 	}
@@ -216,6 +215,7 @@ func TestRecentEndpointContract(t *testing.T) {
 		t.Fatalf("empty workspace returned %+v", empty)
 	}
 	assertJSONError(t, performRequest(routed, http.MethodGet, "/api/recent?limit=1"), http.StatusBadRequest)
+	assertJSONError(t, performRequest(routed, http.MethodGet, "/api/recent?refresh=false"), http.StatusBadRequest)
 	assertJSONError(t, performRequest(routed, http.MethodPost, "/api/recent"), http.StatusMethodNotAllowed)
 
 	handler.recent.expiresAt = time.Time{}

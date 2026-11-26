@@ -254,6 +254,12 @@ export function App({
   tokensAvailable,
 }: AppProps) {
   const preview = usePreview(api);
+  const [settledHomeRevision, setSettledHomeRevision] = useState(0);
+  const homeRefreshing =
+    preview.filesLoading ||
+    (preview.phase === "home" &&
+      preview.homeRequest.forceRefresh &&
+      preview.homeRequest.revision !== settledHomeRevision);
   // A single-file scope has nothing to switch between, so the file sidebar and
   // its toolbar trigger stay hidden; directories and multi-root workspaces
   // both offer navigation. Every other control remains shared.
@@ -1290,6 +1296,29 @@ export function App({
               frontmatter={preview.document?.frontmatter ?? null}
             />
             <div className="toolbar-actions">
+              {preview.phase === "home" || preview.phase === "empty" ? (
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="toolbar-control"
+                        aria-label="刷新文档首页"
+                        aria-busy={homeRefreshing}
+                        disabled={homeRefreshing}
+                        onClick={() => void preview.refresh()}
+                      />
+                    }
+                  >
+                    <RefreshCw
+                      aria-hidden="true"
+                      className={homeRefreshing ? "is-spinning" : undefined}
+                    />
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">刷新文档首页</TooltipContent>
+                </Tooltip>
+              ) : null}
               {authIdentity !== null &&
               authIdentity !== undefined &&
               onLogout !== undefined ? (
@@ -1478,7 +1507,9 @@ export function App({
               {preview.phase === "home" ? (
                 <HomePage
                   getRecent={(api ?? browserAPI).getRecent}
-                  revision={preview.homeRevision}
+                  revision={preview.homeRequest.revision}
+                  forceRefresh={preview.homeRequest.forceRefresh}
+                  onRecentSettled={setSettledHomeRevision}
                   fileCount={preview.files.length}
                   roots={preview.roots}
                   options={preview}
@@ -2442,7 +2473,7 @@ function PreviewContent({
       <section className="state-panel" aria-live="polite">
         <Inbox aria-hidden="true" />
         <p>目录中没有 Markdown 文件</p>
-        <span>添加 .md 或 .markdown 文件后重新打开预览。</span>
+        <span>添加 .md 或 .markdown 文件后，点击「刷新文档首页」。</span>
       </section>
     );
   }

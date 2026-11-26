@@ -10,11 +10,11 @@ import {
   documentURL,
   encodeHeadingHash,
   encodeVirtualPath,
-  initialExpandedPaths,
   markdownURL,
   readRoute,
   rootFiles,
   routeURL,
+  selectionExpandedPaths,
   type TreeNode,
 } from "./model";
 
@@ -361,36 +361,16 @@ describe("tree model", () => {
     expect(sub.children[9_999 % 100]?.name).toBe("doc-0099.md");
   });
 
-  it("expands first-level directories of an unselected single-root tree", () => {
-    const tree = buildTree([
-      { path: "docs/a/b.md", name: "b.md" },
-      { path: "docs/deep/c/d.md", name: "d.md" },
-      { path: "guide.md", name: "guide.md" },
-    ]);
-    // Top-level directories open, the deeper "docs/deep" level stays closed.
-    expect(initialExpandedPaths(tree, null, false, "")).toEqual(
-      new Set(["docs"]),
-    );
+  it("keeps directories and roots collapsed without a selection", () => {
+    expect(selectionExpandedPaths(null)).toEqual(new Set());
+    expect(selectionExpandedPaths(null, "r0")).toEqual(new Set());
   });
 
   it("expands only the selection's own chain, root row included", () => {
-    const tree = buildTree([
-      { path: "a/b/c.md", name: "c.md" },
-      { path: "x/y.md", name: "y.md" },
-    ]);
-    // Single root: just the ancestors, no synthetic root row.
-    expect(initialExpandedPaths(tree, "a/b/c.md", false, "")).toEqual(
-      new Set(["a", "a/b"]),
-    );
-    // Multi-root owning tree: the root row joins the ancestors.
-    expect(initialExpandedPaths(tree, "a/b/c.md", true, "r1")).toEqual(
+    expect(selectionExpandedPaths("a/b/c.md")).toEqual(new Set(["a", "a/b"]));
+    expect(selectionExpandedPaths("a/b/c.md", "r1")).toEqual(
       new Set(["r1", "a", "a/b"]),
     );
-  });
-
-  it("expands nothing in an unselected multi-root tree", () => {
-    const tree = buildTree([{ path: "README.md", name: "README.md" }]);
-    expect(initialExpandedPaths(tree, null, true, "r0")).toEqual(new Set());
   });
 });
 

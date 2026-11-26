@@ -64,7 +64,7 @@ export interface PreviewState {
   // what the reader shows.
   filesLoading: boolean;
   filesError: string | null;
-  homeRevision: number;
+  homeRequest: { revision: number; forceRefresh: boolean };
   // Display metadata cache keyed by the virtual document path. Entries land
   // as the reader points at sidebar files (deduplicated, one request per
   // path) and are dropped whenever the file list reloads, so a refresh never
@@ -121,7 +121,10 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     initialRoute.current.path !== null ? "loading-document" : "loading-files",
   );
   const [filesLoading, setFilesLoading] = useState(true);
-  const [homeRevision, setHomeRevision] = useState(0);
+  const [homeRequest, setHomeRequest] = useState({
+    revision: 0,
+    forceRefresh: false,
+  });
   const [filesError, setFilesError] = useState<string | null>(null);
   const [metadata, setMetadata] = useState<ReadonlyMap<string, FileMetadata>>(
     () => new Map(),
@@ -243,7 +246,6 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
         setKind(loaded.kind);
         setVersion(loaded.version);
         setFilesLoading(false);
-        setHomeRevision((revision) => revision + 1);
         return loaded;
       } catch (reason: unknown) {
         if (controller.signal.aborted || isAbortError(reason)) {
@@ -301,9 +303,9 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
 
   // Entering the root waits for the fresh listing before HomePage mounts
   // and requests recent metadata. An in-place refresh keeps HomePage
-  // mounted and uses homeRevision to request the next set of records.
+  // mounted and requests the next set of recent records after listing.
   const loadWorkspaceDefault = useCallback(
-    async (navigation?: "push" | "replace") => {
+    async (navigation?: "push" | "replace", forceRefresh = false) => {
       if (navigation !== undefined) {
         documentController.current?.abort();
         selectedPathRef.current = null;
@@ -333,6 +335,10 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
       }
       setError(null);
       setVisualError(null);
+      setHomeRequest(({ revision }) => ({
+        revision: revision + 1,
+        forceRefresh,
+      }));
       setPhase(
         loaded.roots.some((root) => root.files.length > 0) ? "home" : "empty",
       );
@@ -415,7 +421,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
   const refresh = useCallback(async () => {
     const path = selectedPathRef.current;
     if (path === null) {
-      await loadWorkspaceDefault();
+      await loadWorkspaceDefault(undefined, true);
       return;
     }
     await Promise.allSettled([
@@ -518,7 +524,7 @@ export function usePreview(api: PreviewAPI = browserAPI): PreviewState {
     phase,
     filesLoading,
     filesError,
-    homeRevision,
+    homeRequest,
     metadata,
     loadFileMetadata,
     error,

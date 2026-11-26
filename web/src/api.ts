@@ -127,7 +127,10 @@ export interface SearchResponse {
 
 export interface PreviewAPI {
   listFiles(signal?: AbortSignal): Promise<FileListResponse>;
-  getRecent(signal?: AbortSignal): Promise<RecentResponse>;
+  getRecent(
+    signal?: AbortSignal,
+    forceRefresh?: boolean,
+  ): Promise<RecentResponse>;
   getDocument(path: string, signal?: AbortSignal): Promise<DocumentResponse>;
   // Fetches one document's sidebar display metadata (title, description)
   // from /api/file-metadata on demand. Callers dedupe; the endpoint reads
@@ -882,8 +885,9 @@ export const browserAPI: PreviewAPI = {
   async listFiles(signal) {
     return parseFileList(await requestJSON(appPath("/api/files"), signal));
   },
-  async getRecent(signal) {
-    const payload = await requestJSON(appPath("/api/recent"), signal);
+  async getRecent(signal, forceRefresh) {
+    const path = forceRefresh ? "/api/recent?refresh=true" : "/api/recent";
+    const payload = await requestJSON(appPath(path), signal);
     if (
       !isRecord(payload) ||
       !Array.isArray(payload.created) ||

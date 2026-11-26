@@ -19,6 +19,48 @@ test("directory home opens document links and survives history navigation and re
   expect(requests.filter((path) => path === "/api/document")).toEqual([]);
   expect(requests.filter((path) => path === "/api/recent")).toHaveLength(1);
 
+  const directory = page.getByRole("button", { name: "a", exact: true });
+  await expect(directory).toHaveAttribute("aria-expanded", "false");
+  const refresh = page.locator(".toolbar-actions").getByRole("button").first();
+  await expect(refresh).toHaveAccessibleName("刷新文档首页");
+  const filesGate = Promise.withResolvers<void>();
+  const recentGate = Promise.withResolvers<void>();
+  await page.route("**/api/files", async (route) => {
+    await filesGate.promise;
+    await route.continue();
+  });
+  await page.route("**/api/recent?refresh=true", async (route) => {
+    await recentGate.promise;
+    await route.continue();
+  });
+  const refreshed = page.waitForResponse((response) =>
+    response.url().endsWith("/api/recent?refresh=true"),
+  );
+  const beforeRefresh = requests.length;
+  const icon = refresh.locator("svg");
+  try {
+    await refresh.click();
+    await expect(refresh).toBeDisabled();
+    await expect(icon).toHaveCSS("animation-name", "spin");
+    const recentRequested = page.waitForRequest((request) =>
+      request.url().endsWith("/api/recent?refresh=true"),
+    );
+    filesGate.resolve();
+    await recentRequested;
+    await expect(refresh).toHaveAttribute("aria-busy", "true");
+    await expect(icon).toHaveCSS("animation-name", "spin");
+  } finally {
+    filesGate.resolve();
+    recentGate.resolve();
+  }
+  expect((await refreshed).ok()).toBe(true);
+  await expect(refresh).toBeEnabled();
+  await expect(icon).toHaveCSS("animation-name", "none");
+  expect(requests.slice(beforeRefresh)).toEqual(["/api/files", "/api/recent"]);
+  await expect(directory).toHaveAttribute("aria-expanded", "false");
+  await expect(page).toHaveURL(/\/$/);
+  await expect(updated.getByRole("link")).toHaveCount(1);
+
   const recent = updated.getByRole("link").first();
   const href = await recent.getAttribute("href");
   if (href === null) throw new Error("recent document link has no href");

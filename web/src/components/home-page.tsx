@@ -19,6 +19,8 @@ const sections = [
 interface HomePageProps {
   getRecent: PreviewAPI["getRecent"];
   revision: number;
+  forceRefresh: boolean;
+  onRecentSettled(revision: number): void;
   fileCount: number;
   roots: RootSummary[];
   options: ViewOptions;
@@ -28,6 +30,8 @@ interface HomePageProps {
 export function HomePage({
   getRecent,
   revision,
+  forceRefresh,
+  onRecentSettled,
   fileCount,
   roots,
   options,
@@ -43,18 +47,16 @@ export function HomePage({
   useEffect(() => {
     if (!loading) return;
     const controller = new AbortController();
-    void getRecent(controller.signal).then(
-      (response) => {
-        if (!controller.signal.aborted)
-          setResult({ revision, recent: response });
-      },
-      () => {
-        if (!controller.signal.aborted)
-          setResult({ revision, recent: "error" });
-      },
+    const settle = (recent: RecentResponse | "error") => {
+      if (controller.signal.aborted) return;
+      setResult({ revision, recent });
+      onRecentSettled(revision);
+    };
+    void getRecent(controller.signal, forceRefresh).then(settle, () =>
+      settle("error"),
     );
     return () => controller.abort();
-  }, [getRecent, loading, revision]);
+  }, [getRecent, loading, revision, forceRefresh, onRecentSettled]);
 
   const lists = recent === "error" ? null : recent;
   const latestDate = lists?.updated[0]?.date;

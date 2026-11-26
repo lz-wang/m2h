@@ -92,6 +92,11 @@ describe("App directory preview", () => {
     expect(
       screen.getByRole("button", { name: "README.md，README.md" }),
     ).toBeTruthy();
+    expect(
+      screen
+        .getByRole("button", { name: "guides" })
+        .getAttribute("aria-expanded"),
+    ).toBe("false");
   });
 
   it("retries recent metadata and opens a document from either list", async () => {
@@ -722,11 +727,11 @@ describe("App directory preview", () => {
     expect(document.documentElement.classList.contains("dark")).toBe(false);
   });
 
-  it("does not expose a manual directory refresh control", async () => {
+  it("keeps the home refresh control off document routes", async () => {
     render(<App api={createAPI()} />);
     await screen.findByText("Body for README.md");
 
-    expect(screen.queryByRole("button", { name: "刷新文件列表" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "刷新文档首页" })).toBeNull();
   });
 
   it("supports keyboard tree toggles and the theme menu", async () => {

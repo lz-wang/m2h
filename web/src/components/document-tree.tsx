@@ -24,8 +24,8 @@ import {
   type DirectoryNode,
   documentURL,
   type FileNode,
-  initialExpandedPaths,
   markdownURL,
+  selectionExpandedPaths,
   type TreeNode,
 } from "@/model";
 
@@ -48,7 +48,7 @@ interface DocumentTreeProps {
   rootBase?: string;
   // Present only in a multi-root workspace: renders the labeled root row the
   // tree nests under. Roots start collapsed unless the selection lives in
-  // them (see initialExpandedPaths); collapsing uses the same directory
+  // them. Collapsing uses the same directory
   // mechanics as inner directories.
   rootLabel?: string;
   // Reports context-menu copy outcomes to the app-level status line, shared
@@ -85,21 +85,19 @@ export function DocumentTree({
         ? selectedPath
         : selectedPath.slice(rootBase.length + 1)
       : null;
-  const [expanded, setExpanded] = useState<Set<string>>(() =>
-    initialExpandedPaths(tree, selectedRelative, hasRootRow, rootBase),
+  const rootRowPath = hasRootRow ? rootBase : undefined;
+  const [expanded, setExpanded] = useState(() =>
+    selectionExpandedPaths(selectedRelative, rootRowPath),
   );
   const treeRef = useRef<HTMLUListElement>(null);
   const revealedPathRef = useRef<string | null>(null);
 
   // A new selection only ever ADDS expansion: its ancestors (and its own root
   // row in a multi-root workspace) merge into whatever the reader has already
-  // opened. The initial single-root first-level expansion lives in
-  // initialExpandedPaths and is not re-derived here.
+  // opened.
   useLayoutEffect(() => {
-    const next = new Set(ancestorDirectories(selectedRelative));
-    if (selectedRelative !== null && hasRootRow) {
-      next.add(rootBase);
-    }
+    if (selectedRelative === null) return;
+    const next = selectionExpandedPaths(selectedRelative, rootRowPath);
     setExpanded((current) => {
       const merged = new Set(current);
       for (const ancestor of next) {
@@ -107,7 +105,7 @@ export function DocumentTree({
       }
       return merged;
     });
-  }, [selectedRelative, hasRootRow, rootBase]);
+  }, [selectedRelative, rootRowPath]);
 
   // Reveal the active file inside the sidebar's scroll viewport. Deliberately
   // only the viewport's own scrollTop is adjusted — scrollIntoView() could

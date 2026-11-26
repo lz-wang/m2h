@@ -142,6 +142,16 @@ test.describe("authenticated mode", () => {
   test("login opens the reader and survives reload", async ({ page }) => {
     await login(page, "alice", "password-1");
     await expect(page.getByRole("button", { name: "设置" })).toBeVisible();
+    const refresh = page
+      .locator(".toolbar-actions")
+      .getByRole("button")
+      .first();
+    await expect(refresh).toHaveAccessibleName("刷新文档首页");
+    const refreshed = page.waitForResponse((response) =>
+      response.url().endsWith("/api/recent?refresh=true"),
+    );
+    await refresh.click();
+    expect((await refreshed).ok()).toBe(true);
 
     await page.reload();
     // The session cookie restored the reader — no login page.

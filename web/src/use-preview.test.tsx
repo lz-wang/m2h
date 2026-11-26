@@ -160,6 +160,7 @@ describe("usePreview decoupled loading", () => {
       .mockResolvedValueOnce({ created: [entry], updated: [entry] })
       .mockReturnValueOnce(stale.promise)
       .mockResolvedValueOnce({ created: [latest], updated: [latest] });
+    const onRecentSettled = vi.fn();
 
     function PreviewHarness() {
       const preview = usePreview(api);
@@ -170,7 +171,9 @@ describe("usePreview decoupled loading", () => {
           </button>
           <HomePage
             getRecent={api.getRecent}
-            revision={preview.homeRevision}
+            revision={preview.homeRequest.revision}
+            forceRefresh={preview.homeRequest.forceRefresh}
+            onRecentSettled={onRecentSettled}
             fileCount={preview.files.length}
             roots={preview.roots}
             options={preview}
@@ -185,6 +188,10 @@ describe("usePreview decoupled loading", () => {
       await screen.findByRole("region", { name: "最新创建" }),
     );
     expect(created.getByRole("link", { name: /Old title/ })).toBeTruthy();
+    expect(api.getRecent).toHaveBeenLastCalledWith(
+      expect.any(AbortSignal),
+      false,
+    );
     const refresh = screen.getByRole("button", { name: "Refresh" });
     api.listFiles.mockResolvedValue({
       kind: "directory",
@@ -193,6 +200,10 @@ describe("usePreview decoupled loading", () => {
     });
     fireEvent.click(refresh);
     await waitFor(() => expect(api.getRecent).toHaveBeenCalledTimes(2));
+    expect(api.getRecent).toHaveBeenLastCalledWith(
+      expect.any(AbortSignal),
+      true,
+    );
     fireEvent.click(refresh);
     const updated = within(
       await screen.findByRole("region", { name: "最近更新" }),

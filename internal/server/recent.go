@@ -50,8 +50,9 @@ type recentCache struct {
 }
 
 func (handler *documentHandler) serveRecent(w http.ResponseWriter, r *http.Request) {
-	if r.URL.RawQuery != "" {
-		writeJSONError(w, http.StatusBadRequest, "query parameters are not supported")
+	forceRefresh := r.URL.RawQuery == "refresh=true"
+	if r.URL.RawQuery != "" && !forceRefresh {
+		writeJSONError(w, http.StatusBadRequest, "only refresh=true is supported")
 		return
 	}
 	result := recentResponse{Created: []recentDocument{}, Updated: []recentDocument{}}
@@ -67,7 +68,7 @@ func (handler *documentHandler) serveRecent(w http.ResponseWriter, r *http.Reque
 		}
 		err = handler.recentScopedDocument(scope.Resource.RootID, scope.Resource.Path, version, &result)
 	case record.DocumentHash == "":
-		err = handler.recentLists(r, &result)
+		err = handler.recentLists(r, forceRefresh, &result)
 	}
 	if r.Context().Err() != nil {
 		return
@@ -95,8 +96,8 @@ func (handler *documentHandler) recentScopedDocument(rootID, relative string, ve
 	return err
 }
 
-func (handler *documentHandler) recentLists(r *http.Request, result *recentResponse) error {
-	snapshot, err := handler.recentSnapshot(r.Context())
+func (handler *documentHandler) recentLists(r *http.Request, forceRefresh bool, result *recentResponse) error {
+	snapshot, err := handler.recentSnapshot(r.Context(), forceRefresh)
 	if err != nil {
 		return err
 	}
@@ -148,11 +149,11 @@ func (handler *documentHandler) recentLists(r *http.Request, result *recentRespo
 	return nil
 }
 
-func (handler *documentHandler) recentSnapshot(ctx context.Context) (map[string]recentMetadata, error) {
+func (handler *documentHandler) recentSnapshot(ctx context.Context, forceRefresh bool) (map[string]recentMetadata, error) {
 	cache := &handler.recent
 	cache.mu.Lock()
 	defer cache.mu.Unlock()
-	if time.Now().Before(cache.expiresAt) {
+	if !forceRefresh && time.Now().Before(cache.expiresAt) {
 		return cache.files, nil
 	}
 
