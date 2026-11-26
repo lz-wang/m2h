@@ -124,8 +124,8 @@ jobs:
           go-version: "1.26.x"
           check-latest: true
 
-      - name: Install and build WebUI
-        run: make web-ci-install web-build
+      - name: Install WebUI dependencies
+        run: make web-ci-install
 
       - name: Build binary
         run: make build-os OS=${{ matrix.goos }} ARCH=${{ matrix.goarch }} VERSION=${{ needs.readiness.outputs.version }}
