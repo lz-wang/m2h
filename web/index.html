@@ -8,7 +8,20 @@
          every script — including the scroll-restoration preference set at the
          top of src/main.tsx — loads as an external module. -->
     <link rel="icon" type="image/svg+xml" href="/ui/favicon.svg" />
-    <link id="m2h-markdown-styles" rel="stylesheet" href="/ui/markdown.css" />
+    <!-- Go serves the shared Markdown stylesheet at runtime. -->
+    <link
+      id="m2h-markdown-styles"
+      rel="stylesheet"
+      href="/ui/markdown.css"
+      vite-ignore
+    />
+    <!-- Keep standards-based ::highlight() rules outside the CSS optimizer.
+         The media attribute makes Vite emit this link's stylesheet as an asset. -->
+    <link
+      rel="stylesheet"
+      media="all"
+      href="/src/annotation-highlights.css?no-inline"
+    />
     <title>m2h</title>
   </head>
   <body>

@@ -338,6 +338,13 @@ flowchart LR
           localRequests.some((path) => path === `${base}/ui/markdown.css`),
         ).toBe(true);
         expect(
+          localRequests.some(
+            (path) =>
+              path.startsWith(`${base}/ui/assets/annotation-highlights-`) &&
+              path.endsWith(".css"),
+          ),
+        ).toBe(true);
+        expect(
           localRequests.filter((path) => !path.startsWith(`${base}/`)),
         ).toEqual([]);
         expect(errors).toEqual([]);
