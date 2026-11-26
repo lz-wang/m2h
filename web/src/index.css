@@ -491,6 +491,10 @@ body,
   max-width: min(18rem, calc(100vw - 1rem));
 }
 
+.settings-submenu-popup {
+  min-width: 8rem;
+}
+
 .theme-menu-label {
   padding: 0.35rem 0.5rem;
   color: var(--muted-foreground);
@@ -513,7 +517,8 @@ body,
 
 .theme-menu-item:hover,
 .theme-menu-item:focus-visible,
-.theme-menu-item[data-highlighted] {
+.theme-menu-item[data-highlighted],
+.theme-menu-item[data-popup-open] {
   background: var(--accent);
   color: var(--accent-foreground);
 }

@@ -682,23 +682,61 @@ test.describe("authenticated mode", () => {
     await expect(page.getByText(/还没有标注/)).toBeVisible();
   });
 
-  test("settings and width menus close after choosing an option", async ({
+  test("settings groups theme and document width in submenus", async ({
     page,
   }) => {
     await login(page, "alice", "password-1");
-    await page.getByRole("button", { name: "设置" }).click();
-    const menu = page.getByRole("menu");
-    await expect(menu.getByText("显示主题", { exact: true })).toHaveCount(0);
-    await expect(menu.getByRole("menuitemradio")).toHaveText([
-      "系统主题",
-      "浅色主题",
-      "深色主题",
-    ]);
-    await menu.getByRole("menuitemradio", { name: "深色主题" }).click();
-    await expect(menu).toBeHidden();
-    await page.getByRole("button", { name: /文档宽度/ }).click();
-    await page.getByRole("menuitemradio", { name: "宽" }).click();
-    await expect(page.getByRole("menu")).toBeHidden();
+    await page.goto(`${baseURL}/doc/README.md`);
+
+    const settings = page.getByRole("button", { name: "设置" });
+    const theme = page.getByRole("menuitem", { name: "页面主题" });
+    const width = page.getByRole("menuitem", { name: "正文宽度" });
+    await expect(page.getByRole("button", { name: /^文档宽度/ })).toHaveCount(
+      0,
+    );
+
+    await settings.press("Enter");
+    await expect(theme).toBeFocused();
+    await expect(page.getByRole("menuitemradio")).toHaveCount(0);
+    await page.keyboard.press("ArrowRight");
+    const systemTheme = page.getByRole("menuitemradio", {
+      name: "系统主题",
+      checked: true,
+    });
+    await expect(systemTheme).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(systemTheme).toBeHidden();
+    await expect(theme).toBeFocused();
+    await page.keyboard.press("ArrowRight");
+    await expect(systemTheme).toBeFocused();
+    await page.keyboard.press("End");
+    await expect(
+      page.getByRole("menuitemradio", { name: "深色主题" }),
+    ).toBeFocused();
+    await page.keyboard.press("Enter");
+    await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
+    await expect(settings).toBeFocused();
+    await expect(theme).toBeHidden();
+
+    await settings.click();
+    await width.hover();
+    await expect(
+      page.getByRole("menuitemradio", { name: "标准", checked: true }),
+    ).toBeVisible();
+    await page.getByRole("menuitemradio", { name: "宽", exact: true }).click();
+    await expect(page).toHaveURL(
+      ({ searchParams }) =>
+        searchParams.get("mode") === "dark" &&
+        searchParams.get("width") === "wide",
+    );
+    await expect(page.locator(".reader-canvas-wide")).toBeVisible();
+    await expect(width).toBeHidden();
+
+    await settings.click();
+    await width.hover();
+    await expect(
+      page.getByRole("menuitemradio", { name: "宽", checked: true }),
+    ).toBeVisible();
   });
 
   test("token settings offer finite and permanent lifetimes", async ({
@@ -1625,11 +1663,13 @@ test.describe("authenticated mode", () => {
       Array.from({ length: 5 }, () => [19, 31]),
     );
     await page.getByRole("button", { name: "设置" }).click();
+    await page.getByRole("menuitem", { name: "页面主题" }).hover();
     await page.getByRole("menuitemradio", { name: "深色主题" }).click();
     await expect
       .poll(highlightOpacity)
       .toEqual(Array.from({ length: 5 }, () => [39, 47]));
     await page.getByRole("button", { name: "设置" }).click();
+    await page.getByRole("menuitem", { name: "页面主题" }).hover();
     await page.getByRole("menuitemradio", { name: "浅色主题" }).click();
     const pointAt = (offset: number) =>
       page.evaluate((offset) => {

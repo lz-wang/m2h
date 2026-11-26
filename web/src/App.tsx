@@ -1,6 +1,7 @@
 import { Menu } from "@base-ui/react/menu";
 import {
   Check,
+  ChevronRight,
   Columns3,
   FileQuestion,
   FileText,
@@ -25,6 +26,7 @@ import type {
   CSSProperties,
   KeyboardEvent as ReactKeyboardEvent,
   MouseEvent as ReactMouseEvent,
+  ReactNode,
   PointerEvent as ReactPointerEvent,
   SyntheticEvent,
 } from "react";
@@ -158,6 +160,11 @@ const modes: Array<{ value: Mode; label: string; icon: typeof Sun }> = [
   { value: "light", label: "浅色", icon: Sun },
   { value: "dark", label: "深色", icon: Moon },
 ];
+
+const accountThemeOptions = modes.map((option) => ({
+  ...option,
+  label: option.value === "auto" ? "系统主题" : `${option.label}主题`,
+}));
 
 const layoutStorageKey = "m2h.preview.layout";
 
@@ -411,7 +418,6 @@ export function App({
   const [annotationSelectionVersion, setAnnotationSelectionVersion] =
     useState(0);
   const [tokenSettingsOpen, setTokenSettingsOpen] = useState(false);
-  const [settingsOpen, setSettingsOpen] = useState(false);
   const [tocShare, setTocShare] = useState(50);
   const [annotationPopups, setAnnotationPopups] = useState<AnnotationPopup[]>(
     [],
@@ -1284,18 +1290,10 @@ export function App({
               frontmatter={preview.document?.frontmatter ?? null}
             />
             <div className="toolbar-actions">
-              <DocumentWidthMenu
-                width={preview.width}
-                onChange={preview.setWidth}
-              />
               {authIdentity !== null &&
               authIdentity !== undefined &&
               onLogout !== undefined ? (
-                <Menu.Root
-                  modal={false}
-                  open={settingsOpen}
-                  onOpenChange={setSettingsOpen}
-                >
+                <Menu.Root modal={false}>
                   <Tooltip>
                     <Menu.Trigger
                       render={
@@ -1322,38 +1320,20 @@ export function App({
                       className="theme-menu-positioner"
                     >
                       <Menu.Popup className="theme-menu-popup settings-menu-popup">
-                        <Menu.Group>
-                          <Menu.RadioGroup
+                        <PreferenceSubmenu label="页面主题" icon={SunMoon}>
+                          <PreferenceMenuOptions
+                            options={accountThemeOptions}
                             value={preview.mode}
-                            onValueChange={(value) => {
-                              if (
-                                value === "light" ||
-                                value === "dark" ||
-                                value === "auto"
-                              )
-                                preview.setMode(value);
-                            }}
-                          >
-                            {modes.map(({ value, label, icon: Icon }) => (
-                              <Menu.RadioItem
-                                key={value}
-                                value={value}
-                                className="theme-menu-item"
-                                onClick={() => setSettingsOpen(false)}
-                              >
-                                <Icon aria-hidden="true" />
-                                <span>
-                                  {value === "auto"
-                                    ? "系统主题"
-                                    : `${label}主题`}
-                                </span>
-                                <Menu.RadioItemIndicator className="theme-menu-indicator">
-                                  <Check aria-hidden="true" />
-                                </Menu.RadioItemIndicator>
-                              </Menu.RadioItem>
-                            ))}
-                          </Menu.RadioGroup>
-                        </Menu.Group>
+                            onChange={preview.setMode}
+                          />
+                        </PreferenceSubmenu>
+                        <PreferenceSubmenu label="正文宽度" icon={Columns3}>
+                          <PreferenceMenuOptions
+                            options={documentWidths}
+                            value={preview.width}
+                            onChange={preview.setWidth}
+                          />
+                        </PreferenceSubmenu>
                         {tokensEnabled ? (
                           <Menu.Item
                             className="theme-menu-item"
@@ -1375,7 +1355,13 @@ export function App({
                   </Menu.Portal>
                 </Menu.Root>
               ) : (
-                <ThemeMenu mode={preview.mode} onChange={preview.setMode} />
+                <>
+                  <DocumentWidthMenu
+                    width={preview.width}
+                    onChange={preview.setWidth}
+                  />
+                  <ThemeMenu mode={preview.mode} onChange={preview.setMode} />
+                </>
               )}
               {tokensEnabled ? (
                 <TokenSettings
@@ -1997,6 +1983,76 @@ function RightSidebarResizeHandle({
   );
 }
 
+function PreferenceSubmenu({
+  label,
+  icon: Icon,
+  children,
+}: {
+  label: string;
+  icon: typeof Sun;
+  children: ReactNode;
+}) {
+  return (
+    <Menu.SubmenuRoot>
+      <Menu.SubmenuTrigger className="theme-menu-item">
+        <Icon aria-hidden="true" />
+        <span>{label}</span>
+        <ChevronRight aria-hidden="true" />
+      </Menu.SubmenuTrigger>
+      <Menu.Portal>
+        <Menu.Positioner
+          className="theme-menu-positioner"
+          side="left"
+          align="start"
+          sideOffset={4}
+        >
+          <Menu.Popup
+            className="theme-menu-popup settings-submenu-popup"
+            aria-label={label}
+          >
+            {children}
+          </Menu.Popup>
+        </Menu.Positioner>
+      </Menu.Portal>
+    </Menu.SubmenuRoot>
+  );
+}
+
+function PreferenceMenuOptions<Value extends string>({
+  options,
+  value,
+  onChange,
+}: {
+  options: { value: Value; label: string; icon: typeof Sun }[];
+  value: Value;
+  onChange(value: Value): void;
+}) {
+  return (
+    <Menu.RadioGroup
+      value={value}
+      onValueChange={(nextValue) => {
+        const option = options.find((item) => item.value === nextValue);
+        if (option) onChange(option.value);
+      }}
+    >
+      {options.map(({ value, label, icon: Icon }) => (
+        <Menu.RadioItem
+          key={value}
+          value={value}
+          className="theme-menu-item"
+          closeOnClick
+        >
+          <Icon aria-hidden="true" />
+          <span>{label}</span>
+          <Menu.RadioItemIndicator className="theme-menu-indicator">
+            <Check aria-hidden="true" />
+          </Menu.RadioItemIndicator>
+        </Menu.RadioItem>
+      ))}
+    </Menu.RadioGroup>
+  );
+}
+
 function DocumentWidthMenu({
   width,
   onChange,
@@ -2004,13 +2060,12 @@ function DocumentWidthMenu({
   width: DocumentWidth;
   onChange(width: DocumentWidth): void;
 }) {
-  const [open, setOpen] = useState(false);
   const current =
     documentWidths.find((item) => item.value === width) ?? documentWidths[0];
   const CurrentIcon = current.icon;
   return (
     // Non-modal: toolbar dropdowns must not trap focus or lock document scroll.
-    <Menu.Root modal={false} open={open} onOpenChange={setOpen}>
+    <Menu.Root modal={false}>
       <Tooltip>
         <Menu.Trigger
           render={
@@ -2041,32 +2096,11 @@ function DocumentWidthMenu({
               <Menu.GroupLabel className="theme-menu-label">
                 文档宽度
               </Menu.GroupLabel>
-              <Menu.RadioGroup
+              <PreferenceMenuOptions
+                options={documentWidths}
                 value={width}
-                onValueChange={(value) => {
-                  if (
-                    value === "standard" ||
-                    value === "wide" ||
-                    value === "full"
-                  )
-                    onChange(value);
-                }}
-              >
-                {documentWidths.map(({ value, label, icon: Icon }) => (
-                  <Menu.RadioItem
-                    key={value}
-                    value={value}
-                    className="theme-menu-item"
-                    onClick={() => setOpen(false)}
-                  >
-                    <Icon aria-hidden="true" />
-                    <span>{label}</span>
-                    <Menu.RadioItemIndicator className="theme-menu-indicator">
-                      <Check aria-hidden="true" />
-                    </Menu.RadioItemIndicator>
-                  </Menu.RadioItem>
-                ))}
-              </Menu.RadioGroup>
+                onChange={onChange}
+              />
             </Menu.Group>
           </Menu.Popup>
         </Menu.Positioner>
@@ -2082,20 +2116,13 @@ function ThemeMenu({
   mode: Mode;
   onChange(mode: Mode): void;
 }) {
-  const [open, setOpen] = useState(false);
   const currentLabel = modes.find((item) => item.value === mode)?.label ?? mode;
   const CurrentIcon =
     modes.find((item) => item.value === mode)?.icon ?? SunMoon;
 
-  const handleChange = (value: string) => {
-    if (value === "light" || value === "dark" || value === "auto") {
-      onChange(value);
-    }
-  };
-
   return (
     // Non-modal: toolbar dropdowns must not trap focus or lock document scroll.
-    <Menu.Root modal={false} open={open} onOpenChange={setOpen}>
+    <Menu.Root modal={false}>
       <Tooltip>
         <Menu.Trigger
           render={
@@ -2125,22 +2152,11 @@ function ThemeMenu({
               <Menu.GroupLabel className="theme-menu-label">
                 显示主题
               </Menu.GroupLabel>
-              <Menu.RadioGroup value={mode} onValueChange={handleChange}>
-                {modes.map(({ value, label, icon: Icon }) => (
-                  <Menu.RadioItem
-                    key={value}
-                    value={value}
-                    className="theme-menu-item"
-                    onClick={() => setOpen(false)}
-                  >
-                    <Icon aria-hidden="true" />
-                    <span>{label}</span>
-                    <Menu.RadioItemIndicator className="theme-menu-indicator">
-                      <Check aria-hidden="true" />
-                    </Menu.RadioItemIndicator>
-                  </Menu.RadioItem>
-                ))}
-              </Menu.RadioGroup>
+              <PreferenceMenuOptions
+                options={modes}
+                value={mode}
+                onChange={onChange}
+              />
             </Menu.Group>
           </Menu.Popup>
         </Menu.Positioner>
