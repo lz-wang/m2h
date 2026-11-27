@@ -322,7 +322,7 @@ export function TokenSettings({
             <p className="text-muted-foreground py-6 text-sm">正在加载令牌…</p>
           ) : visibleTokens.length === 0 ? (
             <p className="text-muted-foreground py-10 text-center text-sm">
-              还没有令牌。
+              还没有令牌
             </p>
           ) : (
             <table className="w-full min-w-[700px] text-left text-sm">

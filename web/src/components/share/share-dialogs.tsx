@@ -434,11 +434,11 @@ export function ShareSettings({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="top-[10dvh] h-[80dvh] max-h-[80dvh] gap-4 p-5 sm:max-w-5xl">
-        <div className="space-y-1 pr-8">
-          <DialogTitle>分享管理</DialogTitle>
-          <DialogDescription>查看或撤销你创建的有效分享。</DialogDescription>
-        </div>
+      <DialogContent
+        aria-describedby={undefined}
+        className="top-[10dvh] h-[80dvh] max-h-[80dvh] gap-4 p-5 sm:max-w-5xl"
+      >
+        <DialogTitle className="pr-8">分享管理</DialogTitle>
         {error ? (
           <div role="alert" className="flex items-center gap-3 text-sm">
             无法加载分享列表。
@@ -453,7 +453,9 @@ export function ShareSettings({
           </p>
         ) : null}
         {shares !== null && active.length === 0 && !error ? (
-          <p className="text-muted-foreground text-sm">暂无有效分享。</p>
+          <p className="text-muted-foreground py-10 text-center text-sm">
+            暂无有效分享
+          </p>
         ) : null}
         {selected ? (
           <ConfirmRevoke

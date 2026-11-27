@@ -1904,7 +1904,9 @@ test("public document sharing opens in an anonymous browser and revokes the link
     const confirmation = page.getByRole("dialog", { name: "撤销分享" });
     await expect(confirmation).toBeVisible();
     await confirmation.getByRole("button", { name: "确认撤销" }).click();
-    await expect(settings.getByText("暂无有效分享。")).toBeVisible();
+    const empty = settings.getByText("暂无有效分享", { exact: true });
+    await expect(empty).toBeVisible();
+    await expect(empty).toHaveCSS("text-align", "center");
     expect((await reader.reload())?.status()).toBe(404);
     await expect(reader.getByText("此分享链接不可用。")).toBeVisible();
   } finally {
