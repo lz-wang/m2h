@@ -3,13 +3,17 @@ import {
   ArrowUp,
   ArrowUpDown,
   Check,
+  ChevronDown,
   CircleAlert,
+  Clock3,
   Copy,
   ExternalLink,
+  FileText,
+  FolderOpen,
   Link2,
   Trash2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useState } from "react";
 
 import {
   APIError,
@@ -21,9 +25,10 @@ import {
 } from "../../api";
 import { copyText } from "../../lib/clipboard";
 import { expiryOptions } from "../../lib/expiry";
-import { Button } from "../ui/button";
+import { Button, buttonVariants } from "../ui/button";
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogTitle,
@@ -129,6 +134,33 @@ function ShareActions({
   share: DocumentShare;
   onRevoke(): void;
 }) {
+  return (
+    <div className="flex items-center justify-center gap-1">
+      <a
+        href={share.url}
+        target="_blank"
+        rel="noreferrer"
+        aria-label="打开分享链接"
+        title="打开分享链接"
+        className="hover:bg-muted focus-visible:ring-ring inline-flex size-8 items-center justify-center rounded-md focus-visible:ring-2"
+      >
+        <ExternalLink className="size-4" aria-hidden="true" />
+      </a>
+      <ShareCopyButton url={share.url} />
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        aria-label="撤销分享链接"
+        title="撤销分享链接"
+        onClick={onRevoke}
+      >
+        <Trash2 aria-hidden="true" />
+      </Button>
+    </div>
+  );
+}
+
+function ShareCopyButton({ url }: { url: string }) {
   const [copyState, setCopyState] = useState<"success" | "error" | null>(null);
   useEffect(() => {
     if (copyState === null) return;
@@ -142,57 +174,37 @@ function ShareActions({
         ? CircleAlert
         : Copy;
   return (
-    <div className="flex items-center justify-center gap-1">
-      <a
-        href={share.url}
-        target="_blank"
-        rel="noreferrer"
-        aria-label="打开分享链接"
-        title="打开分享链接"
-        className="hover:bg-muted focus-visible:ring-ring inline-flex size-8 items-center justify-center rounded-md focus-visible:ring-2"
-      >
-        <ExternalLink className="size-4" aria-hidden="true" />
-      </a>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label={
+    <Button
+      variant="ghost"
+      size="icon-sm"
+      className="shrink-0"
+      aria-label={
+        copyState === "success"
+          ? "分享链接已复制"
+          : copyState === "error"
+            ? "复制分享链接失败，请重试"
+            : "复制分享链接"
+      }
+      title={copyState === "error" ? "复制失败，请重试" : "复制分享链接"}
+      data-copy-state={copyState ?? undefined}
+      onClick={() => {
+        setCopyState(null);
+        void copyText(url).then((copied) =>
+          setCopyState(copied ? "success" : "error"),
+        );
+      }}
+    >
+      <CopyIcon
+        aria-hidden="true"
+        className={
           copyState === "success"
-            ? "分享链接已复制"
+            ? "text-[color:var(--m2h-copy-success)]"
             : copyState === "error"
-              ? "复制分享链接失败，请重试"
-              : "复制分享链接"
+              ? "text-[color:var(--m2h-copy-danger)]"
+              : undefined
         }
-        title={copyState === "error" ? "复制失败，请重试" : "复制分享链接"}
-        data-copy-state={copyState ?? undefined}
-        onClick={() => {
-          setCopyState(null);
-          void copyText(share.url).then((copied) =>
-            setCopyState(copied ? "success" : "error"),
-          );
-        }}
-      >
-        <CopyIcon
-          aria-hidden="true"
-          className={
-            copyState === "success"
-              ? "text-[color:var(--m2h-copy-success)]"
-              : copyState === "error"
-                ? "text-[color:var(--m2h-copy-danger)]"
-                : undefined
-          }
-        />
-      </Button>
-      <Button
-        variant="ghost"
-        size="icon-sm"
-        aria-label="撤销分享链接"
-        title="撤销分享链接"
-        onClick={onRevoke}
-      >
-        <Trash2 aria-hidden="true" />
-      </Button>
-    </div>
+      />
+    </Button>
   );
 }
 
@@ -277,6 +289,120 @@ function ConfirmRevoke({
   );
 }
 
+const shareDetailRowClass =
+  "grid grid-cols-[7rem_minmax(0,1fr)] items-center gap-3 px-3 py-3";
+const shareDetailLabelClass = "text-muted-foreground flex items-center gap-2";
+
+const shareDialogContentClass =
+  "top-1/2 max-w-xl -translate-y-1/2 gap-5 overflow-y-auto p-5 sm:p-6";
+
+function ShareDocumentDetails({
+  target,
+  children,
+}: {
+  target: ShareTarget;
+  children: ReactNode;
+}) {
+  return (
+    <dl className="bg-muted/40 divide-border grid auto-rows-fr divide-y rounded-lg border text-left text-sm">
+      <div className={shareDetailRowClass}>
+        <dt className={shareDetailLabelClass}>
+          <FileText aria-hidden="true" className="size-4 shrink-0" />
+          文档名称
+        </dt>
+        <dd className="border-l border-transparent pl-3 font-medium wrap-anywhere">
+          {target.title}
+        </dd>
+      </div>
+      <div className={shareDetailRowClass}>
+        <dt className={shareDetailLabelClass}>
+          <FolderOpen aria-hidden="true" className="size-4 shrink-0" />
+          文档路径
+        </dt>
+        <dd>
+          <code className="bg-muted text-muted-foreground inline-block max-w-full rounded border border-transparent px-3 py-0.5 font-mono text-xs wrap-anywhere">
+            {target.documentRef.path}
+          </code>
+        </dd>
+      </div>
+      {children}
+    </dl>
+  );
+}
+
+function SharedDocumentDialog({
+  target,
+  share,
+  onClose,
+  onRevoked,
+}: {
+  target: ShareTarget;
+  share: DocumentShare;
+  onClose(): void;
+  onRevoked(): void;
+}) {
+  const [confirming, setConfirming] = useState(false);
+  return (
+    <Dialog
+      open
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <DialogContent
+        showCloseButton={false}
+        className={shareDialogContentClass}
+      >
+        <DialogTitle>已分享文档</DialogTitle>
+        <ShareDocumentDetails target={target}>
+          <div className={shareDetailRowClass}>
+            <dt>
+              <label
+                className={shareDetailLabelClass}
+                htmlFor="share-public-link"
+              >
+                <Link2 aria-hidden="true" className="size-4 shrink-0" />
+                公开链接
+              </label>
+            </dt>
+            <dd className="flex min-w-0 items-center gap-1">
+              <Input
+                id="share-public-link"
+                readOnly
+                className="min-w-0 pr-2 pl-3 font-mono"
+                value={share.url}
+                onFocus={(event) => event.currentTarget.select()}
+              />
+              <ShareCopyButton url={share.url} />
+            </dd>
+          </div>
+        </ShareDocumentDetails>
+        {confirming ? (
+          <ConfirmRevoke
+            share={share}
+            onCancel={() => setConfirming(false)}
+            onRevoked={onRevoked}
+          />
+        ) : (
+          <div className="flex justify-end gap-2">
+            <Button variant="destructive" onClick={() => setConfirming(true)}>
+              删除
+            </Button>
+            <a
+              className={buttonVariants()}
+              href={share.url}
+              target="_blank"
+              rel="noreferrer"
+            >
+              打开
+            </a>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function ShareDialog({
   target,
   onClose,
@@ -291,7 +417,6 @@ export function ShareDialog({
   const [duration, setDuration] = useState("30m");
   const [creating, setCreating] = useState(false);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [confirmID, setConfirmID] = useState("");
   const active = shares?.find(
     (item) =>
       item.documentRef.rootId === target.documentRef.rootId &&
@@ -317,6 +442,21 @@ export function ShareDialog({
       setCreating(false);
     }
   }
+  if (active) {
+    return (
+      <SharedDocumentDialog
+        key={active.id}
+        target={target}
+        share={active}
+        onClose={onClose}
+        onRevoked={() => {
+          setShares(
+            (items) => items?.filter((item) => item.id !== active.id) ?? [],
+          );
+        }}
+      />
+    );
+  }
   return (
     <Dialog
       open
@@ -324,64 +464,30 @@ export function ShareDialog({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="top-1/2 max-w-md -translate-y-1/2 gap-4 overflow-y-auto p-5">
-        <div className="space-y-1 pr-8">
-          <DialogTitle>分享文档</DialogTitle>
-          <DialogDescription>{target.title}</DialogDescription>
+      <DialogContent
+        showCloseButton={false}
+        className={shareDialogContentClass}
+      >
+        <div className="space-y-1">
+          <DialogTitle>确认分享文档？</DialogTitle>
+          <DialogDescription>
+            分享后，此文档将在有效期内可公开访问
+          </DialogDescription>
         </div>
-        <div className="bg-muted/60 flex items-start gap-3 rounded-md p-3 text-sm">
-          <Link2 className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-          <div className="space-y-1">
-            <p className="font-medium">任何获得链接的人</p>
-            <p className="text-muted-foreground">
-              无需登录即可阅读。链接有效期间，正文和附件的后续变更也会公开。
-            </p>
-          </div>
-        </div>
-        {active ? (
-          <div className="grid gap-3">
-            <Input
-              readOnly
-              aria-label="分享链接"
-              value={active.url}
-              onFocus={(event) => event.currentTarget.select()}
-            />
-            <div className="flex items-center justify-between gap-2 text-sm">
-              <span className="text-muted-foreground">
-                剩余有效期 <ShareExpiry share={active} />
-              </span>
-              <ShareActions
-                key={active.id}
-                share={active}
-                onRevoke={() => setConfirmID(active.id)}
-              />
-            </div>
-            {confirmID === active.id ? (
-              <ConfirmRevoke
-                share={active}
-                onCancel={() => setConfirmID("")}
-                onRevoked={() => {
-                  setShares(
-                    (items) =>
-                      items?.filter((item) => item.id !== active.id) ?? [],
-                  );
-                  setConfirmID("");
-                }}
-              />
-            ) : null}
-          </div>
-        ) : (
-          <div className="grid gap-3">
-            <label
-              className="flex flex-col gap-1.5 text-sm"
-              htmlFor="share-duration"
-            >
-              有效期
+        <ShareDocumentDetails target={target}>
+          <div className={shareDetailRowClass}>
+            <dt>
+              <label className={shareDetailLabelClass} htmlFor="share-duration">
+                <Clock3 aria-hidden="true" className="size-4 shrink-0" />
+                分享有效期
+              </label>
+            </dt>
+            <dd className="relative w-44 max-w-full">
               <select
                 id="share-duration"
                 value={duration}
                 onChange={(event) => setDuration(event.target.value)}
-                className="border-border bg-background h-9 rounded-md border px-2"
+                className="border-border bg-background h-9 w-full appearance-none rounded-md border pr-9 pl-3 text-left"
               >
                 {expiryOptions.map(({ id, label }) => (
                   <option key={id} value={id}>
@@ -389,42 +495,47 @@ export function ShareDialog({
                   </option>
                 ))}
               </select>
-            </label>
-            {duration === "permanent" ? (
-              <p className="text-muted-foreground text-sm">
-                永久链接会持续公开这篇文档及其后续修改，直到撤销或失效。
-              </p>
-            ) : null}
-            {shares === null && !error ? (
-              <p className="text-muted-foreground text-sm" role="status">
-                正在检查已有分享
-              </p>
-            ) : null}
-            {error ? (
-              <div
-                className="flex items-center justify-between gap-2 text-sm"
-                role="alert"
-              >
-                无法加载分享状态。
-                <Button variant="outline" size="sm" onClick={retry}>
-                  重试
-                </Button>
-              </div>
-            ) : null}
-            {createError !== null ? (
-              <p role="alert" className="text-destructive text-sm">
-                {createError}
-              </p>
-            ) : null}
+              <ChevronDown
+                aria-hidden="true"
+                className="text-muted-foreground pointer-events-none absolute top-1/2 right-3 size-4 -translate-y-1/2"
+              />
+            </dd>
+          </div>
+        </ShareDocumentDetails>
+        <div className="grid gap-3">
+          {shares === null && !error ? (
+            <p className="text-muted-foreground text-sm" role="status">
+              正在检查已有分享
+            </p>
+          ) : null}
+          {error ? (
+            <div
+              className="flex items-center justify-between gap-2 text-sm"
+              role="alert"
+            >
+              无法加载分享状态。
+              <Button variant="outline" size="sm" onClick={retry}>
+                重试
+              </Button>
+            </div>
+          ) : null}
+          {createError !== null ? (
+            <p role="alert" className="text-destructive text-sm">
+              {createError}
+            </p>
+          ) : null}
+          <div className="flex justify-end gap-2">
+            <DialogClose render={<Button variant="outline" />}>
+              取消
+            </DialogClose>
             <Button
-              className="justify-self-end"
               disabled={creating || shares === null || error}
               onClick={() => void create()}
             >
-              {creating ? "正在创建" : "创建分享链接"}
+              {creating ? "分享中" : "分享"}
             </Button>
           </div>
-        )}
+        </div>
       </DialogContent>
     </Dialog>
   );

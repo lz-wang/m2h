@@ -1846,13 +1846,78 @@ test("public document sharing opens in an anonymous browser and revokes the link
   await login(page, "alice", "password-1");
   await page.goto(`${baseURL}/doc/image-lightbox.md`);
   await page.getByRole("button", { name: "分享文档", exact: true }).click();
-  const create = page.getByRole("dialog", { name: "分享文档" });
-  await expect(create.getByLabel("有效期")).toHaveValue("30m");
-  await create.getByRole("button", { name: "创建分享链接" }).click();
-  const shareLink = await create
-    .getByRole("textbox", { name: "分享链接" })
+  const create = page.getByRole("dialog", { name: "确认分享文档？" });
+  await expect(create).toHaveCSS("width", "576px");
+  const duration = create.getByLabel("分享有效期", { exact: true });
+  const createLink = create.getByRole("button", { name: "分享", exact: true });
+  await expect(duration).toHaveValue("30m");
+  const hint = create.getByText("分享后，此文档将在有效期内可公开访问", {
+    exact: true,
+  });
+  await expect(hint).toBeVisible();
+  await createLink.click({ trial: true });
+  const path = create.getByText("image-lightbox.md", { exact: true });
+  await expect(path).toBeVisible();
+  await expect(path).toHaveCSS("font-family", /monospace/);
+  const alignment = await duration.evaluate((select) => {
+    const card = select.closest("dl");
+    const title = card?.querySelector("dd");
+    const pathValue = card?.querySelector("code");
+    if (!card || !title || !pathValue) throw new Error("Missing share details");
+    return {
+      heights: Array.from(
+        card.children,
+        (row) => row.getBoundingClientRect().height,
+      ),
+      leftEdges: [title, pathValue, select].map((field) => {
+        const style = getComputedStyle(field);
+        return (
+          field.getBoundingClientRect().left +
+          Number.parseFloat(style.borderLeftWidth) +
+          Number.parseFloat(style.paddingLeft)
+        );
+      }),
+    };
+  });
+  expect(alignment.heights).toHaveLength(3);
+  expect(
+    Math.max(...alignment.heights) - Math.min(...alignment.heights),
+  ).toBeLessThan(0.5);
+  expect(
+    Math.max(...alignment.leftEdges) - Math.min(...alignment.leftEdges),
+  ).toBeLessThan(0.5);
+  const pathBox = await path.boundingBox();
+  const durationBox = await duration.boundingBox();
+  const arrowBox = await duration
+    .locator("xpath=..")
+    .locator("svg")
+    .boundingBox();
+  const cancelBox = await create
+    .getByRole("button", { name: "取消" })
+    .boundingBox();
+  const buttonBox = await createLink.boundingBox();
+  if (!pathBox || !durationBox || !arrowBox || !cancelBox || !buttonBox) {
+    throw new Error("Missing share creation controls");
+  }
+  expect(pathBox.x).toBeCloseTo(durationBox.x, 0);
+  expect(arrowBox.x + arrowBox.width).toBeLessThan(
+    durationBox.x + durationBox.width,
+  );
+  expect(arrowBox.x).toBeGreaterThan(durationBox.x);
+  expect(cancelBox.x + cancelBox.width).toBeLessThan(buttonBox.x);
+  expect(buttonBox.y).toBeGreaterThanOrEqual(
+    durationBox.y + durationBox.height,
+  );
+  await createLink.click();
+  const shared = page.getByRole("dialog", { name: "已分享文档" });
+  await expect(shared).toHaveCSS("width", "576px");
+  const shareLink = await shared
+    .getByRole("textbox", { name: "公开链接" })
     .inputValue();
   expect(new URL(shareLink).pathname).toMatch(/^\/share\/[A-Za-z0-9_-]{43}$/);
+  await expect(
+    shared.getByRole("link", { name: "打开", exact: true }),
+  ).toHaveAttribute("href", shareLink);
 
   const anonymous = await browser.newContext();
   try {
@@ -1897,7 +1962,9 @@ test("public document sharing opens in an anonymous browser and revokes the link
       reader.getByRole("navigation", { name: "文档目录" }),
     ).toBeHidden();
 
-    await create.getByRole("button", { name: "关闭" }).click();
+    await expect(shared.getByRole("button", { name: "关闭" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
+    await expect(shared).toBeHidden();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("button", { name: "设置", exact: true }).click();
     await page.getByRole("menuitem", { name: "分享管理" }).click();

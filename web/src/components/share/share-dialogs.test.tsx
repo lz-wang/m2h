@@ -49,19 +49,49 @@ it("creates and copies the current document's link", async () => {
   const user = userEvent.setup();
   render(<ShareDialog target={target} onClose={vi.fn()} />);
   const create = screen.getByRole<HTMLButtonElement>("button", {
-    name: "创建分享链接",
+    name: "分享",
   });
   expect(
-    screen.getByRole<HTMLSelectElement>("combobox", { name: "有效期" }).value,
+    screen.getByRole<HTMLSelectElement>("combobox", { name: "分享有效期" })
+      .value,
   ).toBe("30m");
-  await user.selectOptions(screen.getByLabelText("有效期"), "permanent");
-  expect(screen.getByText(/永久链接会持续公开/)).toBeTruthy();
+  await user.selectOptions(screen.getByLabelText("分享有效期"), "permanent");
+  expect(screen.getByText("分享后，此文档将在有效期内可公开访问")).toBeTruthy();
   await user.click(create);
   const address = `${location.origin}/share/${id}`;
   const input = await screen.findByRole<HTMLInputElement>("textbox", {
-    name: "分享链接",
+    name: "公开链接",
   });
   expect(input.value).toBe(address);
+  const sharedDialog = screen.getByRole("dialog", { name: "已分享文档" });
+  expect(
+    within(sharedDialog).getByText(target.title, { exact: true }),
+  ).toBeTruthy();
+  expect(
+    within(sharedDialog).getByText(target.documentRef.path, { exact: true }),
+  ).toBeTruthy();
+  expect(
+    within(sharedDialog)
+      .getByRole("button", { name: "删除" })
+      .querySelector("svg"),
+  ).toBeNull();
+  expect(
+    within(sharedDialog)
+      .getByRole("link", { name: "打开" })
+      .querySelector("svg"),
+  ).toBeNull();
+  expect(
+    within(sharedDialog).queryByText("分享后，此文档将在有效期内可公开访问"),
+  ).toBeNull();
+  expect(within(sharedDialog).queryByText(/剩余有效期/)).toBeNull();
+  expect(
+    within(sharedDialog)
+      .getByRole("link", { name: "打开" })
+      .getAttribute("href"),
+  ).toBe(address);
+  expect(
+    within(sharedDialog).getByRole("button", { name: "删除" }),
+  ).toBeTruthy();
   expect(request.mock.calls[0]?.[0]).toBe(
     "/api/shares?rootId=root&path=guide.md",
   );
@@ -83,13 +113,25 @@ it("creates and copies the current document's link", async () => {
   expect(copy.getAttribute("aria-label")).toBe("复制分享链接");
 });
 
+it("cancels the confirmation without creating a share", async () => {
+  request.mockResolvedValueOnce(json([]));
+  const onClose = vi.fn();
+  render(<ShareDialog target={target} onClose={onClose} />);
+  const dialog = screen.getByRole("dialog", { name: "确认分享文档？" });
+  expect(within(dialog).getByText(target.documentRef.path)).toBeTruthy();
+  expect(within(dialog).queryByRole("button", { name: "关闭" })).toBeNull();
+  await userEvent.click(within(dialog).getByRole("button", { name: "取消" }));
+  expect(onClose).toHaveBeenCalledOnce();
+  expect(request).toHaveBeenCalledTimes(1);
+});
+
 it("reuses the existing link and allows cancellation of revocation", async () => {
   request.mockResolvedValueOnce(json([shared]));
   const user = userEvent.setup();
   render(<ShareDialog target={target} onClose={vi.fn()} />);
-  await screen.findByRole("textbox", { name: "分享链接" });
-  expect(screen.queryByRole("button", { name: "创建分享链接" })).toBeNull();
-  await user.click(screen.getByRole("button", { name: "撤销分享链接" }));
+  await screen.findByRole("textbox", { name: "公开链接" });
+  expect(screen.queryByRole("button", { name: "分享" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "删除" }));
   await user.click(screen.getByRole("button", { name: "取消" }));
   expect(screen.queryByRole("button", { name: "确认撤销" })).toBeNull();
   expect(request).toHaveBeenCalledTimes(1);
@@ -170,7 +212,7 @@ it("retries failed list and create requests", async () => {
   render(<ShareDialog target={target} onClose={vi.fn()} />);
   await user.click(await screen.findByRole("button", { name: "重试" }));
   const create = screen.getByRole<HTMLButtonElement>("button", {
-    name: "创建分享链接",
+    name: "分享",
   });
   await waitFor(() => expect(create.disabled).toBe(false));
   await user.click(create);
