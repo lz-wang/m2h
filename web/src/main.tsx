@@ -1,7 +1,8 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-
 import { AuthGate } from "./components/auth/auth-gate";
+import { PublicReader } from "./components/share/public-reader";
+import { stripBasePath } from "./lib/base-path";
 import "./index.css";
 
 // Keep the browser's scroll restoration enabled: an early release had stored
@@ -22,8 +23,12 @@ if (root === null) {
   throw new Error("m2h WebUI root element is missing");
 }
 
+const shareID = stripBasePath(location.pathname)?.match(
+  /^\/share\/([^/]+)$/,
+)?.[1];
+
 createRoot(root).render(
   <StrictMode>
-    <AuthGate />
+    {shareID === undefined ? <AuthGate /> : <PublicReader id={shareID} />}
   </StrictMode>,
 );

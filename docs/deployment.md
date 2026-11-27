@@ -5,7 +5,7 @@ tags:
   - 部署
   - 安全
 create_date: 2026-08-30
-update_date: 2026-11-23
+update_date: 2026-11-27
 ---
 
 # VPS 部署指南
@@ -339,6 +339,7 @@ M2H_LDAP_ALLOWED_USERS='alice,bob' \
 | 变量 / 参数 | 作用 |
 | --- | --- |
 | `--auth <none\|local\|ldap>` | 认证模式；默认 `none`。仅设置环境变量不会启用认证 |
+| `--public-shares` | 允许登录用户创建公开分享。默认关闭，要求 `--auth local` 或 `--auth ldap` |
 | `--data-dir` / `M2H_DATA_DIR` | SQLite 数据目录（默认为各操作系统用户数据目录下的 `m2h`）；不得位于任何发布的文档目录内 |
 | `M2H_LOCAL_USERS_JSON` | 本地账号表，JSON 对象；值支持 `$argon2id$…` PHC 哈希 |
 | `M2H_LDAP_*` | LDAP 连接、服务账号、检索基准/过滤器与白名单；过滤器中的 `%s` 会经 `ldap.EscapeFilter` 转义 |
@@ -348,7 +349,7 @@ M2H_LDAP_ALLOWED_USERS='alice,bob' \
 
 - 浏览器使用 `m2h_session` Cookie（HttpOnly、SameSite=Lax、路径跟随 `--base-path`）。登录后会话有效期为 7 天。距上次续期或登录满 10 分钟后，下次访问文档页面或受保护资源会将有效期顺延至 7 天后。因此，会话可能在最后一次活动后不足 7 天过期，最多相差 10 分钟。健康检查和公开静态资源请求不触发续期。
 - 登录失败统一报错，并按用户名限流。15 分钟内失败 10 次会锁定该用户名。
-- 标注、会话与 Token 全部存在数据目录的 `m2h.db`（纯 Go SQLite 驱动，权限 0600）。数据库运行在 WAL 模式，**运行期间直接复制该文件不是一致性备份**——尚未合并进主文件的写入可能丢失。停机时复制文件即可；运行中备份使用 `sqlite3 <data-dir>/m2h.db "VACUUM INTO '<backup-path>/m2h.db'"`（或 SQLite Online Backup，`sqlite3 … ".backup '<backup-path>/m2h.db'"`）生成一致性快照，恢复时把快照放回数据目录重启即可。Schema 由版本号管理，旧库自动迁移，比程序新的库拒绝打开。
+- 标注、会话、Token 与公开分享全部存在数据目录的 `m2h.db`（纯 Go SQLite 驱动，权限 0600）。数据库运行在 WAL 模式，**运行期间直接复制该文件不是一致性备份**——尚未合并进主文件的写入可能丢失。停机时复制文件即可；运行中备份使用 `sqlite3 <data-dir>/m2h.db "VACUUM INTO '<backup-path>/m2h.db'"`（或 SQLite Online Backup，`sqlite3 … ".backup '<backup-path>/m2h.db'"`）生成一致性快照，恢复时把快照放回数据目录重启即可。Schema 由版本号管理，旧库自动迁移，比程序新的库拒绝打开。
 - 切换 Local/LDAP 后，旧模式签发的会话与 Token 失效。从 `M2H_LOCAL_USERS_JSON` 删除账号或从 `M2H_LDAP_ALLOWED_USERS` 移除用户后，重启服务以加载新配置。该账号的会话与 Token 在下一次请求时失效。
 - LDAP 已有凭证只检查本地白名单，不检查目录中的禁用状态。禁用目录账号时，也须从白名单移除该用户并重启服务。同名账号重新加入配置后，未撤销且未过期的旧 Token 可能再次生效。移除账号前，应先在设置中撤销其所有 Token；不要依赖同名账号重建来撤销凭证。
 - 登录验证最多同时执行 4 次，整个服务每分钟最多接受 60 次验证；超出时返回 429。反向代理还应限制登录请求速率，以减少网络和服务负载。
@@ -357,6 +358,32 @@ M2H_LDAP_ALLOWED_USERS='alice,bob' \
 ### Agent 与 API Token
 
 认证模式下可在 WebUI「API 令牌」设置中创建长期只读 Token，或在标注面板一键生成绑定当前文档版本的临时分享。Agent 通过 `Authorization: Bearer m2h_…` 搜索与读取原文，规范见 [Agent 知识库接入](agent-access.md)。
+
+## 公开分享
+
+在使用 m2h 内置认证的启动命令中添加 `--public-shares`。例如：
+
+```console
+M2H_LOCAL_USERS_JSON='{"alice":"请替换为你的密码"}' m2h docs --auth local --public-shares
+```
+
+- 持链接者可匿名阅读单篇文档。链接读取当前路径内容，正文、引用和附件的后续修改也会公开。移走文档会中断访问，在原路径放回文档可恢复仍在有效期内的链接。
+- 匿名页面仅提供正文和目录。本地附件必须由正文直接引用，并符合文件发布策略。公开分享始终拒绝隐藏文件，跨文档的本地链接只保留文字。
+- 撤销或过期后，后续请求无法使用原链接。从 m2h 本地账号或 LDAP 白名单移除创建者后，重启服务会撤销其分享。仅禁用 LDAP 目录账号时，也要从 m2h 白名单移除该账号。
+- 分享记录随 SQLite 数据库保存。认证配置不同的实例应使用各自的数据目录。备份包含有效分享链接，应按凭据保护。数据库升级到 schema v7。回退旧版时，使用升级前的数据库备份。
+
+反向代理部署应配置 `M2H_PUBLIC_URL` 和 `--base-path`。对外允许访问 `/share/` 和 `/api/public/shares/`（带上已配置的前缀），以及阅读页使用的 `/ui/` 和 `/runtime/`。分享管理接口 `/api/shares` 使用 m2h 会话认证。
+
+代理应遵守 `Cache-Control: no-store`，并从日志移除分享标识。若使用 Nginx，可在 `http` 中定义下列规则，并在对应 `server` 应用条件日志。示例同时匹配根路径和 `/docs` 前缀。使用其他 Base Path 时替换正则中的 `/docs`。
+
+```nginx
+map $uri $m2h_log_request {
+    default 1;
+    ~^(/docs)?/(share|api/public/shares|api/shares)/ 0;
+}
+# 放在 m2h 的 server 中
+access_log /var/log/nginx/m2h.access.log combined if=$m2h_log_request;
+```
 
 ## Tinyauth 认证（可选）
 

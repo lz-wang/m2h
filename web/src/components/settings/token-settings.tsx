@@ -11,13 +11,13 @@ import {
   Trash2,
 } from "lucide-react";
 import { useEffect, useState } from "react";
-
 import { createToken, listTokens, revokeToken, type TokenItem } from "@/api";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { appPath } from "@/lib/base-path";
 import { copyText } from "@/lib/clipboard";
+import { expiryOptions } from "../../lib/expiry";
 
 function describeScope(token: TokenItem): string {
   switch (token.scope.resource.type) {
@@ -473,17 +473,11 @@ export function TokenSettings({
                     className="border-border bg-background h-9 rounded-md border px-2 text-sm"
                     onChange={(event) => setExpiresInDays(event.target.value)}
                   >
-                    <option value={String(10 / 1440)}>10 分钟</option>
-                    <option value={String(30 / 1440)}>30 分钟</option>
-                    <option value={String(1 / 24)}>1 小时</option>
-                    <option value={String(6 / 24)}>6 小时</option>
-                    <option value={String(12 / 24)}>12 小时</option>
-                    <option value="1">24 小时</option>
-                    <option value="3">3 天</option>
-                    <option value="7">7 天</option>
-                    <option value="30">30 天</option>
-                    <option value="90">90 天</option>
-                    <option value="permanent">永久</option>
+                    {expiryOptions.map(({ id, days, label }) => (
+                      <option key={id} value={String(days)}>
+                        {label}
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <div className="flex flex-col gap-1.5 text-sm">

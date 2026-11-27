@@ -210,7 +210,7 @@ function reportUnauthorized(url: string, status: number): void {
 // deliberately carries no user or deployment details.
 export interface SiteConfig {
   authMode: AuthMode;
-  features: { annotations: boolean; tokens: boolean };
+  features: { annotations: boolean; tokens: boolean; shares?: true };
 }
 
 export type AuthMode = "none" | "local" | "ldap";
@@ -232,6 +232,7 @@ function parseSiteConfig(payload: unknown): SiteConfig {
     features: {
       annotations: features.annotations === true,
       tokens: features.tokens === true,
+      ...(features.shares === true ? { shares: true } : {}),
     },
   };
 }
@@ -629,6 +630,102 @@ export async function createToken(input: CreateTokenInput): Promise<TokenItem> {
 // revokeToken tombstones one of the caller's own tokens.
 export async function revokeToken(id: string): Promise<void> {
   await requestMutation(appPath(`/api/tokens/${id}`), "DELETE");
+}
+
+export interface DocumentShare {
+  id: string;
+  title: string;
+  documentRef: DocumentRef;
+  createdAt: number;
+  expiresAt: number;
+  url: string;
+}
+
+function parseDocumentShare(value: unknown): DocumentShare {
+  if (
+    !isRecord(value) ||
+    typeof value.id !== "string" ||
+    !/^[A-Za-z0-9_-]{43}$/.test(value.id) ||
+    typeof value.title !== "string" ||
+    typeof value.createdAt !== "number" ||
+    typeof value.expiresAt !== "number" ||
+    typeof value.url !== "string" ||
+    !isRecord(value.documentRef) ||
+    typeof value.documentRef.rootId !== "string" ||
+    typeof value.documentRef.path !== "string"
+  ) {
+    throw new Error("分享响应格式无效");
+  }
+  const link = new URL(value.url, window.location.origin);
+  if (
+    (link.protocol !== "https:" && link.protocol !== "http:") ||
+    link.pathname !== appPath(`/share/${value.id}`) ||
+    link.username ||
+    link.password ||
+    link.search ||
+    link.hash
+  ) {
+    throw new Error("分享地址无效");
+  }
+  return {
+    id: value.id,
+    title: value.title,
+    createdAt: value.createdAt,
+    expiresAt: value.expiresAt,
+    url: link.href,
+    documentRef: {
+      rootId: value.documentRef.rootId,
+      path: value.documentRef.path,
+    },
+  };
+}
+
+export async function listShares(
+  signal?: AbortSignal,
+): Promise<DocumentShare[]> {
+  const payload = await requestJSON(appPath("/api/shares"), signal);
+  if (!Array.isArray(payload)) {
+    throw new Error("分享列表响应格式无效");
+  }
+  return payload.map(parseDocumentShare);
+}
+
+export async function createShare(
+  documentRef: DocumentRef,
+  duration: string,
+): Promise<DocumentShare> {
+  return parseDocumentShare(
+    await requestMutation(appPath("/api/shares"), "POST", {
+      documentRef,
+      duration,
+    }),
+  );
+}
+
+export async function revokeShare(id: string): Promise<void> {
+  await requestMutation(appPath(`/api/shares/${id}`), "DELETE");
+}
+
+export async function getSharedDocument(
+  id: string,
+  signal?: AbortSignal,
+): Promise<Pick<DocumentResponse, "title" | "html" | "toc">> {
+  const payload = await requestJSON(
+    appPath(`/api/public/shares/${encodeURIComponent(id)}`),
+    signal,
+  );
+  if (
+    !isRecord(payload) ||
+    typeof payload.title !== "string" ||
+    typeof payload.html !== "string"
+  ) {
+    throw new Error("文档响应格式无效");
+  }
+  return {
+    title: payload.title,
+    html: payload.html,
+    toc: parseTOC(payload.toc),
+  };
 }
 
 function parseRecentDocument(value: unknown): RecentDocument {

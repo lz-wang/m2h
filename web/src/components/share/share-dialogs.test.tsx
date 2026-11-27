@@ -1,0 +1,125 @@
+import { render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
+
+import * as clipboard from "../../lib/clipboard";
+import { ShareDialog, ShareSettings } from "./share-dialogs";
+
+const request = vi.fn<typeof fetch>();
+const target = {
+  documentRef: { rootId: "root", path: "guide.md" },
+  title: "Guide",
+};
+const id = "a".repeat(43);
+const shared = {
+  ...target,
+  id,
+  url: `/share/${id}`,
+  createdAt: 1,
+  expiresAt: 0,
+};
+
+function json(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), { status });
+}
+
+beforeEach(() => {
+  request.mockReset();
+  vi.stubGlobal("fetch", request);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it("creates and copies the current document's link", async () => {
+  request
+    .mockResolvedValueOnce(json([]))
+    .mockResolvedValueOnce(json(shared, 201));
+  vi.spyOn(clipboard, "copyText").mockResolvedValue(true);
+  const user = userEvent.setup();
+  render(<ShareDialog target={target} onClose={vi.fn()} />);
+  const create = screen.getByRole<HTMLButtonElement>("button", {
+    name: "创建分享链接",
+  });
+  expect(
+    screen.getByRole<HTMLSelectElement>("combobox", { name: "有效期" }).value,
+  ).toBe("30m");
+  await user.selectOptions(screen.getByLabelText("有效期"), "permanent");
+  expect(screen.getByText(/永久链接会持续公开/)).toBeTruthy();
+  await user.click(create);
+  const address = `${location.origin}/share/${id}`;
+  const input = await screen.findByRole<HTMLInputElement>("textbox", {
+    name: "分享链接",
+  });
+  expect(input.value).toBe(address);
+  expect(request.mock.calls[1]?.[0]).toBe("/api/shares");
+  expect(request.mock.calls[1]?.[1]?.body).toBe(
+    JSON.stringify({ documentRef: target.documentRef, duration: "permanent" }),
+  );
+  await user.click(screen.getByRole("button", { name: "复制分享链接" }));
+  expect(clipboard.copyText).toHaveBeenCalledWith(address);
+  expect(await screen.findByText("已复制")).toBeTruthy();
+});
+
+it("reuses the existing link and allows cancellation of revocation", async () => {
+  request.mockResolvedValueOnce(json([shared]));
+  const user = userEvent.setup();
+  render(<ShareDialog target={target} onClose={vi.fn()} />);
+  await screen.findByRole("textbox", { name: "分享链接" });
+  expect(screen.queryByRole("button", { name: "创建分享链接" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "撤销分享链接" }));
+  await user.click(screen.getByRole("button", { name: "取消" }));
+  expect(screen.queryByRole("button", { name: "确认撤销" })).toBeNull();
+  expect(request).toHaveBeenCalledTimes(1);
+});
+
+it("sorts only active records and removes a revoked share", async () => {
+  const temporary = {
+    ...shared,
+    id: "b".repeat(43),
+    url: `/share/${"b".repeat(43)}`,
+    title: "Alpha",
+    expiresAt: Date.now() + 3_600_000,
+  };
+  const expired = {
+    ...shared,
+    id: "c".repeat(43),
+    url: `/share/${"c".repeat(43)}`,
+    title: "Expired",
+    expiresAt: 1,
+  };
+  request
+    .mockResolvedValueOnce(json([shared, temporary, expired]))
+    .mockResolvedValueOnce(new Response(null, { status: 204 }));
+  const user = userEvent.setup();
+  render(<ShareSettings open onOpenChange={vi.fn()} />);
+  const alpha = await screen.findByRole("row", { name: /Alpha/ });
+  expect(screen.queryByText("Expired")).toBeNull();
+  await user.click(screen.getByRole("button", { name: "文档名称" }));
+  await user.click(screen.getByRole("button", { name: "文档名称" }));
+  expect(screen.getAllByRole("row")[1]?.textContent).toContain("Guide");
+  await user.click(within(alpha).getByRole("button", { name: "撤销分享链接" }));
+  await user.click(screen.getByRole("button", { name: "确认撤销" }));
+  expect(await screen.findByText("Guide")).toBeTruthy();
+  await waitFor(() => expect(screen.queryByText("Alpha")).toBeNull());
+  expect(request.mock.calls[1]?.[0]).toBe(`/api/shares/${temporary.id}`);
+  expect(request.mock.calls[1]?.[1]?.method).toBe("DELETE");
+});
+
+it("retries failed list and create requests", async () => {
+  request
+    .mockRejectedValueOnce(new Error("offline"))
+    .mockResolvedValueOnce(json([]))
+    .mockResolvedValueOnce(json({}, 503));
+  const user = userEvent.setup();
+  render(<ShareDialog target={target} onClose={vi.fn()} />);
+  await user.click(await screen.findByRole("button", { name: "重试" }));
+  const create = screen.getByRole<HTMLButtonElement>("button", {
+    name: "创建分享链接",
+  });
+  await waitFor(() => expect(create.disabled).toBe(false));
+  await user.click(create);
+  expect(await screen.findByText(/无法创建分享/)).toBeTruthy();
+});

@@ -69,6 +69,7 @@ export function AuthGate({
         onLogout={auth.logout}
         annotationsAvailable={auth.features.annotations}
         tokensAvailable={auth.features.tokens}
+        sharesAvailable={auth.features.shares === true}
       />
     </>
   );

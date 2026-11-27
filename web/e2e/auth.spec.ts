@@ -29,6 +29,7 @@ test.beforeAll(async () => {
       String(authPort),
       "--auth",
       "local",
+      "--public-shares",
       "--data-dir",
       dataDir,
       "web/e2e/docs",
@@ -1837,4 +1838,69 @@ test.describe("authenticated mode", () => {
     expect(entries.map(({ id }) => id)).toEqual([wide.id, newer.id]);
     expect(entries.map(({ id }) => id)).not.toContain(older.id);
   });
+});
+
+test("public document sharing opens in an anonymous browser and revokes the link", async ({
+  page,
+  browser,
+}) => {
+  await login(page, "alice", "password-1");
+  await page.goto(`${baseURL}/doc/image-lightbox.md`);
+  await page.getByRole("button", { name: "分享文档", exact: true }).click();
+  const create = page.getByRole("dialog", { name: "分享文档" });
+  await expect(create.getByLabel("有效期")).toHaveValue("30m");
+  await create.getByRole("button", { name: "创建分享链接" }).click();
+  const shareLink = await create
+    .getByRole("textbox", { name: "分享链接" })
+    .inputValue();
+  expect(new URL(shareLink).pathname).toMatch(/^\/share\/[A-Za-z0-9_-]{43}$/);
+
+  const anonymous = await browser.newContext();
+  try {
+    const reader = await anonymous.newPage();
+    const requests: string[] = [];
+    reader.on("request", (request) =>
+      requests.push(new URL(request.url()).pathname),
+    );
+    await reader.goto(shareLink);
+    await expect(
+      reader.getByRole("heading", { name: "图片 Lightbox 回归文档" }),
+    ).toBeVisible();
+    await expect(
+      reader.getByRole("navigation", { name: "文档目录" }),
+    ).toBeVisible();
+    const image = reader.getByRole("img", { name: "第一张图片" });
+    await expect(image).toBeVisible();
+    await expect
+      .poll(() =>
+        image.evaluate(
+          (element) =>
+            element instanceof HTMLImageElement && element.naturalWidth,
+        ),
+      )
+      .toBeGreaterThan(0);
+    expect(requests).toContain(
+      `/api/public/shares/${new URL(shareLink).pathname.split("/").at(-1)}`,
+    );
+    expect(requests).not.toContain("/api/files");
+    expect(requests).not.toContain("/api/auth/me");
+    expect((await anonymous.request.get(`${baseURL}/api/files`)).status()).toBe(
+      401,
+    );
+
+    await create.getByRole("button", { name: "关闭" }).click();
+    await page.getByRole("button", { name: "设置", exact: true }).click();
+    await page.getByRole("menuitem", { name: "分享管理" }).click();
+    const settings = page.getByRole("dialog", { name: "分享管理" });
+    await settings
+      .getByRole("row", { name: /图片 Lightbox 回归文档/ })
+      .getByRole("button", { name: "撤销分享链接" })
+      .click();
+    await settings.getByRole("button", { name: "确认撤销" }).click();
+    await expect(settings.getByText("暂无有效分享。")).toBeVisible();
+    expect((await reader.reload())?.status()).toBe(404);
+    await expect(reader.getByText("此分享链接不可用。")).toBeVisible();
+  } finally {
+    await anonymous.close();
+  }
 });
