@@ -116,6 +116,21 @@ var migrations = []migration{
 			`ALTER TABLE annotations DROP COLUMN previous_color`,
 		},
 	},
+	{
+		version: 7,
+		statements: []string{
+			`CREATE TABLE document_shares (
+				id TEXT PRIMARY KEY,
+				owner_id TEXT NOT NULL,
+				owner_name TEXT NOT NULL,
+				root_id TEXT NOT NULL REFERENCES document_roots(id),
+				document_path TEXT NOT NULL,
+				created_at INTEGER NOT NULL,
+				expires_at INTEGER NOT NULL,
+				UNIQUE (owner_id, root_id, document_path)
+			)`,
+		},
+	},
 }
 
 // latestVersion is the highest schema version this build understands.
