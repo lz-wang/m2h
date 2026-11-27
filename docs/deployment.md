@@ -339,7 +339,6 @@ M2H_LDAP_ALLOWED_USERS='alice,bob' \
 | 变量 / 参数 | 作用 |
 | --- | --- |
 | `--auth <none\|local\|ldap>` | 认证模式；默认 `none`。仅设置环境变量不会启用认证 |
-| `--public-shares` | 允许登录用户创建公开分享。默认关闭，要求 `--auth local` 或 `--auth ldap` |
 | `--data-dir` / `M2H_DATA_DIR` | SQLite 数据目录（默认为各操作系统用户数据目录下的 `m2h`）；不得位于任何发布的文档目录内 |
 | `M2H_LOCAL_USERS_JSON` | 本地账号表，JSON 对象；值支持 `$argon2id$…` PHC 哈希 |
 | `M2H_LDAP_*` | LDAP 连接、服务账号、检索基准/过滤器与白名单；过滤器中的 `%s` 会经 `ldap.EscapeFilter` 转义 |
@@ -361,11 +360,7 @@ M2H_LDAP_ALLOWED_USERS='alice,bob' \
 
 ## 公开分享
 
-在使用 m2h 内置认证的启动命令中添加 `--public-shares`。例如：
-
-```console
-M2H_LOCAL_USERS_JSON='{"alice":"请替换为你的密码"}' m2h docs --auth local --public-shares
-```
+启用 `--auth local` 或 `--auth ldap` 后，用户登录即可创建和管理公开分享。
 
 - 持链接者可匿名阅读单篇文档。链接读取当前路径内容，正文、引用和附件的后续修改也会公开。移走文档会中断访问，在原路径放回文档可恢复仍在有效期内的链接。
 - 匿名页面仅提供正文和目录。本地附件必须由正文直接引用，并符合文件发布策略。公开分享始终拒绝隐藏文件，跨文档的本地链接只保留文字。

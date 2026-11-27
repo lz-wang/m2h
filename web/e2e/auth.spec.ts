@@ -29,7 +29,6 @@ test.beforeAll(async () => {
       String(authPort),
       "--auth",
       "local",
-      "--public-shares",
       "--data-dir",
       dataDir,
       "web/e2e/docs",

@@ -64,7 +64,6 @@ type authStack struct {
 	// without a path), or "" when unconfigured. When set, it is the only
 	// accepted origin for state-changing requests.
 	publicOrigin string
-	publicShares bool
 }
 
 // buildAuthStack assembles the authentication layer from a validated
@@ -335,7 +334,7 @@ func (handler *documentHandler) serveConfig(response http.ResponseWriter, reques
 		// Annotations and tokens ship with the authenticated reader.
 		config.Features.Annotations = true
 		config.Features.Tokens = true
-		config.Features.Shares = handler.auth.publicShares
+		config.Features.Shares = true
 	} else {
 		config.AuthMode = string(auth.ModeNone)
 	}

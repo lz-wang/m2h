@@ -216,10 +216,8 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 		mux.HandleFunc("/api/annotations/", handler.serveAnnotationItem)
 		mux.HandleFunc("/api/tokens", handler.serveTokens)
 		mux.HandleFunc("/api/tokens/", handler.serveTokenItem)
-		if handler.auth.publicShares {
-			mux.HandleFunc("/api/shares", handler.serveShares)
-			mux.HandleFunc(shareManagementPrefix, handler.serveShareItem)
-		}
+		mux.HandleFunc("/api/shares", handler.serveShares)
+		mux.HandleFunc(shareManagementPrefix, handler.serveShareItem)
 	}
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/recent", requireGET(handler.serveRecent))
@@ -243,20 +241,17 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 	// mountBasePath, so its path decisions see the internal URL shape.
 	chain := http.Handler(mux)
 	if handler.auth != nil {
-		chain = handler.auth.sessions.LoadAndSave(handler.authenticate(mux))
-		if handler.auth.publicShares {
-			protected := chain
-			chain = http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
-				switch path := request.URL.EscapedPath(); {
-				case strings.HasPrefix(path, sharePagePrefix):
-					handler.serveSharedPage(response, request)
-				case strings.HasPrefix(path, shareDocumentPrefix):
-					handler.serveSharedDocument(response, request)
-				default:
-					protected.ServeHTTP(response, request)
-				}
-			})
-		}
+		protected := handler.auth.sessions.LoadAndSave(handler.authenticate(mux))
+		chain = http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+			switch path := request.URL.EscapedPath(); {
+			case strings.HasPrefix(path, sharePagePrefix):
+				handler.serveSharedPage(response, request)
+			case strings.HasPrefix(path, shareDocumentPrefix):
+				handler.serveSharedDocument(response, request)
+			default:
+				protected.ServeHTTP(response, request)
+			}
+		})
 	}
 	return requestLogger(securityHeaders(mountBasePath(handler.basePath, chain), handler.cdn), logger, handler.basePath)
 }

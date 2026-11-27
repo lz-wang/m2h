@@ -647,7 +647,7 @@ func TestDefaultModeRegistersNoAuthEndpoints(t *testing.T) {
 	if config.AuthMode != "none" {
 		t.Fatalf("default config authMode = %q, want none", config.AuthMode)
 	}
-	if config.Features.Annotations || config.Features.Tokens {
+	if config.Features.Annotations || config.Features.Tokens || config.Features.Shares {
 		t.Fatalf("default config must not advertise features: %+v", config.Features)
 	}
 }

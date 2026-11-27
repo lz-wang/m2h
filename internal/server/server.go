@@ -78,8 +78,7 @@ type Options struct {
 	// PublicURL is the externally reachable origin behind a reverse proxy
 	// (M2H_PUBLIC_URL). It decides the session cookie's Secure attribute;
 	// m2h never trusts client-sent forwarded headers for it.
-	PublicURL    string
-	PublicShares bool
+	PublicURL string
 
 	OnListening func(string)
 }
@@ -181,7 +180,6 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		if err != nil {
 			return fmt.Errorf("auth mode %q: %w", normalized.AuthMode, err)
 		}
-		stack.publicShares = normalized.PublicShares
 		if err := stack.pruneShareOwners(runContext, workspace); err != nil {
 			return err
 		}
@@ -307,9 +305,6 @@ func normalizeOptions(options Options) (Options, error) {
 		return Options{}, fmt.Errorf("invalid auth mode %q: expected none, local, or ldap", options.AuthMode)
 	}
 	options.AuthMode = mode
-	if options.PublicShares && mode == auth.ModeNone {
-		return Options{}, fmt.Errorf("--public-shares requires --auth local or ldap")
-	}
 	if options.PublicURL != "" {
 		parsed, parseErr := url.Parse(options.PublicURL)
 		if parseErr != nil || parsed.Scheme == "" || parsed.Host == "" ||

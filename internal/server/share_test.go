@@ -29,7 +29,7 @@ type shareFixture struct {
 	handler     http.Handler
 }
 
-func newShareFixture(t *testing.T, enabled bool) *shareFixture {
+func newShareFixture(t *testing.T) *shareFixture {
 	t.Helper()
 	fixture := &shareFixture{
 		docs: filepath.Join(t.TempDir(), "docs"), other: filepath.Join(t.TempDir(), "other"),
@@ -93,27 +93,31 @@ private_tag: private-metadata
 	}
 	fixture.workspace = workspace
 	fixture.dataStore = dataStore
-	fixture.rebuild(t, enabled, "alice", "bob")
+	fixture.rebuild(t, "alice", "bob")
 	return fixture
 }
 
-func (fixture *shareFixture) rebuild(t *testing.T, enabled bool, users ...string) {
+func (fixture *shareFixture) rebuild(t *testing.T, users ...string) {
 	t.Helper()
-	dataStore := fixture.dataStore
 	config := &auth.Config{Mode: auth.ModeLocal, PublicURL: shareTestOrigin + shareTestBase}
 	for _, name := range users {
 		config.LocalUsers = append(config.LocalUsers, auth.User{Username: name, Password: "test-password"})
 	}
-	stack, err := buildAuthStack(config, dataStore, shareTestBase)
+	fixture.configure(t, config)
+}
+
+func (fixture *shareFixture) configure(t *testing.T, config *auth.Config) *authStack {
+	t.Helper()
+	stack, err := buildAuthStack(config, fixture.dataStore, shareTestBase)
 	if err != nil {
 		t.Fatal(err)
 	}
-	stack.publicShares = enabled
 	if err := stack.pruneShareOwners(context.Background(), fixture.workspace); err != nil {
 		t.Fatal(err)
 	}
 	ui := fstest.MapFS{"index.html": {Data: []byte(`<!doctype html><head></head><div id="root"></div>`)}}
 	fixture.handler = newDocumentHandlerWithAuth(context.Background(), fixture.workspace, &fixture.logs, ui, "test", false, shareTestBase, stack)
+	return stack
 }
 
 func (fixture *shareFixture) call(method, path string, body string, cookie *http.Cookie, origin, bearer string) *httptest.ResponseRecorder {
@@ -172,7 +176,7 @@ func (fixture *shareFixture) create(t *testing.T, cookie *http.Cookie, path, dur
 }
 
 func TestPublicShareLifecycleAndIsolation(t *testing.T) {
-	fixture := newShareFixture(t, true)
+	fixture := newShareFixture(t)
 	alice := fixture.login(t, "alice")
 	bob := fixture.login(t, "bob")
 	config := fixture.call(http.MethodGet, "/api/config", "", nil, "", "")
@@ -252,7 +256,7 @@ func TestPublicShareLifecycleAndIsolation(t *testing.T) {
 
 	fixture.workspace.roots[0], fixture.workspace.roots[1] = fixture.workspace.roots[1], fixture.workspace.roots[0]
 	fixture.workspace.roots[0].id, fixture.workspace.roots[1].id = "r0", "r1"
-	fixture.rebuild(t, true, "alice", "bob")
+	fixture.rebuild(t, "alice", "bob")
 	response = fixture.call(http.MethodGet, document, "", nil, "", "")
 	expectShareStatus(t, response, http.StatusOK)
 	if !strings.Contains(response.Body.String(), "Updated") {
@@ -267,13 +271,51 @@ func TestPublicShareLifecycleAndIsolation(t *testing.T) {
 }
 
 func TestPublicShareOwnerRemovalIsPermanent(t *testing.T) {
-	fixture := newShareFixture(t, true)
+	fixture := newShareFixture(t)
 	share := fixture.create(t, fixture.login(t, "alice"), "guide.md", "permanent", http.StatusCreated)
 	path := shareDocumentPrefix + share.ID
-	fixture.rebuild(t, false, "alice", "bob")
-	expectShareStatus(t, fixture.call(http.MethodGet, path, "", nil, "", ""), http.StatusUnauthorized)
-	fixture.rebuild(t, true, "bob")
+	fixture.rebuild(t, "bob")
 	expectShareStatus(t, fixture.call(http.MethodGet, path, "", nil, "", ""), http.StatusNotFound)
-	fixture.rebuild(t, true, "alice", "bob")
+	fixture.rebuild(t, "alice", "bob")
 	expectShareStatus(t, fixture.call(http.MethodGet, path, "", nil, "", ""), http.StatusNotFound)
+}
+
+func TestPublicShareAvailableToLDAPSession(t *testing.T) {
+	fixture := newShareFixture(t)
+	stack := fixture.configure(t, &auth.Config{
+		Mode: auth.ModeLDAP, PublicURL: shareTestOrigin + shareTestBase,
+		LDAP: auth.LDAPConfig{
+			URL: "ldaps://ldap.example.test", UserBaseDN: "dc=example,dc=test",
+			UserFilter: "(uid=%s)", AllowedUsers: []string{"alice"},
+		},
+	})
+	config := fixture.call(http.MethodGet, "/api/config", "", nil, "", "")
+	var capabilities configResponse
+	decodeJSON(t, config, &capabilities)
+	if capabilities.AuthMode != "ldap" || !capabilities.Features.Shares {
+		t.Fatalf("LDAP shares unavailable: %+v", capabilities)
+	}
+	ctx, err := stack.sessions.Load(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stack.sessions.Put(ctx, sessionPrincipalID, "ldap:alice-id")
+	stack.sessions.Put(ctx, sessionUsername, "alice")
+	stack.sessions.Put(ctx, sessionProvider, "ldap")
+	token, _, err := stack.sessions.Commit(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cookie := &http.Cookie{Name: auth.SessionCookieName, Value: token}
+	share := fixture.create(t, cookie, "guide.md", "", http.StatusCreated)
+	expectShareStatus(t, fixture.call(http.MethodGet, shareDocumentPrefix+share.ID, "", nil, "", ""), http.StatusOK)
+	expectShareStatus(t, fixture.call(http.MethodDelete, shareManagementPrefix+share.ID, "", cookie, shareTestOrigin, ""), http.StatusNoContent)
+}
+
+func TestShareRoutesAbsentWithoutAuthentication(t *testing.T) {
+	fixture := newShareFixture(t)
+	fixture.handler = newDocumentHandlerWithContext(context.Background(), fixture.workspace, nil, nil, "test", false, shareTestBase)
+	for _, route := range []string{"/api/shares", shareDocumentPrefix + "unknown", sharePagePrefix + "unknown"} {
+		expectShareStatus(t, fixture.call(http.MethodGet, route, "", nil, "", ""), http.StatusNotFound)
+	}
 }

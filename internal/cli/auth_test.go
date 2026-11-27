@@ -239,20 +239,10 @@ func TestXDGDataHomeOverridesDefault(t *testing.T) {
 	}
 }
 
-func TestPublicSharesRequiresExplicitAuthenticatedMode(t *testing.T) {
-	withEnv(t, map[string]string{auth.EnvLocalUsersJSON: `{"alice":"password-1"}`})
-	options := captureServerOptions(t)
-	if _, _, err := runCommand(t, "--public-shares", "docs.md"); err == nil ||
-		!strings.Contains(err.Error(), "--public-shares requires --auth") {
-		t.Fatalf("unauthenticated public sharing error = %v", err)
-	}
-	if len(options.Inputs) != 0 {
-		t.Fatal("CLI passed invalid options to the server")
-	}
-	if _, _, err := runCommand(t, "--auth", "local", "docs.md"); err != nil || options.PublicShares {
-		t.Fatalf("default public shares setting: %v, error %v", options.PublicShares, err)
-	}
-	if _, _, err := runCommand(t, "--auth", "local", "--public-shares", "docs.md"); err != nil || !options.PublicShares {
-		t.Fatalf("explicit public shares setting: %v, error %v", options.PublicShares, err)
+func TestPublicSharesFlagIsRemoved(t *testing.T) {
+	captured := captureServerOptions(t)
+	_, _, err := runCommand(t, "--public-shares", "docs.md")
+	if err == nil || err.Error() != "Error: unknown option" || len(captured.Inputs) != 0 {
+		t.Fatalf("removed flag: server called = %v, error = %v", len(captured.Inputs) != 0, err)
 	}
 }
