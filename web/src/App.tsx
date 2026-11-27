@@ -4,10 +4,10 @@ import {
   Funnel,
   House,
   ImageOff,
-  KeyRound,
   LogOut,
   MessageSquare,
   RefreshCw,
+  Settings2,
   Share2,
   SunMoon,
   UserRoundCog,
@@ -66,10 +66,9 @@ import {
   ThemeMenu,
 } from "./components/reader-preferences";
 import { SearchDialog } from "./components/search-dialog";
-import { TokenSettings } from "./components/settings/token-settings";
+import { ManagementDialog } from "./components/settings/management-dialog";
 import {
   ShareDialog,
-  ShareSettings,
   type ShareTarget,
 } from "./components/share/share-dialogs";
 import {
@@ -78,6 +77,13 @@ import {
   TOCToggle,
 } from "./components/table-of-contents";
 import { Button } from "./components/ui/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "./components/ui/dialog";
 import { Input } from "./components/ui/input";
 import { ScrollArea } from "./components/ui/scroll-area";
 import {
@@ -391,9 +397,10 @@ export function App({
     preview.annotationsOpen;
   const [annotationSelectionVersion, setAnnotationSelectionVersion] =
     useState(0);
-  const [tokenSettingsOpen, setTokenSettingsOpen] = useState(false);
+  const [managementOpen, setManagementOpen] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const accountName = authIdentity?.displayName.trim();
   const [shareTarget, setShareTarget] = useState<ShareTarget | null>(null);
-  const [shareSettingsOpen, setShareSettingsOpen] = useState(false);
   const sharesEnabled = sharesAvailable === true && authIdentity != null;
   const shareDocument =
     sharesEnabled && preview.phase === "ready" ? preview.document : null;
@@ -1362,30 +1369,21 @@ export function App({
                             onChange={preview.setWidth}
                           />
                         </PreferenceSubmenu>
-                        {tokensEnabled ? (
+                        {tokensEnabled || sharesEnabled ? (
                           <Menu.Item
                             className="theme-menu-item"
-                            onClick={() => setTokenSettingsOpen(true)}
+                            onClick={() => setManagementOpen(true)}
                           >
-                            <KeyRound aria-hidden="true" />
-                            凭据管理
-                          </Menu.Item>
-                        ) : null}
-                        {sharesEnabled ? (
-                          <Menu.Item
-                            className="theme-menu-item"
-                            onClick={() => setShareSettingsOpen(true)}
-                          >
-                            <Share2 aria-hidden="true" />
-                            分享管理
+                            <Settings2 aria-hidden="true" />
+                            管理面板
                           </Menu.Item>
                         ) : null}
                         <Menu.Item
                           className="theme-menu-item"
-                          onClick={() => void onLogout()}
+                          onClick={() => setLogoutConfirmOpen(true)}
                         >
                           <LogOut aria-hidden="true" />
-                          退出登录（{authIdentity.displayName}）
+                          退出登录
                         </Menu.Item>
                       </Menu.Popup>
                     </Menu.Positioner>
@@ -1406,17 +1404,49 @@ export function App({
                   onClose={() => setShareTarget(null)}
                 />
               ) : null}
-              {sharesEnabled ? (
-                <ShareSettings
-                  open={shareSettingsOpen}
-                  onOpenChange={setShareSettingsOpen}
+              {tokensEnabled || sharesEnabled ? (
+                <ManagementDialog
+                  open={managementOpen}
+                  onOpenChange={setManagementOpen}
+                  tokensEnabled={tokensEnabled}
+                  sharesEnabled={sharesEnabled}
                 />
               ) : null}
-              {tokensEnabled ? (
-                <TokenSettings
-                  open={tokenSettingsOpen}
-                  onOpenChange={setTokenSettingsOpen}
-                />
+              {authIdentity != null && onLogout !== undefined ? (
+                <Dialog
+                  open={logoutConfirmOpen}
+                  onOpenChange={setLogoutConfirmOpen}
+                >
+                  <DialogContent
+                    showCloseButton={false}
+                    className="top-1/2 -translate-y-1/2 gap-5 p-5 sm:max-w-sm"
+                  >
+                    <div className="space-y-1.5">
+                      <DialogTitle>确认退出登录？</DialogTitle>
+                      <DialogDescription className="wrap-anywhere">
+                        当前账号{" "}
+                        <bdi>
+                          {accountName && accountName !== authIdentity.username
+                            ? `${accountName}（${authIdentity.username}）`
+                            : authIdentity.username}
+                        </bdi>
+                      </DialogDescription>
+                    </div>
+                    <div className="flex justify-end gap-2">
+                      <DialogClose render={<Button variant="outline" />}>
+                        取消
+                      </DialogClose>
+                      <Button
+                        onClick={() => {
+                          setLogoutConfirmOpen(false);
+                          onLogout();
+                        }}
+                      >
+                        退出登录
+                      </Button>
+                    </div>
+                  </DialogContent>
+                </Dialog>
               ) : null}
               {annotationsEnabled && !workspaceRoot ? (
                 <Tooltip>

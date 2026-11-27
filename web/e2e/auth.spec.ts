@@ -168,7 +168,19 @@ test.describe("authenticated mode", () => {
     await page.goto(`${baseURL}/doc/README.md?mode=light`);
     await expect(page.locator("html")).toHaveCSS("color-scheme", "light");
     await page.getByRole("button", { name: "设置" }).click();
-    await page.getByRole("menuitem", { name: /退出登录/ }).click();
+    const logout = page.getByRole("menuitem", {
+      name: "退出登录",
+      exact: true,
+    });
+    await logout.click();
+    const confirmLogout = page.getByRole("dialog", { name: "确认退出登录？" });
+    await expect(confirmLogout).toHaveAccessibleDescription("当前账号 alice");
+    await confirmLogout.getByRole("button", { name: "取消" }).click();
+    await expect(page.locator("html")).toHaveCSS("color-scheme", "light");
+
+    await page.getByRole("button", { name: "设置" }).click();
+    await logout.click();
+    await confirmLogout.getByRole("button", { name: "退出登录" }).click();
     await expect(page.getByRole("heading", { name: "登录 m2h" })).toBeVisible();
     const root = page.locator("html");
     const loginPage = page.getByRole("main");
@@ -754,8 +766,11 @@ test.describe("authenticated mode", () => {
   }) => {
     await login(page, "alice", "password-1");
     await page.getByRole("button", { name: "设置" }).click();
-    await page.getByRole("menuitem", { name: "凭据管理" }).click();
-    const dialog = page.getByRole("dialog", { name: "API 令牌", exact: true });
+    await page.getByRole("menuitem", { name: "管理面板" }).click();
+    const dialog = page.getByRole("dialog", { name: "管理面板" });
+    await expect(
+      dialog.getByRole("tab", { name: "凭据管理", selected: true }),
+    ).toBeVisible();
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "新建" }).click();
     const createDialog = page.getByRole("dialog", { name: "新建 API 令牌" });
@@ -1967,8 +1982,17 @@ test("public document sharing opens in an anonymous browser and revokes the link
     await expect(shared).toBeHidden();
     await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("button", { name: "设置", exact: true }).click();
-    await page.getByRole("menuitem", { name: "分享管理" }).click();
-    const settings = page.getByRole("dialog", { name: "分享管理" });
+    await page.getByRole("menuitem", { name: "管理面板" }).click();
+    const management = page.getByRole("dialog", { name: "管理面板" });
+    await management.getByRole("tab", { name: "分享管理" }).click();
+    const settings = management.getByRole("tabpanel", { name: "分享管理" });
+    const navigation = await management.getByRole("tablist").boundingBox();
+    const content = await settings.boundingBox();
+    expect(navigation).not.toBeNull();
+    expect(content).not.toBeNull();
+    if (navigation && content) {
+      expect(content.x).toBeGreaterThanOrEqual(navigation.x + navigation.width);
+    }
     await expect(
       settings.getByRole("columnheader", { name: "剩余有效期" }),
     ).toHaveCSS("text-align", "center");

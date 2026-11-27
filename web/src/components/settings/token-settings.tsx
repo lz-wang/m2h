@@ -46,17 +46,10 @@ interface RootOption {
 // last-used time, revoke. Scope edits are deliberately absent — a token
 // whose reach changed would need re-issuing; revocation plus a new token
 // is the honest flow.
-export function TokenSettings({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange(open: boolean): void;
-}) {
+export function TokenSettings() {
   const [tokens, setTokens] = useState<TokenItem[]>([]);
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!open) return;
     const nextExpiry = Math.min(
       ...tokens
         .map((token) => token.expiresAt)
@@ -68,7 +61,7 @@ export function TokenSettings({
       Math.min(nextExpiry - now + 1, 2_147_483_647),
     );
     return () => window.clearTimeout(timer);
-  }, [open, tokens, now]);
+  }, [tokens, now]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -91,9 +84,6 @@ export function TokenSettings({
   const [documentPath, setDocumentPath] = useState("");
 
   useEffect(() => {
-    if (!open) {
-      return;
-    }
     const controller = new AbortController();
     setLoading(true);
     setError(null);
@@ -116,7 +106,7 @@ export function TokenSettings({
     return () => {
       controller.abort();
     };
-  }, [open]);
+  }, []);
 
   // Restricted scopes need the workspace topology; fetch it once, on
   // first need. Only the persistent root identities (rootId) are usable
@@ -125,7 +115,7 @@ export function TokenSettings({
   // says so instead of silently disabling creation.
   const [rootsError, setRootsError] = useState<string | null>(null);
   useEffect(() => {
-    if (!open || scopeType === "all_published" || roots !== null) {
+    if (scopeType === "all_published" || roots !== null) {
       return;
     }
     const controller = new AbortController();
@@ -186,20 +176,9 @@ export function TokenSettings({
     return () => {
       controller.abort();
     };
-  }, [open, scopeType, roots]);
+  }, [scopeType, roots]);
 
   const selectedRoot = roots?.find((option) => option.id === rootId);
-
-  // Closing the dialog drops the secret: the one-time display is exactly
-  // that, and a stale secret must never reappear on reopen.
-  const handleOpenChange = (next: boolean) => {
-    onOpenChange(next);
-    if (next) setNow(Date.now());
-    if (!next) {
-      setCreateOpen(false);
-      setCopied(false);
-    }
-  };
 
   const create = async () => {
     const trimmed = name.trim();
@@ -288,334 +267,328 @@ export function TokenSettings({
   ] as const;
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent
-        showCloseButton={false}
-        aria-describedby={undefined}
-        className="h-[80dvh] max-h-[80dvh] w-[calc(100vw-24px)] p-5 sm:max-w-5xl"
+    <>
+      <div
+        className={`flex items-center justify-between gap-4 pb-4${visibleTokens.length > 0 ? " border-b" : ""}`}
       >
-        <div
-          className={`flex items-center justify-between gap-4 pb-4${visibleTokens.length > 0 ? " border-b" : ""}`}
+        <h2 className="text-sm font-medium">API 令牌</h2>
+        <Button
+          size="sm"
+          onClick={() => {
+            setName("");
+            setExpiresInDays(String(30 / 1440));
+            setScopeType("all_published");
+            setDocumentPath("");
+            setFreshSecret(null);
+            setError(null);
+            setCreateOpen(true);
+          }}
         >
-          <DialogTitle>API 令牌</DialogTitle>
-          <Button
-            size="sm"
-            onClick={() => {
-              setName("");
-              setExpiresInDays(String(30 / 1440));
-              setScopeType("all_published");
-              setDocumentPath("");
-              setFreshSecret(null);
-              setError(null);
-              setCreateOpen(true);
-            }}
-          >
-            <Plus aria-hidden="true" />
-            新建
-          </Button>
-        </div>
-        {error !== null && !createOpen ? (
-          <p className="text-destructive text-sm" role="alert">
-            {error}
+          <Plus aria-hidden="true" />
+          新建
+        </Button>
+      </div>
+      {error !== null && !createOpen ? (
+        <p className="text-destructive text-sm" role="alert">
+          {error}
+        </p>
+      ) : null}
+      <div className="min-h-0 flex-1 overflow-auto">
+        {loading ? (
+          <p className="text-muted-foreground py-6 text-sm">正在加载令牌…</p>
+        ) : visibleTokens.length === 0 ? (
+          <p className="text-muted-foreground py-10 text-center text-sm">
+            还没有令牌
           </p>
-        ) : null}
-        <div className="min-h-0 flex-1 overflow-auto">
-          {loading ? (
-            <p className="text-muted-foreground py-6 text-sm">正在加载令牌…</p>
-          ) : visibleTokens.length === 0 ? (
-            <p className="text-muted-foreground py-10 text-center text-sm">
-              还没有令牌
-            </p>
-          ) : (
-            <table className="w-full min-w-[700px] text-left text-sm">
-              <thead className="bg-popover sticky top-0 text-muted-foreground">
-                <tr>
-                  {headers.map(([key, label]) => (
-                    <th
-                      key={key}
-                      scope="col"
-                      aria-sort={
-                        sort.key === key
-                          ? sort.ascending
-                            ? "ascending"
-                            : "descending"
-                          : "none"
+        ) : (
+          <table className="w-full min-w-[700px] text-left text-sm">
+            <thead className="bg-popover sticky top-0 text-muted-foreground">
+              <tr>
+                {headers.map(([key, label]) => (
+                  <th
+                    key={key}
+                    scope="col"
+                    aria-sort={
+                      sort.key === key
+                        ? sort.ascending
+                          ? "ascending"
+                          : "descending"
+                        : "none"
+                    }
+                    className="border-b px-3 py-3 font-medium"
+                  >
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                      onClick={() =>
+                        setSort((current) => ({
+                          key,
+                          ascending:
+                            current.key === key ? !current.ascending : true,
+                        }))
                       }
-                      className="border-b px-3 py-3 font-medium"
                     >
-                      <button
-                        type="button"
-                        className="inline-flex items-center gap-1 hover:text-foreground"
-                        onClick={() =>
-                          setSort((current) => ({
-                            key,
-                            ascending:
-                              current.key === key ? !current.ascending : true,
-                          }))
-                        }
-                      >
-                        {label}
-                        {sort.key === key ? (
-                          sort.ascending ? (
-                            <ArrowUp className="size-3.5" />
-                          ) : (
-                            <ArrowDown className="size-3.5" />
-                          )
+                      {label}
+                      {sort.key === key ? (
+                        sort.ascending ? (
+                          <ArrowUp className="size-3.5" />
                         ) : (
-                          <ArrowUpDown className="size-3.5" />
-                        )}
-                      </button>
-                    </th>
-                  ))}
-                  <th scope="col" className="border-b px-3 py-3 font-medium">
-                    操作
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {visibleTokens.map((token) => (
-                  <tr
-                    key={token.id}
-                    className="border-b last:border-0 hover:bg-muted/40"
-                  >
-                    <td className="px-3 py-3 font-medium">{token.name}</td>
-                    <td className="px-3 py-3">{describeScope(token)}</td>
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      {token.expiresAt === 0
-                        ? "永久"
-                        : new Date(token.expiresAt).toLocaleString()}
-                    </td>
-                    <td className="px-3 py-3 whitespace-nowrap">
-                      {token.lastUsedAt > 0
-                        ? new Date(token.lastUsedAt).toLocaleString()
-                        : "从未使用"}
-                    </td>
-                    <td className="px-3 py-3">
-                      <Button
-                        variant="ghost"
-                        size="icon-xs"
-                        aria-label={`删除 ${token.name}`}
-                        disabled={revoking !== null}
-                        onClick={() => void revoke(token.id)}
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-        <Dialog
-          open={createOpen}
-          onOpenChange={(next) => {
-            setCreateOpen(next);
-            if (!next) setCopied(false);
-          }}
-          onOpenChangeComplete={(next) => {
-            if (!next) setFreshSecret(null);
-          }}
-        >
-          <DialogContent
-            aria-describedby={undefined}
-            forceBackdrop
-            overlayClassName="z-[60] bg-black/30 supports-backdrop-filter:backdrop-blur-sm"
-            className="top-1/2 z-[61] -translate-y-1/2 gap-4 p-5 data-ending-style:-translate-y-[calc(50%-0.5rem)] data-starting-style:-translate-y-[calc(50%-0.5rem)] sm:max-w-lg"
-          >
-            <DialogTitle>新建 API 令牌</DialogTitle>
-            {freshSecret !== null ? (
-              <div className="bg-muted/50 rounded-lg border p-3">
-                <p className="mb-2 text-sm font-medium">
-                  令牌已创建，明文仅显示这一次：
-                </p>
-                <div className="flex items-center gap-2">
-                  <code className="min-w-0 flex-1 overflow-x-auto rounded bg-background px-2 py-1 text-xs whitespace-nowrap">
-                    {freshSecret}
-                  </code>
-                  <Button
-                    variant="outline"
-                    size="icon-xs"
-                    aria-label="复制令牌"
-                    onClick={() => {
-                      void copyText(freshSecret).then((ok) => {
-                        setCopied(ok);
-                        window.setTimeout(() => setCopied(false), 1500);
-                      });
-                    }}
-                  >
-                    {copied ? (
-                      <Check aria-hidden="true" />
-                    ) : (
-                      <ClipboardCopy aria-hidden="true" />
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-4">
-                <label
-                  htmlFor="token-name"
-                  className="flex flex-col gap-1.5 text-sm"
-                >
-                  令牌名称（可选）
-                  <Input
-                    value={name}
-                    id="token-name"
-                    aria-label="令牌名称"
-                    placeholder="留空自动生成"
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                </label>
-                <label className="flex flex-col gap-1.5 text-sm">
-                  有效期
-                  <select
-                    value={expiresInDays}
-                    aria-label="有效期"
-                    className="border-border bg-background h-9 rounded-md border px-2 text-sm"
-                    onChange={(event) => setExpiresInDays(event.target.value)}
-                  >
-                    {expiryOptions.map(({ id, days, label }) => (
-                      <option key={id} value={String(days)}>
-                        {label}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <div className="flex flex-col gap-1.5 text-sm">
-                  <label htmlFor="token-scope-type">访问范围</label>
-                  <div className="flex gap-2">
-                    <select
-                      id="token-scope-type"
-                      aria-label="访问范围"
-                      className="border-border bg-background h-9 min-w-0 flex-1 rounded-md border px-2 text-sm"
-                      value={
-                        scopeType === "all_published"
-                          ? "全部已发布文档"
-                          : scopeType === "root"
-                            ? "指定文档根目录"
-                            : "指定单篇文档"
-                      }
-                      onChange={(event) => {
-                        const next = event.target.value;
-                        setScopeType(
-                          next === "指定文档根目录"
-                            ? "root"
-                            : next === "指定单篇文档"
-                              ? "document"
-                              : "all_published",
-                        );
-                      }}
-                    >
-                      <option value="全部已发布文档">全部已发布文档</option>
-                      <option value="指定文档根目录">指定文档根目录</option>
-                      <option value="指定单篇文档">指定单篇文档</option>
-                    </select>
-                    {scopeType !== "all_published" ? (
-                      rootsError !== null ? (
-                        <span className="text-destructive inline-flex items-center gap-1 text-xs">
-                          {rootsError}
-                          <Button
-                            variant="ghost"
-                            size="xs"
-                            aria-label="重试加载文档列表"
-                            onClick={() => setRoots(null)}
-                          >
-                            重试
-                          </Button>
-                        </span>
+                          <ArrowDown className="size-3.5" />
+                        )
                       ) : (
-                        <select
-                          aria-label="文档根目录"
-                          className="border-border bg-background h-9 min-w-0 flex-1 rounded-md border px-2 text-sm"
-                          value={rootId}
-                          onChange={(event) => {
-                            setRootId(event.target.value);
-                            setDocumentPath("");
-                          }}
-                        >
-                          {(roots ?? []).map((option) => (
-                            <option key={option.id} value={option.id}>
-                              {option.name}
-                            </option>
-                          ))}
-                        </select>
-                      )
-                    ) : null}
-                  </div>
-                  {scopeType === "document" && selectedRoot ? (
-                    <Select.Root
-                      value={documentPath || null}
-                      onValueChange={(value) => setDocumentPath(value ?? "")}
-                    >
-                      <Select.Trigger
-                        aria-label="文档路径"
-                        className="border-border bg-background flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md border px-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                      >
-                        <Select.Value
-                          placeholder="选择文档…"
-                          className="min-w-0 truncate"
-                        />
-                        <Select.Icon>
-                          <ChevronDown className="size-4 shrink-0" />
-                        </Select.Icon>
-                      </Select.Trigger>
-                      <Select.Portal>
-                        <Select.Positioner
-                          className="z-[70]"
-                          sideOffset={4}
-                          alignItemWithTrigger={false}
-                        >
-                          <Select.Popup className="border-border bg-popover text-popover-foreground max-h-60 w-[var(--anchor-width)] min-w-0 overflow-y-auto rounded-md border p-1 shadow-lg">
-                            <Select.List>
-                              {selectedRoot.paths.map((path) => (
-                                <Select.Item
-                                  key={path}
-                                  value={path}
-                                  className="relative flex cursor-default items-center gap-2 rounded px-2 py-1.5 text-sm outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
-                                >
-                                  <Select.ItemText className="min-w-0 flex-1 truncate">
-                                    {path}
-                                  </Select.ItemText>
-                                  <Select.ItemIndicator>
-                                    <Check className="size-4" />
-                                  </Select.ItemIndicator>
-                                </Select.Item>
-                              ))}
-                            </Select.List>
-                          </Select.Popup>
-                        </Select.Positioner>
-                      </Select.Portal>
-                    </Select.Root>
-                  ) : null}
-                </div>
-                <Button
-                  className="self-end"
-                  size="sm"
-                  disabled={
-                    creating ||
-                    (scopeType !== "all_published" && rootId === "") ||
-                    (scopeType === "document" && documentPath === "")
-                  }
-                  onClick={() => void create()}
+                        <ArrowUpDown className="size-3.5" />
+                      )}
+                    </button>
+                  </th>
+                ))}
+                <th scope="col" className="border-b px-3 py-3 font-medium">
+                  操作
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {visibleTokens.map((token) => (
+                <tr
+                  key={token.id}
+                  className="border-b last:border-0 hover:bg-muted/40"
                 >
-                  {creating ? (
-                    <LoaderCircle aria-hidden="true" className="animate-spin" />
+                  <td className="px-3 py-3 font-medium">{token.name}</td>
+                  <td className="px-3 py-3">{describeScope(token)}</td>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    {token.expiresAt === 0
+                      ? "永久"
+                      : new Date(token.expiresAt).toLocaleString()}
+                  </td>
+                  <td className="px-3 py-3 whitespace-nowrap">
+                    {token.lastUsedAt > 0
+                      ? new Date(token.lastUsedAt).toLocaleString()
+                      : "从未使用"}
+                  </td>
+                  <td className="px-3 py-3">
+                    <Button
+                      variant="ghost"
+                      size="icon-xs"
+                      aria-label={`删除 ${token.name}`}
+                      disabled={revoking !== null}
+                      onClick={() => void revoke(token.id)}
+                    >
+                      <Trash2 aria-hidden="true" />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+      <Dialog
+        open={createOpen}
+        onOpenChange={(next) => {
+          setCreateOpen(next);
+          if (!next) setCopied(false);
+        }}
+        onOpenChangeComplete={(next) => {
+          if (!next) setFreshSecret(null);
+        }}
+      >
+        <DialogContent
+          aria-describedby={undefined}
+          forceBackdrop
+          overlayClassName="z-[60] bg-black/30 supports-backdrop-filter:backdrop-blur-sm"
+          className="top-1/2 z-[61] -translate-y-1/2 gap-4 p-5 data-ending-style:-translate-y-[calc(50%-0.5rem)] data-starting-style:-translate-y-[calc(50%-0.5rem)] sm:max-w-lg"
+        >
+          <DialogTitle>新建 API 令牌</DialogTitle>
+          {freshSecret !== null ? (
+            <div className="bg-muted/50 rounded-lg border p-3">
+              <p className="mb-2 text-sm font-medium">
+                令牌已创建，明文仅显示这一次：
+              </p>
+              <div className="flex items-center gap-2">
+                <code className="min-w-0 flex-1 overflow-x-auto rounded bg-background px-2 py-1 text-xs whitespace-nowrap">
+                  {freshSecret}
+                </code>
+                <Button
+                  variant="outline"
+                  size="icon-xs"
+                  aria-label="复制令牌"
+                  onClick={() => {
+                    void copyText(freshSecret).then((ok) => {
+                      setCopied(ok);
+                      window.setTimeout(() => setCopied(false), 1500);
+                    });
+                  }}
+                >
+                  {copied ? (
+                    <Check aria-hidden="true" />
                   ) : (
-                    <Plus aria-hidden="true" />
+                    <ClipboardCopy aria-hidden="true" />
                   )}
-                  创建
                 </Button>
               </div>
-            )}
-            {error !== null ? (
-              <p className="text-destructive text-sm" role="alert">
-                {error}
-              </p>
-            ) : null}
-          </DialogContent>
-        </Dialog>
-      </DialogContent>
-    </Dialog>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-4">
+              <label
+                htmlFor="token-name"
+                className="flex flex-col gap-1.5 text-sm"
+              >
+                令牌名称（可选）
+                <Input
+                  value={name}
+                  id="token-name"
+                  aria-label="令牌名称"
+                  placeholder="留空自动生成"
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </label>
+              <label className="flex flex-col gap-1.5 text-sm">
+                有效期
+                <select
+                  value={expiresInDays}
+                  aria-label="有效期"
+                  className="border-border bg-background h-9 rounded-md border px-2 text-sm"
+                  onChange={(event) => setExpiresInDays(event.target.value)}
+                >
+                  {expiryOptions.map(({ id, days, label }) => (
+                    <option key={id} value={String(days)}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <div className="flex flex-col gap-1.5 text-sm">
+                <label htmlFor="token-scope-type">访问范围</label>
+                <div className="flex gap-2">
+                  <select
+                    id="token-scope-type"
+                    aria-label="访问范围"
+                    className="border-border bg-background h-9 min-w-0 flex-1 rounded-md border px-2 text-sm"
+                    value={
+                      scopeType === "all_published"
+                        ? "全部已发布文档"
+                        : scopeType === "root"
+                          ? "指定文档根目录"
+                          : "指定单篇文档"
+                    }
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      setScopeType(
+                        next === "指定文档根目录"
+                          ? "root"
+                          : next === "指定单篇文档"
+                            ? "document"
+                            : "all_published",
+                      );
+                    }}
+                  >
+                    <option value="全部已发布文档">全部已发布文档</option>
+                    <option value="指定文档根目录">指定文档根目录</option>
+                    <option value="指定单篇文档">指定单篇文档</option>
+                  </select>
+                  {scopeType !== "all_published" ? (
+                    rootsError !== null ? (
+                      <span className="text-destructive inline-flex items-center gap-1 text-xs">
+                        {rootsError}
+                        <Button
+                          variant="ghost"
+                          size="xs"
+                          aria-label="重试加载文档列表"
+                          onClick={() => setRoots(null)}
+                        >
+                          重试
+                        </Button>
+                      </span>
+                    ) : (
+                      <select
+                        aria-label="文档根目录"
+                        className="border-border bg-background h-9 min-w-0 flex-1 rounded-md border px-2 text-sm"
+                        value={rootId}
+                        onChange={(event) => {
+                          setRootId(event.target.value);
+                          setDocumentPath("");
+                        }}
+                      >
+                        {(roots ?? []).map((option) => (
+                          <option key={option.id} value={option.id}>
+                            {option.name}
+                          </option>
+                        ))}
+                      </select>
+                    )
+                  ) : null}
+                </div>
+                {scopeType === "document" && selectedRoot ? (
+                  <Select.Root
+                    value={documentPath || null}
+                    onValueChange={(value) => setDocumentPath(value ?? "")}
+                  >
+                    <Select.Trigger
+                      aria-label="文档路径"
+                      className="border-border bg-background flex h-9 w-full min-w-0 items-center justify-between gap-2 rounded-md border px-2 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <Select.Value
+                        placeholder="选择文档…"
+                        className="min-w-0 truncate"
+                      />
+                      <Select.Icon>
+                        <ChevronDown className="size-4 shrink-0" />
+                      </Select.Icon>
+                    </Select.Trigger>
+                    <Select.Portal>
+                      <Select.Positioner
+                        className="z-[70]"
+                        sideOffset={4}
+                        alignItemWithTrigger={false}
+                      >
+                        <Select.Popup className="border-border bg-popover text-popover-foreground max-h-60 w-[var(--anchor-width)] min-w-0 overflow-y-auto rounded-md border p-1 shadow-lg">
+                          <Select.List>
+                            {selectedRoot.paths.map((path) => (
+                              <Select.Item
+                                key={path}
+                                value={path}
+                                className="relative flex cursor-default items-center gap-2 rounded px-2 py-1.5 text-sm outline-none data-highlighted:bg-accent data-highlighted:text-accent-foreground"
+                              >
+                                <Select.ItemText className="min-w-0 flex-1 truncate">
+                                  {path}
+                                </Select.ItemText>
+                                <Select.ItemIndicator>
+                                  <Check className="size-4" />
+                                </Select.ItemIndicator>
+                              </Select.Item>
+                            ))}
+                          </Select.List>
+                        </Select.Popup>
+                      </Select.Positioner>
+                    </Select.Portal>
+                  </Select.Root>
+                ) : null}
+              </div>
+              <Button
+                className="self-end"
+                size="sm"
+                disabled={
+                  creating ||
+                  (scopeType !== "all_published" && rootId === "") ||
+                  (scopeType === "document" && documentPath === "")
+                }
+                onClick={() => void create()}
+              >
+                {creating ? (
+                  <LoaderCircle aria-hidden="true" className="animate-spin" />
+                ) : (
+                  <Plus aria-hidden="true" />
+                )}
+                创建
+              </Button>
+            </div>
+          )}
+          {error !== null ? (
+            <p className="text-destructive text-sm" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

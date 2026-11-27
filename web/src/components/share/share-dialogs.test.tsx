@@ -8,9 +8,9 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-
+import { ManagementDialog } from "@/components/settings/management-dialog";
 import * as clipboard from "../../lib/clipboard";
-import { ShareDialog, ShareSettings } from "./share-dialogs";
+import { ShareDialog } from "./share-dialogs";
 
 const request = vi.fn<typeof fetch>();
 const target = {
@@ -157,7 +157,14 @@ it("sorts only active records and removes a revoked share", async () => {
     .mockResolvedValueOnce(new Response(null, { status: 204 }));
   vi.spyOn(clipboard, "copyText").mockResolvedValue(true);
   const user = userEvent.setup();
-  render(<ShareSettings open onOpenChange={vi.fn()} />);
+  render(
+    <ManagementDialog
+      open
+      onOpenChange={vi.fn()}
+      tokensEnabled={false}
+      sharesEnabled
+    />,
+  );
   const alpha = await screen.findByRole("row", { name: /Alpha/ });
   expect(screen.queryByText("Expired")).toBeNull();
   const name = screen.getByRole("columnheader", { name: "文档名称" });
@@ -231,7 +238,14 @@ it("refreshes expiry labels at their display boundary and removes expired rows",
   };
   request.mockResolvedValueOnce(json([shared, temporary]));
   await act(async () => {
-    render(<ShareSettings open onOpenChange={vi.fn()} />);
+    render(
+      <ManagementDialog
+        open
+        onOpenChange={vi.fn()}
+        tokensEnabled={false}
+        sharesEnabled
+      />,
+    );
   });
   const row = screen.getByRole("row", { name: /Temporary/ });
   expect(within(row).getByText("2m", { exact: true })).toBeTruthy();

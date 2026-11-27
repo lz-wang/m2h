@@ -541,14 +541,8 @@ export function ShareDialog({
   );
 }
 
-export function ShareSettings({
-  open,
-  onOpenChange,
-}: {
-  open: boolean;
-  onOpenChange(open: boolean): void;
-}) {
-  const { shares, setShares, error, now, retry } = useShareList(open);
+export function ShareSettings() {
+  const { shares, setShares, error, now, retry } = useShareList(true);
   const [sort, setSort] = useState<{
     key: "title" | "expiry";
     ascending: boolean;
@@ -577,127 +571,115 @@ export function ShareSettings({
     ["expiry", "剩余有效期"],
   ] as const;
   return (
-    <Dialog
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) setSelected(null);
-        onOpenChange(next);
-      }}
-    >
-      <DialogContent
-        aria-describedby={undefined}
-        className="top-[10dvh] h-[80dvh] max-h-[80dvh] gap-4 p-5 sm:max-w-5xl"
-      >
-        <DialogTitle className="pr-8">分享管理</DialogTitle>
-        {error ? (
-          <div role="alert" className="flex items-center gap-3 text-sm">
-            无法加载分享列表。
-            <Button variant="outline" size="sm" onClick={retry}>
-              重试
-            </Button>
-          </div>
-        ) : null}
-        {shares === null && !error ? (
-          <p role="status" className="text-muted-foreground text-sm">
-            正在加载分享
-          </p>
-        ) : null}
-        {shares !== null && active.length === 0 && !error ? (
-          <p className="text-muted-foreground py-10 text-center text-sm">
-            暂无有效分享
-          </p>
-        ) : null}
-        {selected ? (
-          <ConfirmRevoke
-            key={selected.id}
-            modal
-            share={selected}
-            onCancel={() => setSelected(null)}
-            onRevoked={() => {
-              setShares(
-                (items) =>
-                  items?.filter((item) => item.id !== selected.id) ?? [],
-              );
-              setSelected(null);
-            }}
-          />
-        ) : null}
-        {active.length > 0 ? (
-          <div className="min-h-0 flex-1 overflow-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-popover text-muted-foreground sticky top-0">
-                <tr>
-                  {headers.map(([key, label]) => {
-                    const isSorted = sort.key === key;
-                    const SortIcon = isSorted
-                      ? sort.ascending
-                        ? ArrowUp
-                        : ArrowDown
-                      : ArrowUpDown;
-                    return (
-                      <th
-                        key={key}
-                        scope="col"
-                        className={
-                          key === "expiry"
-                            ? "text-center whitespace-nowrap"
-                            : undefined
-                        }
-                        aria-sort={
-                          isSorted
-                            ? sort.ascending
-                              ? "ascending"
-                              : "descending"
-                            : "none"
+    <>
+      <h2 className="text-sm font-medium">分享管理</h2>
+      {error ? (
+        <div role="alert" className="flex items-center gap-3 text-sm">
+          无法加载分享列表。
+          <Button variant="outline" size="sm" onClick={retry}>
+            重试
+          </Button>
+        </div>
+      ) : null}
+      {shares === null && !error ? (
+        <p role="status" className="text-muted-foreground text-sm">
+          正在加载分享
+        </p>
+      ) : null}
+      {shares !== null && active.length === 0 && !error ? (
+        <p className="text-muted-foreground py-10 text-center text-sm">
+          暂无有效分享
+        </p>
+      ) : null}
+      {selected ? (
+        <ConfirmRevoke
+          key={selected.id}
+          modal
+          share={selected}
+          onCancel={() => setSelected(null)}
+          onRevoked={() => {
+            setShares(
+              (items) => items?.filter((item) => item.id !== selected.id) ?? [],
+            );
+            setSelected(null);
+          }}
+        />
+      ) : null}
+      {active.length > 0 ? (
+        <div className="min-h-0 flex-1 overflow-auto">
+          <table className="w-full min-w-80 text-left text-sm">
+            <thead className="bg-popover text-muted-foreground sticky top-0">
+              <tr>
+                {headers.map(([key, label]) => {
+                  const isSorted = sort.key === key;
+                  const SortIcon = isSorted
+                    ? sort.ascending
+                      ? ArrowUp
+                      : ArrowDown
+                    : ArrowUpDown;
+                  return (
+                    <th
+                      key={key}
+                      scope="col"
+                      className={
+                        key === "expiry"
+                          ? "text-center whitespace-nowrap"
+                          : undefined
+                      }
+                      aria-sort={
+                        isSorted
+                          ? sort.ascending
+                            ? "ascending"
+                            : "descending"
+                          : "none"
+                      }
+                    >
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() =>
+                          setSort((current) => ({
+                            key,
+                            ascending:
+                              key !== current.key || !current.ascending,
+                          }))
                         }
                       >
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            setSort((current) => ({
-                              key,
-                              ascending:
-                                key !== current.key || !current.ascending,
-                            }))
-                          }
-                        >
-                          {label}
-                          <SortIcon aria-hidden="true" className="size-3.5" />
-                        </Button>
-                      </th>
-                    );
-                  })}
-                  <th scope="col" className="px-2 text-center">
-                    操作
-                  </th>
+                        {label}
+                        <SortIcon aria-hidden="true" className="size-3.5" />
+                      </Button>
+                    </th>
+                  );
+                })}
+                <th scope="col" className="px-2 text-center">
+                  操作
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {active.map((share) => (
+                <tr key={share.id} className="border-t align-middle">
+                  <td className="p-2">
+                    <p className="font-medium break-all">{share.title}</p>
+                    <p className="text-muted-foreground text-xs break-all">
+                      {share.documentRef.path}
+                    </p>
+                  </td>
+                  <td className="p-2 text-center whitespace-nowrap">
+                    <ShareExpiry share={share} />
+                  </td>
+                  <td className="p-2 text-center">
+                    <ShareActions
+                      share={share}
+                      onRevoke={() => setSelected(share)}
+                    />
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {active.map((share) => (
-                  <tr key={share.id} className="border-t align-middle">
-                    <td className="p-2">
-                      <p className="font-medium break-all">{share.title}</p>
-                      <p className="text-muted-foreground text-xs break-all">
-                        {share.documentRef.path}
-                      </p>
-                    </td>
-                    <td className="p-2 text-center whitespace-nowrap">
-                      <ShareExpiry share={share} />
-                    </td>
-                    <td className="p-2 text-center">
-                      <ShareActions
-                        share={share}
-                        onRevoke={() => setSelected(share)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : null}
-      </DialogContent>
-    </Dialog>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : null}
+    </>
   );
 }

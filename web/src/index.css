@@ -487,7 +487,7 @@ body,
 }
 
 .settings-menu-popup {
-  min-width: 11rem;
+  min-width: 8.5rem;
   max-width: min(18rem, calc(100vw - 1rem));
 }
 

@@ -5,12 +5,12 @@ tags:
   - agent
   - api
 create_date: 2026-11-18
-update_date: 2026-11-26
+update_date: 2026-11-28
 ---
 
 # Agent 知识库接入
 
-认证模式（`--auth local` 或 `--auth ldap`）下的 m2h 提供两步式只读知识库接口：先全文搜索定位文档，再取原始 Markdown。凭据为 API Token（在 WebUI 的「API 令牌」设置中创建，或在标注面板一键生成临时分享）。默认无认证模式下这些接口同样工作，只是不需要 `Authorization` 头。
+认证模式（`--auth local` 或 `--auth ldap`）下的 m2h 提供两步式只读知识库接口：先全文搜索定位文档，再取原始 Markdown。凭据为 API Token（在 WebUI 的「设置 → 管理面板 → 凭据管理」中创建，或在标注面板一键生成临时分享）。默认无认证模式下这些接口同样工作，只是不需要 `Authorization` 头。
 
 ## 1. 搜索相关文档
 

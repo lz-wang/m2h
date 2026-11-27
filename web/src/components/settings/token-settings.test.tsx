@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as clipboard from "@/lib/clipboard";
-import { TokenSettings } from "./token-settings";
+import { ManagementDialog } from "./management-dialog";
 
 const fetchMock = vi.fn<typeof fetch>();
 
@@ -45,7 +45,12 @@ function openDialog() {
         <button type="button" onClick={() => setOpen(true)}>
           API 令牌设置
         </button>
-        <TokenSettings open={open} onOpenChange={setOpen} />
+        <ManagementDialog
+          open={open}
+          onOpenChange={setOpen}
+          tokensEnabled
+          sharesEnabled={false}
+        />
       </>
     );
   }
@@ -372,8 +377,8 @@ describe("TokenSettings", () => {
   });
 });
 
-describe("TokenSettings in the app toolbar", () => {
-  it("renders its trigger through the App toolbar when tokens are available", async () => {
+describe("Account settings in the app toolbar", () => {
+  it("opens the management panel and confirms logout before calling the handler", async () => {
     const { App } = await import("../../App");
     const initialFiles = {
       kind: "directory" as const,
@@ -393,6 +398,8 @@ describe("TokenSettings in the app toolbar", () => {
       frontmatter: null,
       toc: [],
     };
+    const onLogout = vi.fn();
+    const user = userEvent.setup();
     const fetchCalls = vi.fn<typeof fetch>();
     fetchCalls.mockImplementation(async (input: RequestInfo | URL) => {
       const url = String(input);
@@ -405,6 +412,8 @@ describe("TokenSettings in the app toolbar", () => {
       if (url.includes("/api/file-metadata")) {
         return jsonResponse({ title: "Readme" });
       }
+      if (url.includes("/api/tokens")) return jsonResponse({ tokens: [] });
+      if (url.includes("/api/shares")) return jsonResponse([]);
       return jsonResponse({
         authMode: "none",
         features: { annotations: false, tokens: false },
@@ -414,28 +423,49 @@ describe("TokenSettings in the app toolbar", () => {
     render(
       <App
         tokensAvailable
+        sharesAvailable
         authIdentity={{
           username: "alice",
-          displayName: "alice",
+          displayName: "Alice",
           provider: "local",
         }}
-        onLogout={() => {}}
+        onLogout={onLogout}
       />,
     );
-    await userEvent.click(await screen.findByRole("button", { name: "设置" }));
+    const settings = await screen.findByRole("button", { name: "设置" });
+    await user.click(settings);
+    const logoutItem = screen.getByRole("menuitem", {
+      name: "退出登录",
+    });
+    expect(logoutItem.textContent).toBe("退出登录");
+    expect(screen.queryByRole("menuitem", { name: "凭据管理" })).toBeNull();
+    expect(screen.queryByRole("menuitem", { name: "分享管理" })).toBeNull();
+    await user.click(screen.getByRole("menuitem", { name: "管理面板" }));
+    expect(screen.getByRole("dialog", { name: "管理面板" })).toBeTruthy();
     expect(
-      await screen.findByRole("menuitem", { name: "凭据管理" }),
+      screen.getByRole("tab", { name: "凭据管理", selected: true }),
     ).toBeTruthy();
-    // And never without the capability.
-    vi.stubGlobal(
-      "fetch",
-      fetchCalls.mockImplementation(async () =>
-        jsonResponse({
-          authMode: "none",
-          features: { annotations: false, tokens: false },
-        }),
-      ),
-    );
-    vi.unstubAllGlobals();
+    expect(await screen.findByText("还没有令牌")).toBeTruthy();
+    await user.click(screen.getByRole("tab", { name: "分享管理" }));
+    expect(screen.getByRole("tabpanel", { name: "分享管理" })).toBeTruthy();
+    expect(screen.queryByRole("tabpanel", { name: "凭据管理" })).toBeNull();
+    expect(await screen.findByText("暂无有效分享")).toBeTruthy();
+    await user.click(screen.getByRole("button", { name: "关闭" }));
+
+    await user.click(settings);
+    await user.click(screen.getByRole("menuitem", { name: "退出登录" }));
+    expect(
+      screen.getByRole("dialog", {
+        name: "确认退出登录？",
+        description: "当前账号 Alice（alice）",
+      }),
+    ).toBeTruthy();
+    expect(onLogout).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "取消" }));
+    expect(onLogout).not.toHaveBeenCalled();
+    await user.click(settings);
+    await user.click(screen.getByRole("menuitem", { name: "退出登录" }));
+    await user.click(screen.getByRole("button", { name: "退出登录" }));
+    expect(onLogout).toHaveBeenCalledTimes(1);
   });
 });
