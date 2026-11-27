@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 	"testing/fstest"
+	"time"
 
 	"github.com/lz-wang/m2h/internal/auth"
 	"github.com/lz-wang/m2h/internal/files"
@@ -29,12 +31,12 @@ type shareFixture struct {
 	handler     http.Handler
 }
 
-func newShareFixture(t *testing.T) *shareFixture {
+func newShareFixture(t testing.TB) *shareFixture {
 	t.Helper()
 	fixture := &shareFixture{
 		docs: filepath.Join(t.TempDir(), "docs"), other: filepath.Join(t.TempDir(), "other"),
 	}
-	writeTestFile(t, filepath.Join(fixture.docs, "guide.md"), `---
+	writeShareFixtureFile(t, filepath.Join(fixture.docs, "guide.md"), `---
 title: Public guide
 private_tag: private-metadata
 ---
@@ -54,19 +56,19 @@ private_tag: private-metadata
 
 [hidden](.secret.txt) [ignored](ignored.txt) [hidden alias](alias.txt)
 `)
-	writeTestFile(t, filepath.Join(fixture.docs, "private.md"), "# Private")
-	writeTestFile(t, filepath.Join(fixture.docs, "asset.txt"), "asset contents")
-	writeTestFile(t, filepath.Join(fixture.docs, "frame.txt"), "frame contents")
-	writeTestFile(t, filepath.Join(fixture.docs, "movie.mp4"), "movie contents")
-	writeTestFile(t, filepath.Join(fixture.docs, "pictures", "image one.png"), "picture one")
-	writeTestFile(t, filepath.Join(fixture.docs, "pictures", "high.png"), "picture high")
-	writeTestFile(t, filepath.Join(fixture.docs, ".secret.txt"), "hidden")
-	writeTestFile(t, filepath.Join(fixture.docs, ".gitignore"), "ignored.txt\n")
-	writeTestFile(t, filepath.Join(fixture.docs, "ignored.txt"), "ignored")
+	writeShareFixtureFile(t, filepath.Join(fixture.docs, "private.md"), "# Private")
+	writeShareFixtureFile(t, filepath.Join(fixture.docs, "asset.txt"), "asset contents")
+	writeShareFixtureFile(t, filepath.Join(fixture.docs, "frame.txt"), "frame contents")
+	writeShareFixtureFile(t, filepath.Join(fixture.docs, "movie.mp4"), "movie contents")
+	writeShareFixtureFile(t, filepath.Join(fixture.docs, "pictures", "image one.png"), "picture one")
+	writeShareFixtureFile(t, filepath.Join(fixture.docs, "pictures", "high.png"), "picture high")
+	writeShareFixtureFile(t, filepath.Join(fixture.docs, ".secret.txt"), "hidden")
+	writeShareFixtureFile(t, filepath.Join(fixture.docs, ".gitignore"), "ignored.txt\n")
+	writeShareFixtureFile(t, filepath.Join(fixture.docs, "ignored.txt"), "ignored")
 	if err := os.Symlink(".secret.txt", filepath.Join(fixture.docs, "alias.txt")); err != nil {
 		t.Fatal(err)
 	}
-	writeTestFile(t, filepath.Join(fixture.other, "guide.md"), "# Other root")
+	writeShareFixtureFile(t, filepath.Join(fixture.other, "guide.md"), "# Other root")
 	var inputs []files.Input
 	for _, name := range []string{fixture.docs, fixture.other} {
 		input, err := files.Resolve(name)
@@ -97,7 +99,7 @@ private_tag: private-metadata
 	return fixture
 }
 
-func (fixture *shareFixture) rebuild(t *testing.T, users ...string) {
+func (fixture *shareFixture) rebuild(t testing.TB, users ...string) {
 	t.Helper()
 	config := &auth.Config{Mode: auth.ModeLocal, PublicURL: shareTestOrigin + shareTestBase}
 	for _, name := range users {
@@ -106,7 +108,7 @@ func (fixture *shareFixture) rebuild(t *testing.T, users ...string) {
 	fixture.configure(t, config)
 }
 
-func (fixture *shareFixture) configure(t *testing.T, config *auth.Config) *authStack {
+func (fixture *shareFixture) configure(t testing.TB, config *auth.Config) *authStack {
 	t.Helper()
 	stack, err := buildAuthStack(config, fixture.dataStore, shareTestBase)
 	if err != nil {
@@ -318,4 +320,71 @@ func TestShareRoutesAbsentWithoutAuthentication(t *testing.T) {
 	for _, route := range []string{"/api/shares", shareDocumentPrefix + "unknown", sharePagePrefix + "unknown"} {
 		expectShareStatus(t, fixture.call(http.MethodGet, route, "", nil, "", ""), http.StatusNotFound)
 	}
+}
+
+func writeShareFixtureFile(t testing.TB, filename, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(filename), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filename, []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestShareCacheRechecksAssetPolicyAndEvictsRevokedLink(t *testing.T) {
+	fixture := newShareFixture(t)
+	alice := fixture.login(t, "alice")
+	share := fixture.create(t, alice, "guide.md", "", http.StatusCreated)
+	asset := sharePagePrefix + share.ID + "/assets/asset.txt"
+	page := shareDocumentPrefix + share.ID
+	expectShareStatus(t, fixture.call(http.MethodGet, page, "", nil, "", ""), http.StatusOK)
+	expectShareStatus(t, fixture.call(http.MethodGet, asset, "", nil, "", ""), http.StatusOK)
+	writeTestFile(t, filepath.Join(fixture.docs, ".gitignore"), "asset.txt\n")
+	expectShareStatus(t, fixture.call(http.MethodGet, asset, "", nil, "", ""), http.StatusNotFound)
+	response := fixture.call(http.MethodGet, page, "", nil, "", "")
+	expectShareStatus(t, response, http.StatusOK)
+	if strings.Contains(response.Body.String(), "/assets/asset.txt") {
+		t.Fatal("cached document still advertised the ignored asset")
+	}
+	writeTestFile(t, filepath.Join(fixture.docs, ".gitignore"), "")
+	expectShareStatus(t, fixture.call(http.MethodGet, asset, "", nil, "", ""), http.StatusOK)
+	expectShareStatus(t, fixture.call(http.MethodDelete, shareManagementPrefix+share.ID, "", alice, shareTestOrigin, ""), http.StatusNoContent)
+	expectShareStatus(t, fixture.call(http.MethodGet, asset, "", nil, "", ""), http.StatusNotFound)
+}
+
+func BenchmarkSharedAssetWithFiftyReferences(b *testing.B) {
+	fixture := newShareFixture(b)
+	var document strings.Builder
+	for index := range 50 {
+		name := fmt.Sprintf("asset-%02d.txt", index)
+		writeShareFixtureFile(b, filepath.Join(fixture.docs, name), "sample")
+		fmt.Fprintf(&document, "[Attachment](%s)\n\n", name)
+	}
+	writeShareFixtureFile(b, filepath.Join(fixture.docs, "guide.md"), document.String())
+	stack := fixture.configure(b, localAuthConfig())
+	fixture.handler = newDocumentHandlerWithAuth(context.Background(), fixture.workspace, nil, nil, "test", false, shareTestBase, stack)
+	id := strings.Repeat("A", 43)
+	_, err := fixture.dataStore.CreateShare(context.Background(), store.Share{
+		ID: id, OwnerID: "local:alice", OwnerName: "alice",
+		RootID: fixture.workspace.primary().identity, DocumentPath: "guide.md",
+		CreatedAt: time.Now().UnixMilli(),
+	})
+	if err != nil {
+		b.Fatal(err)
+	}
+	page := fixture.call(http.MethodGet, shareDocumentPrefix+id, "", nil, "", "")
+	if page.Code != http.StatusOK {
+		b.Fatalf("warm share response: %d", page.Code)
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+	b.RunParallel(func(pb *testing.PB) {
+		for index := 0; pb.Next(); index++ {
+			asset := fmt.Sprintf("%s%s/assets/asset-%02d.txt", sharePagePrefix, id, index%50)
+			if response := fixture.call(http.MethodGet, asset, "", nil, "", ""); response.Code != http.StatusOK {
+				b.Errorf("shared asset response: %d", response.Code)
+			}
+		}
+	})
 }

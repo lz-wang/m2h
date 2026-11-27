@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -200,6 +199,7 @@ func (handler *documentHandler) serveShareItem(response http.ResponseWriter, req
 	case err != nil:
 		writeJSONError(response, http.StatusInternalServerError, "revoke document share")
 	default:
+		handler.shareRenders.remove(id)
 		response.WriteHeader(http.StatusNoContent)
 	}
 }
@@ -304,7 +304,7 @@ func (handler *documentHandler) serveSharedDocument(response http.ResponseWriter
 		return
 	}
 	id := strings.TrimPrefix(request.URL.EscapedPath(), shareDocumentPrefix)
-	document, _, err := handler.renderPublicShare(request, id)
+	document, err := handler.renderPublicShare(request, id)
 	if err != nil {
 		status := shareStatus(err)
 		writeJSONError(response, status, http.StatusText(status))
@@ -322,37 +322,25 @@ func readShareFile(root workspaceRoot, target string) ([]byte, error) {
 	return base.ReadFile(target)
 }
 
-func (handler *documentHandler) renderPublicShare(request *http.Request, id string) (publicDocumentResponse, map[string]sharedAsset, error) {
-	record, root, target, err := handler.loadPublicShare(request, id)
+func (handler *documentHandler) renderPublicShare(request *http.Request, id string) (publicDocumentResponse, error) {
+	prepared, root, err := handler.loadShareRender(request, id)
 	if err != nil {
-		return publicDocumentResponse{}, nil, err
+		return publicDocumentResponse{}, err
 	}
-	contents, err := readShareFile(root, target)
-	if err != nil {
-		return publicDocumentResponse{}, nil, err
-	}
-	body, metadata, err := markdown.ParseFrontMatter(contents)
-	if err != nil {
-		return publicDocumentResponse{}, nil, fmt.Errorf("parse shared document: %w", err)
-	}
-	resources := make(map[string]sharedAsset)
-	rendered, err := markdown.RenderShare(body, record.DocumentPath, func(relative string) string {
-		asset, found := resources[relative]
+	document := prepared.document
+	allowed := make(map[string]bool, len(prepared.references))
+	document.HTML, err = markdown.RewriteShareAssets(document.HTML, func(relative string) string {
+		assetAllowed, found := allowed[relative]
 		if !found {
-			asset = resolveSharedAsset(root, relative)
-			resources[relative] = asset
+			assetAllowed = resolveSharedAsset(root, relative).target != ""
+			allowed[relative] = assetAllowed
 		}
-		if asset.target == "" {
+		if !assetAllowed {
 			return ""
 		}
-		escaped := (&url.URL{Path: "/" + relative}).EscapedPath()
-		return handler.basePath + sharePagePrefix + id + "/assets" + strings.ReplaceAll(escaped, ",", "%2C")
+		return handler.basePath + sharePagePrefix + id + "/assets" + escapeShareAssetPath(relative)
 	})
-	if err != nil {
-		return publicDocumentResponse{}, nil, err
-	}
-	return publicDocumentResponse{Title: markdown.PreferredTitle(metadata, rendered.Title), HTML: rendered.Body,
-		TOC: tocEntriesFrom(rendered.Headings)}, resources, nil
+	return document, err
 }
 
 type sharedAsset struct {
@@ -382,13 +370,17 @@ func (handler *documentHandler) serveSharedAsset(response http.ResponseWriter, r
 		http.NotFound(response, request)
 		return
 	}
-	_, resources, err := handler.renderPublicShare(request, id)
+	prepared, workspaceRoot, err := handler.loadShareRender(request, id)
 	if err != nil {
 		status := shareStatus(err)
 		http.Error(response, http.StatusText(status), status)
 		return
 	}
-	asset := resources[relative]
+	if _, referenced := prepared.references[relative]; !referenced {
+		http.NotFound(response, request)
+		return
+	}
+	asset := resolveSharedAsset(workspaceRoot, relative)
 	if asset.target == "" {
 		http.NotFound(response, request)
 		return

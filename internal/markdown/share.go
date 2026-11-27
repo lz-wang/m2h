@@ -19,23 +19,32 @@ func RenderShare(source []byte, sourcePath string, assetURL func(string) string)
 	if err != nil {
 		return Result{}, err
 	}
-	nodes, err := html.ParseFragment(strings.NewReader(result.Body), &html.Node{
+	result.Body, err = rewriteShareHTML(result.Body, shareHTMLPolicy{sourcePath: sourcePath, assetURL: assetURL})
+	return result, err
+}
+
+// RewriteShareAssets rebinds the root-relative URLs from a prepared public
+// render. It applies the current attachment policy without parsing Markdown.
+func RewriteShareAssets(body string, assetURL func(string) string) (string, error) {
+	return rewriteShareHTML(body, shareHTMLPolicy{sourcePath: "document.md", assetURL: assetURL})
+}
+
+func rewriteShareHTML(input string, policy shareHTMLPolicy) (string, error) {
+	nodes, err := html.ParseFragment(strings.NewReader(input), &html.Node{
 		Type: html.ElementNode, Data: "div", DataAtom: atom.Div,
 	})
 	if err != nil {
-		return Result{}, fmt.Errorf("parse public HTML: %w", err)
+		return "", fmt.Errorf("parse public HTML: %w", err)
 	}
-	policy := shareHTMLPolicy{sourcePath: sourcePath, assetURL: assetURL}
 	var body bytes.Buffer
 	for _, node := range nodes {
 		if policy.clean(node) {
 			if err := html.Render(&body, node); err != nil {
-				return Result{}, fmt.Errorf("render public HTML: %w", err)
+				return "", fmt.Errorf("render public HTML: %w", err)
 			}
 		}
 	}
-	result.Body = body.String()
-	return result, nil
+	return body.String(), nil
 }
 
 var shareElements = strings.Fields("a abbr b blockquote br caption cite code col colgroup dd del details div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i img input ins kbd label li mark ol p picture pre q rp rt ruby s samp section small source span strong sub summary sup table tbody td th thead tfoot tr u ul var video audio")

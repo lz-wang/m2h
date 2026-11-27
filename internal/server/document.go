@@ -121,7 +121,8 @@ type documentHandler struct {
 
 	// auth is the authentication layer of an authenticated run; nil keeps
 	// the default stateless mode where every route stays public.
-	auth *authStack
+	auth         *authStack
+	shareRenders shareRenderCache
 
 	discover func(context.Context, rootScope) (files.Discovery, error)
 	search   *searchIndex
