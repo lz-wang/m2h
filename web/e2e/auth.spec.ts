@@ -1891,11 +1891,19 @@ test("public document sharing opens in an anonymous browser and revokes the link
     await page.getByRole("button", { name: "设置", exact: true }).click();
     await page.getByRole("menuitem", { name: "分享管理" }).click();
     const settings = page.getByRole("dialog", { name: "分享管理" });
+    await expect(
+      settings.getByRole("columnheader", { name: "剩余有效期" }),
+    ).toHaveCSS("text-align", "center");
+    await expect(
+      settings.getByRole("columnheader", { name: "操作" }),
+    ).toHaveCSS("text-align", "center");
     await settings
       .getByRole("row", { name: /图片 Lightbox 回归文档/ })
       .getByRole("button", { name: "撤销分享链接" })
       .click();
-    await settings.getByRole("button", { name: "确认撤销" }).click();
+    const confirmation = page.getByRole("dialog", { name: "撤销分享" });
+    await expect(confirmation).toBeVisible();
+    await confirmation.getByRole("button", { name: "确认撤销" }).click();
     await expect(settings.getByText("暂无有效分享。")).toBeVisible();
     expect((await reader.reload())?.status()).toBe(404);
     await expect(reader.getByText("此分享链接不可用。")).toBeVisible();

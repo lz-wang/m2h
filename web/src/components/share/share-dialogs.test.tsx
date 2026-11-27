@@ -1,4 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 
@@ -29,6 +36,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -58,9 +66,18 @@ it("creates and copies the current document's link", async () => {
   expect(request.mock.calls[1]?.[1]?.body).toBe(
     JSON.stringify({ documentRef: target.documentRef, duration: "permanent" }),
   );
-  await user.click(screen.getByRole("button", { name: "复制分享链接" }));
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  const copy = screen.getByRole("button", { name: "复制分享链接" });
+  await act(async () => {
+    fireEvent.click(copy);
+  });
   expect(clipboard.copyText).toHaveBeenCalledWith(address);
-  expect(await screen.findByText("已复制")).toBeTruthy();
+  expect(copy.getAttribute("data-copy-state")).toBe("success");
+  expect(copy.querySelector(".lucide-check")).not.toBeNull();
+  expect(screen.queryByText("已复制")).toBeNull();
+  act(() => vi.advanceTimersByTime(2_000));
+  expect(copy.getAttribute("data-copy-state")).toBeNull();
+  expect(copy.getAttribute("aria-label")).toBe("复制分享链接");
 });
 
 it("reuses the existing link and allows cancellation of revocation", async () => {
@@ -93,15 +110,48 @@ it("sorts only active records and removes a revoked share", async () => {
   request
     .mockResolvedValueOnce(json([shared, temporary, expired]))
     .mockResolvedValueOnce(new Response(null, { status: 204 }));
+  vi.spyOn(clipboard, "copyText").mockResolvedValue(true);
   const user = userEvent.setup();
   render(<ShareSettings open onOpenChange={vi.fn()} />);
   const alpha = await screen.findByRole("row", { name: /Alpha/ });
   expect(screen.queryByText("Expired")).toBeNull();
-  await user.click(screen.getByRole("button", { name: "文档名称" }));
-  await user.click(screen.getByRole("button", { name: "文档名称" }));
+  const name = screen.getByRole("columnheader", { name: "文档名称" });
+  const expiry = screen.getByRole("columnheader", { name: "剩余有效期" });
+  expect(expiry.getAttribute("aria-sort")).toBe("ascending");
+  expect(screen.getAllByRole("row")[1]).toBe(alpha);
+  await user.click(within(expiry).getByRole("button"));
+  expect(expiry.getAttribute("aria-sort")).toBe("descending");
   expect(screen.getAllByRole("row")[1]?.textContent).toContain("Guide");
-  await user.click(within(alpha).getByRole("button", { name: "撤销分享链接" }));
-  await user.click(screen.getByRole("button", { name: "确认撤销" }));
+  await user.click(within(name).getByRole("button"));
+  expect(name.getAttribute("aria-sort")).toBe("ascending");
+  expect(screen.getAllByRole("row")[1]).toBe(alpha);
+  await user.click(within(name).getByRole("button"));
+  expect(name.getAttribute("aria-sort")).toBe("descending");
+  expect(screen.getAllByRole("row")[1]?.textContent).toContain("Guide");
+
+  const copy = within(alpha).getByRole("button", { name: "复制分享链接" });
+  await user.click(copy);
+  expect(clipboard.copyText).toHaveBeenCalledWith(
+    new URL(temporary.url, location.origin).href,
+  );
+  expect(copy.querySelector(".lucide-check")).not.toBeNull();
+  expect(screen.queryByText("已复制")).toBeNull();
+
+  const revoke = within(alpha).getByRole("button", { name: "撤销分享链接" });
+  await user.click(revoke);
+  const confirmation = screen.getByRole("dialog", { name: "撤销分享" });
+  expect(within(confirmation).getByText(/撤销「Alpha」/)).toBeTruthy();
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog", { name: "撤销分享" })).toBeNull();
+  expect(request).toHaveBeenCalledTimes(1);
+
+  await user.click(revoke);
+  await user.click(
+    within(screen.getByRole("dialog", { name: "撤销分享" })).getByRole(
+      "button",
+      { name: "确认撤销" },
+    ),
+  );
   expect(await screen.findByText("Guide")).toBeTruthy();
   await waitFor(() => expect(screen.queryByText("Alpha")).toBeNull());
   expect(request.mock.calls[1]?.[0]).toBe(`/api/shares/${temporary.id}`);

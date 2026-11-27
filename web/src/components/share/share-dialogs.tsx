@@ -1,4 +1,14 @@
-import { Copy, ExternalLink, Link2, Trash2 } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
+  Check,
+  CircleAlert,
+  Copy,
+  ExternalLink,
+  Link2,
+  Trash2,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 
 import {
@@ -91,9 +101,20 @@ function ShareActions({
   share: DocumentShare;
   onRevoke(): void;
 }) {
-  const [copyStatus, setCopyStatus] = useState("");
+  const [copyState, setCopyState] = useState<"success" | "error" | null>(null);
+  useEffect(() => {
+    if (copyState === null) return;
+    const timer = window.setTimeout(() => setCopyState(null), 2_000);
+    return () => window.clearTimeout(timer);
+  }, [copyState]);
+  const CopyIcon =
+    copyState === "success"
+      ? Check
+      : copyState === "error"
+        ? CircleAlert
+        : Copy;
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center justify-center gap-1">
       <a
         href={share.url}
         target="_blank"
@@ -107,15 +128,32 @@ function ShareActions({
       <Button
         variant="ghost"
         size="icon-sm"
-        aria-label="复制分享链接"
-        title="复制分享链接"
-        onClick={() =>
-          void copyText(share.url).then((copied) =>
-            setCopyStatus(copied ? "已复制" : "复制失败"),
-          )
+        aria-label={
+          copyState === "success"
+            ? "分享链接已复制"
+            : copyState === "error"
+              ? "复制分享链接失败，请重试"
+              : "复制分享链接"
         }
+        title={copyState === "error" ? "复制失败，请重试" : "复制分享链接"}
+        data-copy-state={copyState ?? undefined}
+        onClick={() => {
+          setCopyState(null);
+          void copyText(share.url).then((copied) =>
+            setCopyState(copied ? "success" : "error"),
+          );
+        }}
       >
-        <Copy aria-hidden="true" />
+        <CopyIcon
+          aria-hidden="true"
+          className={
+            copyState === "success"
+              ? "text-[color:var(--m2h-copy-success)]"
+              : copyState === "error"
+                ? "text-[color:var(--m2h-copy-danger)]"
+                : undefined
+          }
+        />
       </Button>
       <Button
         variant="ghost"
@@ -126,9 +164,6 @@ function ShareActions({
       >
         <Trash2 aria-hidden="true" />
       </Button>
-      <span className="text-muted-foreground text-xs" role="status">
-        {copyStatus}
-      </span>
     </div>
   );
 }
@@ -137,10 +172,12 @@ function ConfirmRevoke({
   share,
   onCancel,
   onRevoked,
+  modal = false,
 }: {
   share: DocumentShare;
   onCancel(): void;
   onRevoked(): void;
+  modal?: boolean;
 }) {
   const [pending, setPending] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -155,11 +192,11 @@ function ConfirmRevoke({
       setPending(false);
     }
   }
-  return (
-    <div className="grid gap-2 rounded-md border p-3 text-sm">
-      <p>撤销「{share.title}」的分享后，原链接立即失效。</p>
+  const description = `撤销「${share.title}」的分享后，原链接立即失效。`;
+  const controls = (
+    <>
       {failed ? (
-        <p role="alert" className="text-destructive">
+        <p role="alert" className="text-destructive text-sm">
           无法撤销分享，请重试。
         </p>
       ) : null}
@@ -181,6 +218,33 @@ function ConfirmRevoke({
           确认撤销
         </Button>
       </div>
+    </>
+  );
+  if (modal) {
+    return (
+      <Dialog
+        open
+        onOpenChange={(open) => {
+          if (!open && !pending) onCancel();
+        }}
+      >
+        <DialogContent
+          forceBackdrop
+          showCloseButton={!pending}
+          overlayClassName="z-[60] bg-black/30 supports-backdrop-filter:backdrop-blur-sm"
+          className="top-1/2 z-[61] -translate-y-1/2 gap-4 p-5 data-ending-style:-translate-y-[calc(50%-0.5rem)] data-starting-style:-translate-y-[calc(50%-0.5rem)] sm:max-w-lg"
+        >
+          <DialogTitle>撤销分享</DialogTitle>
+          <DialogDescription>{description}</DialogDescription>
+          {controls}
+        </DialogContent>
+      </Dialog>
+    );
+  }
+  return (
+    <div className="grid gap-2 rounded-md border p-3 text-sm">
+      <p>{description}</p>
+      {controls}
     </div>
   );
 }
@@ -339,30 +403,34 @@ export function ShareSettings({
   onOpenChange(open: boolean): void;
 }) {
   const { shares, setShares, error, now, retry } = useShareList(open);
-  const [by, setBy] = useState<"title" | "expiry">("expiry");
-  const [direction, setDirection] = useState<1 | -1>(1);
-  const [confirmID, setConfirmID] = useState("");
+  const [sort, setSort] = useState<{
+    key: "title" | "expiry";
+    ascending: boolean;
+  }>({
+    key: "expiry",
+    ascending: true,
+  });
+  const [selected, setSelected] = useState<DocumentShare | null>(null);
   const active = (shares ?? []).filter(
     (share) => share.expiresAt === 0 || share.expiresAt > now,
   );
   active.sort(
     (a, b) =>
-      direction *
-      (by === "title"
-        ? a.title.localeCompare(b.title)
+      (sort.ascending ? 1 : -1) *
+      (sort.key === "title"
+        ? a.title.localeCompare(b.title, "zh-CN")
         : (a.expiresAt || Number.MAX_SAFE_INTEGER) -
           (b.expiresAt || Number.MAX_SAFE_INTEGER)),
   );
-  const selected = active.find((item) => item.id === confirmID);
-  function sort(next: typeof by) {
-    setDirection(by === next && direction === 1 ? -1 : 1);
-    setBy(next);
-  }
+  const headers = [
+    ["title", "文档名称"],
+    ["expiry", "剩余有效期"],
+  ] as const;
   return (
     <Dialog
       open={open}
       onOpenChange={(next) => {
-        if (!next) setConfirmID("");
+        if (!next) setSelected(null);
         onOpenChange(next);
       }}
     >
@@ -390,14 +458,15 @@ export function ShareSettings({
         {selected ? (
           <ConfirmRevoke
             key={selected.id}
+            modal
             share={selected}
-            onCancel={() => setConfirmID("")}
+            onCancel={() => setSelected(null)}
             onRevoked={() => {
               setShares(
                 (items) =>
                   items?.filter((item) => item.id !== selected.id) ?? [],
               );
-              setConfirmID("");
+              setSelected(null);
             }}
           />
         ) : null}
@@ -406,44 +475,48 @@ export function ShareSettings({
             <table className="w-full text-left text-sm">
               <thead className="bg-popover text-muted-foreground sticky top-0">
                 <tr>
-                  <th
-                    scope="col"
-                    aria-sort={
-                      by === "title"
-                        ? direction === 1
-                          ? "ascending"
-                          : "descending"
-                        : "none"
-                    }
-                  >
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => sort("title")}
-                    >
-                      文档名称
-                    </Button>
-                  </th>
-                  <th
-                    scope="col"
-                    className="whitespace-nowrap"
-                    aria-sort={
-                      by === "expiry"
-                        ? direction === 1
-                          ? "ascending"
-                          : "descending"
-                        : "none"
-                    }
-                  >
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => sort("expiry")}
-                    >
-                      剩余有效期
-                    </Button>
-                  </th>
-                  <th scope="col" className="px-2">
+                  {headers.map(([key, label]) => {
+                    const isSorted = sort.key === key;
+                    const SortIcon = isSorted
+                      ? sort.ascending
+                        ? ArrowUp
+                        : ArrowDown
+                      : ArrowUpDown;
+                    return (
+                      <th
+                        key={key}
+                        scope="col"
+                        className={
+                          key === "expiry"
+                            ? "text-center whitespace-nowrap"
+                            : undefined
+                        }
+                        aria-sort={
+                          isSorted
+                            ? sort.ascending
+                              ? "ascending"
+                              : "descending"
+                            : "none"
+                        }
+                      >
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            setSort((current) => ({
+                              key,
+                              ascending:
+                                key !== current.key || !current.ascending,
+                            }))
+                          }
+                        >
+                          {label}
+                          <SortIcon aria-hidden="true" className="size-3.5" />
+                        </Button>
+                      </th>
+                    );
+                  })}
+                  <th scope="col" className="px-2 text-center">
                     操作
                   </th>
                 </tr>
@@ -457,13 +530,13 @@ export function ShareSettings({
                         {share.documentRef.path}
                       </p>
                     </td>
-                    <td className="p-2 whitespace-nowrap">
+                    <td className="p-2 text-center whitespace-nowrap">
                       <ShareExpiry share={share} now={now} />
                     </td>
-                    <td className="p-2">
+                    <td className="p-2 text-center">
                       <ShareActions
                         share={share}
-                        onRevoke={() => setConfirmID(share.id)}
+                        onRevoke={() => setSelected(share)}
                       />
                     </td>
                   </tr>
