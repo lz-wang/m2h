@@ -113,6 +113,8 @@ export function PublicReader({ id }: { id: string }) {
             {state.document?.title ?? "公开分享"}
           </span>
           <div className="toolbar-actions">
+            <DocumentWidthMenu width={width} onChange={setWidth} />
+            <ThemeMenu mode={mode} onChange={setMode} />
             {headings.length > 0 ? (
               <>
                 <TOCToggle enabled={toc} available onChange={setToc} />
@@ -123,8 +125,6 @@ export function PublicReader({ id }: { id: string }) {
                 />
               </>
             ) : null}
-            <DocumentWidthMenu width={width} onChange={setWidth} />
-            <ThemeMenu mode={mode} onChange={setMode} />
           </div>
         </header>
         <main className="reader-main" ref={container}>

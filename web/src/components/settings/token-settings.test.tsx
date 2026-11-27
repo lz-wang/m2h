@@ -143,13 +143,14 @@ describe("TokenSettings", () => {
       .mockResolvedValueOnce(jsonResponse({ ok: true }));
     await openDialog();
     await waitFor(() => expect(screen.getByText("llm-agent")).toBeTruthy());
+    const heading = screen.getByRole("heading", { name: "API 令牌" });
+    expect(heading.parentElement?.classList.contains("border-b")).toBe(true);
 
     await userEvent.click(
       screen.getByRole("button", { name: "删除 llm-agent" }),
     );
-    await waitFor(() =>
-      expect(screen.getByText(/还没有令牌|无法/)).toBeTruthy(),
-    );
+    expect(await screen.findByText("还没有令牌")).toBeTruthy();
+    expect(heading.parentElement?.classList.contains("border-b")).toBe(false);
   });
 
   it("keeps the token and reports an error if deletion fails", async () => {

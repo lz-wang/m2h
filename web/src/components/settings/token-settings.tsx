@@ -294,7 +294,9 @@ export function TokenSettings({
         aria-describedby={undefined}
         className="h-[80dvh] max-h-[80dvh] w-[calc(100vw-24px)] p-5 sm:max-w-5xl"
       >
-        <div className="flex items-center justify-between gap-4 border-b pb-4">
+        <div
+          className={`flex items-center justify-between gap-4 pb-4${visibleTokens.length > 0 ? " border-b" : ""}`}
+        >
           <DialogTitle>API 令牌</DialogTitle>
           <Button
             size="sm"

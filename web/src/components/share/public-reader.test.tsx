@@ -27,6 +27,17 @@ it("loads only the shared document and provides reader controls", async () => {
   expect(
     await within(main).findByRole("navigation", { name: "文档目录" }),
   ).toBeTruthy();
+  const toolbar = within(screen.getByRole("banner"));
+  expect(
+    toolbar
+      .getAllByRole("button")
+      .map((button) => button.getAttribute("aria-label")),
+  ).toEqual([
+    "文档宽度：标准",
+    "显示主题：跟随系统",
+    "隐藏文档目录",
+    "打开文档目录",
+  ]);
   expect(request.mock.calls.map(([path]) => path)).toEqual([
     `/api/public/shares/${id}`,
   ]);
