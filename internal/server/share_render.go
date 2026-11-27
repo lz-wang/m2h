@@ -4,7 +4,6 @@ import (
 	"container/list"
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"net/http"
 	"net/url"
 	"strings"
@@ -130,9 +129,9 @@ func (handler *documentHandler) loadShareRender(request *http.Request, id string
 }
 
 func prepareShareRender(id, path string, hash [sha256.Size]byte, contents []byte) (shareRenderEntry, error) {
-	body, metadata, err := markdown.ParseFrontMatter(contents)
+	body, metadata, err := parseShareMarkdown(contents)
 	if err != nil {
-		return shareRenderEntry{}, fmt.Errorf("parse shared document: %w", err)
+		return shareRenderEntry{}, err
 	}
 	references := make(map[string]struct{})
 	rendered, err := markdown.RenderShare(body, path, func(relative string) string {

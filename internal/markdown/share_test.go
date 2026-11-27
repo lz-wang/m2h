@@ -90,3 +90,36 @@ func TestRenderShareRetainsTabbedContentAndGFMTasks(t *testing.T) {
 		t.Fatal("accepted an absolute source path")
 	}
 }
+
+func TestShareRestoresOnlyFixedAlertIcons(t *testing.T) {
+	source := []byte(`> [!NOTE]
+> Note content.
+
+> [!TIP]
+> Tip content.
+
+<svg onload="unsafe()"><path d="unsafe" /></svg>
+
+<div class="markdown-alert markdown-alert-warning"><p class="markdown-alert-title"><svg onload="unsafe()"><path d="unsafe"></path></svg>WARNING</p></div>
+`)
+	dropAsset := func(string) string { return "" }
+	rendered, err := RenderShare(source, "guide.md", dropAsset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, err := RewriteShareAssets(rendered.Body, dropAsset)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, variant := range []AlertType{AlertNote, AlertTip, AlertWarning} {
+		if !strings.Contains(body, string(alertIconSVG(variant))) {
+			// The HTML serializer emits an explicit closing tag for SVG paths.
+			if !strings.Contains(body, alertIconPaths[variant]) {
+				t.Errorf("missing fixed %s icon: %s", variant, body)
+			}
+		}
+	}
+	if strings.Count(body, "<svg ") != 3 || strings.Contains(body, "unsafe") {
+		t.Fatalf("untrusted SVG survived sanitization: %s", body)
+	}
+}

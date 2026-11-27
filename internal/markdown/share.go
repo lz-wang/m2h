@@ -87,7 +87,36 @@ func (policy shareHTMLPolicy) clean(node *html.Node) bool {
 		}
 		child = next
 	}
+	restoreShareAlertIcon(node)
 	return true
+}
+
+// Restore a fixed m2h icon after the sanitizer removes all input SVG.
+func restoreShareAlertIcon(node *html.Node) {
+	if node.DataAtom != atom.P || node.Parent == nil || node.Parent.DataAtom != atom.Div ||
+		node.FirstChild == nil || node.FirstChild.Type != html.TextNode {
+		return
+	}
+	hasClass := func(node *html.Node, class string) bool {
+		for _, attr := range node.Attr {
+			if attr.Key == "class" {
+				return slices.Contains(strings.Fields(attr.Val), class)
+			}
+		}
+		return false
+	}
+	if !hasClass(node, "markdown-alert-title") || !hasClass(node.Parent, "markdown-alert") {
+		return
+	}
+	variant := AlertType(strings.ToLower(node.FirstChild.Data))
+	icon := alertIconSVG(variant)
+	if len(icon) == 0 || !hasClass(node.Parent, "markdown-alert-"+string(variant)) {
+		return
+	}
+	elements, err := html.ParseFragment(bytes.NewReader(icon), node)
+	if err == nil && len(elements) == 1 {
+		node.InsertBefore(elements[0], node.FirstChild)
+	}
 }
 
 func shareInput(node *html.Node) bool {

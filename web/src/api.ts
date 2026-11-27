@@ -682,8 +682,13 @@ function parseDocumentShare(value: unknown): DocumentShare {
 
 export async function listShares(
   signal?: AbortSignal,
+  document?: DocumentRef,
 ): Promise<DocumentShare[]> {
-  const payload = await requestJSON(appPath("/api/shares"), signal);
+  const query =
+    document === undefined
+      ? ""
+      : `?${new URLSearchParams({ rootId: document.rootId, path: document.path })}`;
+  const payload = await requestJSON(appPath(`/api/shares${query}`), signal);
   if (!Array.isArray(payload)) {
     throw new Error("分享列表响应格式无效");
   }

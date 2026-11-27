@@ -62,6 +62,9 @@ it("creates and copies the current document's link", async () => {
     name: "分享链接",
   });
   expect(input.value).toBe(address);
+  expect(request.mock.calls[0]?.[0]).toBe(
+    "/api/shares?rootId=root&path=guide.md",
+  );
   expect(request.mock.calls[1]?.[0]).toBe("/api/shares");
   expect(request.mock.calls[1]?.[1]?.body).toBe(
     JSON.stringify({ documentRef: target.documentRef, duration: "permanent" }),

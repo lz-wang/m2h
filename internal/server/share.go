@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
@@ -89,22 +90,45 @@ func (handler *documentHandler) serveShares(response http.ResponseWriter, reques
 	}
 	switch request.Method {
 	case http.MethodGet:
-		records, err := handler.auth.dataStore.ListShares(request.Context(), identity.ID, time.Now())
-		if err != nil {
-			writeJSONError(response, http.StatusInternalServerError, "list document shares")
-			return
-		}
-		items := make([]shareResponse, 0, len(records))
-		for _, record := range records {
-			items = append(items, handler.shareResponse(record))
-		}
-		writeJSON(response, http.StatusOK, items)
+		handler.listShares(response, request, identity.ID)
 	case http.MethodPost:
 		handler.createShare(response, request, identity)
 	default:
 		response.Header().Set("Allow", "GET, POST")
 		writeJSONError(response, http.StatusMethodNotAllowed, "method not allowed")
 	}
+}
+
+func (handler *documentHandler) listShares(response http.ResponseWriter, request *http.Request, ownerID string) {
+	dataStore, ctx, now := handler.auth.dataStore, request.Context(), time.Now()
+	var records []store.Share
+	var err error
+	if request.URL.RawQuery == "" {
+		records, err = dataStore.ListShares(ctx, ownerID, now)
+	} else {
+		query, queryErr := url.ParseQuery(request.URL.RawQuery)
+		if queryErr != nil || len(query) != 2 || len(query["rootId"]) != 1 || len(query["path"]) != 1 ||
+			query.Get("rootId") == "" || query.Get("path") == "" {
+			writeJSONError(response, http.StatusBadRequest, "exactly one rootId and path are required")
+			return
+		}
+		var record store.Share
+		record, err = dataStore.FindDocumentShare(ctx, ownerID, query.Get("rootId"), query.Get("path"), now)
+		if errors.Is(err, sql.ErrNoRows) {
+			err = nil
+		} else if err == nil {
+			records = append(records, record)
+		}
+	}
+	if err != nil {
+		writeJSONError(response, http.StatusInternalServerError, "list document shares")
+		return
+	}
+	items := make([]shareResponse, 0, len(records))
+	for _, record := range records {
+		items = append(items, handler.shareResponse(record, handler.readShareTitle(record)))
+	}
+	writeJSON(response, http.StatusOK, items)
 }
 
 func (handler *documentHandler) createShare(response http.ResponseWriter, request *http.Request, identity *principal) {
@@ -126,9 +150,20 @@ func (handler *documentHandler) createShare(response http.ResponseWriter, reques
 		writeJSONError(response, http.StatusBadRequest, "invalid share duration")
 		return
 	}
-	root, relative, _, err := handler.resolveShareDocument(body.DocumentRef)
+	root, relative, target, err := handler.resolveShareDocument(body.DocumentRef)
 	if err != nil {
 		writeJSONError(response, resolveVisibleStatus(err), "document not found")
+		return
+	}
+
+	contents, err := readShareFile(root, target)
+	if err != nil {
+		writeJSONError(response, shareStatus(err), "read document")
+		return
+	}
+	title, err := shareDocumentTitle(contents, relative)
+	if err != nil {
+		writeShareError(response, err)
 		return
 	}
 
@@ -154,23 +189,37 @@ func (handler *documentHandler) createShare(response http.ResponseWriter, reques
 	if record.ID == candidate.ID {
 		status = http.StatusCreated
 	}
-	writeJSON(response, status, handler.shareResponse(record))
+	writeJSON(response, status, handler.shareResponse(record, title))
 }
 
-func (handler *documentHandler) shareResponse(record store.Share) shareResponse {
+func (handler *documentHandler) readShareTitle(record store.Share) string {
 	ref := documentRefRequest{RootID: record.RootID, Path: record.DocumentPath}
-	title := filepath.Base(ref.Path)
 	if root, _, target, err := handler.resolveShareDocument(ref); err == nil {
 		if contents, err := readShareFile(root, target); err == nil {
-			if body, metadata, err := markdown.ParseFrontMatter(contents); err == nil {
-				if fallback, err := markdown.Title(body, ref.Path); err == nil {
-					title = markdown.PreferredTitle(metadata, fallback)
-				}
+			if title, err := shareDocumentTitle(contents, ref.Path); err == nil {
+				return title
 			}
 		}
 	}
+	return filepath.Base(ref.Path)
+}
+
+func shareDocumentTitle(contents []byte, path string) (string, error) {
+	body, metadata, err := parseShareMarkdown(contents)
+	if err != nil {
+		return "", err
+	}
+	fallback, err := markdown.Title(body, path)
+	if err != nil {
+		return "", err
+	}
+	return markdown.PreferredTitle(metadata, fallback), nil
+}
+
+func (handler *documentHandler) shareResponse(record store.Share, title string) shareResponse {
 	return shareResponse{
-		ID: record.ID, Title: title, DocumentRef: ref, CreatedAt: record.CreatedAt, ExpiresAt: record.ExpiresAt,
+		ID: record.ID, Title: title, DocumentRef: documentRefRequest{RootID: record.RootID, Path: record.DocumentPath},
+		CreatedAt: record.CreatedAt, ExpiresAt: record.ExpiresAt,
 		URL: handler.auth.publicOrigin + handler.basePath + sharePagePrefix + record.ID,
 	}
 }
@@ -245,12 +294,34 @@ func (handler *documentHandler) loadPublicShare(request *http.Request, id string
 	return record, root, target, err
 }
 
+var errInvalidShareFrontMatter = errors.New("invalid frontmatter")
+
+func parseShareMarkdown(contents []byte) ([]byte, *markdown.FrontMatter, error) {
+	body, metadata, err := markdown.ParseFrontMatter(contents)
+	if err != nil {
+		return nil, nil, fmt.Errorf("%w: %w", errInvalidShareFrontMatter, err)
+	}
+	return body, metadata, nil
+}
+
+func writeShareError(response http.ResponseWriter, err error) {
+	status := shareStatus(err)
+	message := http.StatusText(status)
+	if errors.Is(err, errInvalidShareFrontMatter) {
+		message = errInvalidShareFrontMatter.Error()
+	}
+	writeJSONError(response, status, message)
+}
+
 func shareStatus(err error) int {
 	if err == nil {
 		return http.StatusOK
 	}
 	if errors.Is(err, fs.ErrNotExist) {
 		return http.StatusNotFound
+	}
+	if errors.Is(err, errInvalidShareFrontMatter) {
+		return http.StatusUnprocessableEntity
 	}
 	return http.StatusInternalServerError
 }
@@ -306,8 +377,7 @@ func (handler *documentHandler) serveSharedDocument(response http.ResponseWriter
 	id := strings.TrimPrefix(request.URL.EscapedPath(), shareDocumentPrefix)
 	document, err := handler.renderPublicShare(request, id)
 	if err != nil {
-		status := shareStatus(err)
-		writeJSONError(response, status, http.StatusText(status))
+		writeShareError(response, err)
 		return
 	}
 	writeJSON(response, http.StatusOK, document)

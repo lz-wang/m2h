@@ -46,3 +46,12 @@ it("retries a service failure and displays the resulting unavailable link", asyn
   expect(await screen.findByText("此分享链接不可用。")).toBeTruthy();
   expect(request).toHaveBeenCalledTimes(2);
 });
+
+it("explains an invalid Frontmatter response", async () => {
+  const request = vi
+    .fn<typeof fetch>()
+    .mockResolvedValueOnce(new Response(null, { status: 422 }));
+  vi.stubGlobal("fetch", request);
+  render(<PublicReader id={id} />);
+  expect(await screen.findByText(/分享文档的 Frontmatter 无效/)).toBeTruthy();
+});

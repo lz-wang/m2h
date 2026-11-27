@@ -24,7 +24,8 @@ import { TooltipProvider } from "../ui/tooltip";
 
 type PublicDocument = Awaited<ReturnType<typeof getSharedDocument>>;
 type PublicState =
-  | { phase: "loading-document" | "not-found" | "error"; document: null }
+  | { phase: "loading-document" | "not-found"; document: null }
+  | { phase: "error"; document: null; message: string }
   | { phase: "ready"; document: PublicDocument };
 
 export function PublicReader({ id }: { id: string }) {
@@ -63,13 +64,19 @@ export function PublicReader({ id }: { id: string }) {
       },
       (error: unknown) => {
         if (!controller.signal.aborted) {
-          setState({
-            phase:
-              error instanceof APIError && error.status === 404
-                ? "not-found"
-                : "error",
-            document: null,
-          });
+          const status = error instanceof APIError ? error.status : undefined;
+          if (status === 404) {
+            setState({ phase: "not-found", document: null });
+          } else {
+            setState({
+              phase: "error",
+              document: null,
+              message:
+                status === 422
+                  ? "分享文档的 Frontmatter 无效。请联系分享者修正文档。"
+                  : "无法加载分享文档，请稍后重试。",
+            });
+          }
         }
       },
     );
@@ -136,7 +143,7 @@ export function PublicReader({ id }: { id: string }) {
                 phase={state.phase}
                 html={state.document?.html ?? null}
                 frontmatter={null}
-                error="无法加载分享文档，请稍后重试。"
+                error={state.phase === "error" ? state.message : null}
                 resolvedMode={resolvedMode}
                 onRetry={() => setRevision((value) => value + 1)}
                 onVisualError={setVisualError}

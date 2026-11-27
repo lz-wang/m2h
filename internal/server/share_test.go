@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -281,6 +282,7 @@ func TestPublicShareOwnerRemovalIsPermanent(t *testing.T) {
 	fixture.rebuild(t, "alice", "bob")
 	expectShareStatus(t, fixture.call(http.MethodGet, path, "", nil, "", ""), http.StatusNotFound)
 }
+
 func TestPublicShareOwnerRemovalIsPermanentWithoutItsRoot(t *testing.T) {
 	fixture := newShareFixture(t)
 	share := fixture.create(t, fixture.login(t, "alice"), "guide.md", "permanent", http.StatusCreated)
@@ -402,4 +404,77 @@ func BenchmarkSharedAssetWithFiftyReferences(b *testing.B) {
 			}
 		}
 	})
+}
+
+func TestSharesCanBeQueriedByOwnerAndDocument(t *testing.T) {
+	fixture := newShareFixture(t)
+	alice := fixture.login(t, "alice")
+	bob := fixture.login(t, "bob")
+	share := fixture.create(t, alice, "guide.md", "", http.StatusCreated)
+	fixture.create(t, alice, "private.md", "", http.StatusCreated)
+	query := "/api/shares?" + url.Values{
+		"rootId": {share.DocumentRef.RootID},
+		"path":   {share.DocumentRef.Path},
+	}.Encode()
+	request := fixture.call(http.MethodGet, query, "", alice, "", "")
+	expectShareStatus(t, request, http.StatusOK)
+	var shares []shareResponse
+	decodeJSON(t, request, &shares)
+	if len(shares) != 1 || shares[0] != share {
+		t.Fatalf("document query returned %+v", shares)
+	}
+	request = fixture.call(http.MethodGet, query, "", bob, "", "")
+	expectShareStatus(t, request, http.StatusOK)
+	decodeJSON(t, request, &shares)
+	if len(shares) != 0 {
+		t.Fatal("document lookup returned another user's share")
+	}
+	for _, invalid := range []string{"/api/shares?path=guide.md", query + "&path=private.md", query + "&extra=value"} {
+		expectShareStatus(t, fixture.call(http.MethodGet, invalid, "", alice, "", ""), http.StatusBadRequest)
+	}
+
+	token := fixture.call(http.MethodPost, "/api/tokens", `{"kind":"persistent","name":"test",
+		"scope":{"permissions":["document:read"],"resource":{"type":"all_published"}}}`, alice, shareTestOrigin, "")
+	expectShareStatus(t, token, http.StatusCreated)
+	var credential tokenResponse
+	decodeJSON(t, token, &credential)
+	expectShareStatus(t, fixture.call(http.MethodGet, "/raw/r0/guide.md", "", nil, "", credential.Secret), http.StatusOK)
+	expectShareStatus(t, fixture.call(http.MethodGet, query, "", alice, "", credential.Secret), http.StatusForbidden)
+	expectShareStatus(t, fixture.call(http.MethodPost, "/api/shares", "{}", alice, shareTestOrigin, credential.Secret), http.StatusForbidden)
+	expectShareStatus(t, fixture.call(http.MethodDelete, shareManagementPrefix+share.ID, "", alice, shareTestOrigin, credential.Secret), http.StatusForbidden)
+}
+
+func TestShareRejectsInvalidFrontMatterAndReadsRecreatedPath(t *testing.T) {
+	fixture := newShareFixture(t)
+	alice := fixture.login(t, "alice")
+	filename := filepath.Join(fixture.docs, "guide.md")
+	broken := "---\ntitle: [invalid\n---\n# Guide"
+	writeTestFile(t, filename, broken)
+	fixture.create(t, alice, "guide.md", "", http.StatusUnprocessableEntity)
+	request := fixture.call(http.MethodGet, "/api/shares", "", alice, "", "")
+	expectShareStatus(t, request, http.StatusOK)
+	if request.Body.String() != "[]\n" {
+		t.Fatal("an invalid document acquired a share")
+	}
+
+	writeTestFile(t, filename, "# First version")
+	share := fixture.create(t, alice, "guide.md", "", http.StatusCreated)
+	path := shareDocumentPrefix + share.ID
+	expectShareStatus(t, fixture.call(http.MethodGet, path, "", nil, "", ""), http.StatusOK)
+	writeTestFile(t, filename, broken)
+	request = fixture.call(http.MethodGet, path, "", nil, "", "")
+	expectShareStatus(t, request, http.StatusUnprocessableEntity)
+	if !strings.Contains(request.Body.String(), "invalid frontmatter") {
+		t.Fatalf("missing frontmatter error: %s", request.Body)
+	}
+	if err := os.Remove(filename); err != nil {
+		t.Fatal(err)
+	}
+	expectShareStatus(t, fixture.call(http.MethodGet, path, "", nil, "", ""), http.StatusNotFound)
+	writeTestFile(t, filename, "# Recreated")
+	request = fixture.call(http.MethodGet, path, "", nil, "", "")
+	expectShareStatus(t, request, http.StatusOK)
+	if !strings.Contains(request.Body.String(), "Recreated") {
+		t.Fatal("recreated document did not restore its path-bound share")
+	}
 }

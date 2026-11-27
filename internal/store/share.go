@@ -54,6 +54,16 @@ func (store *Store) FindShare(ctx context.Context, id string, now time.Time) (Sh
 	return share, nil
 }
 
+func (store *Store) FindDocumentShare(ctx context.Context, ownerID, rootID, path string, now time.Time) (Share, error) {
+	share, err := scanShare(store.db.QueryRowContext(ctx, `SELECT `+shareColumns+`
+		FROM document_shares WHERE owner_id = ? AND root_id = ? AND document_path = ?
+		AND (expires_at = 0 OR expires_at > ?)`, ownerID, rootID, path, now.UnixMilli()))
+	if err != nil {
+		return Share{}, fmt.Errorf("find share for document: %w", err)
+	}
+	return share, nil
+}
+
 func (store *Store) ListShares(ctx context.Context, ownerID string, now time.Time) ([]Share, error) {
 	rows, err := store.db.QueryContext(ctx, `SELECT `+shareColumns+` FROM document_shares
 		WHERE (? = '' OR owner_id = ?) AND (expires_at = 0 OR expires_at > ?)

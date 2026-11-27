@@ -12,6 +12,7 @@ import {
 import { useEffect, useState } from "react";
 
 import {
+  APIError,
   createShare,
   type DocumentRef,
   type DocumentShare,
@@ -34,7 +35,7 @@ export interface ShareTarget {
   title: string;
 }
 
-function useShareList(open: boolean) {
+function useShareList(open: boolean, document?: DocumentRef) {
   const [shares, setShares] = useState<DocumentShare[] | null>(null);
   const [error, setError] = useState(false);
   const [revision, setRevision] = useState(0);
@@ -49,7 +50,7 @@ function useShareList(open: boolean) {
     setError(false);
     setNow(Date.now());
     const timer = window.setInterval(() => setNow(Date.now()), 1_000);
-    void listShares(controller.signal).then(
+    void listShares(controller.signal, document).then(
       (items) => {
         if (!controller.signal.aborted) setShares(items);
       },
@@ -61,7 +62,7 @@ function useShareList(open: boolean) {
       controller.abort();
       window.clearInterval(timer);
     };
-  }, [open, revision]);
+  }, [open, revision, document]);
   return {
     shares,
     setShares,
@@ -256,10 +257,13 @@ export function ShareDialog({
   target: ShareTarget;
   onClose(): void;
 }) {
-  const { shares, setShares, error, now, retry } = useShareList(true);
+  const { shares, setShares, error, now, retry } = useShareList(
+    true,
+    target.documentRef,
+  );
   const [duration, setDuration] = useState("30m");
   const [creating, setCreating] = useState(false);
-  const [createFailed, setCreateFailed] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [confirmID, setConfirmID] = useState("");
   const active = shares?.find(
     (item) =>
@@ -269,15 +273,19 @@ export function ShareDialog({
   );
   async function create() {
     setCreating(true);
-    setCreateFailed(false);
+    setCreateError(null);
     try {
       const share = await createShare(target.documentRef, duration);
       setShares((items) => [
         ...(items ?? []).filter((item) => item.id !== share.id),
         share,
       ]);
-    } catch {
-      setCreateFailed(true);
+    } catch (error) {
+      setCreateError(
+        error instanceof APIError && error.status === 422
+          ? "文档的 Frontmatter 无效。修正文档后再创建分享。"
+          : "无法创建分享。请确认文档仍可分享，然后重试。",
+      );
     } finally {
       setCreating(false);
     }
@@ -376,9 +384,9 @@ export function ShareDialog({
                 </Button>
               </div>
             ) : null}
-            {createFailed ? (
+            {createError !== null ? (
               <p role="alert" className="text-destructive text-sm">
-                无法创建分享。请确认文档仍可分享，然后重试。
+                {createError}
               </p>
             ) : null}
             <Button
