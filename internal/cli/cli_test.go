@@ -82,7 +82,7 @@ func TestHelpDocumentsContract(t *testing.T) {
 	}{
 		{
 			order: []string{
-				"--host", "--port", "--base-path", "--mode", "--width", "--glob", "--depth",
+				"--host", "--port", "--base-path", "--mode", "--width", "--auth", "--data-dir", "--public-shares", "--glob", "--depth",
 				"--[no-]open", "--[no-]cdn", "--[no-]toc", "--[no-]gitignore", "--[no-]hidden",
 				"--version", "--help",
 			},
@@ -93,7 +93,7 @@ func TestHelpDocumentsContract(t *testing.T) {
 				"--[no-]open", "(default: true)", "--mode", "(default: \"auto\")",
 				"--width", "(default: \"standard\")", "--[no-]toc", "(default: true)",
 				"--glob", "--depth", "-d", "(default: 4)",
-				"--[no-]cdn", "(default: false)",
+				"--[no-]cdn", "(default: false)", "--public-shares",
 				"--version", "-v",
 			},
 		},

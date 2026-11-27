@@ -11,6 +11,7 @@ import (
 
 	urfavecli "github.com/urfave/cli/v3"
 
+	"github.com/lz-wang/m2h/internal/auth"
 	"github.com/lz-wang/m2h/internal/export"
 	"github.com/lz-wang/m2h/internal/markdown"
 	"github.com/lz-wang/m2h/internal/server"
@@ -93,6 +94,7 @@ func serverFlags() []urfavecli.Flag {
 		widthFlag(),
 		authFlag(),
 		dataDirFlag(),
+		&urfavecli.BoolFlag{Name: "public-shares", Usage: "enable public document sharing with local or LDAP authentication", Local: true},
 		&urfavecli.StringFlag{Name: "glob", Usage: "match Markdown paths with a doublestar glob", Local: true},
 		&urfavecli.IntFlag{Name: "depth", Aliases: []string{"d"}, Value: defaultDepth, Usage: "maximum directory recursion depth", Local: true},
 		&urfavecli.BoolWithInverseFlag{Name: "open", Value: true, Usage: "open the default browser after listening", Local: true},
@@ -142,30 +144,34 @@ func serveAction(ctx context.Context, command *urfavecli.Command, ui fs.FS, buil
 	if err != nil {
 		return err
 	}
+	if command.Bool("public-shares") && mode == auth.ModeNone {
+		return fmt.Errorf("Error: --public-shares requires --auth local or ldap")
+	}
 	err = runServer(ctx, server.Options{
-		Inputs:     inputs,
-		BasePath:   command.String("base-path"),
-		Host:       command.String("host"),
-		Port:       command.Int("port"),
-		Mode:       markdown.Mode(command.String("mode")),
-		Width:      markdown.Width(command.String("width")),
-		Browser:    command.Bool("open"),
-		CDN:        command.Bool("cdn"),
-		TOC:        command.Bool("toc"),
-		Pattern:    command.String("glob"),
-		Depth:      command.Int("depth"),
-		Gitignore:  command.Bool("gitignore"),
-		Hidden:     command.Bool("hidden"),
-		PatternSet: command.IsSet("glob"),
-		DepthSet:   command.IsSet("depth"),
-		TOCSet:     command.IsSet("toc"),
-		AuthMode:   mode,
-		AuthConfig: authConfig,
-		DataDir:    dataDir,
-		PublicURL:  authConfig.PublicURL,
-		Log:        command.Root().ErrWriter,
-		UI:         ui,
-		Version:    buildVersion,
+		Inputs:       inputs,
+		BasePath:     command.String("base-path"),
+		Host:         command.String("host"),
+		Port:         command.Int("port"),
+		Mode:         markdown.Mode(command.String("mode")),
+		Width:        markdown.Width(command.String("width")),
+		Browser:      command.Bool("open"),
+		CDN:          command.Bool("cdn"),
+		TOC:          command.Bool("toc"),
+		Pattern:      command.String("glob"),
+		Depth:        command.Int("depth"),
+		Gitignore:    command.Bool("gitignore"),
+		Hidden:       command.Bool("hidden"),
+		PatternSet:   command.IsSet("glob"),
+		DepthSet:     command.IsSet("depth"),
+		TOCSet:       command.IsSet("toc"),
+		AuthMode:     mode,
+		PublicShares: command.Bool("public-shares"),
+		AuthConfig:   authConfig,
+		DataDir:      dataDir,
+		PublicURL:    authConfig.PublicURL,
+		Log:          command.Root().ErrWriter,
+		UI:           ui,
+		Version:      buildVersion,
 	})
 	if err == nil || strings.HasPrefix(err.Error(), "Error:") {
 		return err

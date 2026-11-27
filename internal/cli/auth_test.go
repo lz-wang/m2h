@@ -238,3 +238,21 @@ func TestXDGDataHomeOverridesDefault(t *testing.T) {
 		t.Fatalf("default data dir = %q, want /xdg/data/m2h", got)
 	}
 }
+
+func TestPublicSharesRequiresExplicitAuthenticatedMode(t *testing.T) {
+	withEnv(t, map[string]string{auth.EnvLocalUsersJSON: `{"alice":"password-1"}`})
+	options := captureServerOptions(t)
+	if _, _, err := runCommand(t, "--public-shares", "docs.md"); err == nil ||
+		!strings.Contains(err.Error(), "--public-shares requires --auth") {
+		t.Fatalf("unauthenticated public sharing error = %v", err)
+	}
+	if len(options.Inputs) != 0 {
+		t.Fatal("CLI passed invalid options to the server")
+	}
+	if _, _, err := runCommand(t, "--auth", "local", "docs.md"); err != nil || options.PublicShares {
+		t.Fatalf("default public shares setting: %v, error %v", options.PublicShares, err)
+	}
+	if _, _, err := runCommand(t, "--auth", "local", "--public-shares", "docs.md"); err != nil || !options.PublicShares {
+		t.Fatalf("explicit public shares setting: %v, error %v", options.PublicShares, err)
+	}
+}

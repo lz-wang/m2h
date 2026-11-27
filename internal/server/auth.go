@@ -64,6 +64,7 @@ type authStack struct {
 	// without a path), or "" when unconfigured. When set, it is the only
 	// accepted origin for state-changing requests.
 	publicOrigin string
+	publicShares bool
 }
 
 // buildAuthStack assembles the authentication layer from a validated
@@ -155,6 +156,7 @@ func (stack *authStack) startSessionCleanup(ctx context.Context) chan struct{} {
 				cleanupContext, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				_ = stack.sessionStore.CleanupSessions(cleanupContext)
 				_ = stack.dataStore.CleanupTokens(cleanupContext, time.Now().Add(-7*24*time.Hour))
+				_ = stack.dataStore.CleanupShares(cleanupContext, time.Now())
 				cancel()
 			}
 		}
@@ -315,6 +317,7 @@ type configResponse struct {
 	Features struct {
 		Annotations bool `json:"annotations"`
 		Tokens      bool `json:"tokens"`
+		Shares      bool `json:"shares,omitempty"`
 	} `json:"features"`
 }
 
@@ -332,6 +335,7 @@ func (handler *documentHandler) serveConfig(response http.ResponseWriter, reques
 		// Annotations and tokens ship with the authenticated reader.
 		config.Features.Annotations = true
 		config.Features.Tokens = true
+		config.Features.Shares = handler.auth.publicShares
 	} else {
 		config.AuthMode = string(auth.ModeNone)
 	}

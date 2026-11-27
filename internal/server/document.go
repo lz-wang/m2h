@@ -216,6 +216,10 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 		mux.HandleFunc("/api/annotations/", handler.serveAnnotationItem)
 		mux.HandleFunc("/api/tokens", handler.serveTokens)
 		mux.HandleFunc("/api/tokens/", handler.serveTokenItem)
+		if handler.auth.publicShares {
+			mux.HandleFunc("/api/shares", handler.serveShares)
+			mux.HandleFunc(shareManagementPrefix, handler.serveShareItem)
+		}
 	}
 	mux.HandleFunc("/api/files", requireGET(handler.serveFiles))
 	mux.HandleFunc("/api/recent", requireGET(handler.serveRecent))
@@ -240,8 +244,21 @@ func (handler *documentHandler) routes(logger io.Writer) http.Handler {
 	chain := http.Handler(mux)
 	if handler.auth != nil {
 		chain = handler.auth.sessions.LoadAndSave(handler.authenticate(mux))
+		if handler.auth.publicShares {
+			protected := chain
+			chain = http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+				switch path := request.URL.EscapedPath(); {
+				case strings.HasPrefix(path, sharePagePrefix):
+					handler.serveSharedPage(response, request)
+				case strings.HasPrefix(path, shareDocumentPrefix):
+					handler.serveSharedDocument(response, request)
+				default:
+					protected.ServeHTTP(response, request)
+				}
+			})
+		}
 	}
-	return requestLogger(securityHeaders(mountBasePath(handler.basePath, chain), handler.cdn), logger)
+	return requestLogger(securityHeaders(mountBasePath(handler.basePath, chain), handler.cdn), logger, handler.basePath)
 }
 
 func (handler *documentHandler) serveFiles(response http.ResponseWriter, request *http.Request) {
@@ -744,7 +761,7 @@ func (writer *flushingStatusResponseWriter) Flush() {
 	writer.flusher.Flush()
 }
 
-func requestLogger(next http.Handler, logger io.Writer) http.Handler {
+func requestLogger(next http.Handler, logger io.Writer, basePath string) http.Handler {
 	if logger == nil {
 		logger = io.Discard
 	}
@@ -764,7 +781,7 @@ func requestLogger(next http.Handler, logger io.Writer) http.Handler {
 			started.Format("2006-01-02 15:04:05"),
 			sanitizeLogValue(clientIP(request.RemoteAddr)),
 			sanitizeLogValue(request.Method),
-			sanitizeLogValue(request.URL.RequestURI()),
+			sanitizeLogValue(requestLogURI(request.URL, basePath)),
 			status,
 			float64(time.Since(started).Microseconds())/1000,
 		)
