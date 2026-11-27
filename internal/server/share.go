@@ -65,13 +65,13 @@ func (stack *authStack) shareOwnerAllowed(share store.Share) bool {
 		stack.authorizer.IsPrincipalAllowed(auth.Principal{ID: share.OwnerID, Username: share.OwnerName, Provider: provider})
 }
 
-func (stack *authStack) pruneShareOwners(ctx context.Context, workspace workspace) error {
+func (stack *authStack) pruneShareOwners(ctx context.Context) error {
 	records, err := stack.dataStore.ListShares(ctx, "", time.Now())
 	if err != nil {
 		return err
 	}
 	for _, record := range records {
-		if _, served := workspace.rootByIdentity(record.RootID); served && !stack.shareOwnerAllowed(record) {
+		if !stack.shareOwnerAllowed(record) {
 			if err := stack.dataStore.RevokeShare(ctx, record.OwnerID, record.ID); err != nil && !errors.Is(err, sql.ErrNoRows) {
 				return err
 			}

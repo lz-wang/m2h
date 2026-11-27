@@ -114,7 +114,7 @@ func (fixture *shareFixture) configure(t testing.TB, config *auth.Config) *authS
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := stack.pruneShareOwners(context.Background(), fixture.workspace); err != nil {
+	if err := stack.pruneShareOwners(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 	ui := fstest.MapFS{"index.html": {Data: []byte(`<!doctype html><head></head><div id="root"></div>`)}}
@@ -278,6 +278,21 @@ func TestPublicShareOwnerRemovalIsPermanent(t *testing.T) {
 	path := shareDocumentPrefix + share.ID
 	fixture.rebuild(t, "bob")
 	expectShareStatus(t, fixture.call(http.MethodGet, path, "", nil, "", ""), http.StatusNotFound)
+	fixture.rebuild(t, "alice", "bob")
+	expectShareStatus(t, fixture.call(http.MethodGet, path, "", nil, "", ""), http.StatusNotFound)
+}
+func TestPublicShareOwnerRemovalIsPermanentWithoutItsRoot(t *testing.T) {
+	fixture := newShareFixture(t)
+	share := fixture.create(t, fixture.login(t, "alice"), "guide.md", "permanent", http.StatusCreated)
+	path := shareDocumentPrefix + share.ID
+
+	roots := fixture.workspace.roots
+	fixture.workspace.roots = roots[1:]
+	fixture.rebuild(t, "bob")
+	expectShareStatus(t, fixture.call(http.MethodGet, path, "", nil, "", ""), http.StatusNotFound)
+	fixture.rebuild(t, "alice", "bob")
+
+	fixture.workspace.roots = roots
 	fixture.rebuild(t, "alice", "bob")
 	expectShareStatus(t, fixture.call(http.MethodGet, path, "", nil, "", ""), http.StatusNotFound)
 }

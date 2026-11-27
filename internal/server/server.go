@@ -180,7 +180,7 @@ func run(ctx context.Context, options Options, deps dependencies) error {
 		if err != nil {
 			return fmt.Errorf("auth mode %q: %w", normalized.AuthMode, err)
 		}
-		if err := stack.pruneShareOwners(runContext, workspace); err != nil {
+		if err := stack.pruneShareOwners(runContext); err != nil {
 			return err
 		}
 		sessionCleanupDone = stack.startSessionCleanup(runContext)
