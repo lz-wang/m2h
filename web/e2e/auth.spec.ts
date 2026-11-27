@@ -1887,7 +1887,18 @@ test("public document sharing opens in an anonymous browser and revokes the link
       401,
     );
 
+    await reader.setViewportSize({ width: 390, height: 844 });
+    await reader.getByRole("button", { name: "打开文档目录" }).click();
+    await expect(
+      reader.getByRole("navigation", { name: "文档目录" }),
+    ).toBeVisible();
+    await reader.keyboard.press("Escape");
+    await expect(
+      reader.getByRole("navigation", { name: "文档目录" }),
+    ).toBeHidden();
+
     await create.getByRole("button", { name: "关闭" }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
     await page.getByRole("button", { name: "设置", exact: true }).click();
     await page.getByRole("menuitem", { name: "分享管理" }).click();
     const settings = page.getByRole("dialog", { name: "分享管理" });

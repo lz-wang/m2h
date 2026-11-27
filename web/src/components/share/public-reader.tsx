@@ -6,7 +6,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { DocumentWidthMenu, ThemeMenu } from "../../App";
+
 import { APIError, getSharedDocument } from "../../api";
 import { useTheme } from "../../hooks/use-theme";
 import { activateTabForElement } from "../../lib/tabbed";
@@ -15,6 +15,7 @@ import { useHeadingNavigation } from "../../use-heading-navigation";
 import { useHeadingSpy } from "../../use-heading-spy";
 import { PreviewContent } from "../preview-content";
 import { ReaderFooter } from "../reader-footer";
+import { DocumentWidthMenu, ThemeMenu } from "../reader-preferences";
 import {
   TableOfContentsPanel,
   TableOfContentsSheet,

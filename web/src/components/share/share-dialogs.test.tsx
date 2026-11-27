@@ -176,3 +176,28 @@ it("retries failed list and create requests", async () => {
   await user.click(create);
   expect(await screen.findByText(/无法创建分享/)).toBeTruthy();
 });
+
+it("refreshes expiry labels at their display boundary and removes expired rows", async () => {
+  vi.useFakeTimers({ toFake: ["Date", "setTimeout", "clearTimeout"] });
+  const expiresAt = Date.now() + 120_100;
+  const temporary = {
+    ...shared,
+    title: "Temporary",
+    id: "b".repeat(43),
+    url: `/share/${"b".repeat(43)}`,
+    expiresAt,
+  };
+  request.mockResolvedValueOnce(json([shared, temporary]));
+  await act(async () => {
+    render(<ShareSettings open onOpenChange={vi.fn()} />);
+  });
+  const row = screen.getByRole("row", { name: /Temporary/ });
+  expect(within(row).getByText("2m", { exact: true })).toBeTruthy();
+  act(() => vi.advanceTimersByTime(101));
+  expect(within(row).getByText("1m", { exact: true })).toBeTruthy();
+  act(() => vi.advanceTimersByTime(119_998));
+  expect(within(row).getByText("不足 1 分钟", { exact: true })).toBeTruthy();
+  act(() => vi.advanceTimersByTime(1));
+  expect(screen.queryByRole("row", { name: /Temporary/ })).toBeNull();
+  expect(screen.getByText("永久", { exact: true })).toBeTruthy();
+});

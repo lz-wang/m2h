@@ -9,7 +9,7 @@ import {
   Link2,
   Trash2,
 } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   APIError,
@@ -49,20 +49,32 @@ function useShareList(open: boolean, document?: DocumentRef) {
     const controller = new AbortController();
     setError(false);
     setNow(Date.now());
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
     void listShares(controller.signal, document).then(
       (items) => {
-        if (!controller.signal.aborted) setShares(items);
+        if (!controller.signal.aborted) {
+          setNow(Date.now());
+          setShares(items);
+        }
       },
       () => {
         if (!controller.signal.aborted) setError(true);
       },
     );
-    return () => {
-      controller.abort();
-      window.clearInterval(timer);
-    };
+    return () => controller.abort();
   }, [open, revision, document]);
+  useEffect(() => {
+    if (!open || shares === null) return;
+    const next = shares.reduce(
+      (earliest, share) =>
+        share.expiresAt > now ? Math.min(earliest, share.expiresAt) : earliest,
+      Infinity,
+    );
+    if (!Number.isFinite(next)) return;
+    // The expiry of a long-lived share may exceed the browser timer limit.
+    const delay = Math.min(Math.max(next - Date.now(), 0), 2_147_483_647);
+    const timer = window.setTimeout(() => setNow(Date.now()), delay);
+    return () => window.clearTimeout(timer);
+  }, [open, shares, now]);
   return {
     shares,
     setShares,
@@ -81,7 +93,22 @@ function remaining(share: DocumentShare, now: number): string {
   return minutes > 0 ? `${minutes}m` : "不足 1 分钟";
 }
 
-function ShareExpiry({ share, now }: { share: DocumentShare; now: number }) {
+function ShareExpiry({ share }: { share: DocumentShare }) {
+  const { expiresAt } = share;
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const remainingTime = expiresAt - now;
+    if (remainingTime <= 0) return;
+    const unit = remainingTime >= 86_400_000 ? 3_600_000 : 60_000;
+    // Only this label updates as the display unit changes. The list has its
+    // own timer for the exact expiry, including the final minute.
+    const next = Math.min(expiresAt, now + (remainingTime % unit) + 1);
+    const timer = window.setTimeout(
+      () => setNow(Date.now()),
+      Math.max(next - Date.now(), 0),
+    );
+    return () => window.clearTimeout(timer);
+  }, [expiresAt, now]);
   return (
     <span
       title={
@@ -321,7 +348,7 @@ export function ShareDialog({
             />
             <div className="flex items-center justify-between gap-2 text-sm">
               <span className="text-muted-foreground">
-                剩余有效期 <ShareExpiry share={active} now={now} />
+                剩余有效期 <ShareExpiry share={active} />
               </span>
               <ShareActions
                 key={active.id}
@@ -419,16 +446,20 @@ export function ShareSettings({
     ascending: true,
   });
   const [selected, setSelected] = useState<DocumentShare | null>(null);
-  const active = (shares ?? []).filter(
-    (share) => share.expiresAt === 0 || share.expiresAt > now,
+  const ordered = useMemo(
+    () =>
+      (shares ?? []).toSorted(
+        (a, b) =>
+          (sort.ascending ? 1 : -1) *
+          (sort.key === "title"
+            ? a.title.localeCompare(b.title, "zh-CN")
+            : (a.expiresAt || Number.MAX_SAFE_INTEGER) -
+              (b.expiresAt || Number.MAX_SAFE_INTEGER)),
+      ),
+    [shares, sort],
   );
-  active.sort(
-    (a, b) =>
-      (sort.ascending ? 1 : -1) *
-      (sort.key === "title"
-        ? a.title.localeCompare(b.title, "zh-CN")
-        : (a.expiresAt || Number.MAX_SAFE_INTEGER) -
-          (b.expiresAt || Number.MAX_SAFE_INTEGER)),
+  const active = ordered.filter(
+    (share) => share.expiresAt === 0 || share.expiresAt > now,
   );
   const headers = [
     ["title", "文档名称"],
@@ -541,7 +572,7 @@ export function ShareSettings({
                       </p>
                     </td>
                     <td className="p-2 text-center whitespace-nowrap">
-                      <ShareExpiry share={share} now={now} />
+                      <ShareExpiry share={share} />
                     </td>
                     <td className="p-2 text-center">
                       <ShareActions

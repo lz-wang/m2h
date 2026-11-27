@@ -58,6 +58,7 @@ export default defineConfig({
         "src/use-toc-spy.ts",
         "src/components/document-tree.tsx",
         "src/components/preview-content.tsx",
+        "src/components/reader-preferences.tsx",
         "src/components/share/public-reader.tsx",
         "src/components/share/share-dialogs.tsx",
         "src/components/table-of-contents.tsx",
